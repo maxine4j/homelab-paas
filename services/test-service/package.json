@@ -1,0 +1,32 @@
+{
+  "name": "test-service",
+  "version": "1.0.0",
+  "main": "main.ts",
+  "license": "AGPL3",
+  "packageManager": "yarn@4.4.0",
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/koa": "^2.15.0",
+    "@types/koa-pino-logger": "^3.0.4",
+    "@types/koa__router": "^12.0.4",
+    "jest": "^29.7.0",
+    "prettier": "^3.3.3",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "@koa/bodyparser": "^5.1.1",
+    "@koa/router": "^12.0.1",
+    "koa": "^2.15.3",
+    "koa-pino-logger": "^4.0.0",
+    "pino": "^9.3.2",
+    "tslib": "^2.6.3",
+    "uuid": "^10.0.0",
+    "zod": "^3.23.8"
+  }
+}

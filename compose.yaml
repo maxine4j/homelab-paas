@@ -1,0 +1,7 @@
+services:
+  paas:
+    build:
+      context: ./
+      dockerfile: ./services/paas/Dockerfile
+    ports:
+      - "8080:8080"
