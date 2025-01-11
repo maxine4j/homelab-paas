@@ -11,8 +11,5 @@ export const createHealthCheckRouter = () => {
   };
   
   return new Router()
-    .get('/healthz', getHealth)
-    .get('/livez', getHealth)
-    .get('/readyz', getHealth)
     .get('/health', getHealth);
 };
