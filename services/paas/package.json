@@ -29,7 +29,9 @@
     "dockerode": "^4.0.3",
     "koa": "^2.15.3",
     "koa-pino-logger": "^4.0.0",
+    "nanotar": "^0.1.1",
     "pino": "^9.3.2",
+    "short-uuid": "^5.2.0",
     "tslib": "^2.6.3",
     "uuid": "^10.0.0",
     "zod": "^3.23.8"

@@ -1,4 +1,6 @@
+import { createBootstrapEnvoyService } from './domain/ingress/bootstrap-envoy';
 import { startApi } from './start-api';
+import { startWorker } from './start-worker';
 import { createLifecycle } from './util/lifecycle';
 
 const lifecycle = createLifecycle();
@@ -21,7 +23,8 @@ process
     process.exit(1);
   });
 
-const main = () => {
+const main = async () => {
+  await startWorker();
   startApi(lifecycle);
 };
 
