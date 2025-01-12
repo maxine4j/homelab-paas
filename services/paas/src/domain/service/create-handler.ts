@@ -43,7 +43,7 @@ export const createServiceCreateHandler = (
     logger.info('Created network for new service');
 
     await network.connect({
-      Container: 'homelab-paas',
+      Container: '/homelab-paas-1',
     });
     logger.info('Connected network to paas');
 
