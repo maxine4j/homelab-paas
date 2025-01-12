@@ -1,3 +1,5 @@
+import { createInMemoryKeyValueStore } from '../../kv-store/in-memory';
+import { KeyValueStore } from '../../kv-store/types';
 import { ContextualError } from '../../util/error';
 
 export interface ServiceRecord {
@@ -12,13 +14,13 @@ export interface ServiceRepository {
   setActiveDeployment: (serviceId: string, deploymentId: string) => Promise<void>
 };
 
-export const createInMemoryServiceRepository = (): ServiceRepository => {
-
-  const store = new Map<string, ServiceRecord>();
+export const createServiceRepository = (
+  store: KeyValueStore<ServiceRecord>
+): ServiceRepository => {
 
   return {
     queryAllServices: async () => {
-      return Array.from(store.values());
+      return store.values();
     },
     queryService: async (serviceId) => {
       return store.get(serviceId);
@@ -32,13 +34,14 @@ export const createInMemoryServiceRepository = (): ServiceRepository => {
       });
     },
     setActiveDeployment: async (serviceId, deploymentId) => {
-      const serviceRecord = store.get(serviceId);
-      if (!serviceRecord) {
-        throw new ContextualError('Cannot set active deployment: Service does not exist', { serviceId, deploymentId });
-      }
-      store.set(serviceId, {
-        ...serviceRecord,
-        activeDeploymentId: deploymentId,
+      store.update(serviceId, (existingValue) => {
+        if (!existingValue) {
+          throw new ContextualError('Cannot set active deployment: Service does not exist', { serviceId, deploymentId });
+        }
+        return {
+          ...existingValue,
+          activeDeploymentId: deploymentId,
+        }
       });
     },
   };

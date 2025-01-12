@@ -8,6 +8,7 @@
     "build": "tsc --build"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
     "@types/dockerode": "^3.3.34",
     "@types/jest": "^29.5.12",
     "@types/koa": "^2.15.0",
@@ -26,6 +27,7 @@
   "dependencies": {
     "@koa/bodyparser": "^5.1.1",
     "@koa/router": "^12.0.1",
+    "better-sqlite3": "^11.7.2",
     "dockerode": "^4.0.3",
     "koa": "^2.15.3",
     "koa-pino-logger": "^4.0.0",
