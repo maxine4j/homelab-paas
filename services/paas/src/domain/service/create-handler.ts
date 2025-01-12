@@ -6,7 +6,7 @@ export interface CreateServiceHandler {
   (serviceId: string): Promise<void>
 }
 
-export const createCreateServiceHandler = (
+export const createServiceCreateHandler = (
   connectDocker: () => Docker,
   serviceRepository: ServiceRepository,
 ): CreateServiceHandler => {

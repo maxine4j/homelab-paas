@@ -29,12 +29,7 @@ export const createDeploymentCleanupTask = (
     containerInfo: Docker.ContainerInfo
   ) => {
     const deploymentId = containerInfo.Labels['deployment-id'] ?? undefined;
-    
-    if (protectedDeploymentIds.has(deploymentId)) {
-      return false;
-    }
-
-    return true;
+    return !protectedDeploymentIds.has(deploymentId);
   }
 
   const cleanupContainer = async (containerId: string) => {

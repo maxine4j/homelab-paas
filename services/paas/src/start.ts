@@ -12,10 +12,10 @@ import { createInMemoryTaskQueue } from './tasks/queue';
 import { createDeploymentDeployTask, DeploymentDeployTask } from './domain/deployment/deploy-task';
 import { createInMemoryDeploymentRepository } from './domain/deployment/repository';
 import { createInMemoryServiceRepository } from './domain/service/repository';
-import { createStartDeploymentHandler } from './domain/deployment/start-deployment-handler';
+import { createDeploymentStartHandler } from './domain/deployment/start-handler';
 import { createDeploymentRouter } from './domain/deployment/router';
 import { createDeploymentCleanupTask } from './domain/deployment/cleanup-task';
-import { createCreateServiceHandler } from './domain/service/create-service-handler';
+import { createServiceCreateHandler } from './domain/service/create-handler';
 
 export const start = (lifecycle: Lifecycle) => {
   const app = new Koa();
@@ -25,13 +25,12 @@ export const start = (lifecycle: Lifecycle) => {
   const uuid = () => generateShortUuid();
   const now = () => new Date();
 
-
   const deployTaskQueue = createInMemoryTaskQueue<DeploymentDeployTask>(uuid);
-  const startDeploymentHandler = createStartDeploymentHandler(uuid, deployTaskQueue);
+  const deploymentStartHandler = createDeploymentStartHandler(uuid, deployTaskQueue);
   const deploymentRepository = createInMemoryDeploymentRepository(now);
   const serviceRepository = createInMemoryServiceRepository();
-  const createServiceHandler = createCreateServiceHandler(connectDocker, serviceRepository);
-  const startDeploymentDeployTask = createDeploymentDeployTask(lifecycle, deployTaskQueue, connectDocker, deploymentRepository, serviceRepository, createServiceHandler);
+  const serviceCreateHandler = createServiceCreateHandler(connectDocker, serviceRepository);
+  const startDeploymentDeployTask = createDeploymentDeployTask(lifecycle, deployTaskQueue, connectDocker, deploymentRepository, serviceRepository, serviceCreateHandler);
   const startDeploymentCleanupTask = createDeploymentCleanupTask(lifecycle, connectDocker, deploymentRepository, serviceRepository); 
 
   startDeploymentDeployTask();
@@ -42,7 +41,7 @@ export const start = (lifecycle: Lifecycle) => {
     .use(createReverseProxy(serviceRepository, deploymentRepository))
     .use(bodyParser())
     .use(createHealthCheckRouter().routes())
-    .use(createDeploymentRouter(startDeploymentHandler).routes())
+    .use(createDeploymentRouter(deploymentStartHandler).routes())
     .use(errorMiddleware);
 
   const server = app.listen(config.port, () => {

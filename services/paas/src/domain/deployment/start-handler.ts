@@ -6,7 +6,7 @@ export interface StartDeploymentHandler {
   (serviceDescriptor: ServiceDescriptor): Promise<string>
 }
 
-export const createStartDeploymentHandler = (
+export const createDeploymentStartHandler = (
   generateDeploymentId: () => string,
   deploymentTaskQueue: TaskQueue<DeploymentDeployTask>
 ): StartDeploymentHandler =>

@@ -8,7 +8,7 @@ import { DomainError } from '../../util/error'
 import { logger } from '../../util/logger'
 import { sleep } from '../../util/sleep'
 import { ServiceRepository } from '../service/repository'
-import { CreateServiceHandler } from '../service/create-service-handler'
+import { CreateServiceHandler } from '../service/create-handler'
 
 export interface DeploymentDeployTask {
   serviceId: string

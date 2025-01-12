@@ -2,7 +2,7 @@ import { Context } from 'koa';
 import Router from '@koa/router';
 import { ValidationError } from '../../util/error';
 import { ServiceDescriptor } from '../service/service-descriptor';
-import { StartDeploymentHandler } from './start-deployment-handler';
+import { StartDeploymentHandler } from './start-handler';
 
 export const createDeploymentRouter = (
   startDeployment: StartDeploymentHandler,
