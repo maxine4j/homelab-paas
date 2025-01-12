@@ -50,6 +50,17 @@ export const createDeployCommandHandler = (
     });
   }
 
+  const pullImageIfMissing = async (image: string) => {
+    const existingImage = await docker.getImage(image).inspect();
+    if (existingImage) {
+      logger.info({ image }, 'Image already exists')
+      return;
+    }
+
+    logger.info({ image }, 'Image does not exist, pulling');
+    await docker.pull(image);
+  }
+
   const startContainer = async (serviceId: string, deploymentId: string, image: string, networkId: string) => {
     const container = await docker.createContainer({
       Image: image,
@@ -111,7 +122,7 @@ export const createDeployCommandHandler = (
   };
 
   const cleanupOldContainers = async (serviceId: string) => {
-    const activeDeploymentId = await serviceRegistry.getActiveDeploymentId(serviceId);
+    const activeDeployment = await serviceRegistry.getActiveDeployment(serviceId);
     
     const containerInfos = await docker.listContainers({
       filters: {
@@ -122,7 +133,8 @@ export const createDeployCommandHandler = (
       }
     });
 
-    const inactiveContainers = containerInfos.filter(containerInfo => containerInfo.Labels['deployment-id'] !== activeDeploymentId);
+    const inactiveContainers = containerInfos.filter(containerInfo => 
+      containerInfo.Labels['deployment-id'] !== activeDeployment?.deploymentId);
 
     const containerCleanupPromises = inactiveContainers.map(async ({ Id: inactiveContainerId, Names }) => {
       const inactiveContainer = docker.getContainer(inactiveContainerId);
@@ -149,6 +161,7 @@ export const createDeployCommandHandler = (
     logger.info({ serviceId, deploymentId }, 'Updated service registry');
 
     // start new containers
+    await pullImageIfMissing(serviceDescriptor.image);
     await startContainer(serviceId, deploymentId, serviceDescriptor.image, network.id);
     logger.info({ serviceId, deploymentId }, 'Deployed new container');
 

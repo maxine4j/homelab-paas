@@ -27,15 +27,7 @@ export const startApi = (lifecycle: Lifecycle) => {
 
   app
     .use(koaPino())
-    .use(async (ctx, next) => {
-      logger.info({ url: ctx.request.url, status: ctx.status }, 'Before proxy: Request received');
-      await next(); // Continue to reverse proxy
-    })
     .use(createReverseProxy(serviceRegistry))
-    .use(async (ctx, next) => {
-      logger.info({ url: ctx.request.url, status: ctx.status }, 'After proxy: Request received');
-      await next(); // Continue to next middleware
-    })
     .use(bodyParser())
     .use(createHealthCheckRouter().routes())
     .use(createServiceRouter(deployHandler, queryServiceState).routes())

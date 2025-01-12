@@ -22,18 +22,17 @@ export const createReverseProxy = (
     if (!serviceId) {
       throw new Error('Failed to parse serviceId from hostname');
     }
-    const activeDeploymentId = await serviceRegistry.getActiveDeploymentId(serviceId);
-    if (!activeDeploymentId) {
-      logger.error({ serviceId, activeDeploymentId }, 'could not find an active deployment id')
+    const activeDeployment = await serviceRegistry.getActiveDeployment(serviceId);
+    if (!activeDeployment) {
+      logger.error({ serviceId }, 'could not find an active deployment id')
       ctx.status = 503;
       return;
     }
-    const internalServiceHostname = `${serviceId}-${activeDeploymentId}`;
 
     // forward the request to the internal service
     const proxyReq = http.request({
-      hostname: internalServiceHostname,
-      port: 8080, // TODO: get this from SD or default to 8080
+      hostname: activeDeployment.container.hostname,
+      port: activeDeployment.container.port,
       path: ctx.request.url,
       method: ctx.request.method,
       headers: {
