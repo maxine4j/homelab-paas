@@ -1,6 +1,6 @@
 import Docker from 'dockerode'
-import { TaskQueue } from '../../tasks/queue'
-import { createQueueTaskRunner } from '../../tasks/queue-runner'
+import { TaskQueue } from '../../task/queue'
+import { createQueueTaskRunner } from '../../task/queue-runner'
 import { Lifecycle } from '../../util/lifecycle'
 import { DeploymentRepository } from './repository'
 import { ServiceDescriptor } from '../service/service-descriptor'

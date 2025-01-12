@@ -8,7 +8,7 @@ import { createHealthCheckRouter } from './util/healthcheck';
 import { bodyParser } from '@koa/bodyparser';
 import { errorMiddleware } from './util/error';
 import { createReverseProxy } from './domain/ingress/reverse-proxy';
-import { createInMemoryTaskQueue } from './tasks/queue';
+import { createInMemoryTaskQueue } from './task/queue';
 import { createDeploymentDeployTask, DeploymentDeployTask } from './domain/deployment/deploy-task';
 import { createDeploymentRepository, DeploymentRecord } from './domain/deployment/repository';
 import { createServiceRepository, ServiceRecord } from './domain/service/repository';

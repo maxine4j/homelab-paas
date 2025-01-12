@@ -2,7 +2,7 @@ import Docker from 'dockerode'
 import { Lifecycle } from '../../util/lifecycle'
 import { DeploymentRepository } from './repository'
 import { ServiceRepository } from '../service/repository'
-import { createPeriodicTaskRunner } from '../../tasks/periodic-runner'
+import { createPeriodicTaskRunner } from '../../task/periodic-runner'
 import { logger } from '../../util/logger'
 
 export const createDeploymentCleanupTask = (
