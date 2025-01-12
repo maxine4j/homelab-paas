@@ -10,7 +10,10 @@ import { errorMiddleware } from './util/error';
 import { createServiceRouter } from './domain/service/router';
 import { createDeployCommandHandler } from './domain/service/deploy-handler';
 import { createServiceStateQueryHandler } from './domain/service/state/query-state';
-import { createInMemoryServiceRegistry } from './domain/service/registry';
+import { createInMemoryServiceRegistryRepository } from './domain/service/registry/repository';
+import { createReverseProxy } from './domain/ingress/reverse-proxy';
+import { createServiceRegistry } from './domain/service/registry/registry';
+import { logger } from './util/logger';
 
 export const startApi = (lifecycle: Lifecycle) => {
   const app = new Koa();
@@ -18,16 +21,25 @@ export const startApi = (lifecycle: Lifecycle) => {
   const docker = new Docker();
 
   const uuid = () => generateShortUuid();
-  const serviceRegistry = createInMemoryServiceRegistry();
+  const serviceRegistry = createServiceRegistry(createInMemoryServiceRegistryRepository());
   const deployHandler = createDeployCommandHandler(() => docker, uuid, serviceRegistry);
   const queryServiceState = createServiceStateQueryHandler(() => docker);
 
   app
-    .use(errorMiddleware)
+    .use(koaPino())
+    .use(async (ctx, next) => {
+      logger.info({ url: ctx.request.url, status: ctx.status }, 'Before proxy: Request received');
+      await next(); // Continue to reverse proxy
+    })
+    .use(createReverseProxy(serviceRegistry))
+    .use(async (ctx, next) => {
+      logger.info({ url: ctx.request.url, status: ctx.status }, 'After proxy: Request received');
+      await next(); // Continue to next middleware
+    })
     .use(bodyParser())
     .use(createHealthCheckRouter().routes())
-    .use(koaPino())
     .use(createServiceRouter(deployHandler, queryServiceState).routes())
+    .use(errorMiddleware)
 
   const server = app.listen(config.port, () => {
     console.log(`Listening on ${config.port}`);

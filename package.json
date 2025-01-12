@@ -8,7 +8,9 @@
   "license": "AGPL3",
   "packageManager": "yarn@4.4.0",
   "scripts": {
-    "build": "turbo build"
+    "build": "turbo build",
+    "test-service:build": "./scripts/build-test-service.sh",
+    "paas:dev": "./scripts/run-paas-dev.sh"
   },
   "workspaces": [
     "services/*"

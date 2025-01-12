@@ -1,7 +1,7 @@
 import Docker from 'dockerode'
 import { logger } from '../../util/logger';
 import { ServiceDescriptor } from './service-descriptor'
-import { ServiceRegistry } from './registry';
+import { ServiceRegistry } from './registry/registry';
 import { sleep } from '../../util/sleep';
 import { ContextualError } from '../../util/error';
 
@@ -27,32 +27,40 @@ export const createDeployCommandHandler = (
     'deployment-id': deploymentId,
   });
 
-  const storeDeploymentInRegistry = async (deploymentId: string, serviceDescriptor: ServiceDescriptor) => {
-    const serviceRegistryRecord = await serviceRegistry.load(serviceDescriptor.serviceId) ?? {
-      serviceId: serviceDescriptor.serviceId,
-       deployments: [],
-    };
-    serviceRegistryRecord.deployments.push({
-      deploymentId,
-      serviceDescriptor,
+  const getOrCreateServiceNetwork = async (serviceId: string) => {
+    const existingNetworkInfos = await docker.listNetworks({
+      filters: {
+        label: [
+          'managed-by=homelab-pass',
+          `service-id=${serviceId}`,
+        ]
+      }
     });
-    await serviceRegistry.save(serviceRegistryRecord);
+    const existingNetworkInfo = existingNetworkInfos.at(0);
+    if (existingNetworkInfo) {
+      return docker.getNetwork(existingNetworkInfo.Id);
+    }
+
+    return await docker.createNetwork({
+      Name: `homelab-paas-${serviceId}`,
+      Labels: {
+        'managed-by': 'homelab-pass',
+        'service-id': serviceId,
+      }
+    });
   }
 
-  const startContainer = async (serviceId: string, deploymentId: string, image: string) => {
+  const startContainer = async (serviceId: string, deploymentId: string, image: string, networkId: string) => {
     const container = await docker.createContainer({
       Image: image,
       name: formatContainerName(serviceId, deploymentId),
       Labels: formatContainerLabels(serviceId, deploymentId),
-      ExposedPorts: {
-        '8080/tcp': {}
-      },
-      HostConfig: {
-        PortBindings: {
-          '8080/tcp': [{
-            HostPort: '8081'
-          }]
-        }
+      NetworkingConfig: {
+        EndpointsConfig: {
+          [networkId]: {
+            NetworkID: networkId,
+          },
+        },
       }
     });
     await container.start();
@@ -95,16 +103,53 @@ export const createDeployCommandHandler = (
     throw new ContextualError(`Container failed to start after ${maxAttempts} attempts`, { attempt, delayMs });
   };
 
+  const connectPaasToNetwork = async (network: Docker.Network) => {
+    // const paasContainer = docker.getContainer('homelab-paas');
+    network.connect({
+      Container: 'homelab-paas',
+    })
+  };
+
+  const cleanupOldContainers = async (serviceId: string) => {
+    const activeDeploymentId = await serviceRegistry.getActiveDeploymentId(serviceId);
+    
+    const containerInfos = await docker.listContainers({
+      filters: {
+        label: [
+            'managed-by=homelab-pass',
+            `service-id=${serviceId}`,
+        ]
+      }
+    });
+
+    const inactiveContainers = containerInfos.filter(containerInfo => containerInfo.Labels['deployment-id'] !== activeDeploymentId);
+
+    const containerCleanupPromises = inactiveContainers.map(async ({ Id: inactiveContainerId, Names }) => {
+      const inactiveContainer = docker.getContainer(inactiveContainerId);
+      await inactiveContainer.stop();
+      await inactiveContainer.remove();
+      logger.info({ serviceId, containerName: Names.at(0) }, 'Cleaned up inactive container')
+    });
+
+    await Promise.all(containerCleanupPromises);
+  }
+
   return async (serviceDescriptor) => {
     const { serviceId } = serviceDescriptor;
     const deploymentId = generateDeploymentId();
     logger.info({ serviceId, deploymentId, serviceDescriptor }, 'Starting deployment');
 
-    await storeDeploymentInRegistry(deploymentId, serviceDescriptor);
+    // get or create service network
+    const network = await getOrCreateServiceNetwork(serviceId);
+    // mount pass into network
+    await connectPaasToNetwork(network);
+
+    // register new deployment
+    await serviceRegistry.registerNewDeployment(serviceId, deploymentId, serviceDescriptor);
     logger.info({ serviceId, deploymentId }, 'Updated service registry');
 
     // start new containers
-    await startContainer(serviceId, deploymentId, serviceDescriptor.image);
+    await startContainer(serviceId, deploymentId, serviceDescriptor.image, network.id);
     logger.info({ serviceId, deploymentId }, 'Deployed new container');
 
     // wait for healthy
@@ -112,7 +157,10 @@ export const createDeployCommandHandler = (
     logger.info({ serviceId, deploymentId }, 'Container is running');
 
     // update ingress
+    await serviceRegistry.setActiveDeploymentId(serviceId, deploymentId);
+    logger.info({ serviceId, deploymentId }, 'Updated active deploymentId');
 
     // stop old containers
+    await cleanupOldContainers(serviceId);
   };
 };

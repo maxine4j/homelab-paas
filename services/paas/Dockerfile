@@ -20,7 +20,6 @@ RUN yarn turbo run build --filter=paas
 FROM base AS runner
 COPY --from=installer --chown=app:app /app/node_modules ./node_modules
 COPY --from=installer --chown=app:app /app/services/paas/dist ./
-COPY --from=builder --chown=app:app /app/services/paas/envoy.yaml ./
 EXPOSE 8080
 
 CMD ["node", "/app/main.js"]
