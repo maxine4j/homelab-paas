@@ -1,4 +1,4 @@
-import { startApi } from './start-api';
+import { start } from './start';
 import { createLifecycle } from './util/lifecycle';
 
 const lifecycle = createLifecycle();
@@ -22,7 +22,7 @@ process
   });
 
 const main = async () => {
-  startApi(lifecycle);
+  start(lifecycle);
 };
 
 main();

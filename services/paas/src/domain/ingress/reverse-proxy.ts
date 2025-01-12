@@ -1,11 +1,13 @@
 import http from 'http';
 import { Context, Next } from 'koa';
-import { ServiceRegistry } from '../service/registry/registry';
 import { logger } from '../../util/logger';
 import {once} from 'node:events';
+import { ServiceRepository } from '../service/repository';
+import { DeploymentRepository } from '../deployment/repository';
 
 export const createReverseProxy = (
-  serviceRegistry: ServiceRegistry,
+  serviceRepository: ServiceRepository,
+  deploymentRepository: DeploymentRepository,
 ) => {
 
   return async (ctx: Context, next: Next) => {
@@ -22,9 +24,11 @@ export const createReverseProxy = (
     if (!serviceId) {
       throw new Error('Failed to parse serviceId from hostname');
     }
-    const activeDeployment = await serviceRegistry.getActiveDeployment(serviceId);
-    if (!activeDeployment) {
-      logger.error({ serviceId }, 'could not find an active deployment id')
+    
+    const service = await serviceRepository.queryService(serviceId);
+    const activeDeployment = await deploymentRepository.query(service?.activeDeploymentId ?? '')
+    if (!activeDeployment || !activeDeployment.container) {
+      logger.error({ serviceId }, 'Could not find active deployment for service')
       ctx.status = 503;
       return;
     }
