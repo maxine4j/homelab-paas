@@ -32,9 +32,11 @@ Store clientId and clientSecret in .env
 ### Set .env
 
 ```bash
-PAAS_AUTH_CLIENT_ID: ...
-PAAS_AUTH_CLIENT_SECRET: ...
-PAAS_ROOT_DOMAIN: paas.localhost
+PAAS_AUTH_CLIENT_ID=...
+PAAS_AUTH_CLIENT_SECRET=...
+PAAS_AUTH_AUTHORIZED_USERS=alice,bob
+PAAS_ROOT_DOMAIN=paas.localhost
+PAAS_AUTH_JWT_SECRET=...
 ```
 
 ### Run paas
@@ -45,11 +47,11 @@ yarn paas:dev
 
 ### Access paas and deployed services
 
-Access the paas via your CNAME plus the paas subdomain.
+Access the paas via paas.localhost
 For any of your deployed services, add the serviceId as an additional subdomain
 
 e.g.
 ```
-paas.local.example.com
-test-service.paas.local.example.com
+paas.localhost
+test-service.paas.localhost
 ```
