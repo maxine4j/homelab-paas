@@ -30,11 +30,10 @@ export const createSqliteKeyValueStore = <TValue>(args: {
   };
 
   const update = (key: string, updateFn: (existingValue: TValue | undefined) => TValue) => {
-    db.transaction(() => {
-      const existingValue = get(key);
-      const newValue = updateFn(existingValue);
-      set(key, newValue);
-    });
+    // FIXME: db.transaction is not working
+    const existingValue = get(key);
+    const newValue = updateFn(existingValue);
+    set(key, newValue);
   };
 
   const values = () => {

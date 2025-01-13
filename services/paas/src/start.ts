@@ -1,5 +1,4 @@
 import Koa from 'koa';
-import koaPino from 'koa-pino-logger';
 import Docker from 'dockerode';
 import { generate as generateShortUuid } from 'short-uuid';
 import { config } from './util/config';
@@ -15,9 +14,10 @@ import { createServiceRepository, ServiceRecord } from './domain/service/reposit
 import { createDeploymentStartHandler } from './domain/deployment/start-handler';
 import { createDeploymentRouter } from './domain/deployment/router';
 import { createDeploymentCleanupTask } from './domain/deployment/cleanup-task';
-import { createServiceCreateHandler } from './domain/service/create-handler';
-import { createInMemoryKeyValueStore } from './kv-store/in-memory';
+import { createServiceConnectHandler } from './domain/service/connect-handler';
 import { createSqliteKeyValueStore } from './kv-store/sqlite';
+import { createAuthRouter } from './domain/ingress/auth/router';
+import { createRequestLogger } from './util/logger';
 
 export const start = (lifecycle: Lifecycle) => {
   const app = new Koa();
@@ -42,22 +42,29 @@ export const start = (lifecycle: Lifecycle) => {
   const deployTaskQueue = createInMemoryTaskQueue<DeploymentDeployTask>(uuid);
 
   const deploymentStartHandler = createDeploymentStartHandler(uuid, deployTaskQueue);
-  const serviceCreateHandler = createServiceCreateHandler(connectDocker, serviceRepository);
+  const serviceConnectHandler = createServiceConnectHandler(connectDocker);
   
-  const startDeploymentDeployTask = createDeploymentDeployTask(lifecycle, deployTaskQueue, connectDocker, deploymentRepository, serviceRepository, serviceCreateHandler);
+  const startDeploymentDeployTask = createDeploymentDeployTask(lifecycle, deployTaskQueue, connectDocker, deploymentRepository, serviceRepository, serviceConnectHandler);
   const startDeploymentCleanupTask = createDeploymentCleanupTask(lifecycle, connectDocker, deploymentRepository, serviceRepository); 
 
   startDeploymentDeployTask();
   startDeploymentCleanupTask();
 
   app
-    .use(koaPino())
+    .use(createRequestLogger())
+    .use(createAuthRouter().routes())
     .use(createReverseProxy(serviceRepository, deploymentRepository))
     .use(bodyParser())
     .use(createHealthCheckRouter().routes())
     .use(createDeploymentRouter(deploymentStartHandler).routes())
-    .use(errorMiddleware);
-
+    .use(errorMiddleware)
+    .use((ctx) => {
+      ctx.body = `
+        <html>
+          <h1>paas home</h1>
+        </html>
+      `
+    });
   const server = app.listen(config.port, () => {
     console.log(`Listening on ${config.port}`);
   });

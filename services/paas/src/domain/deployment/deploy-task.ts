@@ -8,7 +8,7 @@ import { DomainError } from '../../util/error'
 import { logger } from '../../util/logger'
 import { sleep } from '../../util/sleep'
 import { ServiceRepository } from '../service/repository'
-import { CreateServiceHandler } from '../service/create-handler'
+import { ServiceConnectHandler } from '../service/connect-handler'
 
 export interface DeploymentDeployTask {
   serviceId: string
@@ -22,7 +22,7 @@ export const createDeploymentDeployTask = (
   connectDocker: () => Docker,
   deploymentRepository: DeploymentRepository,
   serviceRepository: ServiceRepository,
-  createService: CreateServiceHandler,
+  connectService: ServiceConnectHandler,
 ) => {
 
   const docker = connectDocker();
@@ -32,7 +32,7 @@ export const createDeploymentDeployTask = (
   const createServiceIfNotExists = async (serviceId: string) => {
     const service = await serviceRepository.queryService(serviceId);
     if (!service) {
-      await createService(serviceId);
+      await serviceRepository.createService(serviceId);
     }
   }
 
@@ -132,6 +132,8 @@ export const createDeploymentDeployTask = (
       logger.info({ taskId, serviceId, deploymentId }, 'Starting deploy task');
 
       await createServiceIfNotExists(serviceId);
+      
+      await connectService(serviceId);
 
       await pullImageIfNotPresent(serviceDescriptor.image);
   

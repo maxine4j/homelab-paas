@@ -5,7 +5,14 @@ services:
       context: ./
       dockerfile: ./services/paas/Dockerfile
     ports:
-      - "8080:8080"
+      - "80:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /etc/homelab-paas/:/etc/homelab-paas
+    environment:
+      PAAS_AUTH_CLIENT_ID: ${PAAS_AUTH_CLIENT_ID}
+      PAAS_AUTH_CLIENT_SECRET: ${PAAS_AUTH_CLIENT_SECRET}
+      PAAS_AUTH_AUTHORIZED_USERS: ${PAAS_AUTH_AUTHORIZED_USERS}
+      PAAS_AUTH_JWT_SECRET: ${PAAS_AUTH_JWT_SECRET}
+      PAAS_ROOT_DOMAIN: ${PAAS_ROOT_DOMAIN}
+      PAAS_CONTAINER_NAME: /homelab-paas-1

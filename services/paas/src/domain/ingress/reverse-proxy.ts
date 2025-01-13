@@ -4,6 +4,8 @@ import { logger } from '../../util/logger';
 import {once} from 'node:events';
 import { ServiceRepository } from '../service/repository';
 import { DeploymentRepository } from '../deployment/repository';
+import { config } from '../../util/config';
+import { getLoginUrl, isAuthCookieValid } from './auth/oauth';
 
 export const createReverseProxy = (
   serviceRepository: ServiceRepository,
@@ -11,9 +13,14 @@ export const createReverseProxy = (
 ) => {
 
   return async (ctx: Context, next: Next) => {
+    // check for auth cookie
+    if (!await isAuthCookieValid(ctx.cookies)) {
+      logger.info({ desiredUrl: ctx.request.href }, 'auth cookie is not valid');
+      return ctx.redirect(getLoginUrl(ctx.request.href));
+    }
+
     // dont proxy requests to the paas
-    const serviceId = ctx.hostname.split('.').at(0);
-    if (serviceId === 'paas') {
+    if (ctx.hostname === config.rootDomain) {
       return next();
     }
 
@@ -21,6 +28,7 @@ export const createReverseProxy = (
     ctx.respond = false;
 
     // fetch container hostname for the active deployment of the service
+    const serviceId = ctx.hostname.split(`.${config.rootDomain}`).at(0);
     if (!serviceId) {
       throw new Error('Failed to parse serviceId from hostname');
     }
@@ -30,6 +38,7 @@ export const createReverseProxy = (
     if (!activeDeployment || !activeDeployment.container) {
       logger.error({ serviceId }, 'Could not find active deployment for service')
       ctx.status = 503;
+      ctx.res.end();
       return;
     }
 
