@@ -9,7 +9,7 @@
   "packageManager": "yarn@4.4.0",
   "scripts": {
     "build": "turbo build",
-    "test-service:build": "./scripts/build-test-service.sh",
+    "test-service:build": "docker build -t test-service:latest -f ./services/test-service/Dockerfile .",
     "paas:dev": "docker compose up --build"
   },
   "workspaces": [
