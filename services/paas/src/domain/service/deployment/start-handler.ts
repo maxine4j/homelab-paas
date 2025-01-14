@@ -1,9 +1,9 @@
-import { TaskQueue } from '../../task/queue'
-import { ServiceDescriptor } from '../service/service-descriptor'
+import { TaskQueue } from '../../../task/queue'
+import { ServiceDescriptor } from '../service-descriptor'
 import { DeploymentDeployTask } from './deploy-task'
 
 export interface StartDeploymentHandler {
-  (serviceDescriptor: ServiceDescriptor): Promise<string>
+  (serviceDescriptor: ServiceDescriptor): Promise<{ deploymentId: string }>
 }
 
 export const createDeploymentStartHandler = (
@@ -17,5 +17,5 @@ export const createDeploymentStartHandler = (
         deploymentId,
         serviceDescriptor, 
       });
-      return deploymentId;
+      return { deploymentId };
     };

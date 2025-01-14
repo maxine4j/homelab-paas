@@ -3,7 +3,7 @@ import { Context, Next } from 'koa';
 import { logger } from '../../util/logger';
 import {once} from 'node:events';
 import { ServiceRepository } from '../service/repository';
-import { DeploymentRepository } from '../deployment/repository';
+import { DeploymentRepository } from '../service/deployment/repository';
 import { config } from '../../util/config';
 import { getLoginUrl, isAuthCookieValid } from './auth/oauth';
 
@@ -13,12 +13,6 @@ export const createReverseProxy = (
 ) => {
 
   return async (ctx: Context, next: Next) => {
-    // check for auth cookie
-    if (!await isAuthCookieValid(ctx.cookies)) {
-      logger.info({ desiredUrl: ctx.request.href }, 'auth cookie is not valid');
-      return ctx.redirect(getLoginUrl(ctx.request.href));
-    }
-
     // dont proxy requests to the paas
     if (ctx.hostname === config.rootDomain) {
       return next();
@@ -35,7 +29,15 @@ export const createReverseProxy = (
     
     const service = await serviceRepository.queryService(serviceId);
     const activeDeployment = await deploymentRepository.query(service?.activeDeploymentId ?? '')
-    if (!activeDeployment || !activeDeployment.container) {
+
+    if (!activeDeployment?.serviceDescriptor.ingress.public) {
+      // check for auth cookie
+      if (!await isAuthCookieValid(ctx.cookies)) {
+        return ctx.redirect(getLoginUrl(ctx.request.href));
+      }
+    }
+
+    if (!activeDeployment?.container) {
       logger.error({ serviceId }, 'Could not find active deployment for service')
       ctx.status = 503;
       ctx.res.end();

@@ -1,6 +1,6 @@
-import { KeyValueStore } from '../../kv-store/types'
-import { ContextualError } from '../../util/error'
-import { ServiceDescriptor } from '../service/service-descriptor'
+import { KeyValueStore } from '../../../kv-store/types'
+import { ContextualError } from '../../../util/error'
+import { ServiceDescriptor } from '../service-descriptor'
 
 interface ContainerRecord {
   hostname: string
@@ -12,7 +12,8 @@ export interface DeploymentRecord {
   deploymentId: string
   createdAt: Date,
   serviceDescriptor: ServiceDescriptor
-  status: 'deploying' | 'running' | 'cleaned-up'
+  status: 'deploying' | 'running' | 'cleaned-up' | 'failed'
+  failureReason?: string
   container?: ContainerRecord
 }
 
@@ -22,6 +23,7 @@ export interface DeploymentRepository {
   queryForService: (serviceId: string) => Promise<DeploymentRecord[]>
   createDeployment: (deploymentId: string, serviceDescriptor: ServiceDescriptor) => Promise<void>
   markDeploymentRunning: (deploymentId: string, container: ContainerRecord) => Promise<void>
+  markDeploymentFailed: (deploymentId: string, failureReason: string) => Promise<void>
   markDeploymentCleanedUp: (deploymentId: string) => Promise<void>
 }
 
@@ -60,6 +62,18 @@ export const createDeploymentRepository = (
           ...existingDeploymentRecord,
           status: 'running',
           container,
+        };
+      });
+    },
+    markDeploymentFailed: async (deploymentId, failureReason) => {
+      store.update(deploymentId, (existingDeploymentRecord) => {
+        if (!existingDeploymentRecord) {
+          throw new ContextualError('Failed to make deployment as failed: Deployment does not exist', { deploymentId });
+        }
+        return {
+          ...existingDeploymentRecord,
+          status: 'failed',
+          failureReason,
         };
       });
     },

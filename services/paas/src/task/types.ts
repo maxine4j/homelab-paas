@@ -1,4 +1,3 @@
-export interface TaskEnvelope<TTask> {
-  taskId: string
-  task: TTask
+export interface TaskRunner {
+  start: () => Promise<void>
 }

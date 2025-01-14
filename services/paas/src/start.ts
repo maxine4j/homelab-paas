@@ -7,23 +7,24 @@ import { createHealthCheckRouter } from './util/healthcheck';
 import { bodyParser } from '@koa/bodyparser';
 import { errorMiddleware } from './util/error';
 import { createReverseProxy } from './domain/ingress/reverse-proxy';
-import { createInMemoryTaskQueue } from './task/queue';
-import { createDeploymentDeployTask, DeploymentDeployTask } from './domain/deployment/deploy-task';
-import { createDeploymentRepository, DeploymentRecord } from './domain/deployment/repository';
+import { createDeploymentDeployTask, DeploymentDeployTask } from './domain/service/deployment/deploy-task';
+import { createDeploymentRepository, DeploymentRecord } from './domain/service/deployment/repository';
 import { createServiceRepository, ServiceRecord } from './domain/service/repository';
-import { createDeploymentStartHandler } from './domain/deployment/start-handler';
-import { createDeploymentRouter } from './domain/deployment/router';
-import { createDeploymentCleanupTask } from './domain/deployment/cleanup-task';
-import { createServiceConnectHandler } from './domain/service/connect-handler';
+import { createDeploymentStartHandler } from './domain/service/deployment/start-handler';
+import { createDeploymentRouter } from './domain/service/router';
+import { createDeploymentCleanupTask } from './domain/service/deployment/cleanup-task';
+import { createServiceConnectNetworkHandler } from './domain/service/connect-handler';
 import { createSqliteKeyValueStore } from './kv-store/sqlite';
 import { createAuthRouter } from './domain/ingress/auth/router';
 import { createRequestLogger } from './util/logger';
+import { createDockerService } from './docker/service';
+import { createPeriodicTaskRunner } from './task/periodic';
+import { TaskRunner } from './task/types';
+import { createInMemoryTaskQueue, createQueueTaskRunner } from './task/queue';
 
 export const start = (lifecycle: Lifecycle) => {
   const app = new Koa();
 
-  const docker = new Docker();
-  const connectDocker = () => docker;
   const uuid = () => generateShortUuid();
   const now = () => new Date();
 
@@ -39,16 +40,26 @@ export const start = (lifecycle: Lifecycle) => {
   });
   const serviceRepository = createServiceRepository(serviceKvStore);
 
+  const dockerService = createDockerService(() => new Docker());
   const deployTaskQueue = createInMemoryTaskQueue<DeploymentDeployTask>(uuid);
-
   const deploymentStartHandler = createDeploymentStartHandler(uuid, deployTaskQueue);
-  const serviceConnectHandler = createServiceConnectHandler(connectDocker);
+  const serviceConnectHandler = createServiceConnectNetworkHandler(dockerService);
   
-  const startDeploymentDeployTask = createDeploymentDeployTask(lifecycle, deployTaskQueue, connectDocker, deploymentRepository, serviceRepository, serviceConnectHandler);
-  const startDeploymentCleanupTask = createDeploymentCleanupTask(lifecycle, connectDocker, deploymentRepository, serviceRepository); 
+  const tasks: TaskRunner[] = [
+    createQueueTaskRunner({
+      lifecycle,
+      queue: deployTaskQueue,
+      idleDelayMs: 5_000,
+      runTask: createDeploymentDeployTask(dockerService, deploymentRepository, serviceRepository, serviceConnectHandler),
+    }),
+    createPeriodicTaskRunner({
+      lifecycle,
+      periodMs: 15_000,
+      runTask: createDeploymentCleanupTask(dockerService, deploymentRepository, serviceRepository),
+    })
+  ]
 
-  startDeploymentDeployTask();
-  startDeploymentCleanupTask();
+  tasks.forEach(task => task.start());
 
   app
     .use(createRequestLogger())
