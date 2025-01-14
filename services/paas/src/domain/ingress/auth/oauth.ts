@@ -10,7 +10,7 @@ interface AuthedUserDetails {
 }
 
 export const getLoginUrl = (finalRedirectUri: string) => {
-  const redirectUri = `http://${config.rootDomain}/auth/callback?redirect_uri=${encodeURI(finalRedirectUri)}`;
+  const redirectUri = `https://${config.rootDomain}/auth/callback?redirect_uri=${encodeURI(finalRedirectUri)}`;
   return `https://github.com/login/oauth/authorize?response_type=code&client_id=${config.auth.clientId}&redirect_uri=${encodeURI(redirectUri)}&scope=${encodeURI('user:email')}`;
 };
 

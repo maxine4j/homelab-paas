@@ -5,7 +5,8 @@ const unwrapEnv = (envVarName: string): string => {
 }
 
 export const config = {
-  port: 8080,
+  httpPort: 8080,
+  httpsPort: 8443,
   paasContainerName: process.env['PAAS_CONTAINER_NAME'] ?? '/homelab-paas-1',
   rootDomain: unwrapEnv('PAAS_ROOT_DOMAIN'),
   auth: {

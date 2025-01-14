@@ -4,7 +4,7 @@ import { logger } from '../../../util/logger';
 import { TlsCertificateProvisionHandler } from './cert-provision-handler';
 import { X509Certificate } from 'crypto';
 
-const certificateFileJson = '/etc/homelab-paas/cert.json';
+const privateKeyFilePem = '/etc/homelab-paas/key.pem';
 const certificateFilePem = '/etc/homelab-paas/cert.pem';
 
 const certificateMinDaysUntilExpiry = 30;
@@ -44,6 +44,9 @@ export const createTlsCertRenewalTask = (
     }
 
     const { key, cert } = await provisionCertificate();
-    await writeFile(certificateFilePem, `${key}\n${cert}`);
+    await Promise.all([
+      writeFile(privateKeyFilePem, key),
+      writeFile(certificateFilePem, cert),
+    ]);
   };
 };
