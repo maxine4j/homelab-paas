@@ -28,6 +28,7 @@
   "dependencies": {
     "@koa/bodyparser": "^5.1.1",
     "@koa/router": "^12.0.1",
+    "acme-client": "^5.4.0",
     "better-sqlite3": "^11.7.2",
     "dockerode": "^4.0.3",
     "jsonwebtoken": "^9.0.2",

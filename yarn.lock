@@ -824,6 +824,151 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@peculiar/asn1-cms@npm:^2.3.13, @peculiar/asn1-cms@npm:^2.3.15":
+  version: 2.3.15
+  resolution: "@peculiar/asn1-cms@npm:2.3.15::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2F%40peculiar%2Fasn1-cms%2F-%2Fasn1-cms-2.3.15.tgz"
+  dependencies:
+    "@peculiar/asn1-schema": "npm:^2.3.15"
+    "@peculiar/asn1-x509": "npm:^2.3.15"
+    "@peculiar/asn1-x509-attr": "npm:^2.3.15"
+    asn1js: "npm:^3.0.5"
+    tslib: "npm:^2.8.1"
+  checksum: 10c0/767f984d75c3ed19e1fbb9dd93034646764e84cdf93567deff4aa4876d4d1d205543c5c606c1870c3a3fc641af76a85a5f017369a42269bed7164bd9f5ea8f9f
+  languageName: node
+  linkType: hard
+
+"@peculiar/asn1-csr@npm:^2.3.13":
+  version: 2.3.15
+  resolution: "@peculiar/asn1-csr@npm:2.3.15::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2F%40peculiar%2Fasn1-csr%2F-%2Fasn1-csr-2.3.15.tgz"
+  dependencies:
+    "@peculiar/asn1-schema": "npm:^2.3.15"
+    "@peculiar/asn1-x509": "npm:^2.3.15"
+    asn1js: "npm:^3.0.5"
+    tslib: "npm:^2.8.1"
+  checksum: 10c0/8fd76813b31fc179d41ce33b7ede56f399561f6850d5794ffff2f5b8633cdf96d80847333eb3699ac463a7f3883e2e789702fdc653eb00f90f2872c5577b79f7
+  languageName: node
+  linkType: hard
+
+"@peculiar/asn1-ecc@npm:^2.3.14":
+  version: 2.3.15
+  resolution: "@peculiar/asn1-ecc@npm:2.3.15::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2F%40peculiar%2Fasn1-ecc%2F-%2Fasn1-ecc-2.3.15.tgz"
+  dependencies:
+    "@peculiar/asn1-schema": "npm:^2.3.15"
+    "@peculiar/asn1-x509": "npm:^2.3.15"
+    asn1js: "npm:^3.0.5"
+    tslib: "npm:^2.8.1"
+  checksum: 10c0/410aee8742616bee2abe01a46fc054c5b8d5e4c81446adf2ebbae7a76e8e6eafd0acac360255d927ed08643633382fc7439d3b7a8395eb2245683d9ae4be8f84
+  languageName: node
+  linkType: hard
+
+"@peculiar/asn1-pfx@npm:^2.3.15":
+  version: 2.3.15
+  resolution: "@peculiar/asn1-pfx@npm:2.3.15::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2F%40peculiar%2Fasn1-pfx%2F-%2Fasn1-pfx-2.3.15.tgz"
+  dependencies:
+    "@peculiar/asn1-cms": "npm:^2.3.15"
+    "@peculiar/asn1-pkcs8": "npm:^2.3.15"
+    "@peculiar/asn1-rsa": "npm:^2.3.15"
+    "@peculiar/asn1-schema": "npm:^2.3.15"
+    asn1js: "npm:^3.0.5"
+    tslib: "npm:^2.8.1"
+  checksum: 10c0/9db67a2aa673e9461076fe106d92cc31cd06c34e55abddcb906b6f3c6dc53af27763423ac5560474b4cab213853d363165f570ee8cf07fd3b343bed8b35697bc
+  languageName: node
+  linkType: hard
+
+"@peculiar/asn1-pkcs8@npm:^2.3.15":
+  version: 2.3.15
+  resolution: "@peculiar/asn1-pkcs8@npm:2.3.15::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2F%40peculiar%2Fasn1-pkcs8%2F-%2Fasn1-pkcs8-2.3.15.tgz"
+  dependencies:
+    "@peculiar/asn1-schema": "npm:^2.3.15"
+    "@peculiar/asn1-x509": "npm:^2.3.15"
+    asn1js: "npm:^3.0.5"
+    tslib: "npm:^2.8.1"
+  checksum: 10c0/672cbb67f4ce54197bd2fd28cdf898c3f3b1486b453102387c90db618446fb1bcd0a5ac58140115cd276a7cb920b2a6700ea6d9b8b928c8ffdf0479f45941a9f
+  languageName: node
+  linkType: hard
+
+"@peculiar/asn1-pkcs9@npm:^2.3.13":
+  version: 2.3.15
+  resolution: "@peculiar/asn1-pkcs9@npm:2.3.15::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2F%40peculiar%2Fasn1-pkcs9%2F-%2Fasn1-pkcs9-2.3.15.tgz"
+  dependencies:
+    "@peculiar/asn1-cms": "npm:^2.3.15"
+    "@peculiar/asn1-pfx": "npm:^2.3.15"
+    "@peculiar/asn1-pkcs8": "npm:^2.3.15"
+    "@peculiar/asn1-schema": "npm:^2.3.15"
+    "@peculiar/asn1-x509": "npm:^2.3.15"
+    "@peculiar/asn1-x509-attr": "npm:^2.3.15"
+    asn1js: "npm:^3.0.5"
+    tslib: "npm:^2.8.1"
+  checksum: 10c0/ffae63b07857648c9ba7395932f45c9b56061aa9e44ba9b28145a88d481fe822669ddd2bbd89509a037f8aaaa5c28c24f1e7dd9f83eaccfad1fe1feb0da3b6fd
+  languageName: node
+  linkType: hard
+
+"@peculiar/asn1-rsa@npm:^2.3.13, @peculiar/asn1-rsa@npm:^2.3.15":
+  version: 2.3.15
+  resolution: "@peculiar/asn1-rsa@npm:2.3.15::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2F%40peculiar%2Fasn1-rsa%2F-%2Fasn1-rsa-2.3.15.tgz"
+  dependencies:
+    "@peculiar/asn1-schema": "npm:^2.3.15"
+    "@peculiar/asn1-x509": "npm:^2.3.15"
+    asn1js: "npm:^3.0.5"
+    tslib: "npm:^2.8.1"
+  checksum: 10c0/38f29c5ae6d6303832733536c58b2aa01bbf1fcdc22b4fc913669ef2601f67db76b9c3cac3971c337c84234ae3adf2ebb93593623d27728b713124eada03add4
+  languageName: node
+  linkType: hard
+
+"@peculiar/asn1-schema@npm:^2.3.13, @peculiar/asn1-schema@npm:^2.3.15":
+  version: 2.3.15
+  resolution: "@peculiar/asn1-schema@npm:2.3.15::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2F%40peculiar%2Fasn1-schema%2F-%2Fasn1-schema-2.3.15.tgz"
+  dependencies:
+    asn1js: "npm:^3.0.5"
+    pvtsutils: "npm:^1.3.6"
+    tslib: "npm:^2.8.1"
+  checksum: 10c0/0e73e292a17d00a8770825a9504ceaf0994481a39126317ca0ca5d3dc742087f2b71a4d086bb5613bf19ac57f001d42f594683797d43137702db3ee2b42736a0
+  languageName: node
+  linkType: hard
+
+"@peculiar/asn1-x509-attr@npm:^2.3.15":
+  version: 2.3.15
+  resolution: "@peculiar/asn1-x509-attr@npm:2.3.15::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2F%40peculiar%2Fasn1-x509-attr%2F-%2Fasn1-x509-attr-2.3.15.tgz"
+  dependencies:
+    "@peculiar/asn1-schema": "npm:^2.3.15"
+    "@peculiar/asn1-x509": "npm:^2.3.15"
+    asn1js: "npm:^3.0.5"
+    tslib: "npm:^2.8.1"
+  checksum: 10c0/5460e46b33e4771b8e4117be83b24a6d97f118bd4f4044233c5fab9c28c90d10d6be041a4ef274e4688d2f37a661ff210c45acfc4591c212c6703620c074fad2
+  languageName: node
+  linkType: hard
+
+"@peculiar/asn1-x509@npm:^2.3.13, @peculiar/asn1-x509@npm:^2.3.15":
+  version: 2.3.15
+  resolution: "@peculiar/asn1-x509@npm:2.3.15::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2F%40peculiar%2Fasn1-x509%2F-%2Fasn1-x509-2.3.15.tgz"
+  dependencies:
+    "@peculiar/asn1-schema": "npm:^2.3.15"
+    asn1js: "npm:^3.0.5"
+    pvtsutils: "npm:^1.3.6"
+    tslib: "npm:^2.8.1"
+  checksum: 10c0/a97b5f26d6ce4ebfa2e5102ac076802839e3008571c672f02fda78a047dbf786042b62fd9fd6f6ee615de9b7d32a92433ff1a71ba203447b8a16eedaa89d3e11
+  languageName: node
+  linkType: hard
+
+"@peculiar/x509@npm:^1.11.0":
+  version: 1.12.3
+  resolution: "@peculiar/x509@npm:1.12.3::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2F%40peculiar%2Fx509%2F-%2Fx509-1.12.3.tgz"
+  dependencies:
+    "@peculiar/asn1-cms": "npm:^2.3.13"
+    "@peculiar/asn1-csr": "npm:^2.3.13"
+    "@peculiar/asn1-ecc": "npm:^2.3.14"
+    "@peculiar/asn1-pkcs9": "npm:^2.3.13"
+    "@peculiar/asn1-rsa": "npm:^2.3.13"
+    "@peculiar/asn1-schema": "npm:^2.3.13"
+    "@peculiar/asn1-x509": "npm:^2.3.13"
+    pvtsutils: "npm:^1.3.5"
+    reflect-metadata: "npm:^0.2.2"
+    tslib: "npm:^2.7.0"
+    tsyringe: "npm:^4.8.0"
+  checksum: 10c0/5395af84f04b221989f7e2868c1ee641e5e91ee21aff201dc31bfa85578009fbce00b19db1f7fdebc11b5357f3285731cfe9784e4ae21556da7b62effd976b5c
+  languageName: node
+  linkType: hard
+
 "@pkgjs/parseargs@npm:^0.11.0":
   version: 0.11.0
   resolution: "@pkgjs/parseargs@npm:0.11.0"
@@ -1435,6 +1580,19 @@ __metadata:
   languageName: node
   linkType: hard
 
+"acme-client@npm:^5.4.0":
+  version: 5.4.0
+  resolution: "acme-client@npm:5.4.0::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Facme-client%2F-%2Facme-client-5.4.0.tgz"
+  dependencies:
+    "@peculiar/x509": "npm:^1.11.0"
+    asn1js: "npm:^3.0.5"
+    axios: "npm:^1.7.2"
+    debug: "npm:^4.3.5"
+    node-forge: "npm:^1.3.1"
+  checksum: 10c0/8010af4783414357f4b074f03a34919c9c0e7bbef9111299a1253f18d17cad2621b7aa909db6ef5a2526d983348cd4051d65db5a12947ea8db982688e2e4e7bd
+  languageName: node
+  linkType: hard
+
 "acorn-walk@npm:^8.1.1":
   version: 8.3.3
   resolution: "acorn-walk@npm:8.3.3"
@@ -1576,6 +1734,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"asn1js@npm:^3.0.5":
+  version: 3.0.5
+  resolution: "asn1js@npm:3.0.5::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Fasn1js%2F-%2Fasn1js-3.0.5.tgz"
+  dependencies:
+    pvtsutils: "npm:^1.3.2"
+    pvutils: "npm:^1.1.3"
+    tslib: "npm:^2.4.0"
+  checksum: 10c0/bb8eaf4040c8f49dd475566874986f5976b81bae65a6b5526e2208a13cdca323e69ce297bcd435fdda3eb6933defe888e71974d705b6fcb14f2734a907f8aed4
+  languageName: node
+  linkType: hard
+
 "async@npm:^3.2.3":
   version: 3.2.6
   resolution: "async@npm:3.2.6"
@@ -1594,6 +1763,17 @@ __metadata:
   version: 1.0.0
   resolution: "atomic-sleep@npm:1.0.0"
   checksum: 10c0/e329a6665512736a9bbb073e1761b4ec102f7926cce35037753146a9db9c8104f5044c1662e4a863576ce544fb8be27cd2be6bc8c1a40147d03f31eb1cfb6e8a
+  languageName: node
+  linkType: hard
+
+"axios@npm:^1.7.2":
+  version: 1.7.9
+  resolution: "axios@npm:1.7.9::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Faxios%2F-%2Faxios-1.7.9.tgz"
+  dependencies:
+    follow-redirects: "npm:^1.15.6"
+    form-data: "npm:^4.0.0"
+    proxy-from-env: "npm:^1.1.0"
+  checksum: 10c0/b7a41e24b59fee5f0f26c1fc844b45b17442832eb3a0fb42dd4f1430eb4abc571fe168e67913e8a1d91c993232bd1d1ab03e20e4d1fee8c6147649b576fc1b0b
   languageName: node
   linkType: hard
 
@@ -2163,6 +2343,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"debug@npm:^4.3.5":
+  version: 4.4.0
+  resolution: "debug@npm:4.4.0::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Fdebug%2F-%2Fdebug-4.4.0.tgz"
+  dependencies:
+    ms: "npm:^2.1.3"
+  peerDependenciesMeta:
+    supports-color:
+      optional: true
+  checksum: 10c0/db94f1a182bf886f57b4755f85b3a74c39b5114b9377b7ab375dc2cfa3454f09490cc6c30f829df3fc8042bc8b8995f6567ce5cd96f3bc3688bd24027197d9de
+  languageName: node
+  linkType: hard
+
 "decompress-response@npm:^6.0.0":
   version: 6.0.0
   resolution: "decompress-response@npm:6.0.0::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Fdecompress-response%2F-%2Fdecompress-response-6.0.0.tgz"
@@ -2637,6 +2829,16 @@ __metadata:
     locate-path: "npm:^5.0.0"
     path-exists: "npm:^4.0.0"
   checksum: 10c0/0406ee89ebeefa2d507feb07ec366bebd8a6167ae74aa4e34fb4c4abd06cf782a3ce26ae4194d70706f72182841733f00551c209fe575cb00bd92104056e78c1
+  languageName: node
+  linkType: hard
+
+"follow-redirects@npm:^1.15.6":
+  version: 1.15.9
+  resolution: "follow-redirects@npm:1.15.9::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Ffollow-redirects%2F-%2Ffollow-redirects-1.15.9.tgz"
+  peerDependenciesMeta:
+    debug:
+      optional: true
+  checksum: 10c0/5829165bd112c3c0e82be6c15b1a58fa9dcfaede3b3c54697a82fe4a62dd5ae5e8222956b448d2f98e331525f05d00404aba7d696de9e761ef6e42fdc780244f
   languageName: node
   linkType: hard
 
@@ -4233,7 +4435,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ms@npm:^2.1.1":
+"ms@npm:^2.1.1, ms@npm:^2.1.3":
   version: 2.1.3
   resolution: "ms@npm:2.1.3::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Fms%2F-%2Fms-2.1.3.tgz"
   checksum: 10c0/d924b57e7312b3b63ad21fc5b3dc0af5e78d61a1fc7cfb5457edaf26326bf62be5307cc87ffb6862ef1c2b33b0233cdb5d4f01c4c958cc0d660948b65a287a48
@@ -4283,6 +4485,13 @@ __metadata:
   dependencies:
     semver: "npm:^7.3.5"
   checksum: 10c0/dbd0792ea729329cd9d099f28a5681ff9e8a6db48cf64e1437bf6a7fd669009d1e758a784619a1c4cc8bfd1ed17162f042c787654edf19a1f64b5018457c9c1f
+  languageName: node
+  linkType: hard
+
+"node-forge@npm:^1.3.1":
+  version: 1.3.1
+  resolution: "node-forge@npm:1.3.1::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Fnode-forge%2F-%2Fnode-forge-1.3.1.tgz"
+  checksum: 10c0/e882819b251a4321f9fc1d67c85d1501d3004b4ee889af822fd07f64de3d1a8e272ff00b689570af0465d65d6bf5074df9c76e900e0aff23e60b847f2a46fbe8
   languageName: node
   linkType: hard
 
@@ -4470,6 +4679,7 @@ __metadata:
     "@types/node": "npm:^22.10.5"
     "@types/supertest": "npm:^6.0.2"
     "@types/uuid": "npm:^10"
+    acme-client: "npm:^5.4.0"
     better-sqlite3: "npm:^11.7.2"
     dockerode: "npm:^4.0.3"
     jest: "npm:^29.7.0"
@@ -4796,6 +5006,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"proxy-from-env@npm:^1.1.0":
+  version: 1.1.0
+  resolution: "proxy-from-env@npm:1.1.0::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Fproxy-from-env%2F-%2Fproxy-from-env-1.1.0.tgz"
+  checksum: 10c0/fe7dd8b1bdbbbea18d1459107729c3e4a2243ca870d26d34c2c1bcd3e4425b7bcc5112362df2d93cc7fb9746f6142b5e272fd1cc5c86ddf8580175186f6ad42b
+  languageName: node
+  linkType: hard
+
 "pump@npm:^3.0.0":
   version: 3.0.2
   resolution: "pump@npm:3.0.2::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Fpump%2F-%2Fpump-3.0.2.tgz"
@@ -4817,6 +5034,22 @@ __metadata:
   version: 6.1.0
   resolution: "pure-rand@npm:6.1.0"
   checksum: 10c0/1abe217897bf74dcb3a0c9aba3555fe975023147b48db540aa2faf507aee91c03bf54f6aef0eb2bf59cc259a16d06b28eca37f0dc426d94f4692aeff02fb0e65
+  languageName: node
+  linkType: hard
+
+"pvtsutils@npm:^1.3.2, pvtsutils@npm:^1.3.5, pvtsutils@npm:^1.3.6":
+  version: 1.3.6
+  resolution: "pvtsutils@npm:1.3.6::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Fpvtsutils%2F-%2Fpvtsutils-1.3.6.tgz"
+  dependencies:
+    tslib: "npm:^2.8.1"
+  checksum: 10c0/b1b42646370505ccae536dcffa662303b2c553995211330c8e39dec9ab8c197585d7751c2c5b9ab2f186feda0219d9bb23c34ee1e565573be96450f79d89a13c
+  languageName: node
+  linkType: hard
+
+"pvutils@npm:^1.1.3":
+  version: 1.1.3
+  resolution: "pvutils@npm:1.1.3::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Fpvutils%2F-%2Fpvutils-1.1.3.tgz"
+  checksum: 10c0/23489e6b3c76b6afb6964a20f891d6bef092939f401c78bba186b2bfcdc7a13904a0af0a78f7933346510f8c1228d5ab02d3c80e968fd84d3c76ff98d8ec9aac
   languageName: node
   linkType: hard
 
@@ -4915,6 +5148,13 @@ __metadata:
   version: 0.2.0
   resolution: "real-require@npm:0.2.0"
   checksum: 10c0/23eea5623642f0477412ef8b91acd3969015a1501ed34992ada0e3af521d3c865bb2fe4cdbfec5fe4b505f6d1ef6a03e5c3652520837a8c3b53decff7e74b6a0
+  languageName: node
+  linkType: hard
+
+"reflect-metadata@npm:^0.2.2":
+  version: 0.2.2
+  resolution: "reflect-metadata@npm:0.2.2::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Freflect-metadata%2F-%2Freflect-metadata-0.2.2.tgz"
+  checksum: 10c0/1cd93a15ea291e420204955544637c264c216e7aac527470e393d54b4bb075f10a17e60d8168ec96600c7e0b9fcc0cb0bb6e91c3fbf5b0d8c9056f04e6ac1ec2
   languageName: node
   linkType: hard
 
@@ -5644,6 +5884,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"tslib@npm:^1.9.3":
+  version: 1.14.1
+  resolution: "tslib@npm:1.14.1::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Ftslib%2F-%2Ftslib-1.14.1.tgz"
+  checksum: 10c0/69ae09c49eea644bc5ebe1bca4fa4cc2c82b7b3e02f43b84bd891504edf66dbc6b2ec0eef31a957042de2269139e4acff911e6d186a258fb14069cd7f6febce2
+  languageName: node
+  linkType: hard
+
+"tslib@npm:^2.4.0, tslib@npm:^2.7.0, tslib@npm:^2.8.1":
+  version: 2.8.1
+  resolution: "tslib@npm:2.8.1::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Ftslib%2F-%2Ftslib-2.8.1.tgz"
+  checksum: 10c0/9c4759110a19c53f992d9aae23aac5ced636e99887b51b9e61def52611732872ff7668757d4e4c61f19691e36f4da981cd9485e869b4a7408d689f6bf1f14e62
+  languageName: node
+  linkType: hard
+
 "tslib@npm:^2.6.3":
   version: 2.6.3
   resolution: "tslib@npm:2.6.3"
@@ -5655,6 +5909,15 @@ __metadata:
   version: 1.0.6
   resolution: "tsscmp@npm:1.0.6"
   checksum: 10c0/2f79a9455e7e3e8071995f98cdf3487ccfc91b760bec21a9abb4d90519557eafaa37246e87c92fa8bf3fef8fd30cfd0cc3c4212bb929baa9fb62494bfa4d24b2
+  languageName: node
+  linkType: hard
+
+"tsyringe@npm:^4.8.0":
+  version: 4.8.0
+  resolution: "tsyringe@npm:4.8.0::__archiveUrl=https%3A%2F%2Fpackages.atlassian.com%2Fapi%2Fnpm%2Fnpm-remote%2Ftsyringe%2F-%2Ftsyringe-4.8.0.tgz"
+  dependencies:
+    tslib: "npm:^1.9.3"
+  checksum: 10c0/e13810e8ff39c4093acd0649bc5db3c164825827631e1522cd9d5ca8694a018447fa1c24f059ea54e93b1020767b1131b9dc9ce598dabfc9aa41c11544bbfe19
   languageName: node
   linkType: hard
 
