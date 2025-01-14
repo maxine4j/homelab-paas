@@ -54,7 +54,7 @@ export const createDeploymentCleanupTask = (
     logger.info({ containerIds: containersToBeCleanedUp }, 'Found containers to clean up');
     await Promise.all(containersToBeCleanedUp.map(async ({ containerId, deploymentId }) => {
       await dockerService.terminateContainer(containerId);
-      if (deploymentId) {
+      if (deploymentId && await deploymentRepository.query(deploymentId)) {
         await deploymentRepository.markDeploymentCleanedUp(deploymentId);
       }
     }));

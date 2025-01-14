@@ -1,9 +1,6 @@
-import path from 'path'; 
 import acme from 'acme-client';
 import { logger } from '../../../util/logger';
 import { DnsAcmeChallengeProvider } from './dns-challenge/types';
-
-acme.setLogger(logger.child({ source: 'acme-client' }).info);
 
 export interface TlsCertificateProvisionHandler {
   (): Promise<{
@@ -24,9 +21,11 @@ export const createTlsCertificateProvisionHandler = (
       accountKey: await acme.crypto.createPrivateKey(),
     });
 
+    const altName = `*.${paasRootDomain}`;
     const [key, csr] = await acme.crypto.createCsr({
-      altNames: [`*.${paasRootDomain}`],
+      altNames: [altName],
     });
+    logger.info({ altName }, 'Created certificate signing request');
 
     const statefulChallenge = challengeProvider.createStateFulChallenge();
     const cert = await client.auto({
@@ -38,10 +37,10 @@ export const createTlsCertificateProvisionHandler = (
         challengeRemoveFn: statefulChallenge.removeChallenge,
     });
 
-    logger.info('Provisioned certificate');
+    logger.info({ altName }, 'Provisioned certificate');
     return {
-      key,
-      cert,
+      key: key.toString(),
+      cert: cert.toString(),
     };
   }
 }

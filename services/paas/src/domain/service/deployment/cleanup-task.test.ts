@@ -12,6 +12,7 @@ describe('cleanup-task', () => {
   } satisfies Partial<jest.Mocked<DockerService>> as unknown as jest.Mocked<DockerService>;
 
   const mockDeploymentRepository = {
+    query: jest.fn(),
     queryByStatus: jest.fn(),
     markDeploymentCleanedUp: jest.fn(),
   } satisfies Partial<jest.Mocked<DeploymentRepository>> as unknown as jest.Mocked<DeploymentRepository>;
@@ -23,6 +24,8 @@ describe('cleanup-task', () => {
   let cleanupTask: PeriodicTask;
 
   beforeEach(() => {
+    jest.clearAllMocks();
+
     cleanupTask = createDeploymentCleanupTask(
       mockDockerService,
       mockDeploymentRepository,
@@ -48,6 +51,9 @@ describe('cleanup-task', () => {
         deploymentId: 'deployment-345-deploying',
       }
     ]);
+    mockDeploymentRepository.query.mockImplementation(async (deploymentId) => ({
+      deploymentId,
+    } as any));
     mockDeploymentRepository.queryByStatus.mockResolvedValue([
       {
         deploymentId: 'deployment-345-deploying',
@@ -70,6 +76,25 @@ describe('cleanup-task', () => {
     expect(mockDockerService.terminateContainer).toHaveBeenCalledWith('container-123-stale');
     expect(mockDeploymentRepository.markDeploymentCleanedUp).toHaveBeenCalledWith('deployment-123-stale');
   });
+
+  test('should not attempt to mark deployment as cleaned up if container labelled with deployment that does not exist', async () => {
+    mockDockerService.findAllContainers.mockResolvedValue([
+      {
+        serviceId: undefined,
+        containerId: 'container-123-orphaned',
+        deploymentId: 'deployment-123-orphaned',
+      },
+    ]);
+    mockDeploymentRepository.query.mockResolvedValue(undefined);
+    mockDeploymentRepository.queryByStatus.mockResolvedValue([]);
+    mockServiceRepository.queryAllServices.mockResolvedValue([]);
+    
+    await cleanupTask();
+
+    expect(mockDockerService.terminateContainer).toHaveBeenCalledWith('container-123-orphaned');
+    expect(mockDeploymentRepository.markDeploymentCleanedUp).not.toHaveBeenCalled();
+
+  })
 
   test('should cleanup orphaned containers', async () => {
     mockDockerService.findAllContainers.mockResolvedValue([

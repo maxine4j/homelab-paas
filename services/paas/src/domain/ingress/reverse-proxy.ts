@@ -5,7 +5,9 @@ import {once} from 'node:events';
 import { ServiceRepository } from '../service/repository';
 import { DeploymentRepository } from '../service/deployment/repository';
 import { config } from '../../util/config';
-import { getLoginUrl, isAuthCookieValid } from './auth/oauth';
+import { getLoginUrl, verifyAuthCookie } from './auth/oauth';
+
+const authorizedUsers = new Set(config.auth.authorizedUsers);
 
 export const createReverseProxy = (
   serviceRepository: ServiceRepository,
@@ -32,9 +34,17 @@ export const createReverseProxy = (
 
     if (!activeDeployment?.serviceDescriptor.ingress.public) {
       // check for auth cookie
-      if (!await isAuthCookieValid(ctx.cookies)) {
-        logger.info('no auth cookie, redirecting')
+      const authedUserDetails = await verifyAuthCookie(ctx.cookies);
+      if (!authedUserDetails) {
+        logger.info('User not authenticated, redirecting to login url');
         ctx.redirect(getLoginUrl(ctx.request.href));
+        ctx.res.end();
+        return;
+      }
+      
+      if (!authorizedUsers.has(authedUserDetails.username)) {
+        logger.info({ authedUserDetails }, 'User not authorized');
+        ctx.status = 403;
         ctx.res.end();
         return;
       }

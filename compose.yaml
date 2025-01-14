@@ -8,11 +8,16 @@ services:
       - "80:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /etc/homelab-paas/:/etc/homelab-paas
+      - ./paas-config/:/etc/homelab-paas
     environment:
+      PAAS_ROOT_DOMAIN: ${PAAS_ROOT_DOMAIN}
+      PAAS_CONTAINER_NAME: /homelab-paas-1
+
       PAAS_AUTH_CLIENT_ID: ${PAAS_AUTH_CLIENT_ID}
       PAAS_AUTH_CLIENT_SECRET: ${PAAS_AUTH_CLIENT_SECRET}
       PAAS_AUTH_AUTHORIZED_USERS: ${PAAS_AUTH_AUTHORIZED_USERS}
       PAAS_AUTH_JWT_SECRET: ${PAAS_AUTH_JWT_SECRET}
-      PAAS_ROOT_DOMAIN: ${PAAS_ROOT_DOMAIN}
-      PAAS_CONTAINER_NAME: /homelab-paas-1
+
+      PAAS_DNS_NOTIFICATION_EMAIL: ${PAAS_DNS_NOTIFICATION_EMAIL}
+      PAAS_DNS_DIGITALOCEAN_DOMAIN: ${PAAS_DNS_DIGITALOCEAN_DOMAIN}
+      PAAS_DNS_DIGITALOCEAN_ACCESS_TOKEN: ${PAAS_DNS_DIGITALOCEAN_ACCESS_TOKEN}

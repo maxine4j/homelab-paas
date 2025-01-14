@@ -88,19 +88,23 @@ const issueJwt = async (userDetails: AuthedUserDetails) => {
   });
 };
 
-export const isAuthCookieValid = async (cookies: { get: (cookieName: string) => string | undefined }): Promise<boolean> => {
+export const verifyAuthCookie = async (cookies: { get: (cookieName: string) => string | undefined }): Promise<AuthedUserDetails | undefined> => {
   const authCookie = cookies.get(config.auth.cookieName);
 
   if (!authCookie) {
-    return false;
+    return undefined;
   }
 
   try {
-    jwt.verify(authCookie, config.auth.jwtSecret, {
+    const payload = jwt.verify(authCookie, config.auth.jwtSecret, {
       algorithms: ['HS256'],
     });
-    return true;
+    if (typeof payload === 'string') {
+      return undefined;
+    }
+    logger.info({ payload, typeOfPayload: typeof payload }, 'verified jwt');
+    return undefined; // JSON.parse(payload as any as string) as AuthedUserDetails;
   } catch {
-    return false;
+    return undefined;
   }
 };

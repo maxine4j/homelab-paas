@@ -14,5 +14,13 @@ export const config = {
     clientId: unwrapEnv('PAAS_AUTH_CLIENT_ID'),
     clientSecret: unwrapEnv('PAAS_AUTH_CLIENT_SECRET'),
     jwtSecret: unwrapEnv('PAAS_AUTH_JWT_SECRET'),
-  }
+    authorizedUsers: unwrapEnv('PAAS_AUTH_AUTHORIZED_USERS').split(','),
+  },
+  dns: {
+    notificationEmail: unwrapEnv('PAAS_DNS_NOTIFICATION_EMAIL'),
+    digitalocean: {
+      domain: unwrapEnv('PAAS_DNS_DIGITALOCEAN_DOMAIN'),
+      accessToken: unwrapEnv('PAAS_DNS_DIGITALOCEAN_ACCESS_TOKEN'),
+    }
+  },
 };

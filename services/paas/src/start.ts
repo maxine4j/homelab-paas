@@ -23,6 +23,10 @@ import { createInMemoryTaskQueue, createQueueTaskRunner } from './task/queue';
 import { createNetworkSyncTask } from './domain/networking/sync-task';
 import { createNetworkConnectHandler } from './domain/networking/connect-handler';
 import { createStartupTaskRunner } from './task/startup';
+import { createTlsCertRenewalTask } from './domain/ingress/tls/cert-renewal-task';
+import { createTlsCertificateProvisionHandler } from './domain/ingress/tls/cert-provision-handler';
+import { createDigitalOceanDnsAcmeChallengeProvider } from './domain/ingress/tls/dns-challenge/digitalocean';
+import { readFile, writeFile } from './util/file';
 
 export const start = (lifecycle: Lifecycle) => {
   const app = new Koa();
@@ -46,7 +50,15 @@ export const start = (lifecycle: Lifecycle) => {
   const deployTaskQueue = createInMemoryTaskQueue<DeploymentDeployTask>(uuid);
   const deploymentStartHandler = createDeploymentStartHandler(uuid, deployTaskQueue);
   const networkConnectHandler = createNetworkConnectHandler(dockerService);
-  
+  const provisionCertificateHandler = createTlsCertificateProvisionHandler(
+    config.dns.notificationEmail,
+    config.rootDomain,
+    createDigitalOceanDnsAcmeChallengeProvider(
+      config.dns.digitalocean.domain,
+      config.dns.digitalocean.accessToken,
+    ),
+  );
+
   const tasks: TaskRunner[] = [
     createQueueTaskRunner({
       lifecycle,
@@ -61,6 +73,11 @@ export const start = (lifecycle: Lifecycle) => {
     }),
     createStartupTaskRunner({
       runTask: createNetworkSyncTask(networkConnectHandler, serviceRepository),
+    }),
+    createPeriodicTaskRunner({
+      lifecycle,
+      periodMs: 1_000 * 60 * 60 * 24, // 1 day
+      runTask: createTlsCertRenewalTask(provisionCertificateHandler, writeFile, readFile, now),
     })
   ]
 

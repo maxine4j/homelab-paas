@@ -16,12 +16,12 @@ export const createPeriodicTaskRunner = (args: {
   return {
     start: async () => {
       while (args.lifecycle.isOpen()) {
-        await sleep(args.periodMs);
         try {
           await args.runTask();
         } catch (error) {
           logger.error(error);
         }
+        await sleep(args.periodMs);
       }
     }
   };
