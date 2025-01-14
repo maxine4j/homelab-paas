@@ -2,13 +2,13 @@ import { logger } from '../../util/logger';
 import { config } from '../../util/config';
 import { DockerService } from '../../docker/service';
 
-export interface ServiceConnectNetworkHandler {
+export interface NetworkConnectHandler {
   (serviceId: string): Promise<void>
 }
 
-export const createServiceConnectNetworkHandler = (
+export const createNetworkConnectHandler = (
   dockerService: DockerService,
-): ServiceConnectNetworkHandler => {
+): NetworkConnectHandler => {
 
   return async (serviceId) => {
     const networkId = await dockerService.findNetwork({ serviceId })

@@ -13,7 +13,6 @@ import { createServiceRepository, ServiceRecord } from './domain/service/reposit
 import { createDeploymentStartHandler } from './domain/service/deployment/start-handler';
 import { createDeploymentRouter } from './domain/service/router';
 import { createDeploymentCleanupTask } from './domain/service/deployment/cleanup-task';
-import { createServiceConnectNetworkHandler } from './domain/service/connect-handler';
 import { createSqliteKeyValueStore } from './kv-store/sqlite';
 import { createAuthRouter } from './domain/ingress/auth/router';
 import { createRequestLogger } from './util/logger';
@@ -21,6 +20,9 @@ import { createDockerService } from './docker/service';
 import { createPeriodicTaskRunner } from './task/periodic';
 import { TaskRunner } from './task/types';
 import { createInMemoryTaskQueue, createQueueTaskRunner } from './task/queue';
+import { createNetworkSyncTask } from './domain/networking/sync-task';
+import { createNetworkConnectHandler } from './domain/networking/connect-handler';
+import { createStartupTaskRunner } from './task/startup';
 
 export const start = (lifecycle: Lifecycle) => {
   const app = new Koa();
@@ -43,19 +45,22 @@ export const start = (lifecycle: Lifecycle) => {
   const dockerService = createDockerService(() => new Docker());
   const deployTaskQueue = createInMemoryTaskQueue<DeploymentDeployTask>(uuid);
   const deploymentStartHandler = createDeploymentStartHandler(uuid, deployTaskQueue);
-  const serviceConnectHandler = createServiceConnectNetworkHandler(dockerService);
+  const networkConnectHandler = createNetworkConnectHandler(dockerService);
   
   const tasks: TaskRunner[] = [
     createQueueTaskRunner({
       lifecycle,
       queue: deployTaskQueue,
       idleDelayMs: 5_000,
-      runTask: createDeploymentDeployTask(dockerService, deploymentRepository, serviceRepository, serviceConnectHandler),
+      runTask: createDeploymentDeployTask(dockerService, deploymentRepository, serviceRepository, networkConnectHandler),
     }),
     createPeriodicTaskRunner({
       lifecycle,
       periodMs: 15_000,
       runTask: createDeploymentCleanupTask(dockerService, deploymentRepository, serviceRepository),
+    }),
+    createStartupTaskRunner({
+      runTask: createNetworkSyncTask(networkConnectHandler, serviceRepository),
     })
   ]
 

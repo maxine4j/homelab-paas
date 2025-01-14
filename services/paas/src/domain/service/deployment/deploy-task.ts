@@ -5,8 +5,8 @@ import { DomainError } from '../../../util/error'
 import { logger } from '../../../util/logger'
 import { sleep } from '../../../util/sleep'
 import { ServiceRepository } from '../repository'
-import { ServiceConnectNetworkHandler } from '../connect-handler'
 import { DockerService } from '../../../docker/service'
+import { NetworkConnectHandler } from '../../networking/connect-handler'
 
 export interface DeploymentDeployTask {
   serviceId: string
@@ -18,7 +18,7 @@ export const createDeploymentDeployTask = (
   dockerService: DockerService,
   deploymentRepository: DeploymentRepository,
   serviceRepository: ServiceRepository,
-  connectService: ServiceConnectNetworkHandler,
+  connectService: NetworkConnectHandler,
   waitConfig = { maxAttempts: 5, delayMs: 5_000 },
 ): QueueTask<DeploymentDeployTask> => {
 

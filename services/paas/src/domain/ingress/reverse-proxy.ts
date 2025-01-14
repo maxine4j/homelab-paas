@@ -15,7 +15,7 @@ export const createReverseProxy = (
   return async (ctx: Context, next: Next) => {
     // dont proxy requests to the paas
     if (ctx.hostname === config.rootDomain) {
-      return next();
+      return await next();
     }
 
     // bypass koa's built in response handling so we can pipe the response from the internal service
@@ -33,7 +33,10 @@ export const createReverseProxy = (
     if (!activeDeployment?.serviceDescriptor.ingress.public) {
       // check for auth cookie
       if (!await isAuthCookieValid(ctx.cookies)) {
-        return ctx.redirect(getLoginUrl(ctx.request.href));
+        logger.info('no auth cookie, redirecting')
+        ctx.redirect(getLoginUrl(ctx.request.href));
+        ctx.res.end();
+        return;
       }
     }
 

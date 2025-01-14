@@ -1,6 +1,6 @@
 import { DockerService } from '../../../docker/service';
 import { QueueTask, TaskEnvelope } from '../../../task/queue';
-import { ServiceConnectNetworkHandler } from '../connect-handler';
+import { NetworkConnectHandler } from '../../networking/connect-handler';
 import { ServiceRepository } from '../repository';
 import { createDeploymentDeployTask, DeploymentDeployTask } from './deploy-task';
 import { DeploymentRepository } from './repository';
@@ -41,7 +41,7 @@ describe('deploy-task', () => {
     setActiveDeployment: jest.fn(),
   } satisfies Partial<jest.Mocked<ServiceRepository>> as unknown as jest.Mocked<ServiceRepository>
 
-  const mockConnectService: jest.MockedFn<ServiceConnectNetworkHandler> = jest.fn();
+  const mockConnectService: jest.MockedFn<NetworkConnectHandler> = jest.fn();
 
   let deployTask: QueueTask<DeploymentDeployTask>;
 
