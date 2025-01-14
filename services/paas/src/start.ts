@@ -51,11 +51,12 @@ export const start = (lifecycle: Lifecycle) => {
   const deploymentStartHandler = createDeploymentStartHandler(uuid, deployTaskQueue);
   const networkConnectHandler = createNetworkConnectHandler(dockerService);
   const provisionCertificateHandler = createTlsCertificateProvisionHandler(
-    config.dns.notificationEmail,
+    config.tls.notificationEmail,
     config.rootDomain,
+    config.tls.letsencryptEnv,
     createDigitalOceanDnsAcmeChallengeProvider(
-      config.dns.digitalocean.domain,
-      config.dns.digitalocean.accessToken,
+      config.tls.digitalocean.domain,
+      config.tls.digitalocean.accessToken,
     ),
   );
 

@@ -1,6 +1,7 @@
 import acme from 'acme-client';
 import { logger } from '../../../util/logger';
 import { DnsAcmeChallengeProvider } from './dns-challenge/types';
+import { ContextualError } from '../../../util/error';
 
 export interface TlsCertificateProvisionHandler {
   (): Promise<{
@@ -12,12 +13,21 @@ export interface TlsCertificateProvisionHandler {
 export const createTlsCertificateProvisionHandler = (
   expiryNotificationEmail: string,
   paasRootDomain: string,
+  letsencryptEnv: string,
   challengeProvider: DnsAcmeChallengeProvider,
 ) => {
 
+  const getDirectoryUrl = () => {
+    switch (letsencryptEnv) {
+      case 'production': return acme.directory.letsencrypt.production;
+      case 'staging': return acme.directory.letsencrypt.staging;
+      default: throw new ContextualError('Invalid PAAS_TLS_LETSENCRYPT_ENV, expected staging or production', { letsencryptEnv });
+    }
+  }
+
   return async () => {
     const client = new acme.Client({
-      directoryUrl: acme.directory.letsencrypt.staging,
+      directoryUrl: getDirectoryUrl(),
       accountKey: await acme.crypto.createPrivateKey(),
     });
 

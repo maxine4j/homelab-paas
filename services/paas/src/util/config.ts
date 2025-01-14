@@ -16,11 +16,12 @@ export const config = {
     jwtSecret: unwrapEnv('PAAS_AUTH_JWT_SECRET'),
     authorizedUsers: unwrapEnv('PAAS_AUTH_AUTHORIZED_USERS').split(','),
   },
-  dns: {
-    notificationEmail: unwrapEnv('PAAS_DNS_NOTIFICATION_EMAIL'),
+  tls: {
+    notificationEmail: unwrapEnv('PAAS_TLS_NOTIFICATION_EMAIL'),
+    letsencryptEnv: unwrapEnv('PAAS_TLS_LETSENCRYPT_ENV'),
     digitalocean: {
-      domain: unwrapEnv('PAAS_DNS_DIGITALOCEAN_DOMAIN'),
-      accessToken: unwrapEnv('PAAS_DNS_DIGITALOCEAN_ACCESS_TOKEN'),
+      domain: unwrapEnv('PAAS_TLS_DIGITALOCEAN_DOMAIN'),
+      accessToken: unwrapEnv('PAAS_TLS_DIGITALOCEAN_ACCESS_TOKEN'),
     }
   },
 };
