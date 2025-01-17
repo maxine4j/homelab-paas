@@ -3,7 +3,7 @@ import Docker from 'dockerode';
 import Koa from 'koa';
 import https from 'https';
 import { generate as generateShortUuid } from 'short-uuid';
-import { createDockerService } from './docker/service';
+import { DockerService } from './docker/service';
 import { createAuthRouter } from './domain/ingress/auth/router';
 import { createReverseProxyMiddleware } from './domain/ingress/reverse-proxy/middleware';
 import { TlsCertProvisionService } from './domain/ingress/tls/provision-handler';
@@ -57,7 +57,7 @@ export const start = (lifecycle: Lifecycle) => {
     config.auth.sessionLifetimeSeconds,
     config.auth.authorizedUsers
   );
-  const dockerService = createDockerService(() => new Docker());
+  const dockerService = new DockerService(() => new Docker());
   const deployTaskQueue = new InMemoryTaskQueue<DeployTaskDescriptor>(uuid);
   const deployService = new DeployService(uuid, deployTaskQueue);
   const networkService = new NetworkService(dockerService);
