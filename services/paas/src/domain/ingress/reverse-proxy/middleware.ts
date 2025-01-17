@@ -2,7 +2,6 @@ import { Context, Middleware, Next } from 'koa';
 import { logger } from '../../../util/logger';
 import { ServiceRepository } from '../../service/repository';
 import { DeploymentRecord, DeploymentRepository } from '../../service/deployment/repository';
-import { UserAuthorizationChecker } from '../auth/authz';
 import { RequestForwarder } from './forwarder';
 import { AuthService } from '../auth/service';
 
@@ -10,7 +9,6 @@ export const createReverseProxyMiddleware = (
   serviceRepository: ServiceRepository,
   deploymentRepository: DeploymentRepository,
   authService: AuthService,
-  isAuthorized: UserAuthorizationChecker,
   forwardRequest: RequestForwarder,
   rootDomain: string,
   authCookieName: string,
@@ -64,7 +62,7 @@ export const createReverseProxyMiddleware = (
         ctx.redirect(authService.getLoginUrl(ctx.request.href));
         return;
       }
-      if (!isAuthorized(
+      if (!authService.isUserAuthorized(
         authedUserDetails.userId, 
         activeDeployment?.serviceDescriptor?.ingress?.authorizedUsers)
       ) {
