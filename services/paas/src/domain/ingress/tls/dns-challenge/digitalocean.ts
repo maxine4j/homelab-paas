@@ -55,7 +55,7 @@ export const createDigitalOceanDnsAcmeChallengeProvider = (
   };
 
   return {
-    createStateFulChallenge: () => {
+    createStatefulChallenge: () => {
       let challengeRecordId: string | undefined;
       return {
         createChallenge: async (authz, challenge, keyAuthorization) => {

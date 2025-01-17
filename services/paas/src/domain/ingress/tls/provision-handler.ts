@@ -37,7 +37,7 @@ export const createTlsCertificateProvisionHandler = (
     });
     logger.info({ altName }, 'Created certificate signing request');
 
-    const statefulChallenge = challengeProvider.createStateFulChallenge();
+    const statefulChallenge = challengeProvider.createStatefulChallenge();
     const cert = await client.auto({
         csr,
         email: expiryNotificationEmail,
