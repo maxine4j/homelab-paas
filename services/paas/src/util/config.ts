@@ -12,8 +12,8 @@ export const config = {
   auth: {
     cookieName: 'homelab-paas-auth',
     sessionLifetimeSeconds: 60 * 60 * 24 * 7, // 1 week
-    clientId: unwrapEnv('PAAS_AUTH_CLIENT_ID'),
-    clientSecret: unwrapEnv('PAAS_AUTH_CLIENT_SECRET'),
+    githubClientId: unwrapEnv('PAAS_AUTH_CLIENT_ID'),
+    githubClientSecret: unwrapEnv('PAAS_AUTH_CLIENT_SECRET'),
     jwtSecret: unwrapEnv('PAAS_AUTH_JWT_SECRET'),
     authorizedUsers: unwrapEnv('PAAS_AUTH_AUTHORIZED_USERS').split(','), // users must be here to access anything in the paas
     paasAdminUsers: unwrapEnv('PAAS_AUTH_PAAS_ADMIN_USERS').split(','), // users must be here to access paas functionality itself

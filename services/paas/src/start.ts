@@ -28,11 +28,10 @@ import { readFile, writeFile } from './util/file';
 import { createHealthCheckRouter } from './util/healthcheck';
 import { Lifecycle } from './util/lifecycle';
 import { createRequestLogger, logger } from './util/logger';
-import { readFileSync } from 'fs';
-import { createGetAuthenticatedUser } from './domain/ingress/auth/authn';
 import { createUserAuthorizationChecker } from './domain/ingress/auth/authz';
 import { createRequestForwarder } from './domain/ingress/reverse-proxy/forwarder';
-import { getLoginUrl } from './domain/ingress/auth/oauth';
+import { AuthService } from './domain/ingress/auth/service';
+import { GitHubOauth2Provider } from './domain/ingress/auth/oauth-provider/github';
 
 export const start = (lifecycle: Lifecycle) => {
   const uuid = () => generateShortUuid();
@@ -50,6 +49,8 @@ export const start = (lifecycle: Lifecycle) => {
   });
   const serviceRepository = createServiceRepository(serviceKvStore);
 
+  const oauth2Provider = new GitHubOauth2Provider(config.rootDomain, config.auth.githubClientId, config.auth.githubClientSecret)
+  const authService = new AuthService(oauth2Provider, config.auth.jwtSecret, config.auth.sessionLifetimeSeconds);
   const dockerService = createDockerService(() => new Docker());
   const deployTaskQueue = createInMemoryTaskQueue<DeploymentDeployTask>(uuid);
   const deploymentStartHandler = createDeploymentStartHandler(uuid, deployTaskQueue);
@@ -66,17 +67,17 @@ export const start = (lifecycle: Lifecycle) => {
   const reverseProxy = createReverseProxyMiddleware(
     serviceRepository, 
     deploymentRepository,
-    createGetAuthenticatedUser(),
+    authService,
     createUserAuthorizationChecker(config.auth.authorizedUsers),
     createRequestForwarder(),
     config.rootDomain,
-    getLoginUrl,
+    config.auth.cookieName,
   );
 
   const app = new Koa();
   app
     .use(createRequestLogger())
-    .use(createAuthRouter().routes())
+    .use(createAuthRouter(authService).routes())
     .use(reverseProxy)
     .use(bodyParser())
     .use(createHealthCheckRouter().routes())

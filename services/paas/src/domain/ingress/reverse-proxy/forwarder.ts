@@ -1,9 +1,9 @@
 import http from 'node:http';
 import { Context } from 'koa';
 import { DeploymentRecord } from '../../service/deployment/repository';
-import { AuthedUserDetails } from '../auth/oauth';
 import { once } from 'node:events';
 import { logger } from '../../../util/logger';
+import { AuthedUserDetails } from '../auth/oauth-provider/types';
 
 export interface RequestForwarder {
   (args: {
@@ -52,10 +52,14 @@ const buildAuthHeaders = (authedUserDetails: AuthedUserDetails | undefined) => {
     return headers;
   }
 
-  headers['PaasAuth-Username'] = authedUserDetails.username;
-  headers['PaasAuth-Name'] = authedUserDetails.name;
-  headers['PaasAuth-Avatar'] = authedUserDetails.avatarUrl;
+  headers['PaasAuth-UserId'] = authedUserDetails.userId;
 
+  if (authedUserDetails.name) {
+    headers['PaasAuth-Name'] = authedUserDetails.name;
+  }
+  if (authedUserDetails.avatarUrl) {
+    headers['PaasAuth-Avatar'] = authedUserDetails.avatarUrl;
+  }
   if (authedUserDetails.email) {
     headers['PaasAuth-Email'] = authedUserDetails.email;
   }

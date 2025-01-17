@@ -3,10 +3,10 @@ import { createReverseProxyMiddleware } from './middleware';
 import { DeploymentRecord, DeploymentRepository } from '../../service/deployment/repository';
 import { UserAuthorizationChecker } from '../auth/authz';
 import { RequestForwarder } from './forwarder';
-import { AuthenticatedUserGetter } from '../auth/authn';
 import { startMiddlewareTestApi } from '../../../util/test/router';
 import supertest from 'supertest';
-import { AuthedUserDetails } from '../auth/oauth';
+import { AuthService } from '../auth/service';
+import { AuthedUserDetails } from '../auth/oauth-provider/types';
 
 describe('reverse proxy middleware', () => {
 
@@ -19,7 +19,11 @@ describe('reverse proxy middleware', () => {
   const mockDeploymentRepository = {
     query: jest.fn(),
   } satisfies Partial<jest.Mocked<DeploymentRepository>> as unknown as jest.Mocked<DeploymentRepository>;
-  const mockGetAuthenticatedUser: jest.MockedFn<AuthenticatedUserGetter> = jest.fn();
+  const mockAuthService: jest.Mocked<AuthService> = {
+    getLoginUrl: jest.fn().mockReturnValue(mockLoginUrl),
+    issueAuthCookie: jest.fn(),
+    verifyAuthCookie: jest.fn(),
+  } as Partial<jest.Mocked<AuthService>> as unknown as jest.Mocked<AuthService>;
   const mockIsAuthorized: jest.MockedFn<UserAuthorizationChecker> = jest.fn();
   const mockForwardRequest: jest.MockedFn<RequestForwarder> = jest.fn()
     .mockImplementation(async ({ ctx }) => {
@@ -30,11 +34,11 @@ describe('reverse proxy middleware', () => {
   const reverseProxyMiddleware = createReverseProxyMiddleware(
     mockServiceRepository,
     mockDeploymentRepository,
-    mockGetAuthenticatedUser,
+    mockAuthService,
     mockIsAuthorized,
     mockForwardRequest,
     mockRootDomain,
-    () => mockLoginUrl,
+    'auth-cookie',
   );
 
   const server = startMiddlewareTestApi(
@@ -103,7 +107,7 @@ describe('reverse proxy middleware', () => {
           port: 8080,
         }
       } as Partial<DeploymentRecord> as DeploymentRecord);
-      mockGetAuthenticatedUser.mockResolvedValue(undefined);
+      mockAuthService.verifyAuthCookie.mockReturnValue(undefined);
 
       const response = await supertest(server)
         .get('/')
@@ -125,7 +129,7 @@ describe('reverse proxy middleware', () => {
           port: 8080,
         }
       } as Partial<DeploymentRecord> as DeploymentRecord);
-      mockGetAuthenticatedUser.mockResolvedValue({
+      mockAuthService.verifyAuthCookie.mockReturnValue({
         username: 'user-123',
       } as Partial<AuthedUserDetails> as AuthedUserDetails);
       mockIsAuthorized.mockReturnValue(false);
@@ -144,7 +148,7 @@ describe('reverse proxy middleware', () => {
         activeDeploymentId: undefined,
       });
       mockDeploymentRepository.query.mockResolvedValue(undefined);
-      mockGetAuthenticatedUser.mockResolvedValue({
+      mockAuthService.verifyAuthCookie.mockReturnValue({
         username: 'user-123',
       } as Partial<AuthedUserDetails> as AuthedUserDetails);
       mockIsAuthorized.mockReturnValue(true);
@@ -168,7 +172,7 @@ describe('reverse proxy middleware', () => {
           port: 8080,
         }
       } as Partial<DeploymentRecord> as DeploymentRecord);
-      mockGetAuthenticatedUser.mockResolvedValue({
+      mockAuthService.verifyAuthCookie.mockReturnValue({
         username: 'user-123',
       } as Partial<AuthedUserDetails> as AuthedUserDetails);
       mockIsAuthorized.mockReturnValue(true);

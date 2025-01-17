@@ -4,16 +4,16 @@ import { ServiceRepository } from '../../service/repository';
 import { DeploymentRecord, DeploymentRepository } from '../../service/deployment/repository';
 import { UserAuthorizationChecker } from '../auth/authz';
 import { RequestForwarder } from './forwarder';
-import { AuthenticatedUserGetter } from '../auth/authn';
+import { AuthService } from '../auth/service';
 
 export const createReverseProxyMiddleware = (
   serviceRepository: ServiceRepository,
   deploymentRepository: DeploymentRepository,
-  getAuthenticatedUser: AuthenticatedUserGetter,
+  authService: AuthService,
   isAuthorized: UserAuthorizationChecker,
   forwardRequest: RequestForwarder,
   rootDomain: string,
-  getLoginUrl: (redirect: string) => string,
+  authCookieName: string,
 ): Middleware => {
   
   const isRequestForPaas = (hostname: string) => hostname === rootDomain;
@@ -49,7 +49,7 @@ export const createReverseProxyMiddleware = (
     // bypass koa's built in response handling so we can pipe the response from the internal service
     const serviceId = parseServiceId(ctx.hostname);
     const activeDeployment = await getActiveDeployment(serviceId);
-    const authedUserDetails = await getAuthenticatedUser(ctx.cookies);
+    const authedUserDetails = authService.verifyAuthCookie(ctx.cookies.get(authCookieName));
 
     logger.info({
       serviceId, 
@@ -61,17 +61,15 @@ export const createReverseProxyMiddleware = (
     if (!serviceAllowsPublicIngress(activeDeployment)) {
       if (!authedUserDetails) {
         logger.info('User not authenticated, redirecting to login url');
-        ctx.redirect(getLoginUrl(ctx.request.href));
-        // ctx.res.end();
+        ctx.redirect(authService.getLoginUrl(ctx.request.href));
         return;
       }
       if (!isAuthorized(
-        authedUserDetails.username, 
+        authedUserDetails.userId, 
         activeDeployment?.serviceDescriptor?.ingress?.authorizedUsers)
       ) {
         logger.info({ authedUserDetails }, 'User not authorized');
         ctx.status = 403;
-        // ctx.res.end();
         return;
       }
     }
@@ -79,7 +77,6 @@ export const createReverseProxyMiddleware = (
     if (!activeDeployment?.container) {
       logger.error({ serviceId }, 'Could not find active deployment for service')
       ctx.status = 503;
-      // ctx.res.end();
       return;
     }
 
