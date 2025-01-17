@@ -3,7 +3,7 @@ import { logger } from '../../../util/logger';
 import { ServiceRepository } from '../../service/repository';
 import { DeploymentRecord, DeploymentRepository } from '../../service/deployment/repository';
 import { UserAuthorizationChecker } from '../auth/authz';
-import { RequestForwarder } from './forward';
+import { RequestForwarder } from './forwarder';
 import { AuthenticatedUserGetter } from '../auth/authn';
 
 export const createReverseProxyMiddleware = (

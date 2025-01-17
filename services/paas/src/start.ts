@@ -31,7 +31,7 @@ import { createRequestLogger, logger } from './util/logger';
 import { readFileSync } from 'fs';
 import { createGetAuthenticatedUser } from './domain/ingress/auth/authn';
 import { createUserAuthorizationChecker } from './domain/ingress/auth/authz';
-import { createRequestForwarder } from './domain/ingress/reverse-proxy/forward';
+import { createRequestForwarder } from './domain/ingress/reverse-proxy/forwarder';
 import { getLoginUrl } from './domain/ingress/auth/oauth';
 
 export const start = (lifecycle: Lifecycle) => {

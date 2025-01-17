@@ -2,7 +2,7 @@ import { ServiceRepository } from '../../service/repository';
 import { createReverseProxyMiddleware } from './middleware';
 import { DeploymentRecord, DeploymentRepository } from '../../service/deployment/repository';
 import { UserAuthorizationChecker } from '../auth/authz';
-import { RequestForwarder } from './forward';
+import { RequestForwarder } from './forwarder';
 import { AuthenticatedUserGetter } from '../auth/authn';
 import { startMiddlewareTestApi } from '../../../util/test/router';
 import supertest from 'supertest';
