@@ -4,37 +4,23 @@ import { logger } from '../../../util/logger'
 import { DockerService } from '../../../docker/service';
 import { PeriodicTask } from '../../../task/periodic';
 
-export const createDeploymentCleanupTask = (
-  dockerService: DockerService,
-  deploymentRepository: DeploymentRepository,
-  serviceRepository: ServiceRepository,
-): PeriodicTask => {
+export class DeploymentCleanupTask implements PeriodicTask {
+  
+  constructor (
+    private readonly dockerService: DockerService,
+    private readonly deploymentRepository: DeploymentRepository,
+    private readonly serviceRepository: ServiceRepository,
+  ) {}
 
-  const shouldCleanupContainer = (
-    container: { 
-      serviceId?: string, 
-      deploymentId?: string, 
-    },
-    protectedDeploymentIds: Set<string>,
-  ) => {
-    if (container.serviceId === undefined || container.deploymentId === undefined) {
-      return true;
-    }
-    if (protectedDeploymentIds.has(container.deploymentId)) {
-      return false;
-    }
-    return true;
-  }
-
-  return async () => {
+  public async run() {
     logger.info('Starting deployment cleanup task');
     
-    const services = await serviceRepository.queryAllServices();
+    const services = await this.serviceRepository.queryAllServices();
     const activeDeploymentIds = services
       .map(service => service.activeDeploymentId)
       .filter((deploymentId) => deploymentId !== undefined);
 
-    const deployingDeployments = await deploymentRepository.queryByStatus('deploying');
+    const deployingDeployments = await this.deploymentRepository.queryByStatus('deploying');
     const deployingDeploymentIds = deployingDeployments.map(deployment => deployment.deploymentId);
 
     const protectedDeploymentIds = new Set([
@@ -42,9 +28,9 @@ export const createDeploymentCleanupTask = (
       ...deployingDeploymentIds,
     ]);
 
-    const containers = await dockerService.findAllContainers();
+    const containers = await this.dockerService.findAllContainers();
     const containersToBeCleanedUp = containers
-      .filter(container => shouldCleanupContainer(container, protectedDeploymentIds));
+      .filter(container => this.shouldCleanupContainer(container, protectedDeploymentIds));
     
     if (containersToBeCleanedUp.length === 0) {
       logger.info('No stale containers found');
@@ -53,11 +39,27 @@ export const createDeploymentCleanupTask = (
 
     logger.info({ containerIds: containersToBeCleanedUp }, 'Found containers to clean up');
     await Promise.all(containersToBeCleanedUp.map(async ({ containerId, deploymentId }) => {
-      await dockerService.terminateContainer(containerId);
-      if (deploymentId && await deploymentRepository.query(deploymentId)) {
-        await deploymentRepository.markDeploymentCleanedUp(deploymentId);
+      await this.dockerService.terminateContainer(containerId);
+      if (deploymentId && await this.deploymentRepository.query(deploymentId)) {
+        await this.deploymentRepository.markDeploymentCleanedUp(deploymentId);
       }
     }));
     logger.info({ containerIds: containersToBeCleanedUp }, 'Cleaned up containers');
-  };
-};
+  }
+
+  private shouldCleanupContainer(
+    container: { 
+      serviceId?: string, 
+      deploymentId?: string, 
+    },
+    protectedDeploymentIds: Set<string>,
+  ) {
+    if (container.serviceId === undefined || container.deploymentId === undefined) {
+      return true;
+    }
+    if (protectedDeploymentIds.has(container.deploymentId)) {
+      return false;
+    }
+    return true;
+  }
+}

@@ -1,6 +1,6 @@
 import { TaskQueue } from '../../../task/queue';
 import { ServiceDescriptor } from '../service-descriptor';
-import { DeploymentDeployTask } from './deploy-task';
+import { DeployTask } from './deploy-task';
 import { createDeploymentStartHandler } from './start-handler';
 
 describe('start deployment handler', () => {
@@ -16,7 +16,7 @@ describe('start deployment handler', () => {
   const mockGenerateDeploymentId = jest.fn();
   const mockDeploymentTaskQueue= {
     enqueue: jest.fn(),
-  } as Partial<jest.Mocked<TaskQueue<DeploymentDeployTask>>> as unknown as jest.Mocked<TaskQueue<DeploymentDeployTask>>
+  } as Partial<jest.Mocked<TaskQueue<DeployTask>>> as unknown as jest.Mocked<TaskQueue<DeployTask>>
 
   const startDeployment = createDeploymentStartHandler(mockGenerateDeploymentId, mockDeploymentTaskQueue);
 

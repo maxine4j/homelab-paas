@@ -1,13 +1,13 @@
 import { DockerService } from '../../../docker/service';
-import { QueueTask, TaskEnvelope } from '../../../task/queue';
+import { TaskEnvelope } from '../../../task/queue';
 import { NetworkConnectHandler } from '../../networking/connect-handler';
 import { ServiceRepository } from '../repository';
-import { createDeploymentDeployTask, DeploymentDeployTask } from './deploy-task';
+import { DeployTask, DeployTaskDescriptor } from './deploy-task';
 import { DeploymentRepository } from './repository';
 
-describe('deploy-task', () => {
+describe('deploy task', () => {
 
-  const mockTask: TaskEnvelope<DeploymentDeployTask> = {
+  const mockTask: TaskEnvelope<DeployTaskDescriptor> = {
     taskId: 'task-123',
     task: {
       deploymentId: 'deployment-123',
@@ -43,12 +43,12 @@ describe('deploy-task', () => {
 
   const mockConnectService: jest.MockedFn<NetworkConnectHandler> = jest.fn();
 
-  let deployTask: QueueTask<DeploymentDeployTask>;
+  let deployTask: DeployTask;
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    deployTask = createDeploymentDeployTask(
+    deployTask = new DeployTask(
       mockDockerService,
       mockDeploymentRepository,
       mockServiceRepository,
@@ -67,7 +67,7 @@ describe('deploy-task', () => {
   test('should create new service for first deployment of a new service', async () => {
     mockServiceRepository.queryService.mockResolvedValue(undefined);
 
-    await deployTask(mockTask);
+    await deployTask.run(mockTask);
 
     expect(mockServiceRepository.createService).toHaveBeenCalledWith('service-123');
   });
@@ -75,13 +75,13 @@ describe('deploy-task', () => {
   test('should not create a new service for deployments of existing service', async () => {
     mockServiceRepository.queryService.mockResolvedValue({ serviceId: 'service-123' });
 
-    await deployTask(mockTask);
+    await deployTask.run(mockTask);
 
     expect(mockServiceRepository.createService).not.toHaveBeenCalled();
   });
 
   test('should successfully deploy and wire up deployment', async () => {
-    await deployTask(mockTask);
+    await deployTask.run(mockTask);
 
     expect(mockConnectService).toHaveBeenCalledWith('service-123');
     expect(mockDockerService.pullImageIfNotPresent).toHaveBeenCalledWith('image-123');
@@ -100,13 +100,13 @@ describe('deploy-task', () => {
   test('should throw when service network not found', async () => {
     mockDockerService.findNetwork.mockResolvedValue(undefined);
 
-    await expect(deployTask(mockTask)).rejects.toThrow('Failed to find service network');
+    await expect(deployTask.run(mockTask)).rejects.toThrow('Failed to find service network');
   });
 
   test('should mark deployment as failed when container fails to start', async () => {
     mockDockerService.isContainerRunning.mockResolvedValue(false);
 
-    await deployTask(mockTask);
+    await deployTask.run(mockTask);
 
     expect(mockDeploymentRepository.markDeploymentFailed).toHaveBeenCalledWith('deployment-123', 'Container failed to start');
     expect(mockDeploymentRepository.markDeploymentRunning).not.toHaveBeenCalled();

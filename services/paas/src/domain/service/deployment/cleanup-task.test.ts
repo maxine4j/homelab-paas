@@ -1,7 +1,7 @@
 import { DockerService } from '../../../docker/service';
 import { PeriodicTask } from '../../../task/periodic';
 import { ServiceRepository } from '../repository';
-import { createDeploymentCleanupTask } from './cleanup-task';
+import { DeploymentCleanupTask } from './cleanup-task';
 import { DeploymentRepository } from './repository';
 
 describe('cleanup-task', () => {
@@ -26,7 +26,7 @@ describe('cleanup-task', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    cleanupTask = createDeploymentCleanupTask(
+    cleanupTask = new DeploymentCleanupTask(
       mockDockerService,
       mockDeploymentRepository,
       mockServiceRepository,
@@ -70,7 +70,7 @@ describe('cleanup-task', () => {
       }
     ]);
     
-    await cleanupTask();
+    await cleanupTask.run();
 
     expect(mockDockerService.terminateContainer).toHaveBeenCalledTimes(1);
     expect(mockDockerService.terminateContainer).toHaveBeenCalledWith('container-123-stale');
@@ -89,7 +89,7 @@ describe('cleanup-task', () => {
     mockDeploymentRepository.queryByStatus.mockResolvedValue([]);
     mockServiceRepository.queryAllServices.mockResolvedValue([]);
     
-    await cleanupTask();
+    await cleanupTask.run();
 
     expect(mockDockerService.terminateContainer).toHaveBeenCalledWith('container-123-orphaned');
     expect(mockDeploymentRepository.markDeploymentCleanedUp).not.toHaveBeenCalled();
@@ -107,7 +107,7 @@ describe('cleanup-task', () => {
     mockDeploymentRepository.queryByStatus.mockResolvedValue([]);
     mockServiceRepository.queryAllServices.mockResolvedValue([]);
     
-    await cleanupTask();
+    await cleanupTask.run();
 
     expect(mockDockerService.terminateContainer).toHaveBeenCalledWith('container-123-orphaned');
   });

@@ -11,8 +11,8 @@ import { TlsCertRenewalTask } from './domain/ingress/tls/renewal-task';
 import { DigitalOceanDnsAcmeChallengeProvider } from './domain/ingress/tls/dns-challenge/digitalocean';
 import { createNetworkConnectHandler } from './domain/networking/connect-handler';
 import { NetworkSyncTask } from './domain/networking/sync-task';
-import { createDeploymentCleanupTask } from './domain/service/deployment/cleanup-task';
-import { createDeploymentDeployTask, DeploymentDeployTask } from './domain/service/deployment/deploy-task';
+import { DeploymentCleanupTask } from './domain/service/deployment/cleanup-task';
+import { createDeploymentDeployTask, DeployTask } from './domain/service/deployment/deploy-task';
 import { createDeploymentRepository, DeploymentRecord } from './domain/service/deployment/repository';
 import { createDeploymentStartHandler } from './domain/service/deployment/start-handler';
 import { createServiceRepository, ServiceRecord } from './domain/service/repository';
@@ -55,7 +55,7 @@ export const start = (lifecycle: Lifecycle) => {
     config.auth.authorizedUsers
   );
   const dockerService = createDockerService(() => new Docker());
-  const deployTaskQueue = createInMemoryTaskQueue<DeploymentDeployTask>(uuid);
+  const deployTaskQueue = createInMemoryTaskQueue<DeployTask>(uuid);
   const deploymentStartHandler = createDeploymentStartHandler(uuid, deployTaskQueue);
   const networkConnectHandler = createNetworkConnectHandler(dockerService);
   const provisionCertificateHandler = new TlsCertProvisionService(
@@ -118,7 +118,7 @@ export const start = (lifecycle: Lifecycle) => {
     new PeriodicTaskRunner(
       lifecycle,
       1_000 * 15,
-      createDeploymentCleanupTask(dockerService, deploymentRepository, serviceRepository),
+      new DeploymentCleanupTask(dockerService, deploymentRepository, serviceRepository),
     ),
     new StartupTaskRunner(
       new NetworkSyncTask(networkConnectHandler, serviceRepository),

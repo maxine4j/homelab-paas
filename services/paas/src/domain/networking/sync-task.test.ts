@@ -1,5 +1,5 @@
 import { ServiceRepository } from '../service/repository';
-import { createNetworkSyncTask } from './sync-task';
+import { NetworkSyncTask } from './sync-task';
 
 describe('network sync task', () => {
 
@@ -8,7 +8,7 @@ describe('network sync task', () => {
     queryAllServices: jest.fn(),
   } satisfies Partial<jest.Mocked<ServiceRepository>> as unknown as jest.Mocked<ServiceRepository>;
 
-  const networkSyncTask = createNetworkSyncTask(
+  const networkSyncTask = new NetworkSyncTask(
     mockNetworkConnectHandler,
     mockServiceRepository,
   );
@@ -20,7 +20,7 @@ describe('network sync task', () => {
       { serviceId: 'service-345' },
     ]);
 
-    await networkSyncTask();
+    await networkSyncTask.run();
 
     expect(mockNetworkConnectHandler).toHaveBeenCalledWith('service-123');
     expect(mockNetworkConnectHandler).toHaveBeenCalledWith('service-234');
