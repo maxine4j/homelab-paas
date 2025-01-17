@@ -60,6 +60,38 @@ export const start = (lifecycle: Lifecycle) => {
     ),
   );
 
+  const app = new Koa();
+  app
+    .use(createRequestLogger())
+    .use(createAuthRouter().routes())
+    .use(createReverseProxy(serviceRepository, deploymentRepository))
+    .use(bodyParser())
+    .use(createHealthCheckRouter().routes())
+    .use(createDeploymentRouter(deploymentStartHandler).routes())
+    .use(errorMiddleware)
+    .use((ctx) => {
+      ctx.body = `
+        <html>
+          <h1>paas home</h1>
+        </html>
+      `
+    });
+
+  const httpsServer = https.createServer({}, app.callback());
+  httpsServer.listen(config.httpsPort, () => {
+    logger.info(`Listening on ${config.httpsPort}`);
+  });
+  
+  const httpServer = new Koa()
+    .use((ctx) => {
+      const url = new URL(ctx.request.href);
+      url.protocol = 'https:';
+      ctx.redirect(url.toString());
+    })
+    .listen(config.httpPort, () => {
+      logger.info(`Listening on ${config.httpPort}`);
+    });
+
   const tasks: TaskRunner[] = [
     createQueueTaskRunner({
       lifecycle,
@@ -78,54 +110,11 @@ export const start = (lifecycle: Lifecycle) => {
     createPeriodicTaskRunner({
       lifecycle,
       periodMs: 1_000 * 60 * 60 * 24, // 1 day
-      runTask: createTlsCertRenewalTask(provisionCertificateHandler, writeFile, readFile, now),
+      runTask: createTlsCertRenewalTask(provisionCertificateHandler, httpsServer, writeFile, readFile, now),
     }),
   ]
 
   tasks.forEach(task => task.start());
-
-  const app = new Koa();
-  app
-    .use(createRequestLogger())
-    .use(createAuthRouter().routes())
-    .use(createReverseProxy(serviceRepository, deploymentRepository))
-    .use(bodyParser())
-    .use(createHealthCheckRouter().routes())
-    .use(createDeploymentRouter(deploymentStartHandler).routes())
-    .use(errorMiddleware)
-    .use((ctx) => {
-      ctx.body = `
-        <html>
-          <h1>paas home</h1>
-        </html>
-      `
-    });
-
-  const httpsServer = https.createServer({
-    key: readFileSync('/etc/homelab-paas/key.pem'),
-    cert: readFileSync('/etc/homelab-paas/cert.pem'),
-  }, app.callback());
-  httpsServer.listen(config.httpsPort, () => {
-    logger.info(`Listening on ${config.httpsPort}`);
-  });
-  
-  const httpServer = new Koa()
-    .use((ctx) => {
-      const url = new URL(ctx.request.href);
-      url.protocol = 'https:';
-      ctx.redirect(url.toString());
-    })
-    .listen(config.httpPort, () => {
-      logger.info(`Listening on ${config.httpPort}`);
-    });
-
-  // TODO: dynamically update the cert when a new cert is fetched using setSecureContext
-  // server.setSecureContext({
-  //   key: '',
-  //   cert: ''
-  // });
-
-  // TODO: expose main app on 443 with https but only if cert exists
 
   lifecycle.registerShutdownHandler(() => {
     httpsServer.close();

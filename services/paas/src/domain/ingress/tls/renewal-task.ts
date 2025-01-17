@@ -9,12 +9,31 @@ const certificateFilePem = '/etc/homelab-paas/cert.pem';
 
 const certificateMinDaysUntilExpiry = 30;
 
+interface HttpsServer {
+  setSecureContext: (options: {
+    cert: string,
+    key: string,
+  }) => void
+}
+
 export const createTlsCertRenewalTask = (
   provisionCertificate: TlsCertificateProvisionHandler,
+  httpsServer: HttpsServer,
   writeFile: (name: string, data: string) => Promise<void>,
   readFile: (name: string) => Promise<string | undefined>,
   now: () => Date,
 ): PeriodicTask => {
+
+  const updateHttpsServerCertIfExists = async () => {
+    const certificatePem = await readFile(certificateFilePem);
+    const privateKetPem = await readFile(privateKeyFilePem);
+    if (certificatePem && privateKetPem) {
+      httpsServer.setSecureContext({
+        cert: certificatePem,
+        key: privateKetPem,
+      });
+    }
+  };
 
   const certificateRequiresRenewal = async () => {
     const certificatePem = await readFile(certificateFilePem);
@@ -39,6 +58,8 @@ export const createTlsCertRenewalTask = (
 
   return async () => {
     logger.info('Starting cert renewal task');
+    await updateHttpsServerCertIfExists();
+
     if (!await certificateRequiresRenewal()) {
       return;
     }
@@ -49,6 +70,9 @@ export const createTlsCertRenewalTask = (
       writeFile(certificateFilePem, cert),
     ]);
 
-    
+    httpsServer.setSecureContext({
+      cert, 
+      key
+    });
   };
 };
