@@ -5,7 +5,7 @@ import https from 'https';
 import { generate as generateShortUuid } from 'short-uuid';
 import { createDockerService } from './docker/service';
 import { createAuthRouter } from './domain/ingress/auth/router';
-import { createReverseProxy } from './domain/ingress/reverse-proxy';
+import { createReverseProxyMiddleware } from './domain/ingress/reverse-proxy/middleware';
 import { createTlsCertificateProvisionHandler } from './domain/ingress/tls/provision-handler';
 import { createTlsCertRenewalTask } from './domain/ingress/tls/renewal-task';
 import { createDigitalOceanDnsAcmeChallengeProvider } from './domain/ingress/tls/dns-challenge/digitalocean';
@@ -29,6 +29,10 @@ import { createHealthCheckRouter } from './util/healthcheck';
 import { Lifecycle } from './util/lifecycle';
 import { createRequestLogger, logger } from './util/logger';
 import { readFileSync } from 'fs';
+import { createGetAuthenticatedUser } from './domain/ingress/auth/authn';
+import { createUserAuthorizationChecker } from './domain/ingress/auth/authz';
+import { createRequestForwarder } from './domain/ingress/reverse-proxy/forward';
+import { getLoginUrl } from './domain/ingress/auth/oauth';
 
 export const start = (lifecycle: Lifecycle) => {
   const uuid = () => generateShortUuid();
@@ -59,12 +63,21 @@ export const start = (lifecycle: Lifecycle) => {
       config.tls.digitalocean.accessToken,
     ),
   );
+  const reverseProxy = createReverseProxyMiddleware(
+    serviceRepository, 
+    deploymentRepository,
+    createGetAuthenticatedUser(),
+    createUserAuthorizationChecker(config.auth.authorizedUsers),
+    createRequestForwarder(),
+    config.rootDomain,
+    getLoginUrl,
+  );
 
   const app = new Koa();
   app
     .use(createRequestLogger())
     .use(createAuthRouter().routes())
-    .use(createReverseProxy(serviceRepository, deploymentRepository))
+    .use(reverseProxy)
     .use(bodyParser())
     .use(createHealthCheckRouter().routes())
     .use(createDeploymentRouter(deploymentStartHandler).routes())

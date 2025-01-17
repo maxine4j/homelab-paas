@@ -87,20 +87,3 @@ const issueJwt = async (userDetails: AuthedUserDetails) => {
     expiresIn: config.auth.sessionLifetimeSeconds,
   });
 };
-
-export const verifyAuthCookie = async (cookies: { get: (cookieName: string) => string | undefined }): Promise<AuthedUserDetails | undefined> => {
-  const authCookie = cookies.get(config.auth.cookieName);
-
-  if (!authCookie) {
-    return undefined;
-  }
-
-  try {
-    const payload = jwt.verify(authCookie, config.auth.jwtSecret, {
-      algorithms: ['HS256'],
-    });
-    return payload as AuthedUserDetails;
-  } catch {
-    return undefined;
-  }
-};
