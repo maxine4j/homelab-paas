@@ -12,14 +12,14 @@ import { DigitalOceanDnsAcmeChallengeProvider } from './domain/ingress/tls/dns-c
 import { createNetworkConnectHandler } from './domain/networking/connect-handler';
 import { NetworkSyncTask } from './domain/networking/sync-task';
 import { DeploymentCleanupTask } from './domain/service/deployment/cleanup-task';
-import { createDeploymentDeployTask, DeployTask } from './domain/service/deployment/deploy-task';
+import { DeployTask, DeployTaskDescriptor } from './domain/service/deployment/deploy-task';
 import { createDeploymentRepository, DeploymentRecord } from './domain/service/deployment/repository';
-import { createDeploymentStartHandler } from './domain/service/deployment/start-handler';
+import { createDeploymentStartHandler } from './domain/service/deployment/service';
 import { createServiceRepository, ServiceRecord } from './domain/service/repository';
 import { createDeploymentRouter } from './domain/service/router';
 import { createSqliteKeyValueStore } from './kv-store/sqlite';
 import { PeriodicTaskRunner } from './task/periodic';
-import { createInMemoryTaskQueue, createQueueTaskRunner } from './task/queue';
+import { InMemoryTaskQueue, QueueTaskRunner } from './task/queue';
 import { StartupTaskRunner } from './task/startup';
 import { TaskRunner } from './task/types';
 import { config } from './util/config';
@@ -55,7 +55,7 @@ export const start = (lifecycle: Lifecycle) => {
     config.auth.authorizedUsers
   );
   const dockerService = createDockerService(() => new Docker());
-  const deployTaskQueue = createInMemoryTaskQueue<DeployTask>(uuid);
+  const deployTaskQueue = new InMemoryTaskQueue<DeployTaskDescriptor>(uuid);
   const deploymentStartHandler = createDeploymentStartHandler(uuid, deployTaskQueue);
   const networkConnectHandler = createNetworkConnectHandler(dockerService);
   const provisionCertificateHandler = new TlsCertProvisionService(
@@ -109,12 +109,12 @@ export const start = (lifecycle: Lifecycle) => {
     });
 
   const tasks: TaskRunner[] = [
-    createQueueTaskRunner({
+    new QueueTaskRunner(
       lifecycle,
-      queue: deployTaskQueue,
-      idleDelayMs: 1000 * 5,
-      runTask: createDeploymentDeployTask(dockerService, deploymentRepository, serviceRepository, networkConnectHandler),
-    }),
+      deployTaskQueue,
+      1_000 * 5,
+      new DeployTask(dockerService, deploymentRepository, serviceRepository, networkConnectHandler),
+    ),
     new PeriodicTaskRunner(
       lifecycle,
       1_000 * 15,

@@ -39,8 +39,8 @@ export class QueueTaskRunner<TTask> implements TaskRunner {
   constructor(
     private readonly lifecycle: Lifecycle,
     private readonly queue: TaskQueue<TTask>,
-    private readonly runTask: QueueTask<TTask>,
     private readonly idleDelayMs: number,
+    private readonly runTask: QueueTask<TTask>,
   ) {}
 
   public async start() {
