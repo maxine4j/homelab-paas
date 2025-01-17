@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { config } from '../../../util/config';
 import { logger } from '../../../util/logger';
 
-interface AuthedUserDetails {
+export interface AuthedUserDetails {
   username: string
   name: string
   email: string | undefined
@@ -99,11 +99,7 @@ export const verifyAuthCookie = async (cookies: { get: (cookieName: string) => s
     const payload = jwt.verify(authCookie, config.auth.jwtSecret, {
       algorithms: ['HS256'],
     });
-    if (typeof payload === 'string') {
-      return undefined;
-    }
-    logger.info({ payload, typeOfPayload: typeof payload }, 'verified jwt');
-    return undefined; // JSON.parse(payload as any as string) as AuthedUserDetails;
+    return payload as AuthedUserDetails;
   } catch {
     return undefined;
   }
