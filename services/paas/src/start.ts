@@ -9,7 +9,7 @@ import { createReverseProxyMiddleware } from './domain/ingress/reverse-proxy/mid
 import { TlsCertProvisionService } from './domain/ingress/tls/provision-handler';
 import { TlsCertRenewalTask } from './domain/ingress/tls/renewal-task';
 import { DigitalOceanDnsAcmeChallengeProvider } from './domain/ingress/tls/dns-challenge/digitalocean';
-import { NetworkService } from './domain/network/connect-handler';
+import { NetworkService } from './domain/network/service';
 import { NetworkSyncTask } from './domain/network/sync-task';
 import { DeploymentCleanupTask } from './domain/service/deployment/cleanup-task';
 import { DeployTask, DeployTaskDescriptor } from './domain/service/deployment/deploy-task';

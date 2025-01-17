@@ -1,6 +1,6 @@
 import { DockerService } from '../../../docker/service';
 import { TaskEnvelope } from '../../../task/queue';
-import { NetworkService } from '../../network/connect-handler';
+import { NetworkService } from '../../network/service';
 import { ServiceRepository } from '../repository';
 import { DeployTask, DeployTaskDescriptor } from './deploy-task';
 import { DeploymentRepository } from './repository';

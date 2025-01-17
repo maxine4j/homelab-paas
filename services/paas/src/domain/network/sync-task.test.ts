@@ -1,5 +1,5 @@
 import { ServiceRepository } from '../service/repository';
-import { NetworkService } from './connect-handler';
+import { NetworkService } from './service';
 import { NetworkSyncTask } from './sync-task';
 
 describe('network sync task', () => {

@@ -6,7 +6,7 @@ import { logger } from '../../../util/logger'
 import { sleep } from '../../../util/sleep'
 import { ServiceRepository } from '../repository'
 import { DockerService } from '../../../docker/service'
-import { NetworkService } from '../../network/connect-handler'
+import { NetworkService } from '../../network/service'
 
 export interface DeployTaskDescriptor {
   serviceId: string
