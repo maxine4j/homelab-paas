@@ -7,10 +7,10 @@ import { createDockerService } from './docker/service';
 import { createAuthRouter } from './domain/ingress/auth/router';
 import { createReverseProxyMiddleware } from './domain/ingress/reverse-proxy/middleware';
 import { TlsCertProvisionService } from './domain/ingress/tls/provision-handler';
-import { createTlsCertRenewalTask } from './domain/ingress/tls/renewal-task';
+import { TlsCertRenewalTask } from './domain/ingress/tls/renewal-task';
 import { DigitalOceanDnsAcmeChallengeProvider } from './domain/ingress/tls/dns-challenge/digitalocean';
 import { createNetworkConnectHandler } from './domain/networking/connect-handler';
-import { createNetworkSyncTask } from './domain/networking/sync-task';
+import { NetworkSyncTask } from './domain/networking/sync-task';
 import { createDeploymentCleanupTask } from './domain/service/deployment/cleanup-task';
 import { createDeploymentDeployTask, DeploymentDeployTask } from './domain/service/deployment/deploy-task';
 import { createDeploymentRepository, DeploymentRecord } from './domain/service/deployment/repository';
@@ -18,9 +18,9 @@ import { createDeploymentStartHandler } from './domain/service/deployment/start-
 import { createServiceRepository, ServiceRecord } from './domain/service/repository';
 import { createDeploymentRouter } from './domain/service/router';
 import { createSqliteKeyValueStore } from './kv-store/sqlite';
-import { createPeriodicTaskRunner } from './task/periodic';
+import { PeriodicTaskRunner } from './task/periodic';
 import { createInMemoryTaskQueue, createQueueTaskRunner } from './task/queue';
-import { createStartupTaskRunner } from './task/startup';
+import { StartupTaskRunner } from './task/startup';
 import { TaskRunner } from './task/types';
 import { config } from './util/config';
 import { errorMiddleware } from './util/error';
@@ -112,22 +112,22 @@ export const start = (lifecycle: Lifecycle) => {
     createQueueTaskRunner({
       lifecycle,
       queue: deployTaskQueue,
-      idleDelayMs: 5_000,
+      idleDelayMs: 1000 * 5,
       runTask: createDeploymentDeployTask(dockerService, deploymentRepository, serviceRepository, networkConnectHandler),
     }),
-    createPeriodicTaskRunner({
+    new PeriodicTaskRunner(
       lifecycle,
-      periodMs: 15_000,
-      runTask: createDeploymentCleanupTask(dockerService, deploymentRepository, serviceRepository),
-    }),
-    createStartupTaskRunner({
-      runTask: createNetworkSyncTask(networkConnectHandler, serviceRepository),
-    }),
-    createPeriodicTaskRunner({
+      1_000 * 15,
+      createDeploymentCleanupTask(dockerService, deploymentRepository, serviceRepository),
+    ),
+    new StartupTaskRunner(
+      new NetworkSyncTask(networkConnectHandler, serviceRepository),
+    ),
+    new PeriodicTaskRunner(
       lifecycle,
-      periodMs: 1_000 * 60 * 60 * 24, // 1 day
-      runTask: createTlsCertRenewalTask(provisionCertificateHandler, httpsServer, writeFile, readFile, now),
-    }),
+      1_000 * 60 * 60 * 24, // 1 day
+      new TlsCertRenewalTask(provisionCertificateHandler, httpsServer, writeFile, readFile, now),
+    ),
   ]
 
   tasks.forEach(task => task.start());

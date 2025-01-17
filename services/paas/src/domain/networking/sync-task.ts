@@ -3,14 +3,16 @@ import { logger } from '../../util/logger';
 import { ServiceRepository } from '../service/repository';
 import { NetworkConnectHandler } from './connect-handler';
 
-export const createNetworkSyncTask = (
-  connectNetwork: NetworkConnectHandler,
-  serviceRepository: ServiceRepository,
-): StartupTask => {
+export class NetworkSyncTask implements StartupTask {
 
-  return async () => {
+  constructor(
+    private readonly connectNetwork: NetworkConnectHandler,
+    private readonly serviceRepository: ServiceRepository,
+  ) {}
+
+  public async run() {
     logger.info('Starting network sync task');
-    const services = await serviceRepository.queryAllServices();
-    await Promise.all(services.map(service => connectNetwork(service.serviceId)));
+    const services = await this.serviceRepository.queryAllServices();
+    await Promise.all(services.map(service => this.connectNetwork(service.serviceId)));
   };
 };

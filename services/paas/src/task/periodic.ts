@@ -4,25 +4,24 @@ import { sleep } from '../util/sleep'
 import { TaskRunner } from './types';
 
 export interface PeriodicTask {
-  (): Promise<void>
+  run(): Promise<void>
 }
 
-export const createPeriodicTaskRunner = (args: {
-  lifecycle: Lifecycle,
-  periodMs: number,
-  runTask: PeriodicTask,
-}): TaskRunner => {
+export class PeriodicTaskRunner implements TaskRunner {
+  constructor(
+    private readonly lifecycle: Lifecycle,
+    private readonly periodMs: number,
+    private readonly task: PeriodicTask,
+  ) {}
 
-  return {
-    start: async () => {
-      while (args.lifecycle.isOpen()) {
-        try {
-          await args.runTask();
-        } catch (error) {
-          logger.error(error);
-        }
-        await sleep(args.periodMs);
+  public async start() {
+    while (this.lifecycle.isOpen()) {
+      try {
+        await this.task.run();
+      } catch (error) {
+        logger.error(error);
       }
+      await sleep(this.periodMs);
     }
-  };
-};
+  }
+}

@@ -16,34 +16,56 @@ interface HttpsServer {
   }) => void
 }
 
-export const createTlsCertRenewalTask = (
-  tlsCertProvisionService: TlsCertProvisionService,
-  httpsServer: HttpsServer,
-  writeFile: (name: string, data: string) => Promise<void>,
-  readFile: (name: string) => Promise<string | undefined>,
-  now: () => Date,
-): PeriodicTask => {
+export class TlsCertRenewalTask implements PeriodicTask {
 
-  const updateHttpsServerCertIfExists = async () => {
-    const certificatePem = await readFile(certificateFilePem);
-    const privateKetPem = await readFile(privateKeyFilePem);
+  constructor (
+    private readonly tlsCertProvisionService: TlsCertProvisionService,
+    private readonly httpsServer: HttpsServer,
+    private readonly writeFile: (name: string, data: string) => Promise<void>,
+    private readonly readFile: (name: string) => Promise<string | undefined>,
+    private readonly now: () => Date,
+  ) {}
+
+  public async run() {
+    logger.info('Starting cert renewal task');
+    await this.updateHttpsServerCertIfExists();
+
+    if (!await this.certificateRequiresRenewal()) {
+      return;
+    }
+
+    const { key, cert } = await this.tlsCertProvisionService.provisionCert();
+    await Promise.all([
+      this.writeFile(privateKeyFilePem, key),
+      this.writeFile(certificateFilePem, cert),
+    ]);
+
+    this.httpsServer.setSecureContext({
+      cert, 
+      key
+    });
+  }
+
+  private async updateHttpsServerCertIfExists() {
+    const certificatePem = await this.readFile(certificateFilePem);
+    const privateKetPem = await this.readFile(privateKeyFilePem);
     if (certificatePem && privateKetPem) {
-      httpsServer.setSecureContext({
+      this.httpsServer.setSecureContext({
         cert: certificatePem,
         key: privateKetPem,
       });
     }
   };
 
-  const certificateRequiresRenewal = async () => {
-    const certificatePem = await readFile(certificateFilePem);
+  private async certificateRequiresRenewal() {
+    const certificatePem = await this.readFile(certificateFilePem);
     if (!certificatePem) {
       logger.info('No certificate found, requesting renewal');
       return true;
     }
 
     const { validTo, subject, subjectAltName } = new X509Certificate(certificatePem);
-    const daysUntilExpiry = daysBetween(now(), new Date(validTo));
+    const daysUntilExpiry = daysBetween(this.now(), new Date(validTo));
 
     logger.info({ validTo, daysUntilExpiry, subject, subjectAltName }, 'Existing certificate found');
 
@@ -55,24 +77,4 @@ export const createTlsCertRenewalTask = (
     logger.info('Certificate does not require renewal')
     return false;
   }
-
-  return async () => {
-    logger.info('Starting cert renewal task');
-    await updateHttpsServerCertIfExists();
-
-    if (!await certificateRequiresRenewal()) {
-      return;
-    }
-
-    const { key, cert } = await tlsCertProvisionService.provisionCert();
-    await Promise.all([
-      writeFile(privateKeyFilePem, key),
-      writeFile(certificateFilePem, cert),
-    ]);
-
-    httpsServer.setSecureContext({
-      cert, 
-      key
-    });
-  };
 };

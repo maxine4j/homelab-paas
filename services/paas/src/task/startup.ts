@@ -1,23 +1,21 @@
-import { Lifecycle } from '../util/lifecycle'
 import { logger } from '../util/logger';
-import { sleep } from '../util/sleep'
 import { TaskRunner } from './types';
 
 export interface StartupTask {
-  (): Promise<void>
+  run(): Promise<void>
 }
 
-export const createStartupTaskRunner = (args: {
-  runTask: StartupTask,
-}): TaskRunner => {
+export class StartupTaskRunner implements TaskRunner {
+  
+  constructor(
+    private readonly task: StartupTask,
+  ) {}
 
-  return {
-    start: async () => {
-      try {
-        await args.runTask();
-      } catch (error) {
-        logger.error(error);
-      }
+  public async start() {
+    try {
+      await this.task.run();
+    } catch (error) {
+      logger.error(error);
     }
-  };
-};
+  }
+}
