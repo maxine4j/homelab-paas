@@ -13,9 +13,9 @@ import { NetworkService } from './domain/network/service';
 import { NetworkSyncTask } from './domain/network/sync-task';
 import { DeploymentCleanupTask } from './domain/service/deployment/cleanup-task';
 import { DeployTask, DeployTaskDescriptor } from './domain/service/deployment/deploy-task';
-import { createDeploymentRepository, DeploymentRecord } from './domain/service/deployment/repository';
+import { DeploymentRepository, DeploymentRecord } from './domain/service/deployment/repository';
 import { DeployService } from './domain/service/deployment/service';
-import { createServiceRepository, ServiceRecord } from './domain/service/repository';
+import { ServiceRepository, ServiceRecord } from './domain/service/repository';
 import { ServiceRouter } from './domain/service/router';
 import { SqliteKeyValueStore } from './kv-store/sqlite';
 import { PeriodicTaskRunner } from './task/periodic';
@@ -36,17 +36,20 @@ export const start = (lifecycle: Lifecycle) => {
   const uuid = () => generateShortUuid();
   const now = () => new Date();
 
-  const deploymentKvStore = new SqliteKeyValueStore<DeploymentRecord>({
-    databaseFilename: '/etc/homelab-paas/deployments.db',
-    tableName: 'deployments',
-  });
-  const deploymentRepository = createDeploymentRepository(now, deploymentKvStore);
+  const deploymentRepository = new DeploymentRepository(
+    now,
+    new SqliteKeyValueStore<DeploymentRecord>({
+      databaseFilename: '/etc/homelab-paas/deployments.db',
+      tableName: 'deployments',
+    })
+  );
 
-  const serviceKvStore = new SqliteKeyValueStore<ServiceRecord>({
-    databaseFilename: '/etc/homelab-paas/services.db',
-    tableName: 'services',
-  });
-  const serviceRepository = createServiceRepository(serviceKvStore);
+  const serviceRepository = new ServiceRepository(
+    new SqliteKeyValueStore<ServiceRecord>({
+      databaseFilename: '/etc/homelab-paas/services.db',
+      tableName: 'services',
+    })
+);
 
   const authService = new AuthService(
     new GitHubOauth2Provider(config.rootDomain, config.auth.githubClientId, config.auth.githubClientSecret),

@@ -17,78 +17,74 @@ export interface DeploymentRecord {
   container?: ContainerRecord
 }
 
-export interface DeploymentRepository {
-  query: (deploymentId: string) => Promise<DeploymentRecord | undefined>
-  queryByStatus: (status: DeploymentRecord['status']) => Promise<DeploymentRecord[]>
-  queryForService: (serviceId: string) => Promise<DeploymentRecord[]>
-  createDeployment: (deploymentId: string, serviceDescriptor: ServiceDescriptor) => Promise<void>
-  markDeploymentRunning: (deploymentId: string, container: ContainerRecord) => Promise<void>
-  markDeploymentFailed: (deploymentId: string, failureReason: string) => Promise<void>
-  markDeploymentCleanedUp: (deploymentId: string) => Promise<void>
+export class DeploymentRepository {
+
+  constructor (
+    private readonly now: () => Date,
+    private readonly store: KeyValueStore<DeploymentRecord>,
+  ) {}
+
+  public async query(deploymentId: string): Promise<DeploymentRecord | undefined> {
+    return this.store.get(deploymentId);
+  }
+
+  public async queryByStatus(status: DeploymentRecord['status']): Promise<DeploymentRecord[]> {
+    return this.store.values()
+      .filter(deployment => deployment.status === status);
+  }
+
+  public async queryForService(serviceId: string) {
+    return this.store.values()
+      .filter(deployment => deployment.serviceId === serviceId);
+  }
+
+  public async createDeployment(deploymentId: string, serviceDescriptor: ServiceDescriptor): Promise<void> {
+    this.store.set(deploymentId, {
+      serviceId: serviceDescriptor.serviceId,
+      deploymentId,
+      serviceDescriptor,
+      createdAt: this.now(),
+      status: 'deploying',
+    });
+  }
+
+  public async markDeploymentRunning(deploymentId: string, container: ContainerRecord): Promise<void> {
+    this.store.update(deploymentId, (existingDeploymentRecord) => {
+      if (!existingDeploymentRecord) {
+        throw new ContextualError('Failed to make deployment as running: Deployment does not exist', { deploymentId });
+      }
+      return {
+        ...existingDeploymentRecord,
+        status: 'running',
+        container,
+      };
+    });
+  }
+
+  public async markDeploymentFailed(deploymentId: string, failureReason: string): Promise<void> {
+    this.store.update(deploymentId, (existingDeploymentRecord) => {
+      if (!existingDeploymentRecord) {
+        throw new ContextualError('Failed to make deployment as failed: Deployment does not exist', { deploymentId });
+      }
+      return {
+        ...existingDeploymentRecord,
+        status: 'failed',
+        failureReason,
+      };
+    });
+  }
+
+  public async markDeploymentCleanedUp(deploymentId: string): Promise<void> {
+    this.store.update(deploymentId, (existingDeploymentRecord) => {
+      if (!existingDeploymentRecord) {
+        throw new ContextualError('Failed to make deployment as cleaned up: Deployment does not exist', { deploymentId });
+      }
+      
+      return {
+        ...existingDeploymentRecord,
+        status: 'cleaned-up',
+        container: undefined,
+      }
+    });
+  }
 }
-
-export const createDeploymentRepository = (
-  now: () => Date,
-  store: KeyValueStore<DeploymentRecord>,
-): DeploymentRepository => {
-
-  return {
-    query: async (deploymentId) => {
-      return store.get(deploymentId);
-    },
-    queryByStatus: async (status) => {
-      return store.values()
-        .filter(deployment => deployment.status === status);
-    },
-    queryForService: async (serviceId) => {
-      return store.values()
-        .filter(deployment => deployment.serviceId === serviceId);
-    },
-    createDeployment: async (deploymentId, serviceDescriptor) => {
-      store.set(deploymentId, {
-        serviceId: serviceDescriptor.serviceId,
-        deploymentId,
-        serviceDescriptor,
-        createdAt: now(),
-        status: 'deploying',
-      });
-    },
-    markDeploymentRunning: async (deploymentId, container) => {
-      store.update(deploymentId, (existingDeploymentRecord) => {
-        if (!existingDeploymentRecord) {
-          throw new ContextualError('Failed to make deployment as running: Deployment does not exist', { deploymentId });
-        }
-        return {
-          ...existingDeploymentRecord,
-          status: 'running',
-          container,
-        };
-      });
-    },
-    markDeploymentFailed: async (deploymentId, failureReason) => {
-      store.update(deploymentId, (existingDeploymentRecord) => {
-        if (!existingDeploymentRecord) {
-          throw new ContextualError('Failed to make deployment as failed: Deployment does not exist', { deploymentId });
-        }
-        return {
-          ...existingDeploymentRecord,
-          status: 'failed',
-          failureReason,
-        };
-      });
-    },
-    markDeploymentCleanedUp: async (deploymentId) => {
-      store.update(deploymentId, (existingDeploymentRecord) => {
-        if (!existingDeploymentRecord) {
-          throw new ContextualError('Failed to make deployment as cleaned up: Deployment does not exist', { deploymentId });
-        }
-        
-        return {
-          ...existingDeploymentRecord,
-          status: 'cleaned-up',
-          container: undefined,
-        }
-      });
-    }
-  };
-};

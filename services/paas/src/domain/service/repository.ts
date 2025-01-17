@@ -6,42 +6,38 @@ export interface ServiceRecord {
   activeDeploymentId?: string
 }
 
-export interface ServiceRepository {
-  queryAllServices: () => Promise<ServiceRecord[]>,
-  queryService: (serviceId: string) => Promise<ServiceRecord | undefined>,
-  createService: (serviceId: string) => Promise<void>,
-  setActiveDeployment: (serviceId: string, deploymentId: string) => Promise<void>
-};
+export class ServiceRepository {
+  
+  constructor(
+    private readonly store: KeyValueStore<ServiceRecord>
+  ) {}
 
-export const createServiceRepository = (
-  store: KeyValueStore<ServiceRecord>
-): ServiceRepository => {
+  public async queryAllServices(): Promise<ServiceRecord[]> {
+    return this.store.values();
+  }
 
-  return {
-    queryAllServices: async () => {
-      return store.values();
-    },
-    queryService: async (serviceId) => {
-      return store.get(serviceId);
-    },
-    createService: async (serviceId) => {
-      if (store.get(serviceId)) {
-        throw new ContextualError('Cannot create service: Service already exists', { serviceId });
+  public async queryService(serviceId: string): Promise<ServiceRecord | undefined> {
+    return this.store.get(serviceId);
+  }
+
+  public async createService(serviceId: string): Promise<void> {
+    if (this.store.get(serviceId)) {
+      throw new ContextualError('Cannot create service: Service already exists', { serviceId });
+    }
+    this.store.set(serviceId, {
+      serviceId,
+    });
+  }
+
+  public async setActiveDeployment(serviceId: string, deploymentId: string): Promise<void> {
+    this.store.update(serviceId, (existingValue) => {
+      if (!existingValue) {
+        throw new ContextualError('Cannot set active deployment: Service does not exist', { serviceId, deploymentId });
       }
-      store.set(serviceId, {
-        serviceId,
-      });
-    },
-    setActiveDeployment: async (serviceId, deploymentId) => {
-      store.update(serviceId, (existingValue) => {
-        if (!existingValue) {
-          throw new ContextualError('Cannot set active deployment: Service does not exist', { serviceId, deploymentId });
-        }
-        return {
-          ...existingValue,
-          activeDeploymentId: deploymentId,
-        }
-      });
-    },
-  };
-};
+      return {
+        ...existingValue,
+        activeDeploymentId: deploymentId,
+      }
+    });
+  }
+}
