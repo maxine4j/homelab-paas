@@ -1,9 +1,10 @@
 import supertest from 'supertest';
 import { startTestApi } from '../../util/test/router';
-import { createDeploymentRouter } from './router';
+import { ServiceRouter } from './router';
 import { ServiceDescriptor } from './service-descriptor';
+import { DeployService } from './deployment/service';
 
-describe('deployment-router', () => {
+describe('service router', () => {
 
   const mockServiceDescriptor = {
     serviceId: 'service-123',
@@ -13,12 +14,15 @@ describe('deployment-router', () => {
     },
   } satisfies ServiceDescriptor
 
-  const mockStartDeployment = jest.fn();
-  const deploymentRouter = createDeploymentRouter(
-    mockStartDeployment,
+  const mockDeployService: jest.Mocked<DeployService> = {
+    startDeployment: jest.fn(),
+  } as Partial<jest.Mocked<DeployService>> as unknown as jest.Mocked<DeployService>;
+
+  const deploymentRouter = new ServiceRouter(
+    mockDeployService,
   );
 
-  const server = startTestApi(deploymentRouter);
+  const server = startTestApi(deploymentRouter.routes());
 
   afterAll(() => {
     server.close();
@@ -26,7 +30,7 @@ describe('deployment-router', () => {
 
   test('given valid request, should call register tenant and respond with 200', async () => {
     
-    mockStartDeployment.mockResolvedValue({ deploymentId: 'deployment-123' });
+    mockDeployService.startDeployment.mockResolvedValue({ deploymentId: 'deployment-123' });
 
     const response = await supertest(server)
       .post('/service/deploy')
@@ -40,6 +44,6 @@ describe('deployment-router', () => {
       deploymentId: 'deployment-123',
     });
 
-    expect(mockStartDeployment).toHaveBeenCalledWith(mockServiceDescriptor);
+    expect(mockDeployService.startDeployment).toHaveBeenCalledWith(mockServiceDescriptor);
   });
 });

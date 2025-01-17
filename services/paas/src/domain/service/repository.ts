@@ -1,7 +1,5 @@
-import { createInMemoryKeyValueStore } from '../../kv-store/in-memory';
 import { KeyValueStore } from '../../kv-store/types';
 import { ContextualError } from '../../util/error';
-import { logger } from '../../util/logger';
 
 export interface ServiceRecord {
   serviceId: string

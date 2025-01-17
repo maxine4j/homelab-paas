@@ -1,31 +1,24 @@
 import { KeyValueStore } from './types';
 
-export const createInMemoryKeyValueStore = <TValue>(): KeyValueStore<TValue> => {
-  
-  const store = new Map<string, TValue>();
+export class InMemoryKeyValueStore<TValue> {
 
-  const get = (key: string) => {
-    return store.get(key);
+  private readonly store = new Map<string, TValue>();
+
+  public get(key: string) {
+    return this.store.get(key);
   };
 
-  const set = (key: string, value: TValue) => {
-    store.set(key, value);
-  };
-
-  const update = (key: string, updateFn: (existingValue: TValue | undefined) => TValue) => {
-    const existingValue = get(key);
-    const newValue = updateFn(existingValue);
-    set(key, newValue);
+  public set(key: string, value: TValue) {
+    this.store.set(key, value);
   }
 
-  const values = () => {
-    return Array.from(store.values());
-  };
+  public update(key: string, updateFn: (existingValue: TValue | undefined) => TValue) {
+    const existingValue = this.get(key);
+    const newValue = updateFn(existingValue);
+    this.set(key, newValue);
+  }
 
-  return {
-    get,
-    set,
-    update,
-    values,
-  };
+  public values() {
+    return Array.from(this.store.values());
+  }
 };

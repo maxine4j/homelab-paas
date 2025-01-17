@@ -1,6 +1,6 @@
 import { DockerService } from '../../../docker/service';
 import { TaskEnvelope } from '../../../task/queue';
-import { NetworkConnectHandler } from '../../networking/connect-handler';
+import { NetworkService } from '../../network/connect-handler';
 import { ServiceRepository } from '../repository';
 import { DeployTask, DeployTaskDescriptor } from './deploy-task';
 import { DeploymentRepository } from './repository';
@@ -41,7 +41,9 @@ describe('deploy task', () => {
     setActiveDeployment: jest.fn(),
   } satisfies Partial<jest.Mocked<ServiceRepository>> as unknown as jest.Mocked<ServiceRepository>
 
-  const mockConnectService: jest.MockedFn<NetworkConnectHandler> = jest.fn();
+  const mockNetworkService: jest.Mocked<NetworkService> = {
+    connectServiceNetworkToPaas: jest.fn(),
+  } as Partial<jest.Mocked<NetworkService>> as unknown as jest.Mocked<NetworkService>;
 
   let deployTask: DeployTask;
 
@@ -52,7 +54,7 @@ describe('deploy task', () => {
       mockDockerService,
       mockDeploymentRepository,
       mockServiceRepository,
-      mockConnectService,
+      mockNetworkService,
       {
         delayMs: 0,
         maxAttempts: 1,
@@ -83,7 +85,7 @@ describe('deploy task', () => {
   test('should successfully deploy and wire up deployment', async () => {
     await deployTask.run(mockTask);
 
-    expect(mockConnectService).toHaveBeenCalledWith('service-123');
+    expect(mockNetworkService.connectServiceNetworkToPaas).toHaveBeenCalledWith('service-123');
     expect(mockDockerService.pullImageIfNotPresent).toHaveBeenCalledWith('image-123');
     expect(mockDeploymentRepository.createDeployment).toHaveBeenCalledWith('deployment-123', mockTask.task.serviceDescriptor);
     expect(mockDockerService.runContainer).toHaveBeenCalledWith({

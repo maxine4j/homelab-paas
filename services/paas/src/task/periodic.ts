@@ -9,19 +9,21 @@ export interface PeriodicTask {
 
 export class PeriodicTaskRunner implements TaskRunner {
   constructor(
-    private readonly lifecycle: Lifecycle,
-    private readonly periodMs: number,
-    private readonly task: PeriodicTask,
+    private readonly deps: {
+      lifecycle: Lifecycle,
+      periodMs: number,
+      task: PeriodicTask,
+    }
   ) {}
 
   public async start() {
-    while (this.lifecycle.isOpen()) {
+    while (this.deps.lifecycle.isOpen()) {
       try {
-        await this.task.run();
+        await this.deps.task.run();
       } catch (error) {
         logger.error(error);
       }
-      await sleep(this.periodMs);
+      await sleep(this.deps.periodMs);
     }
   }
 }

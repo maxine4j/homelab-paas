@@ -2,20 +2,18 @@ import { logger } from '../../util/logger';
 import { config } from '../../util/config';
 import { DockerService } from '../../docker/service';
 
-export interface NetworkConnectHandler {
-  (serviceId: string): Promise<void>
-}
+export class NetworkService {
 
-export const createNetworkConnectHandler = (
-  dockerService: DockerService,
-): NetworkConnectHandler => {
+  constructor(
+    private readonly dockerService: DockerService,
+  ) {}
 
-  return async (serviceId) => {
-    const networkId = await dockerService.findNetwork({ serviceId })
-      ?? await dockerService.createNetwork({ serviceId });
+  public async connectServiceNetworkToPaas(serviceId: string) {
+    const networkId = await this.dockerService.findNetwork({ serviceId })
+      ?? await this.dockerService.createNetwork({ serviceId });
 
     try {
-      await dockerService.connectNetwork({
+      await this.dockerService.connectNetwork({
         containerName: config.paasContainerName,
         networkId,
       });

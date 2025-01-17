@@ -37,21 +37,23 @@ export class InMemoryTaskQueue<TTask> implements TaskQueue<TTask> {
 export class QueueTaskRunner<TTask> implements TaskRunner {
   
   constructor(
-    private readonly lifecycle: Lifecycle,
-    private readonly queue: TaskQueue<TTask>,
-    private readonly idleDelayMs: number,
-    private readonly runTask: QueueTask<TTask>,
+    private readonly deps: {
+      lifecycle: Lifecycle,
+      queue: TaskQueue<TTask>,
+      idleDelayMs: number,
+      task: QueueTask<TTask>,
+    }
   ) {}
 
   public async start() {
-    while (this.lifecycle.isOpen()) {
-      const task = await this.queue.dequeue();
-      if (!task) {
-        await sleep(this.idleDelayMs);
+    while (this.deps.lifecycle.isOpen()) {
+      const taskEnvelope = await this.deps.queue.dequeue();
+      if (!taskEnvelope) {
+        await sleep(this.deps.idleDelayMs);
         continue;
       }
       try {
-        await this.runTask(task);
+        await this.deps.task.run(taskEnvelope);
       } catch (error) {
         logger.error(error);
       }

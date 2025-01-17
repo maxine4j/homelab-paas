@@ -6,7 +6,7 @@ import { logger } from '../../../util/logger'
 import { sleep } from '../../../util/sleep'
 import { ServiceRepository } from '../repository'
 import { DockerService } from '../../../docker/service'
-import { NetworkConnectHandler } from '../../networking/connect-handler'
+import { NetworkService } from '../../network/connect-handler'
 
 export interface DeployTaskDescriptor {
   serviceId: string
@@ -20,7 +20,7 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
     private readonly dockerService: DockerService,
     private readonly deploymentRepository: DeploymentRepository,
     private readonly serviceRepository: ServiceRepository,
-    private readonly connectService: NetworkConnectHandler,
+    private readonly networkService: NetworkService,
     private readonly waitConfig = { maxAttempts: 5, delayMs: 5_000 },
   ) {}
 
@@ -58,7 +58,7 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
 
     await this.createServiceIfNotExists(serviceId);
     
-    await this.connectService(serviceId);
+    await this.networkService.connectServiceNetworkToPaas(serviceId);
 
     await this.dockerService.pullImageIfNotPresent(serviceDescriptor.image);
 

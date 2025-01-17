@@ -9,15 +9,15 @@ import { createReverseProxyMiddleware } from './domain/ingress/reverse-proxy/mid
 import { TlsCertProvisionService } from './domain/ingress/tls/provision-handler';
 import { TlsCertRenewalTask } from './domain/ingress/tls/renewal-task';
 import { DigitalOceanDnsAcmeChallengeProvider } from './domain/ingress/tls/dns-challenge/digitalocean';
-import { createNetworkConnectHandler } from './domain/networking/connect-handler';
-import { NetworkSyncTask } from './domain/networking/sync-task';
+import { NetworkService } from './domain/network/connect-handler';
+import { NetworkSyncTask } from './domain/network/sync-task';
 import { DeploymentCleanupTask } from './domain/service/deployment/cleanup-task';
 import { DeployTask, DeployTaskDescriptor } from './domain/service/deployment/deploy-task';
 import { createDeploymentRepository, DeploymentRecord } from './domain/service/deployment/repository';
-import { createDeploymentStartHandler } from './domain/service/deployment/service';
+import { DeployService } from './domain/service/deployment/service';
 import { createServiceRepository, ServiceRecord } from './domain/service/repository';
-import { createDeploymentRouter } from './domain/service/router';
-import { createSqliteKeyValueStore } from './kv-store/sqlite';
+import { ServiceRouter } from './domain/service/router';
+import { SqliteKeyValueStore } from './kv-store/sqlite';
 import { PeriodicTaskRunner } from './task/periodic';
 import { InMemoryTaskQueue, QueueTaskRunner } from './task/queue';
 import { StartupTaskRunner } from './task/startup';
@@ -36,13 +36,13 @@ export const start = (lifecycle: Lifecycle) => {
   const uuid = () => generateShortUuid();
   const now = () => new Date();
 
-  const deploymentKvStore = createSqliteKeyValueStore<DeploymentRecord>({
+  const deploymentKvStore = new SqliteKeyValueStore<DeploymentRecord>({
     databaseFilename: '/etc/homelab-paas/deployments.db',
     tableName: 'deployments',
   });
   const deploymentRepository = createDeploymentRepository(now, deploymentKvStore);
 
-  const serviceKvStore = createSqliteKeyValueStore<ServiceRecord>({
+  const serviceKvStore = new SqliteKeyValueStore<ServiceRecord>({
     databaseFilename: '/etc/homelab-paas/services.db',
     tableName: 'services',
   });
@@ -56,8 +56,8 @@ export const start = (lifecycle: Lifecycle) => {
   );
   const dockerService = createDockerService(() => new Docker());
   const deployTaskQueue = new InMemoryTaskQueue<DeployTaskDescriptor>(uuid);
-  const deploymentStartHandler = createDeploymentStartHandler(uuid, deployTaskQueue);
-  const networkConnectHandler = createNetworkConnectHandler(dockerService);
+  const deployService = new DeployService(uuid, deployTaskQueue);
+  const networkService = new NetworkService(dockerService);
   const provisionCertificateHandler = new TlsCertProvisionService(
     config.tls.notificationEmail,
     config.rootDomain,
@@ -83,7 +83,7 @@ export const start = (lifecycle: Lifecycle) => {
     .use(reverseProxy)
     .use(bodyParser())
     .use(createHealthCheckRouter().routes())
-    .use(createDeploymentRouter(deploymentStartHandler).routes())
+    .use(new ServiceRouter(deployService).routes())
     .use(errorMiddleware)
     .use((ctx) => {
       ctx.body = `
@@ -97,7 +97,7 @@ export const start = (lifecycle: Lifecycle) => {
   httpsServer.listen(config.httpsPort, () => {
     logger.info(`Listening on ${config.httpsPort}`);
   });
-  
+
   const httpServer = new Koa()
     .use((ctx) => {
       const url = new URL(ctx.request.href);
@@ -109,25 +109,25 @@ export const start = (lifecycle: Lifecycle) => {
     });
 
   const tasks: TaskRunner[] = [
-    new QueueTaskRunner(
+    new QueueTaskRunner({
       lifecycle,
-      deployTaskQueue,
-      1_000 * 5,
-      new DeployTask(dockerService, deploymentRepository, serviceRepository, networkConnectHandler),
-    ),
-    new PeriodicTaskRunner(
+      queue: deployTaskQueue,
+      idleDelayMs: 1_000 * 5,
+      task: new DeployTask(dockerService, deploymentRepository, serviceRepository, networkService)
+    }),
+    new PeriodicTaskRunner({
       lifecycle,
-      1_000 * 15,
-      new DeploymentCleanupTask(dockerService, deploymentRepository, serviceRepository),
-    ),
+      periodMs: 1_000 * 15,
+      task: new DeploymentCleanupTask(dockerService, deploymentRepository, serviceRepository),
+    }),
     new StartupTaskRunner(
-      new NetworkSyncTask(networkConnectHandler, serviceRepository),
+      new NetworkSyncTask(networkService, serviceRepository),
     ),
-    new PeriodicTaskRunner(
+    new PeriodicTaskRunner({
       lifecycle,
-      1_000 * 60 * 60 * 24, // 1 day
-      new TlsCertRenewalTask(provisionCertificateHandler, httpsServer, writeFile, readFile, now),
-    ),
+      periodMs: 1_000 * 60 * 60 * 24, // 1 day
+      task: new TlsCertRenewalTask(provisionCertificateHandler, httpsServer, writeFile, readFile, now),
+    }),
   ]
 
   tasks.forEach(task => task.start());

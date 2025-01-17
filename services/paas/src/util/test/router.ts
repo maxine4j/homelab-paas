@@ -4,13 +4,13 @@ import { bodyParser } from '@koa/bodyparser';
 import { errorMiddleware } from '../error';
 import Router from '@koa/router';
 
-export const startTestApi = (router: Router) => {
+export const startTestApi = (routes: ReturnType<Router['routes']>) => {
   const app = new Koa();
 
   app
     .use(bodyParser())
     .use(koaPino())
-    .use(router.routes())
+    .use(routes)
     .use(errorMiddleware);
 
   return app.listen();

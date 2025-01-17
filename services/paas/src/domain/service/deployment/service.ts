@@ -5,8 +5,8 @@ import { DeployTaskDescriptor } from './deploy-task'
 export class DeployService {
 
   constructor (
-    public readonly generateDeploymentId: () => string,
-    public readonly deploymentTaskQueue: TaskQueue<DeployTaskDescriptor>
+    private readonly generateDeploymentId: () => string,
+    private readonly deploymentTaskQueue: TaskQueue<DeployTaskDescriptor>
   ) {}
 
   public async startDeployment(serviceDescriptor: ServiceDescriptor) {

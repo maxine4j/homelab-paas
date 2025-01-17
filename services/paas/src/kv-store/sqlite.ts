@@ -1,50 +1,49 @@
-import sqlite from 'better-sqlite3';
+import sqlite, { Database } from 'better-sqlite3';
 import { KeyValueStore } from './types';
 
-export const createSqliteKeyValueStore = <TValue>(args: {
-  databaseFilename: string,
-  tableName: string,
-}): KeyValueStore<TValue> => {
-  const db = sqlite(args.databaseFilename);
+export class SqliteKeyValueStore<TValue> implements KeyValueStore<TValue> {
 
-  db.prepare(`
-    CREATE TABLE IF NOT EXISTS ${args.tableName} (
-      key TEXT PRIMARY KEY,
-      value TEXT
-    );
-  `).run();
+  private readonly db: Database;
 
-  const get = (key: string) => {
-    const row = db.prepare(`SELECT value FROM ${args.tableName} WHERE key = @key`).get({ key }) as { value: string };
+  constructor(
+    private readonly config: {
+      databaseFilename: string,
+      tableName: string
+    }
+  ) {
+    this.db = sqlite(this.config.databaseFilename);
+    this.db.prepare(`
+      CREATE TABLE IF NOT EXISTS ${this.config.tableName} (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
+    `).run();
+  }
+
+  public get(key: string) {
+    const row = this.db.prepare(`SELECT value FROM ${this.config.tableName} WHERE key = @key`).get({ key }) as { value: string };
     if (!row) {
       return undefined;
     }
     return JSON.parse(row.value) as TValue;
-  };
+  }
 
-  const set = (key: string, value: TValue) => {
-    db.prepare(`INSERT OR REPLACE INTO ${args.tableName} (key, value) VALUES (@key, @value)`).run({
+  public set(key: string, value: TValue) {
+    this.db.prepare(`INSERT OR REPLACE INTO ${this.config.tableName} (key, value) VALUES (@key, @value)`).run({
       key,
       value: JSON.stringify(value),
     });
-  };
+  }
 
-  const update = (key: string, updateFn: (existingValue: TValue | undefined) => TValue) => {
+  public update(key: string, updateFn: (existingValue: TValue | undefined) => TValue) {
     // FIXME: db.transaction is not working
-    const existingValue = get(key);
+    const existingValue = this.get(key);
     const newValue = updateFn(existingValue);
-    set(key, newValue);
-  };
+    this.set(key, newValue);
+  }
 
-  const values = () => {
-    const rows = db.prepare(`SELECT value FROM ${args.tableName}`).all() as Array<{ value: string }>;
+  public values() {
+    const rows = this.db.prepare(`SELECT value FROM ${this.config.tableName}`).all() as Array<{ value: string }>;
     return rows.map(row => JSON.parse(row.value));
-  };
-
-  return {
-    get,
-    set,
-    update,
-    values,
-  };
-};
+  }
+}

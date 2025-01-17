@@ -1,15 +1,19 @@
 import { ServiceRepository } from '../service/repository';
+import { NetworkService } from './connect-handler';
 import { NetworkSyncTask } from './sync-task';
 
 describe('network sync task', () => {
 
-  const mockNetworkConnectHandler = jest.fn();
+  const mockNetworkService: jest.Mocked<NetworkService> = {
+    connectServiceNetworkToPaas: jest.fn(),
+  } as Partial<jest.Mocked<NetworkService>> as unknown as jest.Mocked<NetworkService>;
+
   const mockServiceRepository = {
     queryAllServices: jest.fn(),
   } satisfies Partial<jest.Mocked<ServiceRepository>> as unknown as jest.Mocked<ServiceRepository>;
 
   const networkSyncTask = new NetworkSyncTask(
-    mockNetworkConnectHandler,
+    mockNetworkService,
     mockServiceRepository,
   );
 
@@ -22,8 +26,8 @@ describe('network sync task', () => {
 
     await networkSyncTask.run();
 
-    expect(mockNetworkConnectHandler).toHaveBeenCalledWith('service-123');
-    expect(mockNetworkConnectHandler).toHaveBeenCalledWith('service-234');
-    expect(mockNetworkConnectHandler).toHaveBeenCalledWith('service-345');
+    expect(mockNetworkService.connectServiceNetworkToPaas).toHaveBeenCalledWith('service-123');
+    expect(mockNetworkService.connectServiceNetworkToPaas).toHaveBeenCalledWith('service-234');
+    expect(mockNetworkService.connectServiceNetworkToPaas).toHaveBeenCalledWith('service-345');
   });
 });
