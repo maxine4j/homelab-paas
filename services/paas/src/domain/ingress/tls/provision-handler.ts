@@ -3,44 +3,30 @@ import { logger } from '../../../util/logger';
 import { DnsAcmeChallengeProvider } from './dns-challenge/types';
 import { ContextualError } from '../../../util/error';
 
-export interface TlsCertificateProvisionHandler {
-  (): Promise<{
-    key: string
-    cert: string
-  }>
-}
+export class TlsCertProvisionService {
+  constructor(
+    private readonly expiryNotificationEmail: string,
+    private readonly paasRootDomain: string,
+    private readonly letsencryptEnv: string,
+    private readonly challengeProvider: DnsAcmeChallengeProvider,
+  ) {}
 
-export const createTlsCertificateProvisionHandler = (
-  expiryNotificationEmail: string,
-  paasRootDomain: string,
-  letsencryptEnv: string,
-  challengeProvider: DnsAcmeChallengeProvider,
-) => {
-
-  const getDirectoryUrl = () => {
-    switch (letsencryptEnv) {
-      case 'production': return acme.directory.letsencrypt.production;
-      case 'staging': return acme.directory.letsencrypt.staging;
-      default: throw new ContextualError('Invalid PAAS_TLS_LETSENCRYPT_ENV, expected staging or production', { letsencryptEnv });
-    }
-  }
-
-  return async () => {
+  public async provisionCert() {
     const client = new acme.Client({
-      directoryUrl: getDirectoryUrl(),
+      directoryUrl: this.getDirectoryUrl(),
       accountKey: await acme.crypto.createPrivateKey(),
     });
 
-    const altName = `*.${paasRootDomain}`;
+    const altName = `*.${this.paasRootDomain}`;
     const [key, csr] = await acme.crypto.createCsr({
       altNames: [altName],
     });
     logger.info({ altName }, 'Created certificate signing request');
 
-    const statefulChallenge = challengeProvider.createStatefulChallenge();
+    const statefulChallenge = this.challengeProvider.createStatefulChallenge();
     const cert = await client.auto({
         csr,
-        email: expiryNotificationEmail,
+        email: this.expiryNotificationEmail,
         termsOfServiceAgreed: true,
         challengePriority: ['dns-01'],
         challengeCreateFn: statefulChallenge.createChallenge,
@@ -52,5 +38,13 @@ export const createTlsCertificateProvisionHandler = (
       key: key.toString(),
       cert: cert.toString(),
     };
+  }
+
+  private getDirectoryUrl() {
+    switch (this.letsencryptEnv) {
+      case 'production': return acme.directory.letsencrypt.production;
+      case 'staging': return acme.directory.letsencrypt.staging;
+      default: throw new ContextualError('Invalid PAAS_TLS_LETSENCRYPT_ENV, expected staging or production', { letsencryptEnv: this.letsencryptEnv });
+    }
   }
 }

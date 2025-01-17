@@ -1,23 +1,46 @@
 import { DnsAcmeChallengeProvider } from './types';
 import { ContextualError } from '../../../../util/error';
 import { logger } from '../../../../util/logger';
+import { Authorization } from 'acme-client';
+import { Challenge } from 'acme-client/types/rfc8555';
 
-export const createDigitalOceanDnsAcmeChallengeProvider = (
-  digitaloceanDomain: string,
-  digitaloceanAccessToken: string,
-): DnsAcmeChallengeProvider => {
+export class DigitalOceanDnsAcmeChallengeProvider implements DnsAcmeChallengeProvider {
+  
+  constructor(
+    private readonly digitaloceanDomain: string,
+    private readonly digitaloceanAccessToken: string,
+  ) {}
+  
+  public createStatefulChallenge() {
+    let challengeRecordId: string | undefined;
 
-  const createChallenge = async (authzIdentifier: string, keyAuthorization: string) => {
-    const prunedIdentified = authzIdentifier.split(`.${digitaloceanDomain}`)[0];
+    return {
+      createChallenge: async (authz: Authorization, challenge: Challenge, keyAuthorization: string) => {
+        if (challenge.type !== 'dns-01') {
+          throw new ContextualError('Unsupported challenge type', { type: challenge.type });
+        }
+        challengeRecordId = await this.createChallenge(authz.identifier.value, keyAuthorization);
+      },
+      removeChallenge: async () => {
+        if (!challengeRecordId) {
+          throw new ContextualError('Failed to remove challenge record, no challengeRecordId founds');
+        }
+        await this.removeChallenge(challengeRecordId);
+      },
+    }
+  }
+
+  private async createChallenge(authzIdentifier: string, keyAuthorization: string) {
+    const prunedIdentified = authzIdentifier.split(`.${this.digitaloceanDomain}`)[0];
     logger.info({ authzIdentifier, prunedIdentified }, 'Creating digitalocean dns challenge');
     const name = `_acme-challenge.${prunedIdentified}`;
     const value = keyAuthorization;
 
-    const response = await fetch(`https://api.digitalocean.com/v2/domains/${digitaloceanDomain}/records`, {
+    const response = await fetch(`https://api.digitalocean.com/v2/domains/${this.digitaloceanDomain}/records`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${digitaloceanAccessToken}`,
+        'Authorization': `Bearer ${this.digitaloceanAccessToken}`,
       },
       body: JSON.stringify({
         type: 'TXT',
@@ -36,41 +59,21 @@ export const createDigitalOceanDnsAcmeChallengeProvider = (
     return responseBody.domain_record.id;
   }
 
-  const removeChallenge = async (challengeRecordId: string) => {
+  private async removeChallenge(challengeRecordId: string) {
     if (!challengeRecordId) {
       throw new ContextualError('Failed to clean up TXT record for acme challenge, challengeRecordId not defined');
     }
 
-    const response = await fetch(`https://api.digitalocean.com/v2/domains/${digitaloceanDomain}/records/${challengeRecordId}`, {
+    const response = await fetch(`https://api.digitalocean.com/v2/domains/${this.digitaloceanDomain}/records/${challengeRecordId}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${digitaloceanAccessToken}`,
+        'Authorization': `Bearer ${this.digitaloceanAccessToken}`,
       }
     });
 
     if (!response.ok) {
       throw new ContextualError('Failed to remove challenge record, bad response from digitalocean');
     }
-  };
-
-  return {
-    createStatefulChallenge: () => {
-      let challengeRecordId: string | undefined;
-      return {
-        createChallenge: async (authz, challenge, keyAuthorization) => {
-          if (challenge.type !== 'dns-01') {
-            throw new ContextualError('Unsupported challenge type', { type: challenge.type });
-          }
-          challengeRecordId = await createChallenge(authz.identifier.value, keyAuthorization);
-        },
-        removeChallenge: async () => {
-          if (!challengeRecordId) {
-            throw new ContextualError('Failed to remove challenge record, no challengeRecordId founds');
-          }
-          await removeChallenge(challengeRecordId);
-        },
-      }
-    },
   }
 }

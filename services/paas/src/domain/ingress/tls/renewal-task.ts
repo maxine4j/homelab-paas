@@ -1,7 +1,7 @@
 import { PeriodicTask } from '../../../task/periodic';
 import { daysBetween } from '../../../util/date';
 import { logger } from '../../../util/logger';
-import { TlsCertificateProvisionHandler } from './provision-handler';
+import { TlsCertProvisionService } from './provision-handler';
 import { X509Certificate } from 'crypto';
 
 const privateKeyFilePem = '/etc/homelab-paas/key.pem';
@@ -17,7 +17,7 @@ interface HttpsServer {
 }
 
 export const createTlsCertRenewalTask = (
-  provisionCertificate: TlsCertificateProvisionHandler,
+  tlsCertProvisionService: TlsCertProvisionService,
   httpsServer: HttpsServer,
   writeFile: (name: string, data: string) => Promise<void>,
   readFile: (name: string) => Promise<string | undefined>,
@@ -64,7 +64,7 @@ export const createTlsCertRenewalTask = (
       return;
     }
 
-    const { key, cert } = await provisionCertificate();
+    const { key, cert } = await tlsCertProvisionService.provisionCert();
     await Promise.all([
       writeFile(privateKeyFilePem, key),
       writeFile(certificateFilePem, cert),

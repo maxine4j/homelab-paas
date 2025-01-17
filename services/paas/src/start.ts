@@ -6,9 +6,9 @@ import { generate as generateShortUuid } from 'short-uuid';
 import { createDockerService } from './docker/service';
 import { createAuthRouter } from './domain/ingress/auth/router';
 import { createReverseProxyMiddleware } from './domain/ingress/reverse-proxy/middleware';
-import { createTlsCertificateProvisionHandler } from './domain/ingress/tls/provision-handler';
+import { TlsCertProvisionService } from './domain/ingress/tls/provision-handler';
 import { createTlsCertRenewalTask } from './domain/ingress/tls/renewal-task';
-import { createDigitalOceanDnsAcmeChallengeProvider } from './domain/ingress/tls/dns-challenge/digitalocean';
+import { DigitalOceanDnsAcmeChallengeProvider } from './domain/ingress/tls/dns-challenge/digitalocean';
 import { createNetworkConnectHandler } from './domain/networking/connect-handler';
 import { createNetworkSyncTask } from './domain/networking/sync-task';
 import { createDeploymentCleanupTask } from './domain/service/deployment/cleanup-task';
@@ -58,11 +58,11 @@ export const start = (lifecycle: Lifecycle) => {
   const deployTaskQueue = createInMemoryTaskQueue<DeploymentDeployTask>(uuid);
   const deploymentStartHandler = createDeploymentStartHandler(uuid, deployTaskQueue);
   const networkConnectHandler = createNetworkConnectHandler(dockerService);
-  const provisionCertificateHandler = createTlsCertificateProvisionHandler(
+  const provisionCertificateHandler = new TlsCertProvisionService(
     config.tls.notificationEmail,
     config.rootDomain,
     config.tls.letsencryptEnv,
-    createDigitalOceanDnsAcmeChallengeProvider(
+    new DigitalOceanDnsAcmeChallengeProvider(
       config.tls.digitalocean.domain,
       config.tls.digitalocean.accessToken,
     ),
