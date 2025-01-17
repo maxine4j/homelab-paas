@@ -7,5 +7,6 @@ export const ServiceDescriptor = z.object({
   ingress: z.object({
     containerPort: z.number().min(1).max(65535),
     public: z.boolean().optional(),
+    authorizedUsers: z.array(z.string()).optional(),
   }),
 });

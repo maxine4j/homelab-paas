@@ -3,46 +3,133 @@ import { Context, Next } from 'koa';
 import { logger } from '../../util/logger';
 import {once} from 'node:events';
 import { ServiceRepository } from '../service/repository';
-import { DeploymentRepository } from '../service/deployment/repository';
+import { DeploymentRecord, DeploymentRepository } from '../service/deployment/repository';
 import { config } from '../../util/config';
-import { getLoginUrl, verifyAuthCookie } from './auth/oauth';
+import { AuthedUserDetails, getLoginUrl, verifyAuthCookie } from './auth/oauth';
 
-const authorizedUsers = new Set(config.auth.authorizedUsers);
+const paasAuthorizedUsernames = new Set(config.auth.authorizedUsers);
 
 export const createReverseProxy = (
   serviceRepository: ServiceRepository,
   deploymentRepository: DeploymentRepository,
 ) => {
+  
+  const isRequestForPaas = (hostname: string) => hostname === config.rootDomain;
+
+  const parseServiceId = (hostname: string) => {
+    const serviceId = hostname.split(`.${config.rootDomain}`).at(0);
+    if (!serviceId) {
+      throw new Error('Failed to parse serviceId from hostname');
+    }
+    return serviceId;
+  }
+
+  const getActiveDeployment = async (serviceId: string) => {
+    const service = await serviceRepository.queryService(serviceId);
+    if (!service?.activeDeploymentId) {
+      return;
+    }
+    return await deploymentRepository.query(service.activeDeploymentId);
+  }
+
+  const serviceAllowsPublicIngress = (activeDeployment: DeploymentRecord | undefined) => {
+    return activeDeployment?.serviceDescriptor.ingress.public ?? false;
+  }
+
+  const isUserAuthorized = ({ username }: AuthedUserDetails, activeDeployment: DeploymentRecord | undefined) => {
+    const serviceAuthorizedUsernames = activeDeployment?.serviceDescriptor.ingress.authorizedUsers;
+
+    // user must be authorized to access the paas regardless of service auth
+    if (!paasAuthorizedUsernames.has(username)) {
+      return false;
+    }
+    
+    // if the service does not define a list of authorized users, then any paas user can access the service
+    if (serviceAuthorizedUsernames === undefined) {
+      return true;
+    }
+
+    // if the service does define a list of authorized users, only allow those users access
+    return serviceAuthorizedUsernames.includes(username);
+  };
+
+  const buildAuthHeaders = (authedUserDetails: AuthedUserDetails | undefined) => {
+    const headers: Record<string, string> = {};
+
+    if (!authedUserDetails) {
+      return headers;
+    }
+
+    headers['PaasAuth-Username'] = authedUserDetails.username;
+    headers['PaasAuth-Name'] = authedUserDetails.name;
+    headers['PaasAuth-Avatar'] = authedUserDetails.avatarUrl;
+  
+    if (authedUserDetails.email) {
+      headers['PaasAuth-Email'] = authedUserDetails.email;
+    }
+
+    return headers;
+  }
+
+  const forwardRequest = async (args: {
+    ctx: Context, 
+    serviceContainer: NonNullable<DeploymentRecord['container']>,
+    authedUserDetails: AuthedUserDetails | undefined,
+  }) => {
+    const proxyReq = http.request({
+      hostname: args.serviceContainer.hostname,
+      port: args.serviceContainer.port,
+      path: args.ctx.request.url,
+      method: args.ctx.request.method,
+      headers: {
+        ...args.ctx.request.headers,
+        ...buildAuthHeaders(args.authedUserDetails),
+      },
+    }, (proxyRes) => {
+      logger.info({ status: proxyRes.statusCode, headers: proxyRes.headers }, 'Received response from internal service');
+      args.ctx.set(proxyRes.headers as Record<string, string | string[]>);
+      args.ctx.status = proxyRes.statusCode ?? 502;
+      proxyRes.pipe(args.ctx.res);
+    });
+
+    proxyReq.on('error', (err) => {
+      args.ctx.status = 502;
+      logger.error(err);
+    });
+
+    args.ctx.req.pipe(proxyReq);
+
+    await once(proxyReq, 'finish');
+  };
 
   return async (ctx: Context, next: Next) => {
-    // dont proxy requests to the paas
-    if (ctx.hostname === config.rootDomain) {
-      return await next();
+    
+    if (isRequestForPaas(ctx.hostname)) {
+      await next();
+      return;
     }
 
     // bypass koa's built in response handling so we can pipe the response from the internal service
     ctx.respond = false;
+    const serviceId = parseServiceId(ctx.hostname);
+    const activeDeployment = await getActiveDeployment(serviceId);
+    const authedUserDetails = await verifyAuthCookie(ctx.cookies);
 
-    // fetch container hostname for the active deployment of the service
-    const serviceId = ctx.hostname.split(`.${config.rootDomain}`).at(0);
-    if (!serviceId) {
-      throw new Error('Failed to parse serviceId from hostname');
-    }
-    
-    const service = await serviceRepository.queryService(serviceId);
-    const activeDeployment = await deploymentRepository.query(service?.activeDeploymentId ?? '')
+    logger.info({ 
+      serviceId, 
+      deploymentId: activeDeployment?.deploymentId, 
+      authedUserDetails,
+      allowsPublicIngress: serviceAllowsPublicIngress(activeDeployment),
+    }, 'Proxying request');
 
-    if (!activeDeployment?.serviceDescriptor.ingress.public) {
-      // check for auth cookie
-      const authedUserDetails = await verifyAuthCookie(ctx.cookies);
+    if (!serviceAllowsPublicIngress(activeDeployment)) {
       if (!authedUserDetails) {
         logger.info('User not authenticated, redirecting to login url');
         ctx.redirect(getLoginUrl(ctx.request.href));
         ctx.res.end();
         return;
       }
-      
-      if (!authorizedUsers.has(authedUserDetails.username)) {
+      if (!isUserAuthorized(authedUserDetails, activeDeployment)) {
         logger.info({ authedUserDetails }, 'User not authorized');
         ctx.status = 403;
         ctx.res.end();
@@ -57,34 +144,11 @@ export const createReverseProxy = (
       return;
     }
 
-    // forward the request to the internal service
-    const proxyReq = http.request({
-      hostname: activeDeployment.container.hostname,
-      port: activeDeployment.container.port,
-      path: ctx.request.url,
-      method: ctx.request.method,
-      headers: {
-        ...ctx.request.headers,
-        // TODO: pass through headers for logged in user here
-        // 'X-Authorized-User': '...',
-        // 'X-Authorized-Email': '...',
-      },
-    }, (proxyRes) => {
-      logger.info({ status: proxyRes.statusCode, headers: proxyRes.headers }, 'Received response from internal service');
-      ctx.set(proxyRes.headers as Record<string, string | string[]>);
-      ctx.status = proxyRes.statusCode ?? 502;
-      // pipe response back to client
-      proxyRes.pipe(ctx.res);
+    logger.info({ serviceId, deploymentId: activeDeployment?.deploymentId, authedUserDetails }, 'Forwarding request to service');
+    await forwardRequest({
+      ctx,
+      authedUserDetails,
+      serviceContainer: activeDeployment.container,
     });
-
-    // pipe request body to internal service
-    ctx.req.pipe(proxyReq);
-
-    proxyReq.on('error', (err) => {
-      ctx.status = 502;
-      logger.error(err);
-    });
-
-    await once(proxyReq, 'finish');
   }
 };

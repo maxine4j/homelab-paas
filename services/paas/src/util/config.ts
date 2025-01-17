@@ -15,7 +15,8 @@ export const config = {
     clientId: unwrapEnv('PAAS_AUTH_CLIENT_ID'),
     clientSecret: unwrapEnv('PAAS_AUTH_CLIENT_SECRET'),
     jwtSecret: unwrapEnv('PAAS_AUTH_JWT_SECRET'),
-    authorizedUsers: unwrapEnv('PAAS_AUTH_AUTHORIZED_USERS').split(','),
+    authorizedUsers: unwrapEnv('PAAS_AUTH_AUTHORIZED_USERS').split(','), // users must be here to access anything in the paas
+    paasAdminUsers: unwrapEnv('PAAS_AUTH_PAAS_ADMIN_USERS').split(','), // users must be here to access paas functionality itself
   },
   tls: {
     notificationEmail: unwrapEnv('PAAS_TLS_NOTIFICATION_EMAIL'),
