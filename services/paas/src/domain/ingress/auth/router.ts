@@ -1,11 +1,12 @@
 import Router from '@koa/router';
 import { logger } from '../../../util/logger';
 import { ContextualError } from '../../../util/error';
-import { config } from '../../../util/config';
 import { AuthService } from './service';
+import { ConfigService } from '../../../util/config';
 
 export const createAuthRouter = (
   authService: AuthService,
+  configService: ConfigService
 ) => {
   
   return new Router()
@@ -21,8 +22,8 @@ export const createAuthRouter = (
 
       logger.info('Authenticating user');
       const jwt = await authService.issueAuthCookie(code);
-      ctx.cookies.set(config.auth.cookieName, jwt, {
-        domain: config.rootDomain,
+      ctx.cookies.set(configService.getAuthCookieName(), jwt, {
+        domain: configService.getConfig().paas.rootDomain,
       });
 
       ctx.redirect(redirectUri);

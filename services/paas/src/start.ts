@@ -6,7 +6,7 @@ import { generate as generateShortUuid } from 'short-uuid';
 import { DockerService } from './docker/service';
 import { createAuthRouter } from './domain/ingress/auth/router';
 import { createReverseProxyMiddleware } from './domain/ingress/reverse-proxy/middleware';
-import { TlsCertProvisionService } from './domain/ingress/tls/provision-handler';
+import { TlsCertProvisionService } from './domain/ingress/tls/provision-service';
 import { TlsCertRenewalTask } from './domain/ingress/tls/renewal-task';
 import { DigitalOceanDnsAcmeChallengeProvider } from './domain/ingress/tls/dns-challenge/digitalocean';
 import { NetworkService } from './domain/network/service';
@@ -22,19 +22,23 @@ import { PeriodicTaskRunner } from './task/periodic';
 import { InMemoryTaskQueue, QueueTaskRunner } from './task/queue';
 import { StartupTaskRunner } from './task/startup';
 import { TaskRunner } from './task/types';
-import { config } from './util/config';
+import { ConfigService } from './util/config';
 import { errorMiddleware } from './util/error';
-import { readFile, writeFile } from './util/file';
+import { readFile, readFileSync, writeFile } from './util/file';
 import { createHealthCheckRouter } from './util/healthcheck';
 import { Lifecycle } from './util/lifecycle';
 import { createRequestLogger, logger } from './util/logger';
 import { createRequestForwarder } from './domain/ingress/reverse-proxy/forwarder';
 import { AuthService } from './domain/ingress/auth/service';
 import { GitHubOauth2Provider } from './domain/ingress/auth/oauth-provider/github';
+import { DnsAcmeChallengeProviderRegistry } from './domain/ingress/tls/dns-challenge/registry';
+import { Oauth2ProviderRegistry } from './domain/ingress/auth/oauth-provider/registry';
 
 export const start = (lifecycle: Lifecycle) => {
   const uuid = () => generateShortUuid();
   const now = () => new Date();
+
+  const configService = new ConfigService(readFileSync);
 
   const deploymentRepository = new DeploymentRepository(
     now,
@@ -52,37 +56,29 @@ export const start = (lifecycle: Lifecycle) => {
 );
 
   const authService = new AuthService(
-    new GitHubOauth2Provider(config.rootDomain, config.auth.githubClientId, config.auth.githubClientSecret),
-    config.auth.jwtSecret,
-    config.auth.sessionLifetimeSeconds,
-    config.auth.authorizedUsers
+    configService,
+    new Oauth2ProviderRegistry(configService),
   );
   const dockerService = new DockerService(() => new Docker());
   const deployTaskQueue = new InMemoryTaskQueue<DeployTaskDescriptor>(uuid);
   const deployService = new DeployService(uuid, deployTaskQueue);
-  const networkService = new NetworkService(dockerService);
+  const networkService = new NetworkService(dockerService, configService);
   const provisionCertificateHandler = new TlsCertProvisionService(
-    config.tls.notificationEmail,
-    config.rootDomain,
-    config.tls.letsencryptEnv,
-    new DigitalOceanDnsAcmeChallengeProvider(
-      config.tls.digitalocean.domain,
-      config.tls.digitalocean.accessToken,
-    ),
+    configService,
+    new DnsAcmeChallengeProviderRegistry(configService),
   );
   const reverseProxy = createReverseProxyMiddleware(
     serviceRepository, 
     deploymentRepository,
     authService,
     createRequestForwarder(),
-    config.rootDomain,
-    config.auth.cookieName,
+    configService,
   );
 
   const app = new Koa();
   app
     .use(createRequestLogger())
-    .use(createAuthRouter(authService).routes())
+    .use(createAuthRouter(authService, configService).routes())
     .use(reverseProxy)
     .use(bodyParser())
     .use(createHealthCheckRouter().routes())
@@ -97,8 +93,8 @@ export const start = (lifecycle: Lifecycle) => {
     });
 
   const httpsServer = https.createServer({}, app.callback());
-  httpsServer.listen(config.httpsPort, () => {
-    logger.info(`Listening on ${config.httpsPort}`);
+  httpsServer.listen(8443, () => {
+    logger.info(`Listening on 8443`);
   });
 
   const httpServer = new Koa()
@@ -107,8 +103,8 @@ export const start = (lifecycle: Lifecycle) => {
       url.protocol = 'https:';
       ctx.redirect(url.toString());
     })
-    .listen(config.httpPort, () => {
-      logger.info(`Listening on ${config.httpPort}`);
+    .listen(8080, () => {
+      logger.info(`Listening on 8080`);
     });
 
   const tasks: TaskRunner[] = [

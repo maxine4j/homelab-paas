@@ -1,0 +1,13 @@
+name: homelab
+services:
+  paas:
+    build:
+      context: ./
+      dockerfile: ./services/paas/Dockerfile
+    ports:
+      - "80:8080"
+      - "443:8443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./paas-config/:/etc/homelab-paas
+      - ./config.local.yaml:/etc/homelab-paas/config.yaml

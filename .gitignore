@@ -136,3 +136,4 @@ secrets.yaml
 charts/schooner/values.local.yaml
 
 paas-config/
+config.local.yaml

@@ -1,25 +1,28 @@
 import jwt from 'jsonwebtoken';
 import { AuthedUserDetails, Oauth2Provider } from './oauth-provider/types';
+import { ConfigService } from '../../../util/config';
+import { Oauth2ProviderRegistry } from './oauth-provider/registry';
 
 export class AuthService {
   constructor(
-    private readonly provider: Oauth2Provider,
-    private readonly jwtSecret: string,
-    private readonly sessionLifetimeSeconds: number,
-    private readonly paasAuthorizedUserIds: string[],
+    private readonly configService: ConfigService,
+    private readonly providerRegistry: Oauth2ProviderRegistry,
   ) {}
 
   public getLoginUrl(finalRedirectUri: string): string {
-    return this.provider.getLoginUrl(finalRedirectUri);
+    const { provider } = this.getConfig();
+    return provider.getLoginUrl(finalRedirectUri);
   }
 
   public async issueAuthCookie(oauth2CallbackCode: string): Promise<string> {
-    const accessToken = await this.provider.fetchAccessToken(oauth2CallbackCode);
-    const userDetails = await this.provider.fetchUserDetails(accessToken);
+    const { provider, jwtSecret, sessionLifetimeSeconds } = this.getConfig();
+
+    const accessToken = await provider.fetchAccessToken(oauth2CallbackCode);
+    const userDetails = await provider.fetchUserDetails(accessToken);
     
-    return jwt.sign(userDetails, this.jwtSecret, {
+    return jwt.sign(userDetails, jwtSecret, {
       algorithm: 'HS256',
-      expiresIn: this.sessionLifetimeSeconds,
+      expiresIn: sessionLifetimeSeconds,
     });
   }
 
@@ -29,7 +32,7 @@ export class AuthService {
     }
   
     try {
-      const payload = jwt.verify(authCookie, this.jwtSecret, {
+      const payload = jwt.verify(authCookie, this.configService.getConfig().paas.auth.jwtSecret, {
         algorithms: ['HS256'],
       });
       return payload as AuthedUserDetails;
@@ -39,8 +42,10 @@ export class AuthService {
   }
 
   public isUserAuthorized(userId: string, serviceAuthorizedUserIds: string[] | undefined): boolean {
+    const { authorizedUserIds } = this.getConfig();
+
     // user must be authorized to access the paas regardless of service auth
-    if (!this.paasAuthorizedUserIds.includes(userId)) {
+    if (!authorizedUserIds.includes(userId)) {
       return false;
     }
     
@@ -51,5 +56,16 @@ export class AuthService {
 
     // if the service does define a list of authorized users, only allow those users access
     return serviceAuthorizedUserIds.includes(userId);
+  }
+
+  private getConfig() {
+    const config = this.configService.getConfig();
+    return {
+      provider: this.providerRegistry.getProvider(config.paas.auth.oauth2Provider.type),
+      sessionLifetimeSeconds: config.paas.auth.sessionLifetimeSeconds,
+      jwtSecret: config.paas.auth.jwtSecret,
+      authorizedUserIds: config.paas.auth.authorizedUserIds,
+      adminUserIds: config.paas.auth.adminUserIds,
+    }
   }
 }

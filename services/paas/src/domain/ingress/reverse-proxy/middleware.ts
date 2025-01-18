@@ -4,20 +4,20 @@ import { ServiceRepository } from '../../service/repository';
 import { DeploymentRecord, DeploymentRepository } from '../../service/deployment/repository';
 import { RequestForwarder } from './forwarder';
 import { AuthService } from '../auth/service';
+import { ConfigService } from '../../../util/config';
 
 export const createReverseProxyMiddleware = (
   serviceRepository: ServiceRepository,
   deploymentRepository: DeploymentRepository,
   authService: AuthService,
   forwardRequest: RequestForwarder,
-  rootDomain: string,
-  authCookieName: string,
+  configService: ConfigService,
 ): Middleware => {
   
-  const isRequestForPaas = (hostname: string) => hostname === rootDomain;
+  const isRequestForPaas = (hostname: string) => hostname === configService.getConfig().paas.rootDomain;
 
   const parseServiceId = (hostname: string) => {
-    const serviceId = hostname.split(`.${rootDomain}`).at(0);
+    const serviceId = hostname.split(`.${configService.getConfig().paas.rootDomain}`).at(0);
     if (!serviceId) {
       throw new Error('Failed to parse serviceId from hostname');
     }
@@ -47,7 +47,7 @@ export const createReverseProxyMiddleware = (
     // bypass koa's built in response handling so we can pipe the response from the internal service
     const serviceId = parseServiceId(ctx.hostname);
     const activeDeployment = await getActiveDeployment(serviceId);
-    const authedUserDetails = authService.verifyAuthCookie(ctx.cookies.get(authCookieName));
+    const authedUserDetails = authService.verifyAuthCookie(ctx.cookies.get(configService.getAuthCookieName()));
 
     logger.info({
       serviceId, 

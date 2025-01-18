@@ -1,32 +1,32 @@
 import acme from 'acme-client';
 import { logger } from '../../../util/logger';
-import { DnsAcmeChallengeProvider } from './dns-challenge/types';
-import { ContextualError } from '../../../util/error';
+import { ConfigService } from '../../../util/config';
+import { DnsAcmeChallengeProviderRegistry } from './dns-challenge/registry';
 
 export class TlsCertProvisionService {
   constructor(
-    private readonly expiryNotificationEmail: string,
-    private readonly paasRootDomain: string,
-    private readonly letsencryptEnv: string,
-    private readonly challengeProvider: DnsAcmeChallengeProvider,
+    private readonly configService: ConfigService,
+    private readonly challengeProviderRegistry: DnsAcmeChallengeProviderRegistry,
   ) {}
 
   public async provisionCert() {
+    const { challengeProvider, rootDomain, notificationEmail } = this.getConfig();
+
     const client = new acme.Client({
       directoryUrl: this.getDirectoryUrl(),
       accountKey: await acme.crypto.createPrivateKey(),
     });
 
-    const altName = `*.${this.paasRootDomain}`;
+    const altName = `*.${rootDomain}`;
     const [key, csr] = await acme.crypto.createCsr({
       altNames: [altName],
     });
     logger.info({ altName }, 'Created certificate signing request');
 
-    const statefulChallenge = this.challengeProvider.createStatefulChallenge();
+    const statefulChallenge = challengeProvider.createStatefulChallenge();
     const cert = await client.auto({
         csr,
-        email: this.expiryNotificationEmail,
+        email: notificationEmail,
         termsOfServiceAgreed: true,
         challengePriority: ['dns-01'],
         challengeCreateFn: statefulChallenge.createChallenge,
@@ -41,10 +41,21 @@ export class TlsCertProvisionService {
   }
 
   private getDirectoryUrl() {
-    switch (this.letsencryptEnv) {
+    const { letsEncryptEnv } = this.getConfig();
+    switch (letsEncryptEnv) {
       case 'production': return acme.directory.letsencrypt.production;
       case 'staging': return acme.directory.letsencrypt.staging;
-      default: throw new ContextualError('Invalid PAAS_TLS_LETSENCRYPT_ENV, expected staging or production', { letsencryptEnv: this.letsencryptEnv });
+    }
+  }
+
+  private getConfig() {
+    const config = this.configService.getConfig();
+
+    return {
+      letsEncryptEnv: config.paas.tls.letsEncryptEnv,
+      rootDomain: config.paas.rootDomain,
+      notificationEmail: config.paas.tls.notificationEmail,
+      challengeProvider: this.challengeProviderRegistry.getProvider(config.paas.tls.dnsChallengeProvider.type),
     }
   }
 }

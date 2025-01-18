@@ -6,37 +6,49 @@ import { startMiddlewareTestApi } from '../../../util/test/router';
 import supertest from 'supertest';
 import { AuthService } from '../auth/service';
 import { AuthedUserDetails } from '../auth/oauth-provider/types';
+import { ConfigService } from '../../../util/config';
 
 describe('reverse proxy middleware', () => {
 
   const mockRootDomain = 'paas.localhost';
   const mockLoginUrl = 'auth-provider.localhost/login';
 
-  const mockServiceRepository = {
+  const mockServiceRepository: jest.Mocked<ServiceRepository> = {
     queryService: jest.fn(),
-  } satisfies Partial<jest.Mocked<ServiceRepository>> as unknown as jest.Mocked<ServiceRepository>;
-  const mockDeploymentRepository = {
+  } as Partial<jest.Mocked<ServiceRepository>> as jest.Mocked<ServiceRepository>;
+
+  const mockDeploymentRepository: jest.Mocked<DeploymentRepository> = {
     query: jest.fn(),
-  } satisfies Partial<jest.Mocked<DeploymentRepository>> as unknown as jest.Mocked<DeploymentRepository>;
+  } as Partial<jest.Mocked<DeploymentRepository>> as jest.Mocked<DeploymentRepository>;
+
   const mockAuthService: jest.Mocked<AuthService> = {
     getLoginUrl: jest.fn().mockReturnValue(mockLoginUrl),
     issueAuthCookie: jest.fn(),
     verifyAuthCookie: jest.fn(),
     isUserAuthorized: jest.fn(),
-  } as Partial<jest.Mocked<AuthService>> as unknown as jest.Mocked<AuthService>;
+  } as Partial<jest.Mocked<AuthService>> as jest.Mocked<AuthService>;
+
   const mockForwardRequest: jest.MockedFn<RequestForwarder> = jest.fn()
     .mockImplementation(async ({ ctx }) => {
       ctx.res.statusCode = 200;
       ctx.res.end();
     });
 
+  const mockConfigService: jest.Mocked<ConfigService> = {
+    getConfig: jest.fn().mockReturnValue({
+      paas: {
+        rootDomain: mockRootDomain,
+      }
+    }),
+    getAuthCookieName: jest.fn().mockReturnValue('auth-cookie'),
+  } as Partial<jest.Mocked<ConfigService>> as jest.Mocked<ConfigService>;
+
   const reverseProxyMiddleware = createReverseProxyMiddleware(
     mockServiceRepository,
     mockDeploymentRepository,
     mockAuthService,
     mockForwardRequest,
-    mockRootDomain,
-    'auth-cookie',
+    mockConfigService,
   );
 
   const server = startMiddlewareTestApi(

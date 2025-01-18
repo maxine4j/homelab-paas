@@ -3,12 +3,12 @@ import { ContextualError } from '../../../../util/error';
 import { logger } from '../../../../util/logger';
 import { Authorization } from 'acme-client';
 import { Challenge } from 'acme-client/types/rfc8555';
+import { ConfigService } from '../../../../util/config';
 
 export class DigitalOceanDnsAcmeChallengeProvider implements DnsAcmeChallengeProvider {
   
   constructor(
-    private readonly digitaloceanDomain: string,
-    private readonly digitaloceanAccessToken: string,
+    private readonly configService: ConfigService,
   ) {}
   
   public createStatefulChallenge() {
@@ -31,16 +31,18 @@ export class DigitalOceanDnsAcmeChallengeProvider implements DnsAcmeChallengePro
   }
 
   private async createChallenge(authzIdentifier: string, keyAuthorization: string) {
-    const prunedIdentified = authzIdentifier.split(`.${this.digitaloceanDomain}`)[0];
+    const { accessToken, domain } = this.getConfig();
+   
+    const prunedIdentified = authzIdentifier.split(`.${domain}`)[0];
     logger.info({ authzIdentifier, prunedIdentified }, 'Creating digitalocean dns challenge');
     const name = `_acme-challenge.${prunedIdentified}`;
     const value = keyAuthorization;
 
-    const response = await fetch(`https://api.digitalocean.com/v2/domains/${this.digitaloceanDomain}/records`, {
+    const response = await fetch(`https://api.digitalocean.com/v2/domains/${domain}/records`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.digitaloceanAccessToken}`,
+        'Authorization': `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
         type: 'TXT',
@@ -60,20 +62,33 @@ export class DigitalOceanDnsAcmeChallengeProvider implements DnsAcmeChallengePro
   }
 
   private async removeChallenge(challengeRecordId: string) {
+    const { accessToken, domain } = this.getConfig();
+
     if (!challengeRecordId) {
       throw new ContextualError('Failed to clean up TXT record for acme challenge, challengeRecordId not defined');
     }
 
-    const response = await fetch(`https://api.digitalocean.com/v2/domains/${this.digitaloceanDomain}/records/${challengeRecordId}`, {
+    const response = await fetch(`https://api.digitalocean.com/v2/domains/${domain}/records/${challengeRecordId}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.digitaloceanAccessToken}`,
+        'Authorization': `Bearer ${accessToken}`,
       }
     });
 
     if (!response.ok) {
       throw new ContextualError('Failed to remove challenge record, bad response from digitalocean');
+    }
+  }
+
+  private getConfig() {
+    const providerConfig = this.configService.getConfig().paas.tls.dnsChallengeProvider;
+    if (providerConfig.type !== 'digitalocean') {
+      throw new ContextualError('Failed to configure digitalocean dnc acme challenge provider. Missing provider config');
+    }
+    return {
+      accessToken: providerConfig.accessToken,
+      domain: providerConfig.domain,
     }
   }
 }
