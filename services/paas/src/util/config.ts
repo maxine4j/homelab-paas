@@ -1,5 +1,6 @@
 import yaml from 'yaml';
 import { z } from 'zod';
+import { PeriodicTask } from '../task/periodic';
 import { ContextualError } from './error';
 import { logger } from './logger';
 import { validate } from './validation';
@@ -37,10 +38,14 @@ export class ConfigService {
   private config: PaasConfig | undefined;
   private paasHostname: string | undefined;
 
-  constructor(
-    private readonly readFileSync: (name: string) => string | undefined,
-  ) {
-    this.reloadConfig();
+  private constructor(
+    private readonly readFile: (name: string) => Promise<string | undefined>,
+  ) {}
+
+  static async create(readFile: (name: string) => Promise<string | undefined>) {
+    const configService = new ConfigService(readFile);
+    await configService.reloadConfig();
+    return configService;
   }
 
   public getConfig(): PaasConfig {
@@ -61,18 +66,18 @@ export class ConfigService {
     return 'homelab-paas-auth';
   }
 
-  public reloadConfig(): void {
+  public async reloadConfig(): Promise<void> {
     const paasHostnameFilePath = '/etc/hostname';
-    const maybePaasHostname = this.readFileSync(paasHostnameFilePath)?.trim();
+    const maybePaasHostname = await this.readFile(paasHostnameFilePath);
     if (!maybePaasHostname) {
       throw new ContextualError(
         `Failed to load paas container hostname from ${paasHostnameFilePath}`,
       );
     }
-    this.paasHostname = maybePaasHostname;
+    this.paasHostname = maybePaasHostname.trim();
 
     const paasConfigFilePath = '/etc/homelab-paas/config.yaml';
-    const maybeConfigYaml = this.readFileSync(paasConfigFilePath);
+    const maybeConfigYaml = await this.readFile(paasConfigFilePath);
     if (!maybeConfigYaml) {
       throw new ContextualError(
         `Failed to load paas config from ${paasConfigFilePath}`,
@@ -92,5 +97,13 @@ export class ConfigService {
       logger.error('Failed to validate paas config');
       throw error;
     }
+  }
+}
+
+export class ConfigReloadTask implements PeriodicTask {
+  constructor(private readonly configService: ConfigService) {}
+
+  public async run(): Promise<void> {
+    this.configService.reloadConfig();
   }
 }

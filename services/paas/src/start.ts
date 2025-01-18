@@ -31,18 +31,18 @@ import { PeriodicTaskRunner } from './task/periodic';
 import { InMemoryTaskQueue, QueueTaskRunner } from './task/queue';
 import { StartupTaskRunner } from './task/startup';
 import { TaskRunner } from './task/types';
-import { ConfigService } from './util/config';
+import { ConfigReloadTask, ConfigService } from './util/config';
 import { errorMiddleware } from './util/error';
-import { readFile, readFileSync, writeFile } from './util/file';
+import { readFile, writeFile } from './util/file';
 import { createHealthCheckRouter } from './util/healthcheck';
 import { Lifecycle } from './util/lifecycle';
 import { createRequestLogger, logger } from './util/logger';
 
-export const start = (lifecycle: Lifecycle) => {
+export const start = async (lifecycle: Lifecycle) => {
   const uuid = () => generateShortUuid();
   const now = () => new Date();
 
-  const configService = new ConfigService(readFileSync);
+  const configService = await ConfigService.create(readFile);
 
   const deploymentRepository = new DeploymentRepository(
     now,
@@ -145,6 +145,11 @@ export const start = (lifecycle: Lifecycle) => {
         readFile,
         now,
       ),
+    }),
+    new PeriodicTaskRunner({
+      lifecycle,
+      periodMs: 1_000 * 15,
+      task: new ConfigReloadTask(configService),
     }),
   ];
 

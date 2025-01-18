@@ -25,7 +25,7 @@ process
   });
 
 const main = async () => {
-  start(lifecycle);
+  await start(lifecycle);
 };
 
 main();
