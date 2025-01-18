@@ -75,6 +75,7 @@ export class DockerService {
     serviceId: string;
     deploymentId: string;
     networkId: string;
+    volumes?: Array<{ hostPath: string; containerPath: string }>;
   }): Promise<{ hostname: string }> {
     const hostname = `${args.serviceId}-${args.deploymentId}`;
 
@@ -92,6 +93,11 @@ export class DockerService {
             NetworkID: args.networkId,
           },
         },
+      },
+      HostConfig: {
+        Binds: args.volumes?.map(
+          ({ hostPath, containerPath }) => `${hostPath}:${containerPath}:rw`,
+        ),
       },
     });
     await container.start();
