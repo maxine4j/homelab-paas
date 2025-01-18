@@ -1,9 +1,6 @@
 name: Build and Test Paas
 
-on:
-  pull_request:
-    branches:
-      - "*"
+on: push
 
 jobs:
   build:
