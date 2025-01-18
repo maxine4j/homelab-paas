@@ -14,7 +14,7 @@ export class NetworkService {
 
     try {
       await this.dockerService.connectNetwork({
-        containerName: config.paasContainerName,
+        containerId: config.paasContainerId,
         networkId,
       });
       logger.info({ serviceId }, 'Connected service network to paas');

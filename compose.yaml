@@ -12,7 +12,6 @@ services:
       - ./paas-config/:/etc/homelab-paas
     environment:
       PAAS_ROOT_DOMAIN: ${PAAS_ROOT_DOMAIN}
-      PAAS_CONTAINER_NAME: /homelab-paas-1
 
       PAAS_AUTH_CLIENT_ID: ${PAAS_AUTH_CLIENT_ID}
       PAAS_AUTH_CLIENT_SECRET: ${PAAS_AUTH_CLIENT_SECRET}

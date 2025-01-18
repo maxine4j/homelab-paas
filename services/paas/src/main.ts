@@ -1,5 +1,6 @@
 import { start } from './start';
 import { createLifecycle } from './util/lifecycle';
+import { logger } from './util/logger';
 
 const lifecycle = createLifecycle();
 
@@ -12,11 +13,13 @@ process
     await lifecycle.shutdown();
     process.exit(0);
   })
-  .on('uncaughtException', async () => {
+  .on('uncaughtException', async (error) => {
+    logger.error(error);
     await lifecycle.shutdown();
     process.exit(1);
   })
-  .on('unhandledRejection', async () => {
+  .on('unhandledRejection', async (error) => {
+    logger.error(error);
     await lifecycle.shutdown();
     process.exit(1);
   });

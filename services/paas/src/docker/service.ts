@@ -1,4 +1,5 @@
 import Docker from 'dockerode';
+import { logger } from '../util/logger';
 
 export class DockerService {
 
@@ -44,11 +45,11 @@ export class DockerService {
 
   public async connectNetwork(args: {
     networkId: string
-    containerName: string
+    containerId: string
   }): Promise<void> {
     const network = this.docker.getNetwork(args.networkId);
     await network.connect({
-      Container: args.containerName,
+      Container: args.containerId,
     });
   }
 

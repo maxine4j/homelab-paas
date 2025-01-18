@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 const unwrapEnv = (envVarName: string): string => {
   const value = process.env[envVarName];
   if (typeof value !== 'string') throw Error(`Env var missing: ${envVarName}`);
@@ -7,7 +9,7 @@ const unwrapEnv = (envVarName: string): string => {
 export const config = {
   httpPort: 8080,
   httpsPort: 8443,
-  paasContainerName: process.env['PAAS_CONTAINER_NAME'] ?? '/homelab-paas-1',
+  paasContainerId: readFileSync('/etc/hostname', 'utf-8').trim(),
   rootDomain: unwrapEnv('PAAS_ROOT_DOMAIN'),
   auth: {
     cookieName: 'homelab-paas-auth',
