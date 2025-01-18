@@ -34,13 +34,38 @@ export class DockerService {
     return network.id;
   }
 
-  public async connectNetwork(args: {
+  public async disconnectNetwork(args: {
     networkId: string;
     containerId: string;
   }): Promise<void> {
     const network = this.docker.getNetwork(args.networkId);
+    try {
+      await network.disconnect({
+        Container: args.containerId,
+        Force: true,
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('is not connected to network')
+      ) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  public async connectNetwork(args: {
+    networkId: string;
+    containerId: string;
+    dnsAliases?: string[];
+  }): Promise<void> {
+    const network = this.docker.getNetwork(args.networkId);
     await network.connect({
       Container: args.containerId,
+      EndpointConfig: {
+        Aliases: args.dnsAliases,
+      },
     });
   }
 

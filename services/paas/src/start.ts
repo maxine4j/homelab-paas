@@ -67,7 +67,12 @@ export const start = async (lifecycle: Lifecycle) => {
   const dockerService = new DockerService(() => new Docker());
   const deployTaskQueue = new InMemoryTaskQueue<DeployTaskDescriptor>(uuid);
   const deployService = new DeployService(uuid, deployTaskQueue);
-  const networkService = new NetworkService(dockerService, configService);
+  const networkService = new NetworkService(
+    dockerService,
+    configService,
+    serviceRepository,
+    deploymentRepository,
+  );
   const provisionCertificateHandler = new TlsCertProvisionService(
     configService,
     new DnsAcmeChallengeProviderRegistry(configService),
