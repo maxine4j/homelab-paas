@@ -5,7 +5,8 @@
   "license": "AGPL3",
   "packageManager": "yarn@4.4.0",
   "scripts": {
-    "build": "tsc --build"
+    "build": "tsc --build",
+    "test": "jest ./src"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
