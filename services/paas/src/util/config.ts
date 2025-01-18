@@ -112,5 +112,6 @@ export class ConfigReloadTask implements PeriodicTask {
 
   public async run(): Promise<void> {
     this.configService.reloadConfig();
+    logger.info('Reloaded config');
   }
 }

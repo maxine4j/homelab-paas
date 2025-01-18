@@ -13,6 +13,7 @@ import { DnsAcmeChallengeProviderRegistry } from './domain/ingress/tls/dns-chall
 import { TlsCertProvisionService } from './domain/ingress/tls/provision-service';
 import { TlsCertRenewalTask } from './domain/ingress/tls/renewal-task';
 import { NetworkService } from './domain/network/service';
+import { createServiceProxyMiddleware } from './domain/network/service-proxy/middleware';
 import { NetworkSyncTask } from './domain/network/sync-task';
 import { DeploymentCleanupTask } from './domain/service/deployment/cleanup-task';
 import {
@@ -41,11 +42,11 @@ import { createRequestLogger, logger } from './util/logger';
 import { createRequestForwarder } from './util/request-forwarder';
 
 export const start = async (lifecycle: Lifecycle) => {
+  // ==================== dependencies ====================
+
   const uuid = () => generateShortUuid();
   const now = () => new Date();
-
   const configService = await ConfigService.create(readFile);
-
   const deploymentRepository = new DeploymentRepository(
     now,
     new SqliteKeyValueStore<DeploymentRecord>({
@@ -53,14 +54,12 @@ export const start = async (lifecycle: Lifecycle) => {
       tableName: 'deployments',
     }),
   );
-
   const serviceRepository = new ServiceRepository(
     new SqliteKeyValueStore<ServiceRecord>({
       databaseFilename: '/etc/homelab-paas/services.db',
       tableName: 'services',
     }),
   );
-
   const authService = new AuthService(
     configService,
     new Oauth2ProviderRegistry(configService),
@@ -73,43 +72,72 @@ export const start = async (lifecycle: Lifecycle) => {
     configService,
     new DnsAcmeChallengeProviderRegistry(configService),
   );
-  const reverseProxy = createReverseProxyMiddleware(
-    serviceRepository,
-    deploymentRepository,
-    authService,
-    createRequestForwarder(),
-    configService,
-  );
 
-  const authorizedPaasAdminRequired =
-    createAuthorizedPaasAdminRequiredMiddleware(authService, configService);
+  // ==================== primary paas web server ====================
 
-  const app = new Koa();
-  app
+  const paasKoaApp = new Koa()
     .use(createRequestLogger())
     .use(createAuthRouter(authService, configService).routes())
-    .use(reverseProxy)
+    .use(
+      createReverseProxyMiddleware(
+        serviceRepository,
+        deploymentRepository,
+        authService,
+        createRequestForwarder(),
+        configService,
+      ),
+    )
     .use(bodyParser())
     .use(createHealthCheckRouter().routes())
     .use(createDeployRouter(authService, deployService).routes())
-    .use(authorizedPaasAdminRequired)
+    .use(
+      createAuthorizedPaasAdminRequiredMiddleware(authService, configService),
+    )
     .use(createServiceRouter(serviceRepository, deploymentRepository).routes())
     .use(errorMiddleware);
 
-  const httpsServer = https.createServer({}, app.callback());
-  httpsServer.listen(8443, () => {
-    logger.info(`Listening on 8443`);
+  const paasHttpsServer = https.createServer({}, paasKoaApp.callback());
+  paasHttpsServer.listen(8443, () => {
+    logger.info(`HTTPS server listening on 8443`);
+  });
+  lifecycle.registerShutdownHandler(() => {
+    paasHttpsServer.close();
   });
 
-  const httpServer = new Koa()
+  // ==================== redirect from http web server ====================
+
+  const httpRedirectServer = new Koa()
     .use((ctx) => {
       const url = new URL(ctx.request.href);
       url.protocol = 'https:';
       ctx.redirect(url.toString());
     })
     .listen(8080, () => {
-      logger.info(`Listening on 8080`);
+      logger.info(`HTTP redirect server listening on 8080`);
     });
+  lifecycle.registerShutdownHandler(() => {
+    httpRedirectServer.close();
+  });
+
+  // ==================== service proxy web server ====================
+
+  const serviceProxyWebServer = new Koa()
+    .use(
+      createServiceProxyMiddleware(
+        serviceRepository,
+        deploymentRepository,
+        dockerService,
+        createRequestForwarder(),
+      ),
+    )
+    .listen(9090, () => {
+      logger.info(`Service proxy listening on 9090`);
+    });
+  lifecycle.registerShutdownHandler(() => {
+    serviceProxyWebServer.close();
+  });
+
+  // ==================== tasks ====================
 
   const tasks: TaskRunner[] = [
     new QueueTaskRunner({
@@ -125,7 +153,7 @@ export const start = async (lifecycle: Lifecycle) => {
     }),
     new PeriodicTaskRunner({
       lifecycle,
-      periodMs: 1_000 * 15,
+      periodMs: 1_000 * 30,
       task: new DeploymentCleanupTask(
         dockerService,
         deploymentRepository,
@@ -140,7 +168,7 @@ export const start = async (lifecycle: Lifecycle) => {
       periodMs: 1_000 * 60 * 60 * 24, // 1 day
       task: new TlsCertRenewalTask(
         provisionCertificateHandler,
-        httpsServer,
+        paasHttpsServer,
         writeFile,
         readFile,
         now,
@@ -154,9 +182,4 @@ export const start = async (lifecycle: Lifecycle) => {
   ];
 
   tasks.forEach((task) => task.start());
-
-  lifecycle.registerShutdownHandler(() => {
-    httpsServer.close();
-    httpServer.close();
-  });
 };
