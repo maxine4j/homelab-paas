@@ -9,9 +9,9 @@
   "packageManager": "yarn@4.4.0",
   "scripts": {
     "build": "turbo build",
-    "test-service:build": "docker build -t test-service:latest -f ./services/test-service/Dockerfile .",
-    "paas:dev": "docker compose -f ./compose.local.yaml up --build",
-    "paas:format": "prettier ./services/paas/src --write"
+    "build:docker": "turbo build:docker",
+    "format": "turbo format",
+    "paas:dev": "docker compose -f ./compose.local.yaml up --build"
   },
   "workspaces": [
     "services/*"

@@ -6,6 +6,8 @@
   "packageManager": "yarn@4.4.0",
   "scripts": {
     "build": "tsc --build",
+    "build:docker": "docker build -t paas:latest -f ./Dockerfile ../../",
+    "format": "prettier ./src --write",
     "test": "jest ./src"
   },
   "devDependencies": {

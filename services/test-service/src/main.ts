@@ -15,11 +15,11 @@ const main = () => {
         <html>
           <h1>Hello, test-service</h1>
         </html>
-      `
+      `;
     })
     .listen(port, () => {
       console.log(`Listening on ${port}`);
     });
-}
+};
 
 main();
