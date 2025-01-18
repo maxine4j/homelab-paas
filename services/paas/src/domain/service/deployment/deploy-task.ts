@@ -1,12 +1,12 @@
+import { DockerService } from '../../../docker/service';
 import { QueueTask, TaskEnvelope } from '../../../task/queue';
-import { DeploymentRepository } from './repository';
-import { ServiceDescriptor } from '../service-descriptor';
 import { DomainError } from '../../../util/error';
 import { logger } from '../../../util/logger';
 import { sleep } from '../../../util/sleep';
-import { ServiceRepository } from '../repository';
-import { DockerService } from '../../../docker/service';
 import { NetworkService } from '../../network/service';
+import { ServiceRepository } from '../repository';
+import { ServiceDescriptor } from '../service-descriptor';
+import { DeploymentRepository } from './repository';
 
 export interface DeployTaskDescriptor {
   serviceId: string;

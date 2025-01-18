@@ -1,11 +1,15 @@
 import { bodyParser } from '@koa/bodyparser';
 import Docker from 'dockerode';
-import Koa from 'koa';
 import https from 'https';
+import Koa from 'koa';
 import { generate as generateShortUuid } from 'short-uuid';
 import { DockerService } from './docker/service';
+import { Oauth2ProviderRegistry } from './domain/ingress/auth/oauth-provider/registry';
 import { createAuthRouter } from './domain/ingress/auth/router';
+import { AuthService } from './domain/ingress/auth/service';
+import { createRequestForwarder } from './domain/ingress/reverse-proxy/forwarder';
 import { createReverseProxyMiddleware } from './domain/ingress/reverse-proxy/middleware';
+import { DnsAcmeChallengeProviderRegistry } from './domain/ingress/tls/dns-challenge/registry';
 import { TlsCertProvisionService } from './domain/ingress/tls/provision-service';
 import { TlsCertRenewalTask } from './domain/ingress/tls/renewal-task';
 import { NetworkService } from './domain/network/service';
@@ -16,11 +20,11 @@ import {
   DeployTaskDescriptor,
 } from './domain/service/deployment/deploy-task';
 import {
-  DeploymentRepository,
   DeploymentRecord,
+  DeploymentRepository,
 } from './domain/service/deployment/repository';
 import { DeployService } from './domain/service/deployment/service';
-import { ServiceRepository, ServiceRecord } from './domain/service/repository';
+import { ServiceRecord, ServiceRepository } from './domain/service/repository';
 import { ServiceRouter } from './domain/service/router';
 import { SqliteKeyValueStore } from './kv-store/sqlite';
 import { PeriodicTaskRunner } from './task/periodic';
@@ -33,10 +37,6 @@ import { readFile, readFileSync, writeFile } from './util/file';
 import { createHealthCheckRouter } from './util/healthcheck';
 import { Lifecycle } from './util/lifecycle';
 import { createRequestLogger, logger } from './util/logger';
-import { createRequestForwarder } from './domain/ingress/reverse-proxy/forwarder';
-import { AuthService } from './domain/ingress/auth/service';
-import { DnsAcmeChallengeProviderRegistry } from './domain/ingress/tls/dns-challenge/registry';
-import { Oauth2ProviderRegistry } from './domain/ingress/auth/oauth-provider/registry';
 
 export const start = (lifecycle: Lifecycle) => {
   const uuid = () => generateShortUuid();

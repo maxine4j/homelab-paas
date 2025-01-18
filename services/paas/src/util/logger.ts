@@ -1,6 +1,6 @@
-import pino, { Logger } from 'pino';
-import koaPino from 'koa-pino-logger';
 import { Middleware } from 'koa';
+import koaPino from 'koa-pino-logger';
+import pino, { Logger } from 'pino';
 
 let pinoInstance: Logger | undefined;
 

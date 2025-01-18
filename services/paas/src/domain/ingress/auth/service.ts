@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
-import { AuthedUserDetails, Oauth2Provider } from './oauth-provider/types';
 import { ConfigService } from '../../../util/config';
 import { Oauth2ProviderRegistry } from './oauth-provider/registry';
+import { AuthedUserDetails } from './oauth-provider/types';
 
 export class AuthService {
   constructor(

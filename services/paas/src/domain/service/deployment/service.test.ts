@@ -1,6 +1,6 @@
 import { TaskQueue } from '../../../task/queue';
 import { ServiceDescriptor } from '../service-descriptor';
-import { DeployTask, DeployTaskDescriptor } from './deploy-task';
+import { DeployTaskDescriptor } from './deploy-task';
 import { DeployService } from './service';
 
 describe('deploy service', () => {

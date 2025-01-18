@@ -1,5 +1,3 @@
-import jwt from 'jsonwebtoken';
-
 export interface AuthedUserDetails {
   userId: string;
   name?: string;

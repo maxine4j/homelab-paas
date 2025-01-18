@@ -1,15 +1,15 @@
-import { ServiceRepository } from '../../service/repository';
-import { createReverseProxyMiddleware } from './middleware';
+import supertest from 'supertest';
+import { ConfigService } from '../../../util/config';
+import { startMiddlewareTestApi } from '../../../util/test/router';
 import {
   DeploymentRecord,
   DeploymentRepository,
 } from '../../service/deployment/repository';
-import { RequestForwarder } from './forwarder';
-import { startMiddlewareTestApi } from '../../../util/test/router';
-import supertest from 'supertest';
-import { AuthService } from '../auth/service';
+import { ServiceRepository } from '../../service/repository';
 import { AuthedUserDetails } from '../auth/oauth-provider/types';
-import { ConfigService } from '../../../util/config';
+import { AuthService } from '../auth/service';
+import { RequestForwarder } from './forwarder';
+import { createReverseProxyMiddleware } from './middleware';
 
 describe('reverse proxy middleware', () => {
   const mockRootDomain = 'paas.localhost';

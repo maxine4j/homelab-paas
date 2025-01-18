@@ -1,8 +1,8 @@
 import supertest from 'supertest';
 import { startTestApi } from '../../util/test/router';
+import { DeployService } from './deployment/service';
 import { ServiceRouter } from './router';
 import { ServiceDescriptor } from './service-descriptor';
-import { DeployService } from './deployment/service';
 
 describe('service router', () => {
   const mockServiceDescriptor = {

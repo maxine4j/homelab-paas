@@ -1,8 +1,8 @@
+import { X509Certificate } from 'crypto';
 import { PeriodicTask } from '../../../task/periodic';
 import { daysBetween } from '../../../util/date';
 import { logger } from '../../../util/logger';
 import { TlsCertProvisionService } from './provision-service';
-import { X509Certificate } from 'crypto';
 
 const privateKeyFilePem = '/etc/homelab-paas/key.pem';
 const certificateFilePem = '/etc/homelab-paas/cert.pem';

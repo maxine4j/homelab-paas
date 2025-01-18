@@ -1,5 +1,5 @@
-import fs from 'fs/promises';
 import fsSync from 'fs';
+import fs from 'fs/promises';
 
 export const writeFile = async (name: string, data: string) => {
   await fs.writeFile(name, data);

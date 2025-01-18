@@ -1,5 +1,3 @@
-import { KeyValueStore } from './types';
-
 export class InMemoryKeyValueStore<TValue> {
   private readonly store = new Map<string, TValue>();
 

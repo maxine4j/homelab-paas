@@ -1,5 +1,4 @@
 import Docker from 'dockerode';
-import { logger } from '../util/logger';
 
 export class DockerService {
   private readonly docker: Docker;

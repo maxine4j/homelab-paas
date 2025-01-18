@@ -1,6 +1,6 @@
 import acme from 'acme-client';
-import { logger } from '../../../util/logger';
 import { ConfigService } from '../../../util/config';
+import { logger } from '../../../util/logger';
 import { DnsAcmeChallengeProviderRegistry } from './dns-challenge/registry';
 
 export class TlsCertProvisionService {

@@ -1,8 +1,8 @@
+import { bodyParser } from '@koa/bodyparser';
+import Router from '@koa/router';
 import Koa, { Middleware } from 'koa';
 import koaPino from 'koa-pino-logger';
-import { bodyParser } from '@koa/bodyparser';
 import { errorMiddleware } from '../error';
-import Router from '@koa/router';
 
 export const startTestApi = (routes: ReturnType<Router['routes']>) => {
   const app = new Koa();

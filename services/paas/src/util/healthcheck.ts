@@ -1,5 +1,5 @@
-import { Context } from 'koa';
 import Router from '@koa/router';
+import { Context } from 'koa';
 
 export const createHealthCheckRouter = () => {
   const getHealth = (ctx: Context) => {

@@ -1,13 +1,13 @@
 import { Context, Middleware, Next } from 'koa';
+import { ConfigService } from '../../../util/config';
 import { logger } from '../../../util/logger';
-import { ServiceRepository } from '../../service/repository';
 import {
   DeploymentRecord,
   DeploymentRepository,
 } from '../../service/deployment/repository';
-import { RequestForwarder } from './forwarder';
+import { ServiceRepository } from '../../service/repository';
 import { AuthService } from '../auth/service';
-import { ConfigService } from '../../../util/config';
+import { RequestForwarder } from './forwarder';
 
 export const createReverseProxyMiddleware = (
   serviceRepository: ServiceRepository,
