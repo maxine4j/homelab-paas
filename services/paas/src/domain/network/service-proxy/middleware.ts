@@ -18,6 +18,14 @@ export const createServiceProxyMiddleware = (
     return hostname.split('.mesh').at(0);
   };
 
+  const translatePossibleIpV6Address = (ipAddress: string) => {
+    const ipv6Prefix = '::ffff:';
+    if (ipAddress.startsWith(ipv6Prefix)) {
+      return ipAddress.substring(ipv6Prefix.length);
+    }
+    return ipAddress;
+  };
+
   const lookupRequestingServiceId = async (ipAddress: string) => {
     const containers = await dockerService.findAllContainers();
     const requestingContainer = containers.find(
@@ -43,7 +51,9 @@ export const createServiceProxyMiddleware = (
 
   return async (ctx: Context, next: Next) => {
     const targetServiceId = parseTargetServiceId(ctx.hostname);
-    const requestingServiceId = await lookupRequestingServiceId(ctx.request.ip);
+    const requestingServiceId = await lookupRequestingServiceId(
+      translatePossibleIpV6Address(ctx.request.ip),
+    );
 
     if (!targetServiceId || !requestingServiceId) {
       logger.error(

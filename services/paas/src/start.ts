@@ -81,7 +81,7 @@ export const start = async (lifecycle: Lifecycle) => {
   // ==================== primary paas web server ====================
 
   const paasKoaApp = new Koa()
-    .use(createRequestLogger())
+    .use(createRequestLogger('paas'))
     .use(createAuthRouter(authService, configService).routes())
     .use(
       createReverseProxyMiddleware(
@@ -112,6 +112,7 @@ export const start = async (lifecycle: Lifecycle) => {
   // ==================== redirect from http web server ====================
 
   const httpRedirectServer = new Koa()
+    .use(createRequestLogger('http-redirect'))
     .use((ctx) => {
       const url = new URL(ctx.request.href);
       url.protocol = 'https:';
@@ -127,6 +128,7 @@ export const start = async (lifecycle: Lifecycle) => {
   // ==================== service proxy web server ====================
 
   const serviceProxyWebServer = new Koa()
+    .use(createRequestLogger('service-proxy'))
     .use(
       createServiceProxyMiddleware(
         serviceRepository,
