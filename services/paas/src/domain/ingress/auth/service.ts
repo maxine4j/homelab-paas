@@ -48,24 +48,23 @@ export class AuthService {
     }
   }
 
-  public isDeployTokenAuthorized(
-    serviceId: string,
-    deployToken: string,
-  ): boolean {
+  public isDeployTokenAuthorized(serviceId: string, token: string): boolean {
     const { deployTokens } = this.getConfig();
 
-    const serviceDeployTokens = deployTokens?.[serviceId];
-    if (!serviceDeployTokens) {
-      logger.info({ serviceId }, 'No deploy tokens configured for service');
+    const deployTokenConfig = deployTokens.find(
+      (deployToken) => deployToken.token === token,
+    );
+    if (!deployTokenConfig) {
+      logger.info({ serviceId }, 'Deploy token not found');
       return false;
     }
 
-    if (serviceDeployTokens.includes(deployToken)) {
+    if (deployTokenConfig.authorizedServices.includes(serviceId)) {
       return true;
     }
 
     logger.info(
-      { serviceId },
+      { serviceId, deployTokenName: deployTokenConfig.name },
       'Deploy token bearer is not authorized to deploy service',
     );
     return false;

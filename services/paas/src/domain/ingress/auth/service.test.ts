@@ -14,9 +14,9 @@ describe('user authorization service', () => {
   > as jest.Mocked<Oauth2ProviderRegistry>;
 
   const setupConfigMock = (args: {
-    authorizedUserIds?: string[];
-    deployTokens?: Record<string, string[]>;
-    adminUserIds?: string[];
+    authorizedUserIds?: PaasConfig['paas']['auth']['authorizedUserIds'];
+    deployTokens?: PaasConfig['paas']['auth']['deployTokens'];
+    adminUserIds?: PaasConfig['paas']['auth']['adminUserIds'];
   }) => {
     mockConfigService.getConfig.mockReturnValue({
       paas: {
@@ -47,9 +47,13 @@ describe('user authorization service', () => {
   describe('isDeployTokenAuthorized', () => {
     test('should allow bearer if deploy token is configured for service', () => {
       setupConfigMock({
-        deployTokens: {
-          'test-service': ['valid-deploy-token'],
-        },
+        deployTokens: [
+          {
+            name: 'deploy-pipe',
+            token: 'valid-deploy-token',
+            authorizedServices: ['test-service'],
+          },
+        ],
       });
 
       expect(
@@ -62,9 +66,7 @@ describe('user authorization service', () => {
 
     test('should deny bearer if no deploy tokens are configured for service', () => {
       setupConfigMock({
-        deployTokens: {
-          'test-service': [],
-        },
+        deployTokens: [],
       });
 
       expect(
@@ -75,24 +77,15 @@ describe('user authorization service', () => {
       ).toBe(false);
     });
 
-    test('should deny bearer if deploy token config is missing', () => {
+    test('should deny bearer if deploy token does not authorize requested service', () => {
       setupConfigMock({
-        deployTokens: undefined,
-      });
-
-      expect(
-        authService.isDeployTokenAuthorized(
-          'test-service',
-          'some-deploy-token',
-        ),
-      ).toBe(false);
-    });
-
-    test('should deny bearer if deploy tokens is undefined', () => {
-      setupConfigMock({
-        deployTokens: {
-          'another-service': ['valid-deploy-token'],
-        },
+        deployTokens: [
+          {
+            name: 'deploy-pipe',
+            token: 'valid-deploy-token',
+            authorizedServices: ['another-service'],
+          },
+        ],
       });
 
       expect(
