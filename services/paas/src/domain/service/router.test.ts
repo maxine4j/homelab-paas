@@ -5,22 +5,21 @@ import { ServiceDescriptor } from './service-descriptor';
 import { DeployService } from './deployment/service';
 
 describe('service router', () => {
-
   const mockServiceDescriptor = {
     serviceId: 'service-123',
     image: 'image-123',
     ingress: {
       containerPort: 8080,
     },
-  } satisfies ServiceDescriptor
+  } satisfies ServiceDescriptor;
 
   const mockDeployService: jest.Mocked<DeployService> = {
     startDeployment: jest.fn(),
-  } as Partial<jest.Mocked<DeployService>> as unknown as jest.Mocked<DeployService>;
+  } as Partial<
+    jest.Mocked<DeployService>
+  > as unknown as jest.Mocked<DeployService>;
 
-  const deploymentRouter = new ServiceRouter(
-    mockDeployService,
-  );
+  const deploymentRouter = new ServiceRouter(mockDeployService);
 
   const server = startTestApi(deploymentRouter.routes());
 
@@ -29,8 +28,9 @@ describe('service router', () => {
   });
 
   test('given valid request, should call register tenant and respond with 200', async () => {
-    
-    mockDeployService.startDeployment.mockResolvedValue({ deploymentId: 'deployment-123' });
+    mockDeployService.startDeployment.mockResolvedValue({
+      deploymentId: 'deployment-123',
+    });
 
     const response = await supertest(server)
       .post('/service/deploy')
@@ -44,6 +44,8 @@ describe('service router', () => {
       deploymentId: 'deployment-123',
     });
 
-    expect(mockDeployService.startDeployment).toHaveBeenCalledWith(mockServiceDescriptor);
+    expect(mockDeployService.startDeployment).toHaveBeenCalledWith(
+      mockServiceDescriptor,
+    );
   });
 });

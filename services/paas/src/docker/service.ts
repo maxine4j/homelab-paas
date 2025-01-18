@@ -2,50 +2,42 @@ import Docker from 'dockerode';
 import { logger } from '../util/logger';
 
 export class DockerService {
-
   private readonly docker: Docker;
 
-  constructor(
-    connectDocker: () => Docker,
-  ) {
+  constructor(connectDocker: () => Docker) {
     this.docker = connectDocker();
   }
 
   public async findNetwork(args: {
-    serviceId: string
+    serviceId: string;
   }): Promise<string | undefined> {
     const networkInfos = await this.docker.listNetworks({
       filters: {
-        label: [
-          'managed-by=homelab-paas',
-          `service-id=${args.serviceId}`,
-        ]
-      }
+        label: ['managed-by=homelab-paas', `service-id=${args.serviceId}`],
+      },
     });
     const network = networkInfos.at(0);
-    if (!network) { 
+    if (!network) {
       return undefined;
     }
     return network.Id;
   }
 
-  public async createNetwork(args: {
-    serviceId: string
-  }): Promise<string> {
+  public async createNetwork(args: { serviceId: string }): Promise<string> {
     const network = await this.docker.createNetwork({
       Name: `homelab-paas-${args.serviceId}`,
       Labels: {
         'managed-by': 'homelab-paas',
         'service-id': args.serviceId,
-      }
+      },
     });
 
     return network.id;
   }
 
   public async connectNetwork(args: {
-    networkId: string
-    containerId: string
+    networkId: string;
+    containerId: string;
   }): Promise<void> {
     const network = this.docker.getNetwork(args.networkId);
     await network.connect({
@@ -53,20 +45,20 @@ export class DockerService {
     });
   }
 
-  public async findAllContainers(): Promise<Array<{
-    containerId: string
-    serviceId?: string
-    deploymentId?: string
-  }>> {
+  public async findAllContainers(): Promise<
+    Array<{
+      containerId: string;
+      serviceId?: string;
+      deploymentId?: string;
+    }>
+  > {
     const containerInfos = await this.docker.listContainers({
       filters: {
-        label: [
-          'managed-by=homelab-paas',
-        ]
-      }
+        label: ['managed-by=homelab-paas'],
+      },
     });
 
-    return containerInfos.map(containerInfo => ({
+    return containerInfos.map((containerInfo) => ({
       containerId: containerInfo.Id,
       serviceId: containerInfo.Labels['service-id'],
       deploymentId: containerInfo.Labels['deployment-id'],
@@ -80,12 +72,11 @@ export class DockerService {
   }
 
   public async runContainer(args: {
-    image: string,
-    serviceId: string,
-    deploymentId: string,
-    networkId: string,
+    image: string;
+    serviceId: string;
+    deploymentId: string;
+    networkId: string;
   }): Promise<{ hostname: string }> {
-
     const hostname = `${args.serviceId}-${args.deploymentId}`;
 
     const container = await this.docker.createContainer({
@@ -102,14 +93,17 @@ export class DockerService {
             NetworkID: args.networkId,
           },
         },
-      }
+      },
     });
     await container.start();
 
     return { hostname };
   }
 
-  public async isContainerRunning(args: { serviceId: string, deploymentId: string }): Promise<boolean> {
+  public async isContainerRunning(args: {
+    serviceId: string;
+    deploymentId: string;
+  }): Promise<boolean> {
     const containerInfos = await this.docker.listContainers({
       filters: {
         label: [
@@ -117,9 +111,9 @@ export class DockerService {
           `service-id=${args.serviceId}`,
           `deployment-id=${args.deploymentId}`,
         ],
-      }
+      },
     });
-    
+
     return containerInfos.at(0)?.State === 'running';
   }
 
@@ -128,7 +122,7 @@ export class DockerService {
     if (existingImage) {
       return;
     }
-  
+
     await this.docker.pull(image);
   }
 }

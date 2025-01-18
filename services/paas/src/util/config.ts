@@ -8,7 +8,7 @@ const unwrapEnv = (envVarName: string): string => {
   const value = process.env[envVarName];
   if (typeof value !== 'string') throw Error(`Env var missing: ${envVarName}`);
   return value;
-}
+};
 
 // export const config = {
 //   httpPort: 8080,
@@ -37,9 +37,8 @@ const unwrapEnv = (envVarName: string): string => {
 export type PaasConfig = z.infer<typeof PaasConfig>;
 const PaasConfig = z.object({
   paas: z.object({
-    
     rootDomain: z.string(),
-    
+
     auth: z.object({
       jwtSecret: z.string(),
       sessionLifetimeSeconds: z.number(),
@@ -65,7 +64,6 @@ const PaasConfig = z.object({
 });
 
 export class ConfigService {
-  
   private config: PaasConfig | undefined;
   private paasHostname: string | undefined;
 
@@ -97,14 +95,18 @@ export class ConfigService {
     const paasHostnameFilePath = '/etc/hostname';
     const maybePaasHostname = this.readFileSync(paasHostnameFilePath)?.trim();
     if (!maybePaasHostname) {
-      throw new ContextualError(`Failed to load paas container hostname from ${paasHostnameFilePath}`);
+      throw new ContextualError(
+        `Failed to load paas container hostname from ${paasHostnameFilePath}`,
+      );
     }
     this.paasHostname = maybePaasHostname;
 
     const paasConfigFilePath = '/etc/homelab-paas/config.yaml';
-    const maybeConfigYaml = this.readFileSync(paasConfigFilePath)
+    const maybeConfigYaml = this.readFileSync(paasConfigFilePath);
     if (!maybeConfigYaml) {
-      throw new ContextualError(`Failed to load paas config from ${paasConfigFilePath}`);
+      throw new ContextualError(
+        `Failed to load paas config from ${paasConfigFilePath}`,
+      );
     }
 
     let parsedConfig: unknown;

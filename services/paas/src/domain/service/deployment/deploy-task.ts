@@ -1,22 +1,21 @@
-import { QueueTask, TaskEnvelope } from '../../../task/queue'
-import { DeploymentRepository } from './repository'
-import { ServiceDescriptor } from '../service-descriptor'
-import { DomainError } from '../../../util/error'
-import { logger } from '../../../util/logger'
-import { sleep } from '../../../util/sleep'
-import { ServiceRepository } from '../repository'
-import { DockerService } from '../../../docker/service'
-import { NetworkService } from '../../network/service'
+import { QueueTask, TaskEnvelope } from '../../../task/queue';
+import { DeploymentRepository } from './repository';
+import { ServiceDescriptor } from '../service-descriptor';
+import { DomainError } from '../../../util/error';
+import { logger } from '../../../util/logger';
+import { sleep } from '../../../util/sleep';
+import { ServiceRepository } from '../repository';
+import { DockerService } from '../../../docker/service';
+import { NetworkService } from '../../network/service';
 
 export interface DeployTaskDescriptor {
-  serviceId: string
-  deploymentId: string,
-  serviceDescriptor: ServiceDescriptor,
+  serviceId: string;
+  deploymentId: string;
+  serviceDescriptor: ServiceDescriptor;
 }
 
 export class DeployTask implements QueueTask<DeployTaskDescriptor> {
-
-  constructor (
+  constructor(
     private readonly dockerService: DockerService,
     private readonly deploymentRepository: DeploymentRepository,
     private readonly serviceRepository: ServiceRepository,
@@ -31,38 +30,45 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
     }
   }
 
-  private async waitForRunningContainer(serviceId: string, deploymentId: string): Promise<{ outcome: 'running' | 'failed' }> {
+  private async waitForRunningContainer(
+    serviceId: string,
+    deploymentId: string,
+  ): Promise<{ outcome: 'running' | 'failed' }> {
     let attempt = 1;
 
     while (attempt <= this.waitConfig.maxAttempts) {
-      if (await this.dockerService.isContainerRunning({ serviceId, deploymentId })) {
+      if (
+        await this.dockerService.isContainerRunning({
+          serviceId,
+          deploymentId,
+        })
+      ) {
         return { outcome: 'running' };
       }
       attempt++;
       await sleep(this.waitConfig.delayMs);
     }
 
-    return { 'outcome': 'failed' };
+    return { outcome: 'failed' };
   }
 
   public async run({
     taskId,
-    task: {
-      serviceId,
-      deploymentId,
-      serviceDescriptor,
-    },
+    task: { serviceId, deploymentId, serviceDescriptor },
   }: TaskEnvelope<DeployTaskDescriptor>) {
-    const baseLogContext = { taskId, serviceId, deploymentId }
+    const baseLogContext = { taskId, serviceId, deploymentId };
     logger.info(baseLogContext, 'Starting deploy task');
 
     await this.createServiceIfNotExists(serviceId);
-    
+
     await this.networkService.connectServiceNetworkToPaas(serviceId);
 
     await this.dockerService.pullImageIfNotPresent(serviceDescriptor.image);
 
-    await this.deploymentRepository.createDeployment(deploymentId, serviceDescriptor);
+    await this.deploymentRepository.createDeployment(
+      deploymentId,
+      serviceDescriptor,
+    );
     logger.info(baseLogContext, 'Created new deployment');
 
     const networkId = await this.dockerService.findNetwork({ serviceId });
@@ -71,13 +77,24 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
     }
     logger.info(baseLogContext, 'Found service network');
 
-    const { hostname } = await this.dockerService.runContainer({ serviceId, deploymentId, image: serviceDescriptor.image, networkId });
+    const { hostname } = await this.dockerService.runContainer({
+      serviceId,
+      deploymentId,
+      image: serviceDescriptor.image,
+      networkId,
+    });
     logger.info(baseLogContext, 'Created and started container');
 
-    const { outcome } = await this.waitForRunningContainer(serviceId, deploymentId);
+    const { outcome } = await this.waitForRunningContainer(
+      serviceId,
+      deploymentId,
+    );
     switch (outcome) {
       case 'failed': {
-        await this.deploymentRepository.markDeploymentFailed(deploymentId, 'Container failed to start');
+        await this.deploymentRepository.markDeploymentFailed(
+          deploymentId,
+          'Container failed to start',
+        );
         break;
       }
       case 'running': {
@@ -85,10 +102,13 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
           hostname,
           port: serviceDescriptor.ingress.containerPort,
         });
-  
-        await this.serviceRepository.setActiveDeployment(serviceId, deploymentId);
+
+        await this.serviceRepository.setActiveDeployment(
+          serviceId,
+          deploymentId,
+        );
         logger.info(baseLogContext, 'Deployment complete');
       }
     }
-  };
-};
+  }
+}

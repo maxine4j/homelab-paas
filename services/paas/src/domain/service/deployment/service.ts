@@ -1,12 +1,11 @@
-import { TaskQueue } from '../../../task/queue'
-import { ServiceDescriptor } from '../service-descriptor'
-import { DeployTaskDescriptor } from './deploy-task'
+import { TaskQueue } from '../../../task/queue';
+import { ServiceDescriptor } from '../service-descriptor';
+import { DeployTaskDescriptor } from './deploy-task';
 
 export class DeployService {
-
-  constructor (
+  constructor(
     private readonly generateDeploymentId: () => string,
-    private readonly deploymentTaskQueue: TaskQueue<DeployTaskDescriptor>
+    private readonly deploymentTaskQueue: TaskQueue<DeployTaskDescriptor>,
   ) {}
 
   public async startDeployment(serviceDescriptor: ServiceDescriptor) {
@@ -15,9 +14,9 @@ export class DeployService {
     await this.deploymentTaskQueue.enqueue({
       serviceId: serviceDescriptor.serviceId,
       deploymentId,
-      serviceDescriptor, 
+      serviceDescriptor,
     });
-    
+
     return { deploymentId };
   }
 }

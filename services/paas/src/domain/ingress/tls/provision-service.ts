@@ -10,7 +10,8 @@ export class TlsCertProvisionService {
   ) {}
 
   public async provisionCert() {
-    const { challengeProvider, rootDomain, notificationEmail } = this.getConfig();
+    const { challengeProvider, rootDomain, notificationEmail } =
+      this.getConfig();
 
     const client = new acme.Client({
       directoryUrl: this.getDirectoryUrl(),
@@ -25,12 +26,12 @@ export class TlsCertProvisionService {
 
     const statefulChallenge = challengeProvider.createStatefulChallenge();
     const cert = await client.auto({
-        csr,
-        email: notificationEmail,
-        termsOfServiceAgreed: true,
-        challengePriority: ['dns-01'],
-        challengeCreateFn: statefulChallenge.createChallenge,
-        challengeRemoveFn: statefulChallenge.removeChallenge,
+      csr,
+      email: notificationEmail,
+      termsOfServiceAgreed: true,
+      challengePriority: ['dns-01'],
+      challengeCreateFn: statefulChallenge.createChallenge,
+      challengeRemoveFn: statefulChallenge.removeChallenge,
     });
 
     logger.info({ altName }, 'Provisioned certificate');
@@ -43,8 +44,10 @@ export class TlsCertProvisionService {
   private getDirectoryUrl() {
     const { letsEncryptEnv } = this.getConfig();
     switch (letsEncryptEnv) {
-      case 'production': return acme.directory.letsencrypt.production;
-      case 'staging': return acme.directory.letsencrypt.staging;
+      case 'production':
+        return acme.directory.letsencrypt.production;
+      case 'staging':
+        return acme.directory.letsencrypt.staging;
     }
   }
 
@@ -55,7 +58,9 @@ export class TlsCertProvisionService {
       letsEncryptEnv: config.paas.tls.letsEncryptEnv,
       rootDomain: config.paas.rootDomain,
       notificationEmail: config.paas.tls.notificationEmail,
-      challengeProvider: this.challengeProviderRegistry.getProvider(config.paas.tls.dnsChallengeProvider.type),
-    }
+      challengeProvider: this.challengeProviderRegistry.getProvider(
+        config.paas.tls.dnsChallengeProvider.type,
+      ),
+    };
   }
 }

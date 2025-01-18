@@ -2,17 +2,17 @@ import { ConfigService } from '../../../../util/config';
 import { DigitalOceanDnsAcmeChallengeProvider } from './digitalocean';
 import { DnsAcmeChallengeProvider } from './types';
 
-type DnsAcmeChallengeProviderType =
-  'digitalocean';
+type DnsAcmeChallengeProviderType = 'digitalocean';
 
 export class DnsAcmeChallengeProviderRegistry {
-  constructor(
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly configService: ConfigService) {}
 
-  getProvider(providerType: DnsAcmeChallengeProviderType): DnsAcmeChallengeProvider {
+  getProvider(
+    providerType: DnsAcmeChallengeProviderType,
+  ): DnsAcmeChallengeProvider {
     switch (providerType) {
-      case 'digitalocean': return new DigitalOceanDnsAcmeChallengeProvider(this.configService);
+      case 'digitalocean':
+        return new DigitalOceanDnsAcmeChallengeProvider(this.configService);
     }
   }
 }

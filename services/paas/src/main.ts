@@ -9,7 +9,7 @@ process
     await lifecycle.shutdown();
     process.exit(0);
   })
-  .on('SIGINT', async () => { 
+  .on('SIGINT', async () => {
     await lifecycle.shutdown();
     process.exit(0);
   })

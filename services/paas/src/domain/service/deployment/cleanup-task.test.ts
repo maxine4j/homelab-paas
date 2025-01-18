@@ -5,21 +5,26 @@ import { DeploymentCleanupTask } from './cleanup-task';
 import { DeploymentRepository } from './repository';
 
 describe('cleanup-task', () => {
-
   const mockDockerService = {
     findAllContainers: jest.fn(),
     terminateContainer: jest.fn(),
-  } satisfies Partial<jest.Mocked<DockerService>> as unknown as jest.Mocked<DockerService>;
+  } satisfies Partial<
+    jest.Mocked<DockerService>
+  > as unknown as jest.Mocked<DockerService>;
 
   const mockDeploymentRepository = {
     query: jest.fn(),
     queryByStatus: jest.fn(),
     markDeploymentCleanedUp: jest.fn(),
-  } satisfies Partial<jest.Mocked<DeploymentRepository>> as unknown as jest.Mocked<DeploymentRepository>;
+  } satisfies Partial<
+    jest.Mocked<DeploymentRepository>
+  > as unknown as jest.Mocked<DeploymentRepository>;
 
   const mockServiceRepository = {
     queryAllServices: jest.fn(),
-  } satisfies Partial<jest.Mocked<ServiceRepository>> as unknown as jest.Mocked<ServiceRepository>;
+  } satisfies Partial<
+    jest.Mocked<ServiceRepository>
+  > as unknown as jest.Mocked<ServiceRepository>;
 
   let cleanupTask: PeriodicTask;
 
@@ -30,8 +35,8 @@ describe('cleanup-task', () => {
       mockDockerService,
       mockDeploymentRepository,
       mockServiceRepository,
-    )
-  })
+    );
+  });
 
   test('should cleanup non-deploying, non-active deployments', async () => {
     mockDockerService.findAllContainers.mockResolvedValue([
@@ -49,11 +54,14 @@ describe('cleanup-task', () => {
         serviceId: 'service-123',
         containerId: 'container-345-deploying',
         deploymentId: 'deployment-345-deploying',
-      }
+      },
     ]);
-    mockDeploymentRepository.query.mockImplementation(async (deploymentId) => ({
-      deploymentId,
-    } as any));
+    mockDeploymentRepository.query.mockImplementation(
+      async (deploymentId) =>
+        ({
+          deploymentId,
+        }) as any,
+    );
     mockDeploymentRepository.queryByStatus.mockResolvedValue([
       {
         deploymentId: 'deployment-345-deploying',
@@ -64,17 +72,21 @@ describe('cleanup-task', () => {
       },
     ]);
     mockServiceRepository.queryAllServices.mockResolvedValue([
-      { 
-        serviceId: 'service-123', 
-        activeDeploymentId: 'deployment-234-active' 
-      }
+      {
+        serviceId: 'service-123',
+        activeDeploymentId: 'deployment-234-active',
+      },
     ]);
-    
+
     await cleanupTask.run();
 
     expect(mockDockerService.terminateContainer).toHaveBeenCalledTimes(1);
-    expect(mockDockerService.terminateContainer).toHaveBeenCalledWith('container-123-stale');
-    expect(mockDeploymentRepository.markDeploymentCleanedUp).toHaveBeenCalledWith('deployment-123-stale');
+    expect(mockDockerService.terminateContainer).toHaveBeenCalledWith(
+      'container-123-stale',
+    );
+    expect(
+      mockDeploymentRepository.markDeploymentCleanedUp,
+    ).toHaveBeenCalledWith('deployment-123-stale');
   });
 
   test('should not attempt to mark deployment as cleaned up if container labelled with deployment that does not exist', async () => {
@@ -88,13 +100,16 @@ describe('cleanup-task', () => {
     mockDeploymentRepository.query.mockResolvedValue(undefined);
     mockDeploymentRepository.queryByStatus.mockResolvedValue([]);
     mockServiceRepository.queryAllServices.mockResolvedValue([]);
-    
+
     await cleanupTask.run();
 
-    expect(mockDockerService.terminateContainer).toHaveBeenCalledWith('container-123-orphaned');
-    expect(mockDeploymentRepository.markDeploymentCleanedUp).not.toHaveBeenCalled();
-
-  })
+    expect(mockDockerService.terminateContainer).toHaveBeenCalledWith(
+      'container-123-orphaned',
+    );
+    expect(
+      mockDeploymentRepository.markDeploymentCleanedUp,
+    ).not.toHaveBeenCalled();
+  });
 
   test('should cleanup orphaned containers', async () => {
     mockDockerService.findAllContainers.mockResolvedValue([
@@ -106,9 +121,11 @@ describe('cleanup-task', () => {
     ]);
     mockDeploymentRepository.queryByStatus.mockResolvedValue([]);
     mockServiceRepository.queryAllServices.mockResolvedValue([]);
-    
+
     await cleanupTask.run();
 
-    expect(mockDockerService.terminateContainer).toHaveBeenCalledWith('container-123-orphaned');
+    expect(mockDockerService.terminateContainer).toHaveBeenCalledWith(
+      'container-123-orphaned',
+    );
   });
 });

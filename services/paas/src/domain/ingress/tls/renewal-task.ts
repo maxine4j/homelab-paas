@@ -10,15 +10,11 @@ const certificateFilePem = '/etc/homelab-paas/cert.pem';
 const certificateMinDaysUntilExpiry = 30;
 
 interface HttpsServer {
-  setSecureContext: (options: {
-    cert: string,
-    key: string,
-  }) => void
+  setSecureContext: (options: { cert: string; key: string }) => void;
 }
 
 export class TlsCertRenewalTask implements PeriodicTask {
-
-  constructor (
+  constructor(
     private readonly tlsCertProvisionService: TlsCertProvisionService,
     private readonly httpsServer: HttpsServer,
     private readonly writeFile: (name: string, data: string) => Promise<void>,
@@ -30,7 +26,7 @@ export class TlsCertRenewalTask implements PeriodicTask {
     logger.info('Starting cert renewal task');
     await this.updateHttpsServerCertIfExists();
 
-    if (!await this.certificateRequiresRenewal()) {
+    if (!(await this.certificateRequiresRenewal())) {
       return;
     }
 
@@ -41,8 +37,8 @@ export class TlsCertRenewalTask implements PeriodicTask {
     ]);
 
     this.httpsServer.setSecureContext({
-      cert, 
-      key
+      cert,
+      key,
     });
   }
 
@@ -55,7 +51,7 @@ export class TlsCertRenewalTask implements PeriodicTask {
         key: privateKetPem,
       });
     }
-  };
+  }
 
   private async certificateRequiresRenewal() {
     const certificatePem = await this.readFile(certificateFilePem);
@@ -64,17 +60,24 @@ export class TlsCertRenewalTask implements PeriodicTask {
       return true;
     }
 
-    const { validTo, subject, subjectAltName } = new X509Certificate(certificatePem);
+    const { validTo, subject, subjectAltName } = new X509Certificate(
+      certificatePem,
+    );
     const daysUntilExpiry = daysBetween(this.now(), new Date(validTo));
 
-    logger.info({ validTo, daysUntilExpiry, subject, subjectAltName }, 'Existing certificate found');
+    logger.info(
+      { validTo, daysUntilExpiry, subject, subjectAltName },
+      'Existing certificate found',
+    );
 
     if (daysUntilExpiry < certificateMinDaysUntilExpiry) {
-      logger.info(`Certificate requires renewal, valid for less than ${certificateMinDaysUntilExpiry} days`)
+      logger.info(
+        `Certificate requires renewal, valid for less than ${certificateMinDaysUntilExpiry} days`,
+      );
       return true;
     }
 
-    logger.info('Certificate does not require renewal')
+    logger.info('Certificate does not require renewal');
     return false;
   }
-};
+}

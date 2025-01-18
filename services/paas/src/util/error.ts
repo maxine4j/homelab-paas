@@ -1,10 +1,8 @@
-import { Middleware } from "koa";
+import { Middleware } from 'koa';
 import { logger } from './logger';
 
 export class ValidationError extends Error {
-  constructor(
-    public errors: Array<string>,
-  ) {
+  constructor(public errors: Array<string>) {
     super('ValidationError');
   }
 }
@@ -40,8 +38,8 @@ export const errorMiddleware: Middleware = async (ctx, next) => {
       ctx.body = {
         message: error.message,
         validationErrors: error.errors,
-      }
-      logger.error({ error }, 'Validation Error')
+      };
+      logger.error({ error }, 'Validation Error');
       return;
     }
 
@@ -49,15 +47,15 @@ export const errorMiddleware: Middleware = async (ctx, next) => {
       ctx.status = 400;
       ctx.body = {
         message: error.message,
-      }
-      logger.error({ error }, 'Domain Error')
+      };
+      logger.error({ error }, 'Domain Error');
       return;
     }
 
     ctx.status = 500;
     ctx.body = {
-      message: 'Internal server error'
-    }
+      message: 'Internal server error',
+    };
     logger.error({ error }, 'Internal Server Error');
   }
 };

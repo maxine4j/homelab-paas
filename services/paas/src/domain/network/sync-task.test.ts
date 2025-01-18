@@ -3,14 +3,17 @@ import { NetworkService } from './service';
 import { NetworkSyncTask } from './sync-task';
 
 describe('network sync task', () => {
-
   const mockNetworkService: jest.Mocked<NetworkService> = {
     connectServiceNetworkToPaas: jest.fn(),
-  } as Partial<jest.Mocked<NetworkService>> as unknown as jest.Mocked<NetworkService>;
+  } as Partial<
+    jest.Mocked<NetworkService>
+  > as unknown as jest.Mocked<NetworkService>;
 
   const mockServiceRepository = {
     queryAllServices: jest.fn(),
-  } satisfies Partial<jest.Mocked<ServiceRepository>> as unknown as jest.Mocked<ServiceRepository>;
+  } satisfies Partial<
+    jest.Mocked<ServiceRepository>
+  > as unknown as jest.Mocked<ServiceRepository>;
 
   const networkSyncTask = new NetworkSyncTask(
     mockNetworkService,
@@ -26,8 +29,14 @@ describe('network sync task', () => {
 
     await networkSyncTask.run();
 
-    expect(mockNetworkService.connectServiceNetworkToPaas).toHaveBeenCalledWith('service-123');
-    expect(mockNetworkService.connectServiceNetworkToPaas).toHaveBeenCalledWith('service-234');
-    expect(mockNetworkService.connectServiceNetworkToPaas).toHaveBeenCalledWith('service-345');
+    expect(mockNetworkService.connectServiceNetworkToPaas).toHaveBeenCalledWith(
+      'service-123',
+    );
+    expect(mockNetworkService.connectServiceNetworkToPaas).toHaveBeenCalledWith(
+      'service-234',
+    );
+    expect(mockNetworkService.connectServiceNetworkToPaas).toHaveBeenCalledWith(
+      'service-345',
+    );
   });
 });

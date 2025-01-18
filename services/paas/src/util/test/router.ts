@@ -7,11 +7,7 @@ import Router from '@koa/router';
 export const startTestApi = (routes: ReturnType<Router['routes']>) => {
   const app = new Koa();
 
-  app
-    .use(bodyParser())
-    .use(koaPino())
-    .use(routes)
-    .use(errorMiddleware);
+  app.use(bodyParser()).use(koaPino()).use(routes).use(errorMiddleware);
 
   return app.listen();
 };
@@ -19,7 +15,7 @@ export const startTestApi = (routes: ReturnType<Router['routes']>) => {
 export const startMiddlewareTestApi = (...middlewares: Middleware[]) => {
   const app = new Koa();
 
-  middlewares.map(middleware => app.use(middleware));
+  middlewares.map((middleware) => app.use(middleware));
 
   return app.listen();
 };

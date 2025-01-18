@@ -1,3 +1,3 @@
 export interface TaskRunner {
-  start(): Promise<void>
+  start(): Promise<void>;
 }

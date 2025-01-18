@@ -3,15 +3,15 @@ import { DockerService } from '../../docker/service';
 import { ConfigService } from '../../util/config';
 
 export class NetworkService {
-
   constructor(
     private readonly dockerService: DockerService,
     private readonly configService: ConfigService,
   ) {}
 
   public async connectServiceNetworkToPaas(serviceId: string) {
-    const networkId = await this.dockerService.findNetwork({ serviceId })
-      ?? await this.dockerService.createNetwork({ serviceId });
+    const networkId =
+      (await this.dockerService.findNetwork({ serviceId })) ??
+      (await this.dockerService.createNetwork({ serviceId }));
 
     try {
       await this.dockerService.connectNetwork({
@@ -20,7 +20,10 @@ export class NetworkService {
       });
       logger.info({ serviceId }, 'Connected service network to paas');
     } catch (err) {
-      if (err instanceof Error && err.message.includes('already exists in network')) {
+      if (
+        err instanceof Error &&
+        err.message.includes('already exists in network')
+      ) {
         logger.info({ serviceId }, 'Service network already connected to paas');
       } else {
         throw err;

@@ -19,36 +19,45 @@ export class AuthService {
 
     const accessToken = await provider.fetchAccessToken(oauth2CallbackCode);
     const userDetails = await provider.fetchUserDetails(accessToken);
-    
+
     return jwt.sign(userDetails, jwtSecret, {
       algorithm: 'HS256',
       expiresIn: sessionLifetimeSeconds,
     });
   }
 
-  public verifyAuthCookie(authCookie: string | undefined): AuthedUserDetails | undefined {
+  public verifyAuthCookie(
+    authCookie: string | undefined,
+  ): AuthedUserDetails | undefined {
     if (!authCookie) {
       return undefined;
     }
-  
+
     try {
-      const payload = jwt.verify(authCookie, this.configService.getConfig().paas.auth.jwtSecret, {
-        algorithms: ['HS256'],
-      });
+      const payload = jwt.verify(
+        authCookie,
+        this.configService.getConfig().paas.auth.jwtSecret,
+        {
+          algorithms: ['HS256'],
+        },
+      );
       return payload as AuthedUserDetails;
     } catch {
       return undefined;
     }
   }
 
-  public isUserAuthorized(userId: string, serviceAuthorizedUserIds: string[] | undefined): boolean {
+  public isUserAuthorized(
+    userId: string,
+    serviceAuthorizedUserIds: string[] | undefined,
+  ): boolean {
     const { authorizedUserIds } = this.getConfig();
 
     // user must be authorized to access the paas regardless of service auth
     if (!authorizedUserIds.includes(userId)) {
       return false;
     }
-    
+
     // if the service does not define a list of authorized users, then any paas user can access the service
     if (serviceAuthorizedUserIds === undefined) {
       return true;
@@ -61,11 +70,13 @@ export class AuthService {
   private getConfig() {
     const config = this.configService.getConfig();
     return {
-      provider: this.providerRegistry.getProvider(config.paas.auth.oauth2Provider.type),
+      provider: this.providerRegistry.getProvider(
+        config.paas.auth.oauth2Provider.type,
+      ),
       sessionLifetimeSeconds: config.paas.auth.sessionLifetimeSeconds,
       jwtSecret: config.paas.auth.jwtSecret,
       authorizedUserIds: config.paas.auth.authorizedUserIds,
       adminUserIds: config.paas.auth.adminUserIds,
-    }
+    };
   }
 }

@@ -1,13 +1,18 @@
-import { z, ZodError } from "zod";
-import { ValidationError } from "./error";
+import { z, ZodError } from 'zod';
+import { ValidationError } from './error';
 
-export const validate = <TType>(data: unknown, schema: z.Schema<TType>): TType => {
+export const validate = <TType>(
+  data: unknown,
+  schema: z.Schema<TType>,
+): TType => {
   try {
     return schema.parse(data);
-  } catch(error) {
+  } catch (error) {
     if (error instanceof ZodError) {
-      throw new ValidationError(error.issues.map(issue => `${issue.path}: ${issue.message}`))
+      throw new ValidationError(
+        error.issues.map((issue) => `${issue.path}: ${issue.message}`),
+      );
     }
     throw error;
   }
-}
+};

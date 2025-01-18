@@ -11,10 +11,11 @@ export const createLifecycle = (): Lifecycle => {
   const shutdownHandlers: ShutdownHandler[] = [];
 
   return {
-    registerShutdownHandler: (handler: ShutdownHandler) => shutdownHandlers.push(handler),
+    registerShutdownHandler: (handler: ShutdownHandler) =>
+      shutdownHandlers.push(handler),
     shutdown: async () => {
       isOpen = false;
-      await Promise.all(shutdownHandlers.map(handler => handler()));
+      await Promise.all(shutdownHandlers.map((handler) => handler()));
     },
     isOpen: () => isOpen,
   };
