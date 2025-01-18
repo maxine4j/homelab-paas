@@ -20,6 +20,7 @@ const PaasConfig = z.object({
       }),
       authorizedUserIds: z.array(z.string()),
       adminUserIds: z.array(z.string()),
+      deployTokens: z.record(z.string(), z.array(z.string())),
     }),
 
     tls: z.object({

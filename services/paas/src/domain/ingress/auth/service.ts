@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { ConfigService } from '../../../util/config';
+import { logger } from '../../../util/logger';
 import { Oauth2ProviderRegistry } from './oauth-provider/registry';
 import { AuthedUserDetails } from './oauth-provider/types';
 
@@ -47,6 +48,29 @@ export class AuthService {
     }
   }
 
+  public isDeployTokenAuthorized(
+    serviceId: string,
+    deployToken: string,
+  ): boolean {
+    const { deployTokens } = this.getConfig();
+
+    const serviceDeployTokens = deployTokens?.[serviceId];
+    if (!serviceDeployTokens) {
+      logger.info({ serviceId }, 'No deploy tokens configured for service');
+      return false;
+    }
+
+    if (serviceDeployTokens.includes(deployToken)) {
+      return true;
+    }
+
+    logger.info(
+      { serviceId },
+      'Deploy token bearer is not authorized to deploy service',
+    );
+    return false;
+  }
+
   public isUserAuthorized(
     userId: string,
     serviceAuthorizedUserIds: string[] | undefined,
@@ -77,6 +101,7 @@ export class AuthService {
       jwtSecret: config.paas.auth.jwtSecret,
       authorizedUserIds: config.paas.auth.authorizedUserIds,
       adminUserIds: config.paas.auth.adminUserIds,
+      deployTokens: config.paas.auth.deployTokens,
     };
   }
 }

@@ -10,7 +10,9 @@ export const validate = <TType>(
   } catch (error) {
     if (error instanceof ZodError) {
       throw new ValidationError(
-        error.issues.map((issue) => `${issue.path}: ${issue.message}`),
+        error.issues.map(
+          (issue) => `${issue.path.join('.')}: ${issue.message}`,
+        ),
       );
     }
     throw error;

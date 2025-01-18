@@ -25,7 +25,7 @@ import {
 } from './domain/service/deployment/repository';
 import { DeployService } from './domain/service/deployment/service';
 import { ServiceRecord, ServiceRepository } from './domain/service/repository';
-import { ServiceRouter } from './domain/service/router';
+import { createServiceRouter } from './domain/service/router';
 import { SqliteKeyValueStore } from './kv-store/sqlite';
 import { PeriodicTaskRunner } from './task/periodic';
 import { InMemoryTaskQueue, QueueTaskRunner } from './task/queue';
@@ -86,7 +86,7 @@ export const start = async (lifecycle: Lifecycle) => {
     .use(reverseProxy)
     .use(bodyParser())
     .use(createHealthCheckRouter().routes())
-    .use(new ServiceRouter(deployService).routes())
+    .use(createServiceRouter(authService, deployService).routes())
     .use(errorMiddleware)
     .use((ctx) => {
       ctx.body = `

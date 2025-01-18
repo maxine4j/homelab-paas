@@ -13,7 +13,10 @@ describe('user authorization service', () => {
     jest.Mocked<Oauth2ProviderRegistry>
   > as jest.Mocked<Oauth2ProviderRegistry>;
 
-  const setupConfigMock = (args: { paasAuthorizedUserIds?: string[] }) => {
+  const setupConfigMock = (args: {
+    paasAuthorizedUserIds?: string[];
+    deployTokens?: Record<string, string[]>;
+  }) => {
     mockConfigService.getConfig.mockReturnValue({
       paas: {
         rootDomain: 'paas.localhost',
@@ -27,6 +30,7 @@ describe('user authorization service', () => {
             clientSecret: 'client-secret-123',
           },
           sessionLifetimeSeconds: 123,
+          deployTokens: args.deployTokens,
         },
       } as Partial<PaasConfig['paas']>,
     } as Partial<PaasConfig> as PaasConfig);
@@ -37,6 +41,66 @@ describe('user authorization service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     authService = new AuthService(mockConfigService, mockProviderRegistry);
+  });
+
+  describe('isDeployTokenAuthorized', () => {
+    test('should allow bearer if deploy token is configured for service', () => {
+      setupConfigMock({
+        deployTokens: {
+          'test-service': ['valid-deploy-token'],
+        },
+      });
+
+      expect(
+        authService.isDeployTokenAuthorized(
+          'test-service',
+          'valid-deploy-token',
+        ),
+      ).toBe(true);
+    });
+
+    test('should deny bearer if no deploy tokens are configured for service', () => {
+      setupConfigMock({
+        deployTokens: {
+          'test-service': [],
+        },
+      });
+
+      expect(
+        authService.isDeployTokenAuthorized(
+          'test-service',
+          'some-deploy-token',
+        ),
+      ).toBe(false);
+    });
+
+    test('should deny bearer if deploy token config is missing', () => {
+      setupConfigMock({
+        deployTokens: undefined,
+      });
+
+      expect(
+        authService.isDeployTokenAuthorized(
+          'test-service',
+          'some-deploy-token',
+        ),
+      ).toBe(false);
+    });
+
+    test('should deny bearer if deploy tokens is undefined', () => {
+      setupConfigMock({
+        deployTokens: {
+          'another-service': ['valid-deploy-token'],
+        },
+      });
+
+      expect(
+        authService.isDeployTokenAuthorized(
+          'test-service',
+          'valid-deploy-token',
+        ),
+      ).toBe(false);
+    });
   });
 
   describe('isUserAuthorized', () => {
