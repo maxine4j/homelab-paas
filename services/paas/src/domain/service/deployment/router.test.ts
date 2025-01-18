@@ -1,11 +1,11 @@
 import supertest from 'supertest';
-import { startTestApi } from '../../util/test/router';
-import { AuthService } from '../ingress/auth/service';
-import { DeployService } from './deployment/service';
-import { createServiceRouter } from './router';
-import { ServiceDescriptor } from './service-descriptor';
+import { startTestApi } from '../../../util/test/router';
+import { AuthService } from '../../ingress/auth/service';
+import { ServiceDescriptor } from '../service-descriptor';
+import { createDeployRouter } from './router';
+import { DeployService } from './service';
 
-describe('service router', () => {
+describe('service deploy router', () => {
   const mockServiceDescriptor = {
     serviceId: 'service-123',
     image: 'image-123',
@@ -22,9 +22,9 @@ describe('service router', () => {
     isDeployTokenAuthorized: jest.fn(),
   } as Partial<jest.Mocked<AuthService>> as jest.Mocked<AuthService>;
 
-  const serviceRouter = createServiceRouter(mockAuthService, mockDeployService);
+  const deployRouter = createDeployRouter(mockAuthService, mockDeployService);
 
-  const server = startTestApi(serviceRouter.routes());
+  const server = startTestApi(deployRouter.routes());
 
   afterAll(() => {
     server.close();

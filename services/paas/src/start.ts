@@ -4,6 +4,7 @@ import https from 'https';
 import Koa from 'koa';
 import { generate as generateShortUuid } from 'short-uuid';
 import { DockerService } from './docker/service';
+import { createAuthorizedPaasAdminRequiredMiddleware } from './domain/ingress/auth/middleware';
 import { Oauth2ProviderRegistry } from './domain/ingress/auth/oauth-provider/registry';
 import { createAuthRouter } from './domain/ingress/auth/router';
 import { AuthService } from './domain/ingress/auth/service';
@@ -23,6 +24,7 @@ import {
   DeploymentRecord,
   DeploymentRepository,
 } from './domain/service/deployment/repository';
+import { createDeployRouter } from './domain/service/deployment/router';
 import { DeployService } from './domain/service/deployment/service';
 import { ServiceRecord, ServiceRepository } from './domain/service/repository';
 import { createServiceRouter } from './domain/service/router';
@@ -79,6 +81,11 @@ export const start = async (lifecycle: Lifecycle) => {
     configService,
   );
 
+  const authedPaasAdminRequired = createAuthorizedPaasAdminRequiredMiddleware(
+    authService,
+    configService,
+  );
+
   const app = new Koa();
   app
     .use(createRequestLogger())
@@ -86,15 +93,10 @@ export const start = async (lifecycle: Lifecycle) => {
     .use(reverseProxy)
     .use(bodyParser())
     .use(createHealthCheckRouter().routes())
-    .use(createServiceRouter(authService, deployService).routes())
-    .use(errorMiddleware)
-    .use((ctx) => {
-      ctx.body = `
-        <html>
-          <h1>paas home</h1>
-        </html>
-      `;
-    });
+    .use(createDeployRouter(authService, deployService).routes())
+    .use(authedPaasAdminRequired)
+    .use(createServiceRouter(serviceRepository, deploymentRepository).routes())
+    .use(errorMiddleware);
 
   const httpsServer = https.createServer({}, app.callback());
   httpsServer.listen(8443, () => {

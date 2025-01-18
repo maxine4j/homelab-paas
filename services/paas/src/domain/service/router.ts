@@ -1,45 +1,44 @@
-import Router from '@koa/router';
-import { Context } from 'koa';
-import { parseBearerToken } from '../../util/http';
-import { validate } from '../../util/validation';
-import { AuthService } from '../ingress/auth/service';
-import { DeployService } from './deployment/service';
-import { ServiceDescriptor } from './service-descriptor';
+import Router, { RouterContext } from '@koa/router';
+import {
+  DeploymentRecord,
+  DeploymentRepository,
+} from './deployment/repository';
+import { ServiceRepository } from './repository';
 
 export const createServiceRouter = (
-  authService: AuthService,
-  deployService: DeployService,
+  serviceRepository: ServiceRepository,
+  deploymentRepository: DeploymentRepository,
 ) => {
-  const postDeploy = async (ctx: Context) => {
-    const serviceDescriptor = validate(
-      ctx.request.body.serviceDescriptor,
-      ServiceDescriptor,
-    );
-
-    const deployToken = parseBearerToken(ctx.headers['authorization']);
-    if (!deployToken) {
-      ctx.status = 401;
+  const getServiceSummary = async (ctx: RouterContext) => {
+    const serviceId = ctx.params['serviceId'];
+    const serviceRecord = await serviceRepository.queryService(serviceId ?? '');
+    if (!serviceId || !serviceRecord) {
+      ctx.status = 404;
       return;
     }
 
-    if (
-      !authService.isDeployTokenAuthorized(
-        serviceDescriptor.serviceId,
-        deployToken,
-      )
-    ) {
-      ctx.status = 403;
-      return;
-    }
+    const deploymentRecords =
+      await deploymentRepository.queryByService(serviceId);
 
-    const { deploymentId } =
-      await deployService.startDeployment(serviceDescriptor);
+    const recentDeployments = deploymentRecords
+      .sort(byDeploymentCreatedAt)
+      .slice(0, 10);
 
-    ctx.status = 200;
     ctx.body = {
-      deploymentId,
+      service: serviceRecord,
+      deployments: recentDeployments,
     };
   };
 
-  return new Router().post('/service/deploy', postDeploy);
+  return new Router().get('/service/:serviceId/summary', getServiceSummary);
+};
+
+const byDeploymentCreatedAt = (
+  deploymentA: DeploymentRecord,
+  deploymentB: DeploymentRecord,
+) => {
+  return (
+    new Date(deploymentA.createdAt).getTime() -
+    new Date(deploymentB.createdAt).getTime()
+  );
 };

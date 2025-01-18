@@ -10,7 +10,7 @@ interface ContainerRecord {
 export interface DeploymentRecord {
   serviceId: string;
   deploymentId: string;
-  createdAt: Date;
+  createdAt: string;
   serviceDescriptor: ServiceDescriptor;
   status: 'deploying' | 'running' | 'cleaned-up' | 'failed';
   failureReason?: string;
@@ -37,7 +37,7 @@ export class DeploymentRepository {
       .filter((deployment) => deployment.status === status);
   }
 
-  public async queryForService(serviceId: string) {
+  public async queryByService(serviceId: string): Promise<DeploymentRecord[]> {
     return this.store
       .values()
       .filter((deployment) => deployment.serviceId === serviceId);
@@ -51,7 +51,7 @@ export class DeploymentRepository {
       serviceId: serviceDescriptor.serviceId,
       deploymentId,
       serviceDescriptor,
-      createdAt: this.now(),
+      createdAt: this.now().toISOString(),
       status: 'deploying',
     });
   }

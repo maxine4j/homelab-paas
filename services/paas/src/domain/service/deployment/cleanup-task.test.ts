@@ -65,7 +65,7 @@ describe('cleanup-task', () => {
     mockDeploymentRepository.queryByStatus.mockResolvedValue([
       {
         deploymentId: 'deployment-345-deploying',
-        createdAt: new Date(),
+        createdAt: new Date().toISOString(),
         serviceDescriptor: {} as any,
         serviceId: 'service-345',
         status: 'deploying',

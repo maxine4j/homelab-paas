@@ -31,7 +31,7 @@ describe('reverse proxy middleware', () => {
     getLoginUrl: jest.fn().mockReturnValue(mockLoginUrl),
     issueAuthCookie: jest.fn(),
     verifyAuthCookie: jest.fn(),
-    isUserAuthorized: jest.fn(),
+    isUserAuthorizedToAccessService: jest.fn(),
   } as Partial<jest.Mocked<AuthService>> as jest.Mocked<AuthService>;
 
   const mockForwardRequest: jest.MockedFn<RequestForwarder> = jest
@@ -146,7 +146,7 @@ describe('reverse proxy middleware', () => {
       mockAuthService.verifyAuthCookie.mockReturnValue({
         username: 'user-123',
       } as Partial<AuthedUserDetails> as AuthedUserDetails);
-      mockAuthService.isUserAuthorized.mockReturnValue(false);
+      mockAuthService.isUserAuthorizedToAccessService.mockReturnValue(false);
 
       const response = await supertest(server)
         .get('/')
@@ -165,7 +165,7 @@ describe('reverse proxy middleware', () => {
       mockAuthService.verifyAuthCookie.mockReturnValue({
         username: 'user-123',
       } as Partial<AuthedUserDetails> as AuthedUserDetails);
-      mockAuthService.isUserAuthorized.mockReturnValue(true);
+      mockAuthService.isUserAuthorizedToAccessService.mockReturnValue(true);
 
       const response = await supertest(server)
         .get('/')
@@ -189,7 +189,7 @@ describe('reverse proxy middleware', () => {
       mockAuthService.verifyAuthCookie.mockReturnValue({
         username: 'user-123',
       } as Partial<AuthedUserDetails> as AuthedUserDetails);
-      mockAuthService.isUserAuthorized.mockReturnValue(true);
+      mockAuthService.isUserAuthorizedToAccessService.mockReturnValue(true);
 
       const response = await supertest(server)
         .get('/')

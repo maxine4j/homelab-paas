@@ -74,7 +74,7 @@ export const createReverseProxyMiddleware = (
         return;
       }
       if (
-        !authService.isUserAuthorized(
+        !authService.isUserAuthorizedToAccessService(
           authedUserDetails.userId,
           activeDeployment?.serviceDescriptor?.ingress?.authorizedUsers,
         )

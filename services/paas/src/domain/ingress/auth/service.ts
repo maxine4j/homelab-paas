@@ -71,7 +71,7 @@ export class AuthService {
     return false;
   }
 
-  public isUserAuthorized(
+  public isUserAuthorizedToAccessService(
     userId: string,
     serviceAuthorizedUserIds: string[] | undefined,
   ): boolean {
@@ -89,6 +89,22 @@ export class AuthService {
 
     // if the service does define a list of authorized users, only allow those users access
     return serviceAuthorizedUserIds.includes(userId);
+  }
+
+  public isUserAuthorizedToAccessPaas(userId: string): boolean {
+    const { authorizedUserIds, adminUserIds } = this.getConfig();
+
+    // user must be authorized to access the paas regardless of being an admin
+    if (!authorizedUserIds.includes(userId)) {
+      return false;
+    }
+
+    // user must be an admin to access paas
+    if (!adminUserIds.includes(userId)) {
+      return false;
+    }
+
+    return true;
   }
 
   private getConfig() {

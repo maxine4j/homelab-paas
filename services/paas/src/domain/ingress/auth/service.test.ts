@@ -14,15 +14,16 @@ describe('user authorization service', () => {
   > as jest.Mocked<Oauth2ProviderRegistry>;
 
   const setupConfigMock = (args: {
-    paasAuthorizedUserIds?: string[];
+    authorizedUserIds?: string[];
     deployTokens?: Record<string, string[]>;
+    adminUserIds?: string[];
   }) => {
     mockConfigService.getConfig.mockReturnValue({
       paas: {
         rootDomain: 'paas.localhost',
         auth: {
-          authorizedUserIds: args.paasAuthorizedUserIds ?? [],
-          adminUserIds: [],
+          authorizedUserIds: args.authorizedUserIds ?? [],
+          adminUserIds: args.adminUserIds ?? [],
           jwtSecret: 'jwt-secret-123',
           oauth2Provider: {
             type: 'github',
@@ -103,49 +104,92 @@ describe('user authorization service', () => {
     });
   });
 
-  describe('isUserAuthorized', () => {
+  describe('isUserAuthorizedToAccessService', () => {
     test('should deny user who is not in paas users, even if they are present in service users', () => {
       const serviceAuthorizedUserIds = ['user-service'];
       setupConfigMock({
-        paasAuthorizedUserIds: ['user-pass'],
+        authorizedUserIds: ['user-pass'],
       });
 
       expect(
-        authService.isUserAuthorized('user-service', serviceAuthorizedUserIds),
+        authService.isUserAuthorizedToAccessService(
+          'user-service',
+          serviceAuthorizedUserIds,
+        ),
       ).toBe(false);
     });
 
     test('should deny user who is not in service users, even if they are present in paas users', () => {
       const serviceAuthorizedUserIds = ['user-service'];
       setupConfigMock({
-        paasAuthorizedUserIds: ['user-pass'],
+        authorizedUserIds: ['user-pass'],
       });
 
       expect(
-        authService.isUserAuthorized('user-paas', serviceAuthorizedUserIds),
+        authService.isUserAuthorizedToAccessService(
+          'user-paas',
+          serviceAuthorizedUserIds,
+        ),
       ).toBe(false);
     });
 
     test('should allow user who is present in both paas and service users', () => {
       const serviceAuthorizedUserIds = ['user-both'];
       setupConfigMock({
-        paasAuthorizedUserIds: ['user-both'],
+        authorizedUserIds: ['user-both'],
       });
 
       expect(
-        authService.isUserAuthorized('user-both', serviceAuthorizedUserIds),
+        authService.isUserAuthorizedToAccessService(
+          'user-both',
+          serviceAuthorizedUserIds,
+        ),
       ).toBe(true);
     });
 
     test('should allow paas user is there is no authorization list defined for the service', () => {
       const serviceAuthorizedUserIds = undefined;
       setupConfigMock({
-        paasAuthorizedUserIds: ['user-paas'],
+        authorizedUserIds: ['user-paas'],
       });
 
       expect(
-        authService.isUserAuthorized('user-paas', serviceAuthorizedUserIds),
+        authService.isUserAuthorizedToAccessService(
+          'user-paas',
+          serviceAuthorizedUserIds,
+        ),
       ).toBe(true);
+    });
+  });
+
+  describe('isUserAuthorizedToAccessPaas', () => {
+    test('should deny user who is not in paas users nor admin', () => {
+      setupConfigMock({
+        authorizedUserIds: [],
+        adminUserIds: [],
+      });
+
+      expect(authService.isUserAuthorizedToAccessPaas('some-user')).toBe(false);
+    });
+
+    test('should deny user who is not in paas users, even if they are an admin', () => {
+      setupConfigMock({
+        authorizedUserIds: [],
+        adminUserIds: ['admin-user'],
+      });
+
+      expect(authService.isUserAuthorizedToAccessPaas('admin-user')).toBe(
+        false,
+      );
+    });
+
+    test('should allow user who is present in both paas users and admins', () => {
+      setupConfigMock({
+        authorizedUserIds: ['admin-user'],
+        adminUserIds: ['admin-user'],
+      });
+
+      expect(authService.isUserAuthorizedToAccessPaas('admin-user')).toBe(true);
     });
   });
 });
