@@ -8,7 +8,6 @@ import { createAuthorizedPaasAdminRequiredMiddleware } from './domain/ingress/au
 import { Oauth2ProviderRegistry } from './domain/ingress/auth/oauth-provider/registry';
 import { createAuthRouter } from './domain/ingress/auth/router';
 import { AuthService } from './domain/ingress/auth/service';
-import { createRequestForwarder } from './domain/ingress/reverse-proxy/forwarder';
 import { createReverseProxyMiddleware } from './domain/ingress/reverse-proxy/middleware';
 import { DnsAcmeChallengeProviderRegistry } from './domain/ingress/tls/dns-challenge/registry';
 import { TlsCertProvisionService } from './domain/ingress/tls/provision-service';
@@ -39,6 +38,7 @@ import { readFile, writeFile } from './util/file';
 import { createHealthCheckRouter } from './util/healthcheck';
 import { Lifecycle } from './util/lifecycle';
 import { createRequestLogger, logger } from './util/logger';
+import { createRequestForwarder } from './util/request-forwarder';
 
 export const start = async (lifecycle: Lifecycle) => {
   const uuid = () => generateShortUuid();
@@ -81,10 +81,8 @@ export const start = async (lifecycle: Lifecycle) => {
     configService,
   );
 
-  const authedPaasAdminRequired = createAuthorizedPaasAdminRequiredMiddleware(
-    authService,
-    configService,
-  );
+  const authorizedPaasAdminRequired =
+    createAuthorizedPaasAdminRequiredMiddleware(authService, configService);
 
   const app = new Koa();
   app
@@ -94,7 +92,7 @@ export const start = async (lifecycle: Lifecycle) => {
     .use(bodyParser())
     .use(createHealthCheckRouter().routes())
     .use(createDeployRouter(authService, deployService).routes())
-    .use(authedPaasAdminRequired)
+    .use(authorizedPaasAdminRequired)
     .use(createServiceRouter(serviceRepository, deploymentRepository).routes())
     .use(errorMiddleware);
 

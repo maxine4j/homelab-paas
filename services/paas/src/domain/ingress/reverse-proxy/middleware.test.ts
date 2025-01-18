@@ -1,5 +1,6 @@
 import supertest from 'supertest';
 import { ConfigService } from '../../../util/config';
+import { RequestForwarder } from '../../../util/request-forwarder';
 import { startMiddlewareTestApi } from '../../../util/test/router';
 import {
   DeploymentRecord,
@@ -8,7 +9,6 @@ import {
 import { ServiceRepository } from '../../service/repository';
 import { AuthedUserDetails } from '../auth/oauth-provider/types';
 import { AuthService } from '../auth/service';
-import { RequestForwarder } from './forwarder';
 import { createReverseProxyMiddleware } from './middleware';
 
 describe('reverse proxy middleware', () => {
@@ -144,7 +144,7 @@ describe('reverse proxy middleware', () => {
         },
       } as Partial<DeploymentRecord> as DeploymentRecord);
       mockAuthService.verifyAuthCookie.mockReturnValue({
-        username: 'user-123',
+        userId: 'user-123',
       } as Partial<AuthedUserDetails> as AuthedUserDetails);
       mockAuthService.isUserAuthorizedToAccessService.mockReturnValue(false);
 
@@ -163,7 +163,7 @@ describe('reverse proxy middleware', () => {
       });
       mockDeploymentRepository.query.mockResolvedValue(undefined);
       mockAuthService.verifyAuthCookie.mockReturnValue({
-        username: 'user-123',
+        userId: 'user-123',
       } as Partial<AuthedUserDetails> as AuthedUserDetails);
       mockAuthService.isUserAuthorizedToAccessService.mockReturnValue(true);
 
@@ -187,7 +187,7 @@ describe('reverse proxy middleware', () => {
         },
       } as Partial<DeploymentRecord> as DeploymentRecord);
       mockAuthService.verifyAuthCookie.mockReturnValue({
-        username: 'user-123',
+        userId: 'user-123',
       } as Partial<AuthedUserDetails> as AuthedUserDetails);
       mockAuthService.isUserAuthorizedToAccessService.mockReturnValue(true);
 
@@ -199,13 +199,11 @@ describe('reverse proxy middleware', () => {
       expect(response.status).toBe(200);
       expect(mockForwardRequest).toHaveBeenCalledWith({
         ctx: expect.anything(),
-        authedUserDetails: expect.objectContaining({
-          username: 'user-123',
+        hostname: 'service-123-deployment-123',
+        port: 8080,
+        additionalHeaders: expect.objectContaining({
+          'PaasAuth-UserId': 'user-123',
         }),
-        serviceContainer: {
-          hostname: 'service-123-deployment-123',
-          port: 8080,
-        },
       });
     });
   });

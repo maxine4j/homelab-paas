@@ -49,6 +49,7 @@ export class DockerService {
       containerId: string;
       serviceId?: string;
       deploymentId?: string;
+      ipAddress?: string;
     }>
   > {
     const containerInfos = await this.docker.listContainers({
@@ -61,6 +62,7 @@ export class DockerService {
       containerId: containerInfo.Id,
       serviceId: containerInfo.Labels['service-id'],
       deploymentId: containerInfo.Labels['deployment-id'],
+      ipAddress: this.findContainerIp(containerInfo),
     }));
   }
 
@@ -129,5 +131,11 @@ export class DockerService {
     }
 
     await this.docker.pull(image);
+  }
+
+  private findContainerIp(containerInfo: Docker.ContainerInfo) {
+    const networkInfos = containerInfo.NetworkSettings.Networks;
+    const serviceNetworkInfo = Object.values(networkInfos).at(0);
+    return serviceNetworkInfo?.IPAddress;
   }
 }

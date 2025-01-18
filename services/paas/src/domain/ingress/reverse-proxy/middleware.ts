@@ -1,13 +1,14 @@
 import { Context, Middleware, Next } from 'koa';
 import { ConfigService } from '../../../util/config';
 import { logger } from '../../../util/logger';
+import { RequestForwarder } from '../../../util/request-forwarder';
 import {
   DeploymentRecord,
   DeploymentRepository,
 } from '../../service/deployment/repository';
 import { ServiceRepository } from '../../service/repository';
+import { AuthedUserDetails } from '../auth/oauth-provider/types';
 import { AuthService } from '../auth/service';
-import { RequestForwarder } from './forwarder';
 
 export const createReverseProxyMiddleware = (
   serviceRepository: ServiceRepository,
@@ -41,6 +42,30 @@ export const createReverseProxyMiddleware = (
     activeDeployment: DeploymentRecord | undefined,
   ) => {
     return activeDeployment?.serviceDescriptor?.ingress?.public ?? false;
+  };
+
+  const buildAuthHeaders = (
+    authedUserDetails: AuthedUserDetails | undefined,
+  ) => {
+    const headers: Record<string, string> = {};
+
+    if (!authedUserDetails) {
+      return headers;
+    }
+
+    headers['PaasAuth-UserId'] = authedUserDetails.userId;
+
+    if (authedUserDetails.name) {
+      headers['PaasAuth-Name'] = authedUserDetails.name;
+    }
+    if (authedUserDetails.avatarUrl) {
+      headers['PaasAuth-Avatar'] = authedUserDetails.avatarUrl;
+    }
+    if (authedUserDetails.email) {
+      headers['PaasAuth-Email'] = authedUserDetails.email;
+    }
+
+    return headers;
   };
 
   return async (ctx: Context, next: Next) => {
@@ -96,8 +121,9 @@ export const createReverseProxyMiddleware = (
 
     await forwardRequest({
       ctx,
-      authedUserDetails,
-      serviceContainer: activeDeployment.container,
+      hostname: activeDeployment.container.hostname,
+      port: activeDeployment.container.port,
+      additionalHeaders: buildAuthHeaders(authedUserDetails),
     });
   };
 };
