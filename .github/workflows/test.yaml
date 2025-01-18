@@ -31,6 +31,9 @@ jobs:
       - name: Checkout git repository
         uses: actions/checkout@v2
 
+      - name: Enable corepack
+        run: corepack enable
+
       - name: Install dependencies
         run: yarn install --frozen-lockfile --network-timeout 600000
 
