@@ -1,5 +1,5 @@
 // @ts-check
-import fs from 'node:fs';
+const fs = require('fs');
 
 const unwrapEnv = (envName) => {
   const envValue = process.env[envName];
