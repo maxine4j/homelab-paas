@@ -4,7 +4,7 @@ import { NetworkSyncTask } from './sync-task';
 
 describe('network sync task', () => {
   const mockNetworkService: jest.Mocked<NetworkService> = {
-    connectServiceNetworkToPaas: jest.fn(),
+    configureServiceNetwork: jest.fn(),
   } as Partial<
     jest.Mocked<NetworkService>
   > as unknown as jest.Mocked<NetworkService>;
