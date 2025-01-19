@@ -18,11 +18,11 @@ export class TlsCertProvisionService {
       accountKey: await acme.crypto.createPrivateKey(),
     });
 
-    const altName = `*.${rootDomain}`;
+    const altNames = [rootDomain, `*.${rootDomain}`];
     const [key, csr] = await acme.crypto.createCsr({
-      altNames: [altName],
+      altNames,
     });
-    logger.info({ altName }, 'Created certificate signing request');
+    logger.info({ altNames }, 'Created certificate signing request');
 
     const statefulChallenge = challengeProvider.createStatefulChallenge();
     const cert = await client.auto({
@@ -34,7 +34,7 @@ export class TlsCertProvisionService {
       challengeRemoveFn: statefulChallenge.removeChallenge,
     });
 
-    logger.info({ altName }, 'Provisioned certificate');
+    logger.info({ altNames }, 'Provisioned certificate');
     return {
       key: key.toString(),
       cert: cert.toString(),
