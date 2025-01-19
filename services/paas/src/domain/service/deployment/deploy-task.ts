@@ -61,8 +61,6 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
 
     await this.createServiceIfNotExists(serviceId);
 
-    await this.networkService.connectServiceNetworkToPaas(serviceId);
-
     await this.dockerService.pullImageIfNotPresent(serviceDescriptor.image);
 
     await this.deploymentRepository.createDeployment(
@@ -71,7 +69,7 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
     );
     logger.info(baseLogContext, 'Created new deployment');
 
-    const networkId = await this.dockerService.findNetwork({ serviceId });
+    const networkId = await this.networkService.getServiceNetworkId(serviceId);
     if (!networkId) {
       throw new DomainError('Failed to find service network', baseLogContext);
     }
@@ -91,6 +89,7 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
       serviceId,
       deploymentId,
     );
+
     switch (outcome) {
       case 'failed': {
         await this.deploymentRepository.markDeploymentFailed(
@@ -100,6 +99,8 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
         break;
       }
       case 'running': {
+        await this.networkService.configureServiceNetwork(serviceId);
+
         await this.deploymentRepository.markDeploymentRunning(deploymentId, {
           hostname,
           port: serviceDescriptor.ingress.containerPort,

@@ -30,10 +30,17 @@ export class NetworkService {
     );
   }
 
-  public async connectServiceNetworkToPaas(serviceId: string) {
-    const networkId =
-      (await this.dockerService.findNetwork({ serviceId })) ??
-      (await this.dockerService.createNetwork({ serviceId }));
+  public async getServiceNetworkId(serviceId: string): Promise<string> {
+    const existingNetorkId = await this.dockerService.findNetwork({ serviceId });
+    if (existingNetorkId) {
+      return existingNetorkId;
+    }
+
+    return await this.dockerService.createNetwork({ serviceId });
+  }
+
+  public async configureServiceNetwork(serviceId: string): Promise<void> {
+    const networkId = await this.getServiceNetworkId(serviceId);
 
     const dnsAliases = await this.getServiceProxyEgressAliases(serviceId);
 
@@ -49,7 +56,7 @@ export class NetworkService {
     });
     logger.info(
       { serviceId, dnsAliases },
-      'Reconnected service network to paas',
+      'Reconfigured service network',
     );
   }
 }
