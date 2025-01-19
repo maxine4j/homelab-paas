@@ -1,6 +1,6 @@
 // @ts-check
 const fs = require('fs');
-const core = require('@actions/core');
+
 
 const unwrapEnv = (envName) => {
   const envValue = process.env[envName];
@@ -11,9 +11,9 @@ const unwrapEnv = (envName) => {
 }
 
 const main = async () => {
-  const serviceDescriptorPath = core.getInput('service-descriptor-path');
-  const paasBaseUrl = core.getInput('paas-base-url');
-  const deployToken = core.getInput('deploy-token');
+  const serviceDescriptorPath = unwrapEnv('INPUT_SERVICE_DESCRIPTOR_PATH');
+  const paasBaseUrl = unwrapEnv('INPUT_PAAS_BASE_URL');
+  const deployToken = unwrapEnv('INPUT_DEPLOY_TOKEN');
 
   const serviceDescriptor = fs.readFileSync(serviceDescriptorPath, { encoding: 'utf-8' });
 
