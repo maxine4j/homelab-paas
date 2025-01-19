@@ -100,8 +100,6 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
         break;
       }
       case 'running': {
-        await this.networkService.configureServiceNetwork(serviceId);
-
         await this.deploymentRepository.markDeploymentRunning(deploymentId, {
           hostname,
           port: serviceDescriptor.networking.ingress.containerPort,
@@ -111,6 +109,9 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
           serviceId,
           deploymentId,
         );
+
+        await this.networkService.configureServiceNetwork(serviceId);
+
         logger.info(baseLogContext, 'Deployment complete');
       }
     }

@@ -107,9 +107,6 @@ describe('deploy task', () => {
       'deployment-123',
       mockTask.task.serviceDescriptor,
     );
-    expect(mockNetworkService.configureServiceNetwork).toHaveBeenCalledWith(
-      'service-123',
-    );
     expect(mockDockerService.runContainer).toHaveBeenCalledWith({
       serviceId: 'service-123',
       deploymentId: 'deployment-123',
@@ -126,6 +123,9 @@ describe('deploy task', () => {
     expect(mockServiceRepository.setActiveDeployment).toHaveBeenCalledWith(
       'service-123',
       'deployment-123',
+    );
+    expect(mockNetworkService.configureServiceNetwork).toHaveBeenCalledWith(
+      'service-123',
     );
     expect(
       mockDeploymentRepository.markDeploymentFailed,
