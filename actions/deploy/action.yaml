@@ -17,3 +17,7 @@ outputs:
 runs:
   using: 'node20'
   main: 'deploy.js'
+  env:
+    DEPLOY_TOKEN: ${{ inputs.deploy_token }}
+    SERVICE_DESCRIPTOR_PATH: ${{ inputs.service_descriptor_path }}
+    PAAS_BASE_URL: ${{ inputs.paas_base_url }}
