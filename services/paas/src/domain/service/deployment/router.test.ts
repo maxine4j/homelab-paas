@@ -1,4 +1,5 @@
 import supertest from 'supertest';
+import yaml from 'yaml';
 import { startTestApi } from '../../../util/test/router';
 import { AuthService } from '../../ingress/auth/service';
 import { ServiceDescriptor } from '../service-descriptor';
@@ -31,9 +32,11 @@ describe('service deploy router', () => {
   });
 
   test('should respond with 401 and not start deployment when no auth header', async () => {
-    const response = await supertest(server).post('/service/deploy').send({
-      serviceDescriptor: mockServiceDescriptor,
-    });
+    const response = await supertest(server)
+      .post('/service/deploy')
+      .send({
+        serviceDescriptor: yaml.stringify(mockServiceDescriptor),
+      });
 
     expect(response.status).toBe(401);
     expect(mockDeployService.startDeployment).not.toHaveBeenCalled();
@@ -46,7 +49,7 @@ describe('service deploy router', () => {
       .post('/service/deploy')
       .set('Authorization', 'Bearer not-authorized')
       .send({
-        serviceDescriptor: mockServiceDescriptor,
+        serviceDescriptor: yaml.stringify(mockServiceDescriptor),
       });
 
     expect(response.status).toBe(403);
@@ -64,7 +67,7 @@ describe('service deploy router', () => {
       .post('/service/deploy')
       .set('Authorization', 'Bearer authorized')
       .send({
-        serviceDescriptor: mockServiceDescriptor,
+        serviceDescriptor: yaml.stringify(mockServiceDescriptor),
       });
 
     expect(response.status).toBe(200);

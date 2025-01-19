@@ -1,5 +1,6 @@
 import Router from '@koa/router';
 import { Context } from 'koa';
+import yaml from 'yaml';
 import { parseBearerToken } from '../../../util/http';
 import { validate } from '../../../util/validation';
 import { AuthService } from '../../ingress/auth/service';
@@ -10,10 +11,14 @@ export const createDeployRouter = (
   authService: AuthService,
   deployService: DeployService,
 ) => {
+  const parseAndValidateServiceDescriptor = (serializedDescriptor: string) => {
+    const deserializedDescriptor = yaml.parse(serializedDescriptor);
+    return validate(deserializedDescriptor, ServiceDescriptor);
+  };
+
   const postDeploy = async (ctx: Context) => {
-    const serviceDescriptor = validate(
+    const serviceDescriptor = parseAndValidateServiceDescriptor(
       ctx.request.body.serviceDescriptor,
-      ServiceDescriptor,
     );
 
     const deployToken = parseBearerToken(ctx.headers['authorization']);
