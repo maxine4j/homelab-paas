@@ -17,3 +17,4 @@ outputs:
 runs:
   using: 'node20'
   main: 'deploy.js'
+  pre: yarn install --frozen-lockfile
