@@ -103,6 +103,7 @@ export class DockerService {
     deploymentId: string;
     networkId: string;
     volumes?: Array<{ hostPath: string; containerPath: string }>;
+    environment?: Record<string, string>;
   }): Promise<{ hostname: string }> {
     const hostname = `${args.serviceId}-${args.deploymentId}`;
 
@@ -114,6 +115,9 @@ export class DockerService {
         'service-id': args.serviceId,
         'deployment-id': args.deploymentId,
       },
+      Env: Object.entries(args.environment ?? {}).map(
+        ([key, value]) => `${key}=${value}`,
+      ),
       NetworkingConfig: {
         EndpointsConfig: {
           [args.networkId]: {

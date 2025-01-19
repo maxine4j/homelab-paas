@@ -15,6 +15,7 @@ export const ServiceDescriptor = z.object({
       egress: z.array(z.string()).optional(),
     })
     .optional(),
+  environment: z.record(z.string(), z.string()).optional(),
   volumes: z
     .array(
       z.object({
