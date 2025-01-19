@@ -1,4 +1,5 @@
 import Docker from 'dockerode';
+import { logger } from '../util/logger';
 
 export class DockerService {
   private readonly docker: Docker;
@@ -154,12 +155,42 @@ export class DockerService {
   }
 
   public async pullImageIfNotPresent(image: string): Promise<void> {
-    const existingImage = await this.docker.getImage(image).inspect();
-    if (existingImage) {
+    if (await this.isImagePresent(image)) {
       return;
     }
 
-    await this.docker.pull(image);
+    const pullStream = await this.docker.pull(image);
+    await new Promise((resolve, reject) =>
+      this.docker.modem.followProgress(
+        pullStream,
+        (error, result) => {
+          if (error) {
+            logger.error({ error, image }, 'Failed to pull image');
+            return reject(error);
+          }
+          logger.info({ image }, 'Successfully pulled image');
+          return resolve(result);
+        },
+        (progress) => {
+          logger.info(
+            { status: progress.status, progress: progress.progressDetail },
+            'Pulling image',
+          );
+        },
+      ),
+    );
+  }
+
+  private async isImagePresent(image: string): Promise<boolean> {
+    try {
+      await this.docker.getImage(image).inspect();
+      return true;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('no such image')) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   private findContainerIp(containerInfo: Docker.ContainerInfo) {
