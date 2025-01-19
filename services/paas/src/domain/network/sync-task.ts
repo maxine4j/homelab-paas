@@ -14,7 +14,7 @@ export class NetworkSyncTask implements StartupTask {
     const services = await this.serviceRepository.queryAllServices();
     await Promise.all(
       services.map((service) =>
-        this.networkService.connectServiceNetworkToPaas(service.serviceId),
+        this.networkService.configureServiceNetwork(service.serviceId),
       ),
     );
   }

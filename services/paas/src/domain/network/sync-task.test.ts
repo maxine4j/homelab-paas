@@ -29,13 +29,13 @@ describe('network sync task', () => {
 
     await networkSyncTask.run();
 
-    expect(mockNetworkService.connectServiceNetworkToPaas).toHaveBeenCalledWith(
+    expect(mockNetworkService.configureServiceNetwork).toHaveBeenCalledWith(
       'service-123',
     );
-    expect(mockNetworkService.connectServiceNetworkToPaas).toHaveBeenCalledWith(
+    expect(mockNetworkService.configureServiceNetwork).toHaveBeenCalledWith(
       'service-234',
     );
-    expect(mockNetworkService.connectServiceNetworkToPaas).toHaveBeenCalledWith(
+    expect(mockNetworkService.configureServiceNetwork).toHaveBeenCalledWith(
       'service-345',
     );
   });
