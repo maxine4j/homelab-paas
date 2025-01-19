@@ -30,7 +30,7 @@ export class NetworkService {
     );
   }
 
-  public async getServiceNetworkId(serviceId: string): Promise<string> {
+  public async findServiceNetworkId(serviceId: string): Promise<string> {
     const existingNetorkId = await this.dockerService.findNetwork({ serviceId });
     if (existingNetorkId) {
       return existingNetorkId;
@@ -40,7 +40,7 @@ export class NetworkService {
   }
 
   public async configureServiceNetwork(serviceId: string): Promise<void> {
-    const networkId = await this.getServiceNetworkId(serviceId);
+    const networkId = await this.findServiceNetworkId(serviceId);
 
     const dnsAliases = await this.getServiceProxyEgressAliases(serviceId);
 

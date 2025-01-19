@@ -69,7 +69,7 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
     );
     logger.info(baseLogContext, 'Created new deployment');
 
-    const networkId = await this.networkService.getServiceNetworkId(serviceId);
+    const networkId = await this.networkService.findServiceNetworkId(serviceId);
     if (!networkId) {
       throw new DomainError('Failed to find service network', baseLogContext);
     }

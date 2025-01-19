@@ -68,7 +68,7 @@ describe('deploy task', () => {
       },
     );
 
-    mockDockerService.findNetwork.mockResolvedValue('network-123');
+    mockNetworkService.findServiceNetworkId.mockResolvedValue('network-123');
     mockDockerService.runContainer.mockResolvedValue({
       hostname: 'service-123-deployment-123',
     });
@@ -97,16 +97,16 @@ describe('deploy task', () => {
 
   test('should successfully deploy and wire up deployment', async () => {
     await deployTask.run(mockTask);
-
-    expect(mockNetworkService.connectServiceNetworkToPaas).toHaveBeenCalledWith(
-      'service-123',
-    );
+    
     expect(mockDockerService.pullImageIfNotPresent).toHaveBeenCalledWith(
       'image-123',
     );
     expect(mockDeploymentRepository.createDeployment).toHaveBeenCalledWith(
       'deployment-123',
       mockTask.task.serviceDescriptor,
+    );
+    expect(mockNetworkService.configureServiceNetwork).toHaveBeenCalledWith(
+      'service-123',
     );
     expect(mockDockerService.runContainer).toHaveBeenCalledWith({
       serviceId: 'service-123',
