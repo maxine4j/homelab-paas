@@ -31,6 +31,15 @@ describe('service deploy router', () => {
     server.close();
   });
 
+  test('should response with 400 and validation errors when sd is invalid', async () => {
+    const response = await supertest(server).post('/service/deploy').send({
+      serviceDescriptor: 'invalid',
+    });
+
+    expect(response.status).toBe(400);
+    expect(mockDeployService.startDeployment).not.toHaveBeenCalled();
+  });
+
   test('should respond with 401 and not start deployment when no auth header', async () => {
     const response = await supertest(server)
       .post('/service/deploy')

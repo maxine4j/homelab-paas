@@ -3,6 +3,7 @@ import { Context } from 'koa';
 import yaml from 'yaml';
 import { ValidationError } from '../../../util/error';
 import { parseBearerToken } from '../../../util/http';
+import { logger } from '../../../util/logger';
 import { validate } from '../../../util/validation';
 import { AuthService } from '../../ingress/auth/service';
 import { ServiceDescriptor } from '../service-descriptor';
@@ -24,12 +25,14 @@ export const createDeployRouter = (
         ctx.request.body.serviceDescriptor,
       );
     } catch (error) {
+      logger.info({ error }, 'got an error');
       if (error instanceof ValidationError) {
         ctx.status = 400;
         ctx.body = {
           message: error.message,
           validationErrors: error.errors,
         };
+        return;
       }
       throw error;
     }
