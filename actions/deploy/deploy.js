@@ -1,7 +1,6 @@
 // @ts-check
 const fs = require('fs');
 
-
 const unwrapEnv = (envName) => {
   const envValue = process.env[envName];
   if (!envValue) {
@@ -29,10 +28,16 @@ const main = async () => {
       serviceDescriptor: serviceDescriptor,
     }),
   });
+  
+  if (!response.ok) {
+    console.log('Deploy failed', {
+      status: response.status,
+      error: await response.json()
+    });
+    process.exit(1);
+  } 
 
-  const responseBody = await response.json();
-
-  console.log('Deploy success', responseBody);
+  console.log('Deploy success', await response.json());
 }
 
 main();
