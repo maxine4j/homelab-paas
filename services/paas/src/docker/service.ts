@@ -93,9 +93,9 @@ export class DockerService {
   }
 
   public async terminateContainer(containerId: string): Promise<void> {
-    const inactiveContainer = this.docker.getContainer(containerId);
-    await inactiveContainer.stop();
-    await inactiveContainer.remove();
+    const container = this.docker.getContainer(containerId);
+    await container.stop();
+    await container.remove();
   }
 
   public async runContainer(args: {

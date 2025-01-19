@@ -52,28 +52,45 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
     return { outcome: 'failed' };
   }
 
-  public async run({
+  private async deploy({
     taskId,
     task: { serviceId, deploymentId, serviceDescriptor },
   }: TaskEnvelope<DeployTaskDescriptor>) {
     const baseLogContext = { taskId, serviceId, deploymentId };
-    logger.info(baseLogContext, 'Starting deploy task');
-
-    await this.createServiceIfNotExists(serviceId);
 
     await this.dockerService.pullImageIfNotPresent(serviceDescriptor.image);
-
-    await this.deploymentRepository.createDeployment(
-      deploymentId,
-      serviceDescriptor,
-    );
-    logger.info(baseLogContext, 'Created new deployment');
 
     const networkId = await this.networkService.findServiceNetworkId(serviceId);
     if (!networkId) {
       throw new DomainError('Failed to find service network', baseLogContext);
     }
     logger.info(baseLogContext, 'Found service network');
+
+    // we need to stop the existing deployment early if host ports are defined
+    if (serviceDescriptor.networking.hostPorts) {
+      logger.info(
+        'Service defines hostPorts, cleaning up previous containers before continuing deployment',
+      );
+      const allContainers = await this.dockerService.findAllContainers();
+      const serviceContainers = allContainers.filter(
+        (container) => container.serviceId === serviceId,
+      );
+      await Promise.all(
+        serviceContainers.map(async (serviceContainers) => {
+          await this.dockerService.terminateContainer(
+            serviceContainers.containerId,
+          );
+          logger.info(
+            {
+              containerId: serviceContainers.containerId,
+              serviceId: serviceContainers.serviceId,
+              deploymentId: serviceContainers.deploymentId,
+            },
+            'Cleaned up container',
+          );
+        }),
+      );
+    }
 
     const { hostname } = await this.dockerService.runContainer({
       serviceId,
@@ -91,29 +108,51 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
       deploymentId,
     );
 
-    switch (outcome) {
-      case 'failed': {
-        await this.deploymentRepository.markDeploymentFailed(
-          deploymentId,
-          'Container failed to start',
-        );
-        break;
-      }
-      case 'running': {
-        await this.deploymentRepository.markDeploymentRunning(deploymentId, {
-          hostname,
-          port: serviceDescriptor.networking.ingress.containerPort,
-        });
+    if (outcome === 'failed') {
+      await this.deploymentRepository.markDeploymentFailed(
+        deploymentId,
+        'Container failed to start',
+      );
+      return;
+    }
 
-        await this.serviceRepository.setActiveDeployment(
-          serviceId,
-          deploymentId,
-        );
+    await this.deploymentRepository.markDeploymentRunning(deploymentId, {
+      hostname,
+      port: serviceDescriptor.networking.ingress.containerPort,
+    });
 
-        await this.networkService.configureServiceNetwork(serviceId);
+    await this.serviceRepository.setActiveDeployment(serviceId, deploymentId);
 
-        logger.info(baseLogContext, 'Deployment complete');
-      }
+    await this.networkService.configureServiceNetwork(serviceId);
+
+    logger.info(baseLogContext, 'Deployment complete');
+  }
+
+  public async run(taskEnvelope: TaskEnvelope<DeployTaskDescriptor>) {
+    const {
+      taskId,
+      task: { serviceId, deploymentId, serviceDescriptor },
+    } = taskEnvelope;
+
+    const baseLogContext = { taskId, serviceId, deploymentId };
+    logger.info(baseLogContext, 'Starting deploy task');
+
+    await this.createServiceIfNotExists(serviceId);
+
+    await this.deploymentRepository.createDeployment(
+      deploymentId,
+      serviceDescriptor,
+    );
+    logger.info(baseLogContext, 'Created new deployment');
+
+    try {
+      await this.deploy(taskEnvelope);
+    } catch (error) {
+      logger.error({ error }, 'Marking deployment as failed');
+      await this.deploymentRepository.markDeploymentFailed(
+        deploymentId,
+        String(error),
+      );
     }
   }
 }
