@@ -39,9 +39,11 @@ export const createServiceProxyMiddleware = (
     requestingDeployment: DeploymentRecord,
   ) => {
     const targetIngressAllowList =
-      targetDeployment?.serviceDescriptor.networking.serviceProxy?.ingress ?? [];
+      targetDeployment?.serviceDescriptor.networking.serviceProxy?.ingress ??
+      [];
     const requestingEgressAllowList =
-      requestingDeployment?.serviceDescriptor.networking.serviceProxy?.egress ?? [];
+      requestingDeployment?.serviceDescriptor.networking.serviceProxy?.egress ??
+      [];
 
     return (
       targetIngressAllowList.includes(requestingDeployment.serviceId) &&

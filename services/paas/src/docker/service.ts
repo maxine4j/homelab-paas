@@ -105,6 +105,11 @@ export class DockerService {
     networkId: string;
     volumes?: Array<{ hostPath: string; containerPath: string }>;
     environment?: Record<string, string>;
+    hostPorts?: Array<{
+      hostPort: number;
+      containerPort: number;
+      protocol?: 'tcp' | 'udp';
+    }>;
   }): Promise<{ hostname: string }> {
     const hostname = `${args.serviceId}-${args.deploymentId}`;
 
@@ -130,6 +135,16 @@ export class DockerService {
         Binds: args.volumes?.map(
           ({ hostPath, containerPath }) => `${hostPath}:${containerPath}:rw`,
         ),
+        PortBindings:
+          args.hostPorts &&
+          Object.fromEntries(
+            args.hostPorts.map(({ hostPort, containerPort, protocol }) => {
+              return [
+                `${containerPort}/${protocol ?? 'tcp'}`,
+                [{ HostPort: hostPort.toString() }],
+              ];
+            }),
+          ),
       },
     });
     await container.start();

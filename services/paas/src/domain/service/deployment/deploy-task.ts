@@ -82,6 +82,7 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
       networkId,
       volumes: serviceDescriptor.volumes,
       environment: serviceDescriptor.environment,
+      hostPorts: serviceDescriptor.networking.hostPorts,
     });
     logger.info(baseLogContext, 'Created and started container');
 

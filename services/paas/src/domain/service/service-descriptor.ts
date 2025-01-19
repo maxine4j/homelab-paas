@@ -21,6 +21,7 @@ export const ServiceDescriptor = z.object({
         z.object({
           containerPort: z.number().min(1).max(65_535),
           hostPort: z.number().min(1).max(65_535),
+          protocol: z.union([z.literal('tcp'), z.literal('udp')]).optional(),
         }),
       )
       .optional(),

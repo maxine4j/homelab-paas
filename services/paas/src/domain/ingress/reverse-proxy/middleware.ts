@@ -41,7 +41,9 @@ export const createReverseProxyMiddleware = (
   const serviceAllowsPublicIngress = (
     activeDeployment: DeploymentRecord | undefined,
   ) => {
-    return activeDeployment?.serviceDescriptor?.networking?.ingress?.public ?? false;
+    return (
+      activeDeployment?.serviceDescriptor?.networking?.ingress?.public ?? false
+    );
   };
 
   const buildAuthHeaders = (
@@ -101,7 +103,8 @@ export const createReverseProxyMiddleware = (
       if (
         !authService.isUserAuthorizedToAccessService(
           authedUserDetails.userId,
-          activeDeployment?.serviceDescriptor?.networking?.ingress?.authorizedUsers,
+          activeDeployment?.serviceDescriptor?.networking?.ingress
+            ?.authorizedUsers,
         )
       ) {
         logger.info({ authedUserDetails }, 'User not authorized');
