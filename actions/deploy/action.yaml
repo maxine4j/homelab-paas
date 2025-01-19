@@ -1,0 +1,19 @@
+name: Deploy
+description: Deploy paas service
+author: Maxine <9019624+maxine4j@users.noreply.github.com>
+inputs:
+  deploy_token:
+    description: 'The deployment token used to authenticate the deployment.'
+    required: true
+  service_descriptor_path:
+    description: 'Path to the service descriptor YAML file.'
+    required: true
+  paas_base_url:
+    description: 'Base URL for your paas, e.g. https://paas.example.com'
+    required: true
+outputs:
+  success:
+    description: 'Whether the deployment was successful.'
+runs:
+  using: 'node20'
+  main: 'deploy.js'
