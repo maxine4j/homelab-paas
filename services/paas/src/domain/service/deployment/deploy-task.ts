@@ -103,7 +103,7 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
 
         await this.deploymentRepository.markDeploymentRunning(deploymentId, {
           hostname,
-          port: serviceDescriptor.ingress.containerPort,
+          port: serviceDescriptor.networking.ingress.containerPort,
         });
 
         await this.serviceRepository.setActiveDeployment(

@@ -5,6 +5,7 @@
       "outputs": ["dist/**"]
     },
     "build:docker": {},
-    "format": {}
+    "format": {},
+    "test": {}
   }
 }

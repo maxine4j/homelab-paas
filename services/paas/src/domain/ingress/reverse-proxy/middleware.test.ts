@@ -90,8 +90,10 @@ describe('reverse proxy middleware', () => {
       });
       mockDeploymentRepository.query.mockResolvedValue({
         serviceDescriptor: {
-          ingress: {
-            public: true,
+          networking: {
+            ingress: {
+              public: true,
+            },
           },
         },
         container: {

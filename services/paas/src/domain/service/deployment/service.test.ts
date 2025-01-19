@@ -7,8 +7,10 @@ describe('deploy service', () => {
   const mockServiceDescriptor: ServiceDescriptor = {
     serviceId: 'service-123',
     image: 'image-123',
-    ingress: {
-      containerPort: 8080,
+    networking: {
+      ingress: {
+        containerPort: 8080,
+      },
     },
   };
 

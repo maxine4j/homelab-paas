@@ -21,17 +21,19 @@ export class NetworkService {
     const deployment = await this.deploymentRepository.query(
       service.activeDeploymentId,
     );
-    if (!deployment?.serviceDescriptor.serviceProxy?.egress) {
+    if (!deployment?.serviceDescriptor.networking.serviceProxy?.egress) {
       return [];
     }
 
-    return deployment.serviceDescriptor.serviceProxy.egress.map(
+    return deployment.serviceDescriptor.networking.serviceProxy?.egress?.map(
       (targetServiceId) => `${targetServiceId}.mesh`,
     );
   }
 
   public async findServiceNetworkId(serviceId: string): Promise<string> {
-    const existingNetorkId = await this.dockerService.findNetwork({ serviceId });
+    const existingNetorkId = await this.dockerService.findNetwork({
+      serviceId,
+    });
     if (existingNetorkId) {
       return existingNetorkId;
     }
@@ -54,9 +56,6 @@ export class NetworkService {
       networkId,
       dnsAliases,
     });
-    logger.info(
-      { serviceId, dnsAliases },
-      'Reconfigured service network',
-    );
+    logger.info({ serviceId, dnsAliases }, 'Reconfigured service network');
   }
 }

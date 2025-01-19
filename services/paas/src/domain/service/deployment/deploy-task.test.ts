@@ -14,8 +14,10 @@ describe('deploy task', () => {
       serviceDescriptor: {
         serviceId: 'service-123',
         image: 'image-123',
-        ingress: {
-          containerPort: 8080,
+        networking: {
+          ingress: {
+            containerPort: 8080,
+          },
         },
       },
     },
@@ -97,7 +99,7 @@ describe('deploy task', () => {
 
   test('should successfully deploy and wire up deployment', async () => {
     await deployTask.run(mockTask);
-    
+
     expect(mockDockerService.pullImageIfNotPresent).toHaveBeenCalledWith(
       'image-123',
     );
