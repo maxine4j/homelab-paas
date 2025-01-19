@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "private": true,
-  "repository": "git@github.com:maxine4j/schooner.git",
+  "repository": "git@github.com:maxine4j/homelab-paas.git",
   "author": "Maxine <9019624+maxine4j@users.noreply.github.com>",
   "license": "AGPL3",
   "packageManager": "yarn@4.4.0",

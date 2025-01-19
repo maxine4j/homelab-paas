@@ -2,13 +2,13 @@ name: Deploy
 description: Deploy paas service
 author: Maxine <9019624+maxine4j@users.noreply.github.com>
 inputs:
-  deploy_token:
+  deploy-token:
     description: 'The deployment token used to authenticate the deployment.'
     required: true
-  service_descriptor_path:
+  service-descriptor-path:
     description: 'Path to the service descriptor YAML file.'
     required: true
-  paas_base_url:
+  paas-base-url:
     description: 'Base URL for your paas, e.g. https://paas.example.com'
     required: true
 outputs:
@@ -17,7 +17,3 @@ outputs:
 runs:
   using: 'node20'
   main: 'deploy.js'
-  env:
-    DEPLOY_TOKEN: ${{ inputs.deploy_token }}
-    SERVICE_DESCRIPTOR_PATH: ${{ inputs.service_descriptor_path }}
-    PAAS_BASE_URL: ${{ inputs.paas_base_url }}

@@ -1,0 +1,15 @@
+{
+  "name": "deploy-action",
+  "version": "1.0.0",
+  "main": "deploy.js",
+  "private": true,
+  "repository": "git@github.com:maxine4j/homelab-paas.git",
+  "author": "Maxine <9019624+maxine4j@users.noreply.github.com>",
+  "license": "AGPL3",
+  "scripts": {
+    "deploy": "node deploy.js"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1"
+  }
+}
