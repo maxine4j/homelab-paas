@@ -23,7 +23,6 @@ describe('deploy task', () => {
 
   const mockDockerService = {
     pullImageIfNotPresent: jest.fn(),
-    findNetwork: jest.fn(),
     runContainer: jest.fn(),
     isContainerRunning: jest.fn(),
   } satisfies Partial<
@@ -47,7 +46,8 @@ describe('deploy task', () => {
   > as unknown as jest.Mocked<ServiceRepository>;
 
   const mockNetworkService: jest.Mocked<NetworkService> = {
-    connectServiceNetworkToPaas: jest.fn(),
+    configureServiceNetwork: jest.fn(),
+    findServiceNetworkId: jest.fn(),
   } as Partial<
     jest.Mocked<NetworkService>
   > as unknown as jest.Mocked<NetworkService>;
@@ -128,14 +128,6 @@ describe('deploy task', () => {
     expect(
       mockDeploymentRepository.markDeploymentFailed,
     ).not.toHaveBeenCalled();
-  });
-
-  test('should throw when service network not found', async () => {
-    mockDockerService.findNetwork.mockResolvedValue(undefined);
-
-    await expect(deployTask.run(mockTask)).rejects.toThrow(
-      'Failed to find service network',
-    );
   });
 
   test('should mark deployment as failed when container fails to start', async () => {
