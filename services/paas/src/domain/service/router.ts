@@ -38,7 +38,7 @@ const byDeploymentCreatedAt = (
   deploymentB: DeploymentRecord,
 ) => {
   return (
-    new Date(deploymentA.createdAt).getTime() -
-    new Date(deploymentB.createdAt).getTime()
+    new Date(deploymentB.createdAt).getTime() -
+    new Date(deploymentA.createdAt).getTime()
   );
 };
