@@ -1,6 +1,7 @@
 import Router from '@koa/router';
 import { Context } from 'koa';
 import yaml from 'yaml';
+import { ValidationError } from '../../../util/error';
 import { parseBearerToken } from '../../../util/http';
 import { validate } from '../../../util/validation';
 import { AuthService } from '../../ingress/auth/service';
@@ -17,9 +18,21 @@ export const createDeployRouter = (
   };
 
   const postDeploy = async (ctx: Context) => {
-    const serviceDescriptor = parseAndValidateServiceDescriptor(
-      ctx.request.body.serviceDescriptor,
-    );
+    let serviceDescriptor: ServiceDescriptor;
+    try {
+      serviceDescriptor = parseAndValidateServiceDescriptor(
+        ctx.request.body.serviceDescriptor,
+      );
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        ctx.status = 400;
+        ctx.body = {
+          message: error.message,
+          validationErrors: error.errors,
+        };
+      }
+      throw error;
+    }
 
     const deployToken = parseBearerToken(ctx.headers['authorization']);
     if (!deployToken) {
