@@ -20,24 +20,33 @@ nvm use && yarn
 ### Build test service
 
 ```bash
-yarn test-service:build
+yarn build:docker
+```
+
+### Set up ngrok and DNS
+
+Install and set up ngrok by following: https://dashboard.ngrok.com/get-started/setup/macos
+
+Set up a CNAME record in digital ocean pointing `paas.local.YOUR_DOMAIN_HERE` to your ngrok dev domain. Your dev domain can be found in the docs linked above and should be something like `foo.ngrok-free.app`
+
+### Set up config.yaml
+
+The following script can set up a local test config for you. 
+
+```bash
+yarn init:config --domain paas.local.YOUR_DOMAIN_HERE --username your-github-username
 ```
 
 ### Create GitHub Oauth2 App
 
 See https://github.com/settings/developers
-Set redirect url with your CNAME domain: `http://paas.localhost/auth/callback`
-Store clientId and clientSecret in .env
+Set redirect url with your CNAME domain: `http://paas.local.YOUR_DOMAIN_HERE/auth/callback`
+Add the clientId and clientSecret to ``config.local.yaml``
 
-### Set .env
+### Create DigitalOcean Access Token
 
-```bash
-PAAS_AUTH_CLIENT_ID=...
-PAAS_AUTH_CLIENT_SECRET=...
-PAAS_AUTH_AUTHORIZED_USERS=alice,bob
-PAAS_ROOT_DOMAIN=paas.localhost
-PAAS_AUTH_JWT_SECRET=...
-```
+Create a personal access token at https://cloud.digitalocean.com/account/api/tokens
+Add the token to `config.local.yaml`
 
 ### Run paas
 
@@ -47,11 +56,11 @@ yarn paas:dev
 
 ### Access paas and deployed services
 
-Access the paas via paas.localhost
-For any of your deployed services, add the serviceId as an additional subdomain
+Access the paas via https://paas.local.YOUR_DOMAIN_HERE
+For any of your deployed services, add the `serviceId` as an additional subdomain
 
 e.g.
 ```
-paas.localhost
-test-service.paas.localhost
+https://paas.local.YOUR_DOMAIN_HERE
+https://test-service.paas.local.YOUR_DOMAIN_HERE
 ```

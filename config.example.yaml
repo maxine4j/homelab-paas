@@ -1,27 +1,26 @@
 paas:
-  rootDomain: paas.localhost
+  rootDomain: '...'
   
   auth:
     jwtSecret: ...
     sessionLifetimeSeconds: 604800 # 1 week
     oauth2Provider:
       type: github
-      clientId: ...
-      clientSecret: ...
+      clientId: '...'
+      clientSecret: '...'
     authorizedUserIds:
-      - ...
+      - '...'
     adminUserIds:
-      - ...
+      - '...'
     deployTokens:
       - name: deploy-pipe
-        token: ...
+        token: deploy:local
         authorizedServices:
           - test-service
-  
+
   tls:
-    notificationEmail: ...
-    letsEncryptEnv: staging
+    envType: staging
     dnsChallengeProvider:
       type: digitalocean
-      domain: ...
-      accessToken: ...
+      domain: '...'
+      accessToken: '...'

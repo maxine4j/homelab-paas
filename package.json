@@ -10,6 +10,7 @@
   "scripts": {
     "build": "turbo build",
     "build:docker": "turbo build:docker",
+    "init:config": "./scripts/init-local-config.sh",
     "format": "turbo format",
     "test": "turbo test",
     "paas:dev": "docker compose -f ./compose.local.yaml up --build"
