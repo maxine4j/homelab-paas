@@ -10,7 +10,7 @@ export class TlsCertProvisionService {
   ) {}
 
   public async provisionCert() {
-    const { challengeProvider, rootDomain } =
+    const { challengeProvider, rootDomain, notificationEmail } =
       this.getConfig();
 
     const client = new acme.Client({
@@ -27,7 +27,7 @@ export class TlsCertProvisionService {
     const statefulChallenge = challengeProvider.createStatefulChallenge();
     const cert = await client.auto({
       csr,
-      email: 'null@gmail.com',
+      email: notificationEmail,
       termsOfServiceAgreed: true,
       challengePriority: ['dns-01'],
       challengeCreateFn: statefulChallenge.createChallenge,
@@ -42,8 +42,8 @@ export class TlsCertProvisionService {
   }
 
   private getDirectoryUrl() {
-    const { envType } = this.getConfig();
-    switch (envType) {
+    const { letsEncryptEnv } = this.getConfig();
+    switch (letsEncryptEnv) {
       case 'production':
         return acme.directory.letsencrypt.production;
       case 'staging':
@@ -55,8 +55,9 @@ export class TlsCertProvisionService {
     const config = this.configService.getConfig();
 
     return {
-      envType: config.paas.tls.envType,
+      letsEncryptEnv: config.paas.tls.letsEncryptEnv,
       rootDomain: config.paas.rootDomain,
+      notificationEmail: config.paas.tls.notificationEmail,
       challengeProvider: this.challengeProviderRegistry.getProvider(
         config.paas.tls.dnsChallengeProvider.type,
       ),
