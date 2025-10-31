@@ -20,24 +20,43 @@ nvm use && yarn
 ### Build test service
 
 ```bash
-yarn test-service:build
+yarn build:docker
 ```
 
-### Create GitHub Oauth2 App
+### Create local config
 
-See https://github.com/settings/developers
-Set redirect url with your CNAME domain: `http://paas.localhost/auth/callback`
-Store clientId and clientSecret in .env
+Copy `config.example.yaml` to `config.local.yaml` and follow the below instructions on aquiring the requird API keys for local testing.
 
-### Set .env
+### Setting up DNS in Digital Ocean
 
-```bash
-PAAS_AUTH_CLIENT_ID=...
-PAAS_AUTH_CLIENT_SECRET=...
-PAAS_AUTH_AUTHORIZED_USERS=alice,bob
-PAAS_ROOT_DOMAIN=paas.localhost
-PAAS_AUTH_JWT_SECRET=...
+Ensure you have a CNAME record pointing to `paas.localhost`
+
+E.g.
+
+```txt
+CNAME *paas.local.maxine4j.com paas.localhost
 ```
+
+You should then update `config.local.yaml` to configure the `paas.rootDomain` and `paas.tls.dnsChallengeProvider.domain` as appropriate. 
+
+E.g.
+
+```yaml
+paas:
+  rootDomain: paas.local.maxine4j.com
+  # ...
+  tls:
+    dnsChallengeProvider:
+      domain: maxine4j.com
+      # ...
+```
+
+### Setting up GitHub OAuth2 Login
+
+Create a new app at https://github.com/settings/developers
+Set the redirect url to point to your DNS record + `/auth/callback`
+E.g. `https://paas.local.maxine4j.com/auth/callback`
+Update `config.local.yaml` with your `clientId` and `clientSecret`
 
 ### Run paas
 

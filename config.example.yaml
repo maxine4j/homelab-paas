@@ -5,8 +5,8 @@ paas:
     sessionLifetimeSeconds: 604800 # 1 week
     oauth2Provider:
       type: github
-      clientId: ...
-      clientSecret: ...
+      clientId: ________REPLACE_ME_________
+      clientSecret: ________REPLACE_ME_________
     authorizedUserIds:
       - 'maxine4j'
     adminUserIds:
@@ -21,4 +21,4 @@ paas:
     dnsChallengeProvider:
       type: digitalocean
       domain: 'maxine4j.com'
-      accessToken: ...
+      accessToken: ________REPLACE_ME_________
