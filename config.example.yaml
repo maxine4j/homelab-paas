@@ -1,27 +1,24 @@
 paas:
-  rootDomain: paas.localhost
-  
+  rootDomain: paas.local.maxine4j.com
   auth:
-    jwtSecret: ...
+    jwtSecret: test-jwt-secret
     sessionLifetimeSeconds: 604800 # 1 week
     oauth2Provider:
       type: github
       clientId: ...
       clientSecret: ...
     authorizedUserIds:
-      - ...
+      - 'maxine4j'
     adminUserIds:
-      - ...
+      - 'maxine4j'
     deployTokens:
       - name: deploy-pipe
-        token: ...
+        token: deploy:test-token
         authorizedServices:
           - test-service
-  
   tls:
-    notificationEmail: ...
-    letsEncryptEnv: staging
+    envType: staging
     dnsChallengeProvider:
       type: digitalocean
-      domain: ...
+      domain: 'maxine4j.com'
       accessToken: ...

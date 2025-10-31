@@ -30,8 +30,7 @@ const PaasConfig = z.object({
     }),
 
     tls: z.object({
-      notificationEmail: z.string(),
-      letsEncryptEnv: z.union([z.literal('staging'), z.literal('production')]),
+      envType: z.union([z.literal('staging'), z.literal('production')]),
       dnsChallengeProvider: z.object({
         type: z.literal('digitalocean'),
         domain: z.string(),
