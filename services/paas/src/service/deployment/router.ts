@@ -1,11 +1,11 @@
 import Router from '@koa/router';
 import { Context } from 'koa';
 import yaml from 'yaml';
-import { ValidationError } from '../../../util/error';
-import { parseBearerToken } from '../../../util/http';
-import { logger } from '../../../util/logger';
-import { validate } from '../../../util/validation';
-import { AuthService } from '../../../ingress/auth/service';
+import { ValidationError } from '../../util/error';
+import { parseBearerToken } from '../../util/http';
+import { logger } from '../../util/logger';
+import { validate } from '../../util/validation';
+import { AuthService } from '../../ingress/auth/service';
 import { ServiceDescriptor } from '../service-descriptor';
 import { DeployService } from './service';
 

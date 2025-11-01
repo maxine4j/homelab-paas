@@ -1,7 +1,7 @@
 import { Context, Next } from 'koa';
-import { DockerService } from '../../../docker/service';
-import { logger } from '../../../util/logger';
-import { RequestForwarder } from '../../../util/request-forwarder';
+import { DockerService } from '../../docker/service';
+import { logger } from '../../util/logger';
+import { RequestForwarder } from '../../util/request-forwarder';
 import {
   DeploymentRecord,
   DeploymentRepository,

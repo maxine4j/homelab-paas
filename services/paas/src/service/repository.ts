@@ -1,5 +1,5 @@
-import { KeyValueStore } from '../../kv-store/types';
-import { ContextualError } from '../../util/error';
+import { KeyValueStore } from '../kv-store/types';
+import { ContextualError } from '../util/error';
 
 export interface ServiceRecord {
   serviceId: string;

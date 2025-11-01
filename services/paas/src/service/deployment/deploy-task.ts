@@ -1,8 +1,8 @@
-import { DockerService } from '../../../docker/service';
-import { QueueTask, TaskEnvelope } from '../../../task/queue';
-import { DomainError } from '../../../util/error';
-import { logger } from '../../../util/logger';
-import { sleep } from '../../../util/sleep';
+import { DockerService } from '../../docker/service';
+import { QueueTask, TaskEnvelope } from '../../task/queue';
+import { DomainError } from '../../util/error';
+import { logger } from '../../util/logger';
+import { sleep } from '../../util/sleep';
 import { NetworkService } from '../../network/service';
 import { ServiceRepository } from '../repository';
 import { ServiceDescriptor } from '../service-descriptor';

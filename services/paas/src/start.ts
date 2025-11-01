@@ -12,22 +12,22 @@ import { createReverseProxyMiddleware } from './ingress/reverse-proxy/middleware
 import { DnsAcmeChallengeProviderRegistry } from './ingress/tls/dns-challenge/registry';
 import { TlsCertProvisionService } from './ingress/tls/provision-service';
 import { TlsCertRenewalTask } from './ingress/tls/renewal-task';
-import { NetworkService } from './domain/network/service';
-import { createServiceProxyMiddleware } from './domain/network/service-proxy/middleware';
-import { NetworkSyncTask } from './domain/network/sync-task';
-import { DeploymentCleanupTask } from './domain/service/deployment/cleanup-task';
+import { NetworkService } from './network/service';
+import { createServiceProxyMiddleware } from './network/service-proxy/middleware';
+import { NetworkSyncTask } from './network/sync-task';
+import { DeploymentCleanupTask } from './service/deployment/cleanup-task';
 import {
   DeployTask,
   DeployTaskDescriptor,
-} from './domain/service/deployment/deploy-task';
+} from './service/deployment/deploy-task';
 import {
   DeploymentRecord,
   DeploymentRepository,
-} from './domain/service/deployment/repository';
-import { createDeployRouter } from './domain/service/deployment/router';
-import { DeployService } from './domain/service/deployment/service';
-import { ServiceRecord, ServiceRepository } from './domain/service/repository';
-import { createServiceRouter } from './domain/service/router';
+} from './service/deployment/repository';
+import { createDeployRouter } from './service/deployment/router';
+import { DeployService } from './service/deployment/service';
+import { ServiceRecord, ServiceRepository } from './service/repository';
+import { createServiceRouter } from './service/router';
 import { SqliteKeyValueStore } from './kv-store/sqlite';
 import { PeriodicTaskRunner } from './task/periodic';
 import { InMemoryTaskQueue, QueueTaskRunner } from './task/queue';

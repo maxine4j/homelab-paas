@@ -1,6 +1,6 @@
-import { DockerService } from '../../../docker/service';
-import { PeriodicTask } from '../../../task/periodic';
-import { logger } from '../../../util/logger';
+import { DockerService } from '../../docker/service';
+import { PeriodicTask } from '../../task/periodic';
+import { logger } from '../../util/logger';
 import { ServiceRepository } from '../repository';
 import { DeploymentRepository } from './repository';
 

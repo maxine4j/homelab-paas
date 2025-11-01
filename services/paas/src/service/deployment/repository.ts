@@ -1,5 +1,5 @@
-import { KeyValueStore } from '../../../kv-store/types';
-import { ContextualError } from '../../../util/error';
+import { KeyValueStore } from '../../kv-store/types';
+import { ContextualError } from '../../util/error';
 import { ServiceDescriptor } from '../service-descriptor';
 
 interface ContainerRecord {

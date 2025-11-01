@@ -5,8 +5,8 @@ import { RequestForwarder } from '../../util/request-forwarder';
 import {
   DeploymentRecord,
   DeploymentRepository,
-} from '../../domain/service/deployment/repository';
-import { ServiceRepository } from '../../domain/service/repository';
+} from '../../service/deployment/repository';
+import { ServiceRepository } from '../../service/repository';
 import { AuthedUserDetails } from '../auth/oauth-provider/types';
 import { AuthService } from '../auth/service';
 

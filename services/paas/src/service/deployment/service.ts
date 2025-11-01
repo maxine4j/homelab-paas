@@ -1,4 +1,4 @@
-import { TaskQueue } from '../../../task/queue';
+import { TaskQueue } from '../../task/queue';
 import { ServiceDescriptor } from '../service-descriptor';
 import { DeployTaskDescriptor } from './deploy-task';
 
