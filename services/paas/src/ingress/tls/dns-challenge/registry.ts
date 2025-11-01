@@ -1,4 +1,4 @@
-import { ConfigService } from '../../../../util/config';
+import { ConfigService } from '../../../util/config';
 import { DigitalOceanDnsAcmeChallengeProvider } from './digitalocean';
 import { DnsAcmeChallengeProvider } from './types';
 

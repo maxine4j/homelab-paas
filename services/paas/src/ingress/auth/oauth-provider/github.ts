@@ -1,6 +1,6 @@
-import { ConfigService } from '../../../../util/config';
-import { ContextualError } from '../../../../util/error';
-import { logger } from '../../../../util/logger';
+import { ConfigService } from '../../../util/config';
+import { ContextualError } from '../../../util/error';
+import { logger } from '../../../util/logger';
 import { AuthedUserDetails, Oauth2Provider } from './types';
 
 export class GitHubOauth2Provider implements Oauth2Provider {

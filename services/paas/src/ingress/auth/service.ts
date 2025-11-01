@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
-import { ConfigService } from '../../../util/config';
-import { logger } from '../../../util/logger';
+import { ConfigService } from '../../util/config';
+import { logger } from '../../util/logger';
 import { Oauth2ProviderRegistry } from './oauth-provider/registry';
 import { AuthedUserDetails } from './oauth-provider/types';
 

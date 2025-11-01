@@ -1,12 +1,12 @@
 import { Context, Middleware, Next } from 'koa';
-import { ConfigService } from '../../../util/config';
-import { logger } from '../../../util/logger';
-import { RequestForwarder } from '../../../util/request-forwarder';
+import { ConfigService } from '../../util/config';
+import { logger } from '../../util/logger';
+import { RequestForwarder } from '../../util/request-forwarder';
 import {
   DeploymentRecord,
   DeploymentRepository,
-} from '../../service/deployment/repository';
-import { ServiceRepository } from '../../service/repository';
+} from '../../domain/service/deployment/repository';
+import { ServiceRepository } from '../../domain/service/repository';
 import { AuthedUserDetails } from '../auth/oauth-provider/types';
 import { AuthService } from '../auth/service';
 

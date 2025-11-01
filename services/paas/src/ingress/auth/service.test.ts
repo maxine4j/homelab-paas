@@ -1,4 +1,4 @@
-import { ConfigService, PaasConfig } from '../../../util/config';
+import { ConfigService, PaasConfig } from '../../util/config';
 import { Oauth2ProviderRegistry } from './oauth-provider/registry';
 import { AuthService } from './service';
 

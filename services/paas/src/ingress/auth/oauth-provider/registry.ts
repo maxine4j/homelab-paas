@@ -1,4 +1,4 @@
-import { ConfigService } from '../../../../util/config';
+import { ConfigService } from '../../../util/config';
 import { GitHubOauth2Provider } from './github';
 import { Oauth2Provider } from './types';
 

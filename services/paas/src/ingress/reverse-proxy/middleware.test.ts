@@ -1,12 +1,12 @@
 import supertest from 'supertest';
-import { ConfigService } from '../../../util/config';
-import { RequestForwarder } from '../../../util/request-forwarder';
-import { startMiddlewareTestApi } from '../../../util/test/router';
+import { ConfigService } from '../../util/config';
+import { RequestForwarder } from '../../util/request-forwarder';
+import { startMiddlewareTestApi } from '../../util/test/router';
 import {
   DeploymentRecord,
   DeploymentRepository,
-} from '../../service/deployment/repository';
-import { ServiceRepository } from '../../service/repository';
+} from '../../domain/service/deployment/repository';
+import { ServiceRepository } from '../../domain/service/repository';
 import { AuthedUserDetails } from '../auth/oauth-provider/types';
 import { AuthService } from '../auth/service';
 import { createReverseProxyMiddleware } from './middleware';
