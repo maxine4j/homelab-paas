@@ -1,4 +1,4 @@
-import { KeyValueStore } from '../../kv-store/types';
+import { KeyValueStore } from '../../store/types';
 import { ContextualError } from '../../util/error';
 import { ServiceDescriptor } from '../service-descriptor';
 

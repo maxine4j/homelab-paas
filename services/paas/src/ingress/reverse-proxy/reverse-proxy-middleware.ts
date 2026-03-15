@@ -8,7 +8,7 @@ import {
 } from '../../service/deployment/repository';
 import { ServiceRepository } from '../../service/repository';
 import { AuthedUserDetails } from '../auth/oauth-provider/types';
-import { AuthService } from '../auth/service';
+import { AuthService } from '../auth/auth-service';
 
 export const createReverseProxyMiddleware = (
   serviceRepository: ServiceRepository,

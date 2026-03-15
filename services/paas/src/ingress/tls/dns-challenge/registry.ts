@@ -1,5 +1,5 @@
 import { ConfigService } from '../../../util/config';
-import { DigitalOceanDnsAcmeChallengeProvider } from './digitalocean';
+import { DigitalOceanDnsAcmeChallengeProvider } from './digitalocean-dns-challenge-provider';
 import { DnsAcmeChallengeProvider } from './types';
 
 type DnsAcmeChallengeProviderType = 'digitalocean';

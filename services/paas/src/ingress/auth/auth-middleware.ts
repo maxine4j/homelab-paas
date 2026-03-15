@@ -1,6 +1,6 @@
 import { Context, Next } from 'koa';
 import { ConfigService } from '../../util/config';
-import { AuthService } from './service';
+import { AuthService } from './auth-service';
 
 export const createAuthorizedPaasAdminRequiredMiddleware =
   (authService: AuthService, configService: ConfigService) =>

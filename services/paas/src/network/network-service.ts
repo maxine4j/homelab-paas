@@ -1,4 +1,4 @@
-import { DockerService } from '../docker/service';
+import { DockerService } from '../docker/docker-service';
 import { ConfigService } from '../util/config';
 import { logger } from '../util/logger';
 import { DeploymentRepository } from '../service/deployment/repository';

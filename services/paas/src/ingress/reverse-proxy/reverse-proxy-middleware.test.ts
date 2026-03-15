@@ -8,8 +8,8 @@ import {
 } from '../../service/deployment/repository';
 import { ServiceRepository } from '../../service/repository';
 import { AuthedUserDetails } from '../auth/oauth-provider/types';
-import { AuthService } from '../auth/service';
-import { createReverseProxyMiddleware } from './middleware';
+import { AuthService } from '../auth/auth-service';
+import { createReverseProxyMiddleware } from './reverse-proxy-middleware';
 
 describe('reverse proxy middleware', () => {
   const mockRootDomain = 'paas.localhost';

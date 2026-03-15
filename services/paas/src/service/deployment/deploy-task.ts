@@ -1,9 +1,9 @@
-import { DockerService } from '../../docker/service';
+import { DockerService } from '../../docker/docker-service';
 import { QueueTask, TaskEnvelope } from '../../task/queue';
 import { DomainError } from '../../util/error';
 import { logger } from '../../util/logger';
 import { sleep } from '../../util/sleep';
-import { NetworkService } from '../../network/service';
+import { NetworkService } from '../../network/network-service';
 import { ServiceRepository } from '../repository';
 import { ServiceDescriptor } from '../service-descriptor';
 import { DeploymentRepository } from './repository';

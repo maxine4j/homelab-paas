@@ -2,7 +2,7 @@ import Router from '@koa/router';
 import { ConfigService } from '../../util/config';
 import { ContextualError } from '../../util/error';
 import { logger } from '../../util/logger';
-import { AuthService } from './service';
+import { AuthService } from './auth-service';
 
 export const createAuthRouter = (
   authService: AuthService,

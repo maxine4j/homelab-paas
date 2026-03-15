@@ -1,7 +1,7 @@
 import supertest from 'supertest';
 import yaml from 'yaml';
 import { startTestApi } from '../../util/test/router';
-import { AuthService } from '../../ingress/auth/service';
+import { AuthService } from '../../ingress/auth/auth-service';
 import { ServiceDescriptor } from '../service-descriptor';
 import { createDeployRouter } from './router';
 import { DeployService } from './service';

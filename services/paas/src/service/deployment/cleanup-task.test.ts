@@ -1,4 +1,4 @@
-import { DockerService } from '../../docker/service';
+import { DockerService } from '../../docker/docker-service';
 import { PeriodicTask } from '../../task/periodic';
 import { ServiceRepository } from '../repository';
 import { DeploymentCleanupTask } from './cleanup-task';

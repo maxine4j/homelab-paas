@@ -1,7 +1,7 @@
 import { StartupTask } from '../task/startup';
 import { logger } from '../util/logger';
 import { ServiceRepository } from '../service/repository';
-import { NetworkService } from './service';
+import { NetworkService } from './network-service';
 
 export class NetworkSyncTask implements StartupTask {
   constructor(

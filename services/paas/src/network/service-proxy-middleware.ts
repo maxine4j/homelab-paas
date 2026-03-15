@@ -1,12 +1,12 @@
 import { Context, Next } from 'koa';
-import { DockerService } from '../../docker/service';
-import { logger } from '../../util/logger';
-import { RequestForwarder } from '../../util/request-forwarder';
+import { DockerService } from '../docker/docker-service';
+import { logger } from '../util/logger';
+import { RequestForwarder } from '../util/request-forwarder';
 import {
   DeploymentRecord,
   DeploymentRepository,
-} from '../../service/deployment/repository';
-import { ServiceRepository } from '../../service/repository';
+} from '../service/deployment/repository';
+import { ServiceRepository } from '../service/repository';
 
 export const createServiceProxyMiddleware = (
   serviceRepository: ServiceRepository,

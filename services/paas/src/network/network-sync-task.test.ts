@@ -1,6 +1,6 @@
 import { ServiceRepository } from '../service/repository';
-import { NetworkService } from './service';
-import { NetworkSyncTask } from './sync-task';
+import { NetworkService } from './network-service';
+import { NetworkSyncTask } from './network-sync-task';
 
 describe('network sync task', () => {
   const mockNetworkService: jest.Mocked<NetworkService> = {
