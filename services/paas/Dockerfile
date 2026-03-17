@@ -1,4 +1,4 @@
-FROM node:20 AS base
+FROM node:22 AS base
 WORKDIR /app
 RUN corepack enable
 RUN yarn global add turbo@2

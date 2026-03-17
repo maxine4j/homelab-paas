@@ -11,3 +11,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./paas-config/:/etc/homelab-paas
       - ./config.local.yaml:/etc/homelab-paas/config.yaml
+  paas-ui:
+    build:
+      context: ./
+      dockerfile: ./services/paas-ui/Dockerfile
+    ports:
+      - "3000:3000"

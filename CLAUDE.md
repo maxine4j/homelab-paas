@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Platform as a Service (PaaS) for homelabs. The system allows users to deploy single-container services with a simple descriptor file, with automatic handling of DNS, TLS, and ingress reverse proxy. It features zero-downtime deployments and GitHub OAuth login.
 
+We have the concept of a service descriptor. Every microservice that we want to deploy into the homelab needs to provide a service descriptor. This descriptor tells paas how to deploy and configure their microservice
+
 ## Development Commands
 
 ### Setup
@@ -23,6 +25,10 @@ yarn build:docker
 
 # Build specific service
 cd services/paas
+yarn build
+
+# Build frontend service
+cd services/paas-ui
 yarn build
 ```
 
@@ -66,9 +72,66 @@ We can also inspect the running containers via the `docker` cli
 ## Architecture
 
 ### Monorepo Structure
-- Root uses Yarn workspaces with services in `services/`
-- Each service has its own package.json with independent builds
-- Uses Turbo for build orchestration
+
+The project uses a monorepo setup with Yarn Workspaces and Turbo for efficient build orchestration.
+
+**Directory Layout:**
+- `services/` - Contains all service packages (e.g., `paas`, `test-service`)
+- Each service is an independent workspace with its own `package.json`
+- Root `package.json` defines workspaces: `"services/*"`
+- Shared configuration files at root level (tsconfig.json, .prettierrc.json, turbo.json)
+
+**Build System:**
+- Uses Turbo for build caching and parallel execution
+- `yarn build` runs `turbo build` across all services
+- `yarn build:docker` builds Docker images for all services
+- `yarn test` runs `turbo test` across all services
+- `yarn format` runs `turbo format` across all services
+
+**Service Directory Structure:**
+```
+services/[service-name]/
+├── src/                    # Source TypeScript files
+├── dist/                   # Compiled JavaScript output
+├── package.json            # Service-specific configuration
+├── tsconfig.json           # TypeScript compiler config
+├── Dockerfile              # Docker build instructions
+├── jest.config.ts          # Jest testing configuration
+└── *.sd.yaml               # Service descriptor, this is a descriptor for the microservice. Not applicible to paas and paas-ui
+```
+For the frontend UI (React + Vite), see `services/paas-ui/`
+
+**Docker Build Pattern:**
+Each service uses a multi-stage Dockerfile:
+1. **base**: Node.js 22, enables corepack, adds Turbo 2, disables telemetry
+2. **builder**: Copies all files, runs `turbo prune [service-name] --docker`
+3. **installer**: Copies pruned files, runs `yarn install --frozen-lockfile`, then `turbo run build --filter=[service-name]`
+4. **runner**: Copies node_modules and dist, exposes port, runs the service
+
+**TypeScript Configuration:**
+- Root `tsconfig.json` extends `@tsconfig/node20`
+- All services can extend this config with `rootDir` and `outDir`
+- Uses strict mode with ESNext libraries and CommonJS modules
+
+**Testing:**
+- All services use Jest with `ts-jest` preset
+- Test environment: `node`
+- Test files: `*.test.ts` or `*-test.ts` pattern
+- Supertest used for HTTP endpoint testing
+
+**Service Descriptor (.sd.yaml):**
+Optional configuration for deployment:
+```yaml
+{
+  "serviceId": "test-service",
+  "image": "test-service:latest",
+  "networking": {
+    "ingress": {
+      "containerPort": 8080
+    }
+  }
+}
+```
 
 ### Core Components
 
@@ -111,6 +174,45 @@ Three Koa web servers handle different responsibilities:
 - Services can reference other services in `serviceProxy.egress` field
 - Docker networking with DNS aliases enables inter-service communication
 - Network configuration syncs paas container with service networks
+
+#### Frontend Architecture
+The project includes a React-based frontend built with Vite for the user interface:
+
+- **Location**: `services/paas-ui/`
+- **Framework**: React 19 + TypeScript + Vite 8
+- **Port**: 3000 (direct access via Nginx)
+- **Purpose**: User interface for the PaaS platform
+
+**Development Commands**:
+```bash
+# Build the frontend
+cd services/paas-ui
+yarn build
+
+# Build Docker image for frontend
+cd services/paas-ui
+yarn build:docker
+```
+
+**Access Points**:
+- Backend PaaS: Port 80/443 (HTTP/HTTPS via ingress) on `*.rootDomain`
+- Frontend UI: Port 3000 (direct access)
+- API endpoints: Port 8443
+
+**Key Files**:
+- Source: `services/paas-ui/src/` (App.tsx, main.tsx, index.css, etc.)
+- Config: `vite.config.ts`, `tsconfig.json`, `tsconfig.app.json`
+- Docker: `services/paas-ui/Dockerfile`
+- Public: `services/paas-ui/public/` (static assets like favicon.svg)
+- Build output: `services/paas-ui/dist/` (compiled bundle)
+
+**Implementation Notes**:
+- Uses Vite for fast development and building
+- Multi-stage Dockerfile following the project's Docker build pattern (base → builder → installer → runner)
+- Served by Nginx in production Docker image
+- Currently in early development (placeholder implementation)
+- Follows same monorepo architecture as backend services
+- Uses Yarn 4.4.0 and Turbo for build orchestration
 
 ### Key Patterns
 
