@@ -1,9 +1,8 @@
 import type { Service } from '@/types'
 import { Server } from 'lucide-react'
-import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Badge from '@/components/ui/badge'
 import { cn, getTypeIcon } from '@/lib/utils'
-import React from 'react'
 
 interface ServiceListProps {
   services: Service[]

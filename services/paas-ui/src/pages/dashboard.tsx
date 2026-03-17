@@ -13,14 +13,14 @@ import { Server } from 'lucide-react'
 export function Dashboard() {
   const [services, setServices] = useState<Service[]>([])
   const [stats, setStats] = useState<ServiceStats>({ cpu_usage: 0, memory_usage: 0, requests_total: 0, requests_per_second: 0, avg_response_time: 0 })
-  const [logs, setLogs] = useState<ServiceLogs>({ service_id: '', logs: [] })
+  const [_logs, setLogs] = useState<ServiceLogs>({ service_id: '', logs: [] })
   const [events, setEvents] = useState<ServiceEvents>({ service_id: '', events: [] })
-  const [selectedService, setSelectedService] = useState<Service | null>(null)
+  const [selectedService, _setSelectedService] = useState<Service | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [_isLogsLoading, setIsLogsLoading] = useState(false)
   const [_isEventsLoading, setIsEventsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [logSearchQuery, setLogSearchQuery] = useState('')
+  // const [logSearchQuery, setLogSearchQuery] = useState('')
 
   const loadServices = async () => {
     try {
@@ -73,12 +73,12 @@ export function Dashboard() {
     }
   }
 
-  const handleServiceClick = async (service: Service) => {
-    setSelectedService(service)
-    await loadStats(service.id)
-    await loadLogs(service.id)
-    await loadEvents(service.id)
-  }
+  // const handleServiceClick = async (service: Service) => {
+  //   setSelectedService(service)
+  //   await loadStats(service.id)
+  //   await loadLogs(service.id)
+  //   await loadEvents(service.id)
+  // }
 
   useEffect(() => {
     const init = async () => {
@@ -149,7 +149,7 @@ export function Dashboard() {
             ) : (
               <ServiceList
                 services={services}
-                onServiceClick={handleServiceClick}
+                // onServiceClick={handleServiceClick}
               />
             )}
           </div>
@@ -158,9 +158,10 @@ export function Dashboard() {
             <div className="section section-full">
               <div className="grid-container grid-2">
                 <LogViewer
-                  logs={logs.logs}
-                  searchQuery={logSearchQuery}
-                  onSearchChange={setLogSearchQuery}
+                  logs={[]}
+                  serviceName="foo"
+                  // searchQuery={logSearchQuery}
+                  // onSearchChange={setLogSearchQuery}
                 />
                 <EventList events={events.events} />
               </div>

@@ -1,10 +1,9 @@
 import type { Service } from '@/types'
-import { Activity, Server, ServerCrash, Wifi, HardDrive, RefreshCw, Trash2 } from 'lucide-react'
-import Card, { CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Activity, Server, Wifi, HardDrive, RefreshCw, Trash2 } from 'lucide-react'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import Badge from '@/components/ui/badge'
 import Button from '@/components/ui/button'
-import { cn, getTypeIcon } from '@/lib/utils'
-import React from 'react'
+import { cn } from '@/lib/utils'
 
 interface ServiceDetailProps {
   service: Service

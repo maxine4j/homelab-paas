@@ -1,14 +1,11 @@
-import type { Service } from '@/types'
-import { Server, PlayCircle, PauseCircle, RefreshCw, Trash2 } from 'lucide-react'
+import { Server, PlayCircle, PauseCircle, RefreshCw } from 'lucide-react'
 import Button from '@/components/ui/button'
-import Badge from '@/components/ui/badge'
-import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import Dialog, { DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { cn } from '@/lib/utils'
-import React, { useState } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
+// import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+// import { useState } from 'react'
 
 export default function ServicesPage() {
-  const [isDeployModalOpen, setIsDeployModalOpen] = useState(false)
+  // const [isDeployModalOpen, setIsDeployModalOpen] = useState(false)
 
   return (
     <div className="page-content">
@@ -61,7 +58,7 @@ export default function ServicesPage() {
             className="input"
           />
         </div>
-        <Dialog open={isDeployModalOpen} onOpenChange={setIsDeployModalOpen}>
+        {/* <Dialog open={isDeployModalOpen} onOpenChange={setIsDeployModalOpen}>
           <DialogTrigger asChild>
             <Button size="lg">
               <PlayCircle className="h-4 w-4 mr-2" />
@@ -118,7 +115,7 @@ export default function ServicesPage() {
               </Button>
             </div>
           </DialogContent>
-        </Dialog>
+        </Dialog> */}
       </div>
 
       <div className="flex justify-between items-center mb-6">
