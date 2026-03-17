@@ -1,0 +1,39 @@
+{
+  "name": "paas-ui",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "license": "AGPL3",
+  "packageManager": "yarn@4.4.0",
+  "scripts": {
+    "dev": "vite preview",
+    "build": "tsc -b && vite build",
+    "build:docker": "docker build -t paas-ui:latest -f ./Dockerfile ../../",
+    "format": "prettier ./src --write",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.577.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.1",
+    "recharts": "^3.8.0",
+    "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
+    "prettier": "^3.4.2",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.56.1",
+    "vite": "^8.0.0"
+  }
+}
