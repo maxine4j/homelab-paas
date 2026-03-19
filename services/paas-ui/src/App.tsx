@@ -4,10 +4,12 @@ import { ServiceDirectoryPage } from './pages/service-directory-page'
 import { ServiceOverviewPage } from './pages/service-overview-page'
 import { ServiceLogsPage } from './pages/service-logs-page'
 import { SettingsPage } from './pages/settings-page'
+import { TopNav } from './components/navigation/TopNav'
 
 export function App() {
   return (
     <BrowserRouter>
+      <TopNav />
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/services" element={<ServiceDirectoryPage />} />
