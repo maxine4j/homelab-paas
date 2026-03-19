@@ -5,7 +5,7 @@ export function TopNav() {
   const { services, loading, error } = useFetchServices();
 
   return (
-    <nav className="flex items-center justify-between bg-[#1e1e1e] px-6 h-16 rounded-xl shadow-lg shadow-black/30 my-4 font-sans sticky top-4 z-50">
+    <nav className="flex items-center justify-between bg-[#1e1e1e] px-4 sm:px-6 lg:px-8 h-16 rounded-xl shadow-lg shadow-black/30 mt-4 mb-2 mx-4 sm:mx-6 lg:mx-auto max-w-7xl font-sans sticky top-4 z-50">
       <div className="text-white text-xl font-semibold hover:text-[#a8e6cf] transition-colors">
         <Link to="/">PaaS UI</Link>
       </div>

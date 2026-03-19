@@ -1,4 +1,4 @@
-import { PageContianer } from '@/components/page';
+import { PageContainer } from '@/components/page';
 import { useFetchServices } from '@/hooks/fetch-services';
 import { CircleIcon } from '@/components/icons/circle';
 
@@ -11,17 +11,17 @@ export const ServiceDirectoryPage = () => {
   const { services, loading, error } = useFetchServices();
 
   if (loading) {
-    return <PageContianer title="Services">Loading services...</PageContianer>;
+    return <PageContainer title="Services">Loading services...</PageContainer>;
   }
 
   if (error) {
     return (
-      <PageContianer title="Services">Failed to load services</PageContianer>
+      <PageContainer title="Services">Failed to load services</PageContainer>
     );
   }
 
   return (
-    <PageContianer title="Services">
+    <PageContainer title="Services">
       <div className="min-w-full divide-y divide-white/10">
         <table className="min-w-full divide-y divide-white/10">
           <thead className="bg-[#1e1e1e]">
@@ -60,6 +60,6 @@ export const ServiceDirectoryPage = () => {
           </tbody>
         </table>
       </div>
-    </PageContianer>
+    </PageContainer>
   );
 };
