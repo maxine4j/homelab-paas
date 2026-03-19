@@ -1,16 +1,32 @@
 import { useState, useEffect } from 'react';
+import { ServiceMock } from './fetch-services';
 
-export interface ServiceMock {
-  id: string;
-  status: 'healthy' | 'unhealthy';
-  replicas: number;
-  ownerId: string;
-  image: string;
-  port: number;
-  serviceProxy: string[];
-  hostPorts: Record<string, number>;
-  environment: Record<string, string>;
-  volumes: Array<{ containerPath: string; hostPath: string }>;
+export function useServiceDetail(serviceId: string) {
+  const [service, setService] = useState<ServiceMock | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    // Simulate network delay
+    const timer = setTimeout(() => {
+      try {
+        const foundService = mockServices.find((s) => s.id === serviceId);
+        if (foundService) {
+          setService(foundService);
+        } else {
+          setError(new Error(`Service "${serviceId}" not found`));
+        }
+        setLoading(false);
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error('Unknown error'));
+        setLoading(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [serviceId]);
+
+  return { service, loading, error };
 }
 
 const mockServices: ServiceMock[] = [
@@ -185,30 +201,3 @@ const mockServices: ServiceMock[] = [
     volumes: [],
   },
 ];
-
-export function useFetchServices() {
-  const [services, setServices] = useState<ServiceMock[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  useEffect(() => {
-    // Simulate network delay
-    const timer = setTimeout(() => {
-      try {
-        const sorted = [...mockServices].sort((a, b) =>
-          a.id.localeCompare(b.id),
-        );
-        // Return only the first 15 alphabetically sorted services
-        setServices(sorted.slice(0, 15));
-        setLoading(false);
-      } catch (err) {
-        setError(err instanceof Error ? err : new Error('Unknown error'));
-        setLoading(false);
-      }
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  return { services, loading, error };
-}
