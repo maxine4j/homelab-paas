@@ -8,6 +8,7 @@ import { createAuthorizedPaasAdminRequiredMiddleware } from './ingress/auth/auth
 import { Oauth2ProviderRegistry } from './ingress/auth/oauth-provider/registry';
 import { createAuthRouter } from './ingress/auth/auth-router';
 import { AuthService } from './ingress/auth/auth-service';
+import { createPaasUiProxyMiddleware } from './ingress/reverse-proxy/paas-ui-proxy-middleware';
 import { createReverseProxyMiddleware } from './ingress/reverse-proxy/reverse-proxy-middleware';
 import { DnsAcmeChallengeProviderRegistry } from './ingress/tls/dns-challenge/registry';
 import { TlsCertProvisionService } from './ingress/tls/cert-provision-service';
@@ -99,6 +100,7 @@ export const start = async (lifecycle: Lifecycle) => {
       createAuthorizedPaasAdminRequiredMiddleware(authService, configService),
     )
     .use(createServiceRouter(serviceRepository, deploymentRepository).routes())
+    .use(createPaasUiProxyMiddleware(configService, createRequestForwarder()))
     .use(errorMiddleware);
 
   const paasHttpsServer = https.createServer({}, paasKoaApp.callback());

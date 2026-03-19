@@ -15,5 +15,3 @@ services:
     build:
       context: ./
       dockerfile: ./services/paas-ui/Dockerfile
-    ports:
-      - "3000:3000"

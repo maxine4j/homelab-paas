@@ -115,6 +115,10 @@ The backend paas should be developed with good respect for layered architecture.
 
 Each layer should have well defined contracts, and you should confirm the design of these contracts with me during the planning phase.
 
+### Vertical Slicing
+
+Vertical slicing is the practice of delivering a fully functional "sliver" of a feature that touches every layer of the architecture—from the UI and API down to the database—rather than building horizontally (e.g., completing all database schemas first). For this project, a vertical slice must be thin, testable, and provide immediate value. Avoid creating "placeholder" slices that only contain UI elements; every slice should result in a working end-to-end flow, however small, to validate technical assumptions early and reduce integration risk.
+
 ## Architecture
 
 ### Monorepo Structure
@@ -217,12 +221,12 @@ The project includes a React-based frontend built with Vite for the user interfa
 
 - **Location**: `services/paas-ui/`
 - **Framework**: React 19 + TypeScript + Vite 8
-- **Port**: 3000
+- **Port**: Proxied through backend on `paas.rootDomain` (80/443)
 - **Purpose**: User interface for the PaaS
 
 **Access Points**:
 - Backend PaaS: Port 80/443 (HTTP/HTTPS via ingress) on `*.rootDomain`
-- Frontend UI: Port 3000
+- Frontend UI: Served on `paas.rootDomain` via backend ingress (80/443)
 - API endpoints: Port 8443
 
 **Key Files**:
