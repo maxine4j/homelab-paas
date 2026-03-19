@@ -3,12 +3,14 @@ import Button from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 // import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 // import { useState } from 'react'
+import { MainLayout } from '@/components/layout/main-layout'
 
 export default function ServicesPage() {
   // const [isDeployModalOpen, setIsDeployModalOpen] = useState(false)
 
   return (
-    <div className="page-content">
+    <MainLayout>
+      <div className="page-content">
       <div className="page-header">
         <h1>Services</h1>
         <p>Manage and monitor your deployed services</p>
@@ -162,5 +164,6 @@ export default function ServicesPage() {
         </table>
       </div>
     </div>
+    </MainLayout>
   )
 }

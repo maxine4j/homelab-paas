@@ -1,12 +1,32 @@
-# CLAUDE.md
+# Homelab PaaS
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI agents when working with code in this repository.
 
 ## Project Overview
 
 This is a Platform as a Service (PaaS) for homelabs. The system allows users to deploy single-container services with a simple descriptor file, with automatic handling of DNS, TLS, and ingress reverse proxy. It features zero-downtime deployments and GitHub OAuth login.
 
-We have the concept of a service descriptor. Every microservice that we want to deploy into the homelab needs to provide a service descriptor. This descriptor tells paas how to deploy and configure their microservice
+
+### Services
+
+#### paas
+
+- Backend
+- Provides APIs to deploy and manage microservices
+- Runs as a docker container and utilises the docker socket on the system to run microservices as containers
+- Acts as the centralised ingress point for all web traffic
+- Acts as TLS termination
+
+#### paas-ui
+
+- Frontend web interface for managing the homelab paas
+- Basic CSR react app
+
+#### test-service
+
+- Very basic microservice used to test the paas
+- Renders a simple static page
+- Responds to healthchecks at /health
 
 ## Development Commands
 
@@ -23,13 +43,8 @@ yarn build
 # Build docker images for all services
 yarn build:docker
 
-# Build specific service
-cd services/paas
-yarn build
-
-# Build frontend service
-cd services/paas-ui
-yarn build
+# Build a specific service
+yarn workspace <SERVICE_NAME_HERE> build
 ```
 
 ### Testing
@@ -38,11 +53,10 @@ yarn build
 yarn test
 
 # Run tests for specific service
-cd services/paas
-yarn test
+yarn workspace <SERVICE_NAME_HERE> build
 
 # Run tests matching a pattern
-yarn test ./src/**/*-test.ts
+yarn test ./src/**/*.test.ts
 ```
 
 ### Formatting
@@ -51,14 +65,14 @@ yarn test ./src/**/*-test.ts
 yarn format
 
 # Format specific service
-cd services/paas
-yarn format
+yarn workspace <SERVICE_NAME_HERE> format
 ```
 
 ### Running locally
 ```bash
 # Start development environment with Docker Compose
 # This is the priamry way to run the paas locally, it must be running in the conatiner
+# This command can be re-run again to rebuild the paas with the latest changes
 yarn paas:dev
 ```
 
@@ -69,6 +83,38 @@ We can then verify the state of things like the deployed applications by curling
 
 We can also inspect the running containers via the `docker` cli
 
+## Development Methodology
+
+### Strict TDD
+
+All feature work **must** follow the **Red → Green → Refactor** loop:
+
+1. **RED** — Write failing tests first that describe the desired behaviour.
+2. Run tests (`yarn test`) — confirm they **fail** (RED).
+3. **GREEN** — Write the minimal implementation to make the tests pass.
+4. Run tests (`yarn test`) — if still RED, fix the implementation and re-run. Repeat until all tests are **GREEN**.
+5. **REFACTOR** — Clean up the code while keeping tests green.
+6. Run the full build (`yarn build`) — ensure type-checking and bundling both pass.
+7. Repeat for the next feature or behaviour.
+
+#### TDD Rules
+
+- **Never skip the RED step.** Tests must be observed failing before writing implementation code.
+- **Never write implementation code without a corresponding test.**
+- **Run tests after every change** — do not batch up multiple features before verifying.
+- **Keep tests focused and small** — each test should verify one behaviour.
+- **The build must pass** (including TypeScript type-checking) before a feature is considered complete.
+
+#### TDD Exceptions
+
+- **TypeScript types and interfaces do NOT need Jest tests.** Type definitions (`type`, `interface`, `enum`) are validated by the TypeScript compiler at build time (`tsc --noEmit`). Do not write Jest tests solely to verify types — the type-checker is the test. Only write tests for runtime behaviour (functions, classes, logic).
+
+### Layered architecture
+
+The backend paas should be developed with good respect for layered architecture. There should be 3 primary layers, datastore > service > api. These layers, and the components within them, should have distinct bounds and not expose implementation details.
+
+Each layer should have well defined contracts, and you should confirm the design of these contracts with me during the planning phase.
+
 ## Architecture
 
 ### Monorepo Structure
@@ -76,7 +122,7 @@ We can also inspect the running containers via the `docker` cli
 The project uses a monorepo setup with Yarn Workspaces and Turbo for efficient build orchestration.
 
 **Directory Layout:**
-- `services/` - Contains all service packages (e.g., `paas`, `test-service`)
+- `services/` - Contains all service packages (e.g., `paas`, `paas-ui`, `test-service`)
 - Each service is an independent workspace with its own `package.json`
 - Root `package.json` defines workspaces: `"services/*"`
 - Shared configuration files at root level (tsconfig.json, .prettierrc.json, turbo.json)
@@ -99,14 +145,6 @@ services/[service-name]/
 ├── jest.config.ts          # Jest testing configuration
 └── *.sd.yaml               # Service descriptor, this is a descriptor for the microservice. Not applicible to paas and paas-ui
 ```
-For the frontend UI (React + Vite), see `services/paas-ui/`
-
-**Docker Build Pattern:**
-Each service uses a multi-stage Dockerfile:
-1. **base**: Node.js 22, enables corepack, adds Turbo 2, disables telemetry
-2. **builder**: Copies all files, runs `turbo prune [service-name] --docker`
-3. **installer**: Copies pruned files, runs `yarn install --frozen-lockfile`, then `turbo run build --filter=[service-name]`
-4. **runner**: Copies node_modules and dist, exposes port, runs the service
 
 **TypeScript Configuration:**
 - Root `tsconfig.json` extends `@tsconfig/node20`
@@ -116,24 +154,23 @@ Each service uses a multi-stage Dockerfile:
 **Testing:**
 - All services use Jest with `ts-jest` preset
 - Test environment: `node`
-- Test files: `*.test.ts` or `*-test.ts` pattern
+- Test files: `*.test.ts` pattern
 - Supertest used for HTTP endpoint testing
 
-**Service Descriptor (.sd.yaml):**
-Optional configuration for deployment:
-```yaml
-{
-  "serviceId": "test-service",
-  "image": "test-service:latest",
-  "networking": {
-    "ingress": {
-      "containerPort": 8080
-    }
-  }
-}
-```
+### Core Concepts
 
-### Core Components
+#### Service Descriptor
+
+Every microservice that we want to deploy into the homelab needs to provide a service descriptor. This descriptor tells paas how to deploy and configure their microservice. These files follow the convention `service-name.sd.yaml`
+
+The primary configuration schema for deployed services:
+- `serviceId`: Unique identifier (max 16 chars)
+- `image`: Docker image to run
+- `networking.ingress`: Container port, public flag, authorized users
+- `networking.serviceProxy`: Ingress/egress aliases for mesh networking
+- `networking.hostPorts`: Optional port mappings
+- `environment`: Environment variables
+- `volumes`: Optional volume mounts
 
 #### Task System
 The system uses a task-based architecture for background operations:
@@ -150,7 +187,7 @@ All persistence uses the `KeyValueStore<TValue>` interface:
 - **DeploymentRepository**: Manages deployment records in `deployments.db`
 - **SqliteKeyValueStore**: SQLite-based implementation with database filename and table name configuration
 
-#### Service Deployment Flow
+#### Microservice Deployment Flow
 1. Service descriptor validated via Zod schema
 2. Deployment task enqueued with unique deploymentId
 3. QueueTaskRunner picks up task and executes deploy logic
@@ -180,23 +217,12 @@ The project includes a React-based frontend built with Vite for the user interfa
 
 - **Location**: `services/paas-ui/`
 - **Framework**: React 19 + TypeScript + Vite 8
-- **Port**: 3000 (direct access via Nginx)
-- **Purpose**: User interface for the PaaS platform
-
-**Development Commands**:
-```bash
-# Build the frontend
-cd services/paas-ui
-yarn build
-
-# Build Docker image for frontend
-cd services/paas-ui
-yarn build:docker
-```
+- **Port**: 3000
+- **Purpose**: User interface for the PaaS
 
 **Access Points**:
 - Backend PaaS: Port 80/443 (HTTP/HTTPS via ingress) on `*.rootDomain`
-- Frontend UI: Port 3000 (direct access)
+- Frontend UI: Port 3000
 - API endpoints: Port 8443
 
 **Key Files**:
@@ -211,20 +237,9 @@ yarn build:docker
 - Multi-stage Dockerfile following the project's Docker build pattern (base → builder → installer → runner)
 - Served by Nginx in production Docker image
 - Currently in early development (placeholder implementation)
-- Follows same monorepo architecture as backend services
 - Uses Yarn 4.4.0 and Turbo for build orchestration
 
 ### Key Patterns
-
-#### Service Descriptor
-The primary configuration schema for deployed services:
-- `serviceId`: Unique identifier (max 16 chars)
-- `image`: Docker image to run
-- `networking.ingress`: Container port, public flag, authorized users
-- `networking.serviceProxy`: Ingress/egress aliases for mesh networking
-- `networking.hostPorts`: Optional port mappings
-- `environment`: Environment variables
-- `volumes`: Optional volume mounts
 
 #### Authentication
 - GitHub OAuth2 via `AuthService` with provider registry
@@ -242,7 +257,7 @@ The primary configuration schema for deployed services:
 ### Configuration Service
 - YAML-based configuration loaded at startup
 - Hot-reload task checks for changes every 15 minutes
-- Configuration file location: `/etc/homelab-paas/config.yaml`
+- Configuration file location: `paas-config/config.yaml`
 
 ### Key Configuration Fields
 ```yaml
@@ -278,3 +293,4 @@ All services use Jest with ts-jest:
 - All async operations should use lifecycle-aware task runners
 - Avoid using external services in tests (use in-memory stores where possible)
 - The system is designed for homelab use, not production deployment
+- AVOID use of any

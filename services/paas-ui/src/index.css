@@ -600,13 +600,14 @@ a:hover {
 }
 
 /* Sidebar styles */
-.sidebar {
+.main-layout .sidebar {
   width: 250px;
   background-color: var(--sidebar-bg);
   border-right: 1px solid var(--sidebar-border);
+  flex-shrink: 0;
 }
 
-.sidebar-header {
+.main-layout .sidebar-header {
   height: 64px;
   display: flex;
   align-items: center;
@@ -614,22 +615,22 @@ a:hover {
   border-bottom: 1px solid var(--sidebar-border);
 }
 
-.sidebar-header .logo-icon {
+.main-layout .sidebar-header .logo-icon {
   color: var(--primary);
 }
 
-.sidebar-header .logo-text {
+.main-layout .sidebar-header .logo-text {
   margin-left: 0.75rem;
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--foreground);
 }
 
-.sidebar-nav {
+.main-layout .sidebar-nav {
   padding: 1rem 0;
 }
 
-.sidebar-nav a {
+.main-layout .sidebar-nav a {
   display: flex;
   align-items: center;
   padding: 0.625rem 1rem;
@@ -640,33 +641,33 @@ a:hover {
   transition: all 0.2s;
 }
 
-.sidebar-nav a:hover {
+.main-layout .sidebar-nav a:hover {
   background-color: var(--sidebar-hover);
   color: var(--sidebar-text-hover);
 }
 
-.sidebar-nav a.active {
+.main-layout .sidebar-nav a.active {
   background-color: var(--sidebar-active);
   color: var(--sidebar-active-text);
 }
 
-.sidebar-nav a .nav-icon {
+.main-layout .sidebar-nav a .nav-icon {
   width: 1.25rem;
   height: 1.25rem;
 }
 
-.sidebar-nav a .nav-text {
+.main-layout .sidebar-nav a .nav-text {
   margin-left: 0.75rem;
   font-size: 0.875rem;
   font-weight: 500;
 }
 
-.sidebar-footer {
+.main-layout .sidebar-footer {
   padding: 1rem;
   border-top: 1px solid var(--sidebar-border);
 }
 
-.sidebar-footer button {
+.main-layout .sidebar-footer button {
   display: flex;
   align-items: center;
   width: 100%;
@@ -682,17 +683,17 @@ a:hover {
   font-weight: 500;
 }
 
-.sidebar-footer button:hover {
+.main-layout .sidebar-footer button:hover {
   background-color: var(--sidebar-hover);
   color: var(--sidebar-text-hover);
 }
 
-.sidebar-footer button .footer-icon {
+.main-layout .sidebar-footer button .footer-icon {
   width: 1.25rem;
   height: 1.25rem;
 }
 
-.sidebar-footer button .footer-text {
+.main-layout .sidebar-footer button .footer-text {
   margin-left: 0.75rem;
 }
 
