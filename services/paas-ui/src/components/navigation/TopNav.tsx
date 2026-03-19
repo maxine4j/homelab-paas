@@ -36,7 +36,7 @@ export function TopNav() {
               <ul className="dropdown-list">
                 {services.map((svc) => (
                   <li key={svc.id}>
-                    <Link to={`/services/${svc.id}`}>{svc.name}</Link>
+                    <Link to={`/services/${svc.id}`}>{svc.id}</Link>
                   </li>
                 ))}
               </ul>
