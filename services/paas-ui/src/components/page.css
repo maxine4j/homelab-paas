@@ -1,3 +1,4 @@
 .page-container {
-    background-color: rgb(38, 36, 40);
+    background-color: transparent;
+    padding: 0 32px;
 }
