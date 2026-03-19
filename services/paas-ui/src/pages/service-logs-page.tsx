@@ -1,5 +1,5 @@
-import { PageContianer } from "@/components/page";
+import { PageContianer } from '@/components/page';
 
 export const ServiceLogsPage = () => {
-    return <PageContianer title="Logs" />
-}
+  return <PageContianer title="Logs" />;
+};

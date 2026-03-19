@@ -1,18 +1,17 @@
-import { FunctionComponent, PropsWithChildren } from "react";
-import "./page.css";
+import { FunctionComponent, PropsWithChildren } from 'react';
+import './page.css';
 
 interface PageContianerProps {
-    title: string,
+  title: string;
 }
 
-export const PageContianer: FunctionComponent<PropsWithChildren<PageContianerProps>> = ({
-    title,
-    children
-}) => {
-    return (
-        <div className="page-container">
-            <h1>{title}</h1>
-            {children}
-        </div>
-    );
+export const PageContianer: FunctionComponent<
+  PropsWithChildren<PageContianerProps>
+> = ({ title, children }) => {
+  return (
+    <div className="page-container">
+      <h1>{title}</h1>
+      {children}
+    </div>
+  );
 };

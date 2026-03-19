@@ -1,5 +1,5 @@
-import { PageContianer } from "@/components/page";
+import { PageContianer } from '@/components/page';
 
 export const DashboardPage = () => {
-    return <PageContianer title="Homelab Dashboard" />
-}
+  return <PageContianer title="Homelab Dashboard" />;
+};

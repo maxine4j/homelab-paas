@@ -1,72 +1,11 @@
-/* Global Reset */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif,
+    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
-html,
-body {
-  height: 100vh;
-  width: 100vw;
-  overflow-x: hidden;
-}
-
-body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background-color: #121212;
-  color: #e0e0e0;
-  line-height: 1.6;
-}
-
-/* Typography */
-h1,
-h2,
-h3 {
-  color: #ffffff;
-  margin-top: 0;
-  margin-bottom: 1rem;
-}
-
-h1 {
-  font-size: 2rem;
-  font-weight: 600;
-}
-
-h2 {
-  font-size: 1.75rem;
-  font-weight: 600;
-}
-
-h3 {
-  font-size: 1.5rem;
-  font-weight: 500;
-}
-
-/* Links */
-a {
-  color: #a8e6cf;
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-
-a:hover {
-  color: #96d6b8;
-}
-
-/* Selection */
-::selection {
-  background-color: rgba(168, 230, 207, 0.3);
-  color: #ffffff;
-}
-
-/* Focus rings */
-*:focus {
-  outline: 2px solid #a8e6cf;
-  outline-offset: 2px;
-}
-
-/* Scrollbar styling */
+/* Custom scrollbar styling */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

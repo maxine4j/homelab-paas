@@ -1,10 +1,10 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { DashboardPage } from './pages/dashboard-page'
-import { ServiceDirectoryPage } from './pages/service-directory-page'
-import { ServiceOverviewPage } from './pages/service-overview-page'
-import { ServiceLogsPage } from './pages/service-logs-page'
-import { SettingsPage } from './pages/settings-page'
-import { TopNav } from './components/navigation/TopNav'
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { DashboardPage } from './pages/dashboard-page';
+import { ServiceDirectoryPage } from './pages/service-directory-page';
+import { ServiceOverviewPage } from './pages/service-overview-page';
+import { ServiceLogsPage } from './pages/service-logs-page';
+import { SettingsPage } from './pages/settings-page';
+import { TopNav } from './components/navigation/TopNav';
 
 export function App() {
   return (
@@ -18,5 +18,5 @@ export function App() {
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>
     </BrowserRouter>
-  )
+  );
 }
