@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { PageContainer } from '@/components/page';
 import { useFetchServices } from '@/hooks/fetch-services';
 import { CircleIcon } from '@/components/icons/circle';
@@ -11,17 +12,17 @@ export const ServiceDirectoryPage = () => {
   const { services, loading, error } = useFetchServices();
 
   if (loading) {
-    return <PageContainer title="Services">Loading services...</PageContainer>;
+    return <PageContainer>Loading services...</PageContainer>;
   }
 
   if (error) {
     return (
-      <PageContainer title="Services">Failed to load services</PageContainer>
+      <PageContainer>Failed to load services</PageContainer>
     );
   }
 
   return (
-    <PageContainer title="Services">
+    <PageContainer>
       <div className="min-w-full divide-y divide-white/10">
         <table className="min-w-full divide-y divide-white/10">
           <thead className="bg-[#1e1e1e]">
@@ -46,8 +47,13 @@ export const ServiceDirectoryPage = () => {
                 <td className="px-6 py-4 whitespace-nowrap">
                   <CircleIcon color={getStatusColor(service.status)} />
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-200">
-                  {service.id}
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                  <Link
+                    to={`/services/${service.id}`}
+                    className="text-gray-200 hover:text-white hover:underline transition-colors"
+                  >
+                    {service.id}
+                  </Link>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                   {service.ownerId}

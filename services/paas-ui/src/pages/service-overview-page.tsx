@@ -12,7 +12,7 @@ export const ServiceOverviewPage = () => {
 
   if (loading) {
     return (
-      <PageContainer title="Service Overview">
+      <PageContainer>
         <div className="text-gray-400">Loading service details...</div>
       </PageContainer>
     );
@@ -20,7 +20,7 @@ export const ServiceOverviewPage = () => {
 
   if (error) {
     return (
-      <PageContainer title="Service Overview">
+      <PageContainer>
         <div className="text-red-400">Error: {error.message}</div>
       </PageContainer>
     );
@@ -28,15 +28,15 @@ export const ServiceOverviewPage = () => {
 
   if (!service) {
     return (
-      <PageContainer title="Service Overview">
+      <PageContainer>
         <div className="text-gray-400">Service not found</div>
       </PageContainer>
     );
   }
 
   return (
-    <PageContainer title="Service Overview">
-      <Breadcrumbs />
+    <PageContainer>
+      <Breadcrumbs serviceId={service.id} />
       <div className="flex">
         <ServiceSidebar serviceId={service.id} />
         <main className="flex-1 min-w-0">
