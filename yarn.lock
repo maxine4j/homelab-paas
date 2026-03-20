@@ -753,6 +753,14 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@homelab-paas/shared-contracts@workspace:*, @homelab-paas/shared-contracts@workspace:packages/shared-contracts":
+  version: 0.0.0-use.local
+  resolution: "@homelab-paas/shared-contracts@workspace:packages/shared-contracts"
+  dependencies:
+    typescript: "npm:^5.0.0"
+  languageName: unknown
+  linkType: soft
+
 "@humanfs/core@npm:^0.19.1":
   version: 0.19.1
   resolution: "@humanfs/core@npm:0.19.1"
@@ -6757,6 +6765,7 @@ __metadata:
   resolution: "paas-ui@workspace:services/paas-ui"
   dependencies:
     "@fontsource-variable/inter": "npm:^5.2.8"
+    "@homelab-paas/shared-contracts": "workspace:*"
     "@tailwindcss/vite": "npm:^4.2.2"
     "@types/node": "npm:^25.5.0"
     "@types/react": "npm:^19.2.14"
@@ -6786,6 +6795,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "paas@workspace:services/paas"
   dependencies:
+    "@homelab-paas/shared-contracts": "workspace:*"
     "@koa/bodyparser": "npm:^6.1.0"
     "@koa/router": "npm:^15.4.0"
     "@types/better-sqlite3": "npm:^7.6.13"
@@ -8327,7 +8337,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@npm:^5.9.3, typescript@npm:~5.9.3":
+"typescript@npm:^5.0.0, typescript@npm:^5.9.3, typescript@npm:~5.9.3":
   version: 5.9.3
   resolution: "typescript@npm:5.9.3"
   bin:
@@ -8337,7 +8347,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@patch:typescript@npm%3A^5.9.3#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A~5.9.3#optional!builtin<compat/typescript>":
+"typescript@patch:typescript@npm%3A^5.0.0#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.9.3#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A~5.9.3#optional!builtin<compat/typescript>":
   version: 5.9.3
   resolution: "typescript@patch:typescript@npm%3A5.9.3#optional!builtin<compat/typescript>::version=5.9.3&hash=74658d"
   bin:

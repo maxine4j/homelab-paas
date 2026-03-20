@@ -16,7 +16,8 @@
     "paas:dev": "docker compose -f ./compose.local.yaml up --build"
   },
   "workspaces": [
-    "services/*"
+    "services/*",
+    "packages/*"
   ],
   "devDependencies": {
     "@tsconfig/node24": "^24.0.4",

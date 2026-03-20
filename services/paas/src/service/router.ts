@@ -5,20 +5,7 @@ import {
 } from './deployment/repository';
 import { ServiceRepository } from './repository';
 import { ServiceDescriptor } from './service-descriptor';
-
-// Service summary DTO matching frontend expectations
-export interface ServiceSummary {
-  id: string;
-  status: 'healthy' | 'unhealthy';
-  replicas: number;
-  ownerId: string;
-  image: string;
-  port: number;
-  serviceProxy: string[];
-  hostPorts: Record<string, number>;
-  environment: Record<string, string>;
-  volumes: Array<{ containerPath: string; hostPath: string }>;
-}
+import { ServiceSummary } from '@homelab-paas/shared-contracts';
 
 export const createServiceRouter = (
   serviceRepository: ServiceRepository,
@@ -92,8 +79,8 @@ export const createServiceRouter = (
   };
 
   return new Router()
-    .get('/service/:serviceId/summary', getServiceSummary)
-    .get('/services', getAllServices);
+    .get('/api/service/:serviceId/summary', getServiceSummary)
+    .get('/api/services', getAllServices);
 };
 
 const byDeploymentCreatedAt = (

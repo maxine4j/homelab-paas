@@ -29,6 +29,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@homelab-paas/shared-contracts": "workspace:*",
     "@koa/bodyparser": "^6.1.0",
     "@koa/router": "^15.4.0",
     "acme-client": "^5.4.0",

@@ -18,7 +18,7 @@ const main = async () => {
 
   console.log(`Deploying ${serviceDescriptorPath} to ${paasBaseUrl}`);
 
-  const response = await fetch(`${paasBaseUrl}/service/deploy`, {
+  const response = await fetch(`${paasBaseUrl}/api/deploy`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -4,7 +4,7 @@ import { Breadcrumbs } from '@/components/service-overview/Breadcrumbs';
 import { ServiceSidebar } from '@/components/service-overview/ServiceSidebar';
 import { ServiceHeader } from '@/components/service-overview/ServiceHeader';
 import { DetailCard } from '@/components/service-overview/DetailCard';
-import { useServiceDetail } from '@/hooks/service-detail';
+import { useServiceDetail } from '@/hooks/use-service-detail';
 
 export const ServiceOverviewPage = () => {
   const { serviceId } = useParams<{ serviceId: string }>();

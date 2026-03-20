@@ -2,6 +2,7 @@
 
 !src
 !services
+!packages
 !package.json
 !yarn.lock
 !tsconfig.json

@@ -1,7 +1,7 @@
-import { ServiceMock } from '@/hooks/fetch-services';
+import { ServiceSummary } from '@homelab-paas/shared-contracts';
 
 interface DetailCardProps {
-  service: ServiceMock;
+  service: ServiceSummary;
 }
 
 export const DetailCard = ({ service }: DetailCardProps) => {

@@ -6,6 +6,8 @@ RUN turbo telemetry disable
 
 FROM base AS builder
 COPY . .
+# Include workspace packages in the build context for proper dependency resolution
+COPY ./packages ./packages
 RUN turbo prune paas-ui --docker
 
 FROM base AS installer
@@ -13,7 +15,7 @@ COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/yarn.lock ./yarn.lock
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 COPY --from=builder /app/.yarnrc.yml ./.yarnrc.yml
-RUN yarn install --frozen-lockfile
+RUN yarn install --immutable
 COPY --from=builder /app/out/full/ .
 RUN yarn turbo run build --filter=paas-ui
 

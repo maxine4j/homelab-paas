@@ -55,5 +55,5 @@ export const createDeployRouter = (
     };
   };
 
-  return new Router().post('/service/deploy', postDeploy);
+  return new Router().post('/api/deploy', postDeploy);
 };
