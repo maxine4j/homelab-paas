@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { PageContainer } from '@/components/page';
-import { useFetchServices } from '@/hooks/fetch-services';
+import { useServiceDirectory } from '@/hooks/use-service-directory';
 import { CircleIcon } from '@/components/icons/circle';
 
 // Helper function to map service status to icon color
@@ -9,7 +9,7 @@ const getStatusColor = (status: 'healthy' | 'unhealthy'): 'green' | 'red' => {
 };
 
 export const ServiceDirectoryPage = () => {
-  const { services, loading, error } = useFetchServices();
+  const { services, loading, error } = useServiceDirectory();
 
   if (loading) {
     return <PageContainer>Loading services...</PageContainer>;

@@ -29,6 +29,7 @@ import { createDeployRouter } from './service/deployment/router';
 import { DeployService } from './service/deployment/service';
 import { ServiceRecord, ServiceRepository } from './service/repository';
 import { createServiceRouter } from './service/router';
+import { ServiceQueryHandler } from './service/service-query-handler';
 import { SqliteKeyValueStore } from './store/sqlite';
 import { PeriodicTaskRunner } from './task/periodic';
 import { InMemoryTaskQueue, QueueTaskRunner } from './task/queue';
@@ -78,6 +79,10 @@ export const start = async (lifecycle: Lifecycle) => {
     configService,
     new DnsAcmeChallengeProviderRegistry(configService),
   );
+  const serviceQueryHandler = new ServiceQueryHandler(
+    serviceRepository,
+    deploymentRepository,
+  );
 
   // ==================== primary paas web server ====================
 
@@ -99,7 +104,7 @@ export const start = async (lifecycle: Lifecycle) => {
     .use(
       createAuthorizedPaasAdminRequiredMiddleware(authService, configService),
     )
-    .use(createServiceRouter(serviceRepository, deploymentRepository).routes())
+    .use(createServiceRouter(serviceQueryHandler).routes())
     .use(createPaasUiProxyMiddleware(configService, createRequestForwarder()))
     .use(errorMiddleware);
 

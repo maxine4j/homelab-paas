@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ServiceSummary } from '@homelab-paas/shared-contracts';
 
-export function useFetchServices() {
+export function useServiceDirectory() {
   const [services, setServices] = useState<ServiceSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -24,10 +24,7 @@ export function useFetchServices() {
       }
     };
 
-    // Small delay to simulate network request for consistency
-    const timer = setTimeout(fetchServices, 500);
-
-    return () => clearTimeout(timer);
+    fetchServices();
   }, []);
 
   return { services, loading, error };

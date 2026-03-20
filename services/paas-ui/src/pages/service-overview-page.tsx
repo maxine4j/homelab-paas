@@ -8,6 +8,7 @@ import { useServiceDetail } from '@/hooks/use-service-detail';
 
 export const ServiceOverviewPage = () => {
   const { serviceId } = useParams<{ serviceId: string }>();
+  console.log({ serviceId })
   const { service, loading, error } = useServiceDetail(serviceId || '');
 
   if (loading) {

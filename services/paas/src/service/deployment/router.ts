@@ -14,15 +14,20 @@ export const createDeployRouter = (
   deployService: DeployService,
 ) => {
   const postDeploy = async (ctx: Context) => {
-    const deployToken = parseBearerToken(ctx.headers['authorization']);
-    if (!deployToken) {
-      ctx.status = 401;
+    const { serviceDescriptor: sdRaw } = ctx.request.body as {
+      serviceDescriptor?: string;
+    };
+
+    if (!sdRaw) {
+      ctx.status = 400;
+      ctx.body = { message: 'serviceDescriptor is required' };
       return;
     }
 
     let serviceDescriptor: ServiceDescriptor;
     try {
-      serviceDescriptor = validate(ctx.request.body, ServiceDescriptor);
+      const sdParsed = yaml.parse(sdRaw);
+      serviceDescriptor = validate(sdParsed, ServiceDescriptor);
     } catch (error) {
       logger.info({ error }, 'Failed to validate service descriptor');
       if (error instanceof ValidationError) {
@@ -34,6 +39,12 @@ export const createDeployRouter = (
         return;
       }
       throw error;
+    }
+
+    const deployToken = parseBearerToken(ctx.headers['authorization']);
+    if (!deployToken) {
+      ctx.status = 401;
+      return;
     }
 
     if (

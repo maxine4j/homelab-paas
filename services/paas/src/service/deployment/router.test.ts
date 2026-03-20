@@ -34,7 +34,7 @@ describe('service deploy router', () => {
   });
 
   test('should response with 400 and validation errors when sd is invalid', async () => {
-    const response = await supertest(server).post('/service/deploy').send({
+    const response = await supertest(server).post('/api/deploy').send({
       serviceDescriptor: 'invalid',
     });
 
@@ -44,7 +44,7 @@ describe('service deploy router', () => {
 
   test('should respond with 401 and not start deployment when no auth header', async () => {
     const response = await supertest(server)
-      .post('/service/deploy')
+      .post('/api/deploy')
       .send({
         serviceDescriptor: yaml.stringify(mockServiceDescriptor),
       });
@@ -57,7 +57,7 @@ describe('service deploy router', () => {
     mockAuthService.isDeployTokenAuthorized.mockReturnValue(false);
 
     const response = await supertest(server)
-      .post('/service/deploy')
+      .post('/api/deploy')
       .set('Authorization', 'Bearer not-authorized')
       .send({
         serviceDescriptor: yaml.stringify(mockServiceDescriptor),
@@ -75,7 +75,7 @@ describe('service deploy router', () => {
     });
 
     const response = await supertest(server)
-      .post('/service/deploy')
+      .post('/api/deploy')
       .set('Authorization', 'Bearer authorized')
       .send({
         serviceDescriptor: yaml.stringify(mockServiceDescriptor),

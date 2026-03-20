@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useFetch } from './use-fetch'; // Assuming you have a useFetch hook created
+import { useFetch } from './use-fetch';
 import { ServiceSummary } from '@homelab-paas/shared-contracts';
 
 /**
@@ -21,7 +21,7 @@ export const fetchServiceDetail = async (serviceId: string): Promise<ServiceSumm
   const data = await response.json();
   
   // Simple validation - ensure we have required fields
-  if (!data.id || !data.name) {
+  if (!data.id) {
     throw new Error('Invalid service data received');
   }
   
