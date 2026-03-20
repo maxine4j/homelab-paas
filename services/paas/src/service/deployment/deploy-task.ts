@@ -23,6 +23,34 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
     private readonly waitConfig = { maxAttempts: 5, delayMs: 5_000 },
   ) {}
 
+  public async run(taskEnvelope: TaskEnvelope<DeployTaskDescriptor>) {
+    const {
+      taskId,
+      task: { serviceId, deploymentId, serviceDescriptor },
+    } = taskEnvelope;
+
+    const baseLogContext = { taskId, serviceId, deploymentId };
+    logger.info(baseLogContext, 'Starting deploy task');
+
+    await this.createServiceIfNotExists(serviceId);
+
+    await this.deploymentRepository.createDeployment(
+      deploymentId,
+      serviceDescriptor,
+    );
+    logger.info(baseLogContext, 'Created new deployment');
+
+    try {
+      await this.deploy(taskEnvelope);
+    } catch (error) {
+      logger.error({ error }, 'Marking deployment as failed');
+      await this.deploymentRepository.markDeploymentFailed(
+        deploymentId,
+        String(error),
+      );
+    }
+  }
+
   private async createServiceIfNotExists(serviceId: string) {
     const service = await this.serviceRepository.queryService(serviceId);
     if (!service) {
@@ -126,33 +154,5 @@ export class DeployTask implements QueueTask<DeployTaskDescriptor> {
     await this.networkService.configureServiceNetwork(serviceId);
 
     logger.info(baseLogContext, 'Deployment complete');
-  }
-
-  public async run(taskEnvelope: TaskEnvelope<DeployTaskDescriptor>) {
-    const {
-      taskId,
-      task: { serviceId, deploymentId, serviceDescriptor },
-    } = taskEnvelope;
-
-    const baseLogContext = { taskId, serviceId, deploymentId };
-    logger.info(baseLogContext, 'Starting deploy task');
-
-    await this.createServiceIfNotExists(serviceId);
-
-    await this.deploymentRepository.createDeployment(
-      deploymentId,
-      serviceDescriptor,
-    );
-    logger.info(baseLogContext, 'Created new deployment');
-
-    try {
-      await this.deploy(taskEnvelope);
-    } catch (error) {
-      logger.error({ error }, 'Marking deployment as failed');
-      await this.deploymentRepository.markDeploymentFailed(
-        deploymentId,
-        String(error),
-      );
-    }
   }
 }
