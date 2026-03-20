@@ -10,8 +10,11 @@ if (!pinoInstance) {
 
 export const logger: Logger = pinoInstance;
 
-export const createRequestLogger = (): Middleware =>
+export const createRequestLogger = (serverName: string): Middleware =>
   koaPino({
+    base: {
+      server: serverName,
+    },
     redact: {
       paths: [
         'req.headers.cookie',
@@ -19,4 +22,4 @@ export const createRequestLogger = (): Middleware =>
         'res.headers["set-cookie"]',
       ],
     },
-  });
+  }) as unknown as Middleware;

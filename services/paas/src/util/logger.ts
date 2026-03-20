@@ -22,4 +22,4 @@ export const createRequestLogger = (serverName: string): Middleware =>
         'res.headers["set-cookie"]',
       ],
     },
-  });
+  }) as unknown as Middleware;

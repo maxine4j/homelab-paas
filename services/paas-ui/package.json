@@ -9,7 +9,8 @@
     "build": "tsc -b && vite build",
     "build:docker": "docker build -t paas-ui:latest -f ./Dockerfile ../../",
     "format": "prettier ./src --write",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",

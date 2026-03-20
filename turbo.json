@@ -6,6 +6,7 @@
     },
     "build:docker": {},
     "format": {},
-    "test": {}
+    "test": {},
+    "typecheck": {}
   }
 }

@@ -12,6 +12,7 @@
     "build:docker": "turbo build:docker",
     "format": "turbo format",
     "test": "turbo test",
+    "typecheck": "turbo typecheck",
     "paas:dev": "docker compose -f ./compose.local.yaml up --build"
   },
   "workspaces": [
