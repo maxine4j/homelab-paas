@@ -1,6 +1,6 @@
 # CP-04 — Implement controller persistence
 
-Milestone: [M1](../_milestones.md) · Status: Not started · PR: —
+Milestone: [M1](../_milestones.md) · Status: Complete · PR: — (local commit workflow)
 
 Implement the approved atomic YAML metadata snapshot at `_platform/state/controller.yaml` and lifetime OS lock on `_platform/state/controller.lock`.
 
@@ -24,9 +24,9 @@ Implement the approved atomic YAML metadata snapshot at `_platform/state/control
 
 ## Acceptance criteria
 
-- [ ] Interrupted writes recover a complete committed state without lost identities or fabricated successful operations.
-- [ ] Migration failure, full disk, unwritable paths, and competing writers produce typed actionable errors.
-- [ ] Store operations preserve secret separation and can support restart-safe enrollment and reconciliation.
+- [x] Interrupted writes recover a complete committed state without lost identities or fabricated successful operations.
+- [x] Migration failure, full disk, unwritable paths, and competing writers produce typed actionable errors.
+- [x] Store operations preserve secret separation and can support restart-safe enrollment and reconciliation.
 
 ## Verification
 
@@ -34,5 +34,9 @@ Run persistence fault-injection and restart tests, migration fixtures, and concu
 
 ## Completion
 
-- [ ] Scope, acceptance criteria, and verification are complete; record evidence and the PR link here.
-- [ ] Update this ticket's status and the corresponding checkbox in [the milestone index](../_milestones.md).
+- [x] Scope, acceptance criteria, and verification are complete; record evidence and the PR link here.
+- [x] Update this ticket's status and the corresponding checkbox in [the milestone index](../_milestones.md).
+
+Evidence (2026-10-18): strict red/green tests cover atomic commit/restart, partial writes and injected full-disk/file-sync/rename/directory-sync failures, lost responses, halted effect admission, shutdown draining, immutable identities and operation intents, stale commit/record generations, bounded capacity, malformed/duplicate/unknown YAML, migration backups/failure, wrong bindings, missing existing state, and unsafe/unwritable entries. A real child process verifies lock contention and crash release. Desired descriptor content uses a validated typed extension point inside the sole YAML snapshot; CP-05 supplies its canonical schema, and CP-06 wires startup/effect dispatch. No domain workflows or external effects were added.
+
+Validation: `bazel build //:check //services/control-plane:control-plane //services/paas-ui:bundle` and `bazel test //...` pass. Fault injection establishes the commit/recovery protocol; privileged appliance/power-loss acceptance remains separate. No PR was created, per the requested local-only workflow.
