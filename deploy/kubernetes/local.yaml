@@ -7,18 +7,18 @@ metadata:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: control-plane
+  name: paas
   namespace: homelab-paas
 spec:
   replicas: 1
   revisionHistoryLimit: 2
   selector:
     matchLabels:
-      app: control-plane
+      app: paas
   template:
     metadata:
       labels:
-        app: control-plane
+        app: paas
     spec:
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 15
@@ -29,8 +29,8 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: control-plane
-          image: homelab-paas/control-plane:dev
+        - name: paas
+          image: homelab-paas/paas:dev
           imagePullPolicy: Never
           ports:
             - containerPort: 8080
@@ -61,12 +61,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: control-plane
+  name: paas
   namespace: homelab-paas
 spec:
   type: NodePort
   selector:
-    app: control-plane
+    app: paas
   ports:
     - name: http
       port: 8080

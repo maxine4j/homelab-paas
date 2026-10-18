@@ -12,7 +12,7 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck",
-    "dev": "pnpm --filter @homelab-paas/shared-contracts build && pnpm --parallel --filter @homelab-paas/control-plane --filter @homelab-paas/ui dev",
+    "dev": "pnpm --filter @homelab-paas/shared-contracts build && pnpm --parallel --filter @homelab-paas/paas --filter @homelab-paas/ui dev",
     "image": "python3 scripts/build-image.py",
     "dev:deploy": "python3 scripts/dev-deploy.py"
   },

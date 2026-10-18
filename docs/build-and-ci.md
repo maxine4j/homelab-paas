@@ -1,8 +1,8 @@
 # Build tooling, CI, and image packaging
 
-Status: agreed project specification. The control plane uses TypeScript, Node 24, Fastify, and a top-level pnpm workspace. Ask the owner, with a recommendation, before adding any third-party dependency not already authorized.
+Status: agreed project specification. The control plane uses TypeScript, Node 24, Koa, and a top-level pnpm workspace. Ask the owner, with a recommendation, before adding any third-party dependency not already authorized.
 
-Read when changing workspace scripts, toolchains, dependency integration, contract generation, image packaging, or GitHub Actions. Running existing checks does not require this guide.
+Read when changing workspace scripts, toolchains, dependency integration, image packaging, or GitHub Actions. Running existing checks does not require this guide.
 
 ## Ownership and toolchains
 
@@ -12,16 +12,16 @@ Read when changing workspace scripts, toolchains, dependency integration, contra
 - Recursive type definitions are forbidden. The local Oxlint plugin in `scripts/lint-rules.mjs` rejects direct and mutual alias/interface recursion within a module; `import/no-cycle` includes type imports to reject cycles across modules. Prefer explicit finite types over recursive helpers such as `DeepReadonly`. `pnpm test:tooling` runs the rule's Vitest fixtures and real-linter integration test as part of `pnpm test`.
 - Node's built-in TypeScript stripping supports small development/build scripts. Production runs compiled JavaScript; do not add a runtime TypeScript loader or another repository task orchestrator.
 - `pnpm install --frozen-lockfile` prepares dependencies. Build/check/test scripts do not install dependencies or contact external services.
-- Shared public JSON Schemas in `packages/shared-contracts/src/schemas.ts` are canonical. The shared package generates TypeScript declarations with the existing `json-schema-to-typescript` tool and validates runtime inputs with Ajv. Both services depend on that package through `workspace:*`; never copy wire types or import backend adapters into the browser.
-- Generated source lives in ignored `packages/shared-contracts/src/generated/`; compiled packages and the SPA use ignored `dist/` directories. Run shared generation before compiling consumers. A backend-only build requires the shared package but no frontend build.
-- Root `pnpm build` runs workspace packages in dependency order. `pnpm check` runs format, lint, generation and type checks; `pnpm test` runs Vitest across packages. Unit tests never start Docker or k3d.
+- Shared TypeScript contracts in `packages/shared-contracts/src/index.ts` are canonical and are compiled directly, without code generation. Both services depend on that package through `workspace:*`; never copy wire types or import backend adapters into the browser. Use Zod at untrusted runtime boundaries.
+- Compiled packages and the SPA use ignored `dist/` directories. Build shared contracts before compiling consumers. A backend-only build requires the shared package but no frontend build.
+- Root `pnpm build` runs workspace packages in dependency order. `pnpm check` runs format, lint, and type checks; `pnpm test` runs Vitest across packages with runtime tests. Unit tests never start Docker or k3d.
 - Use `pnpm format` to format the repository, and `pnpm dev` for the backend and Vite development servers. Vite proxies API requests to the backend.
 
 ## Shared contracts
 
-The initial models are a nonempty `CredentialReference` string and strict `ApiError` objects with closed error/diagnostic codes. Runtime validation rejects unknown fields and codes. Errors expose controlled field paths and stable codes, never rejected values or resolved credentials.
+The initial types are a `CredentialReference` string and `ApiError` objects with closed error/diagnostic codes. Types alone do not validate runtime input; adapters must validate untrusted values with Zod. Errors expose controlled field paths and stable codes, never rejected values or resolved credentials.
 
-Shared fixture tests validate `packages/shared-contracts/tests/fixtures.json`; compiler fixtures check valid and invalid use of the generated declarations. Extend canonical schemas and fixtures together. String-length constraints require runtime validation. The draft descriptor model is separate from the approved public schema catalog; CP-05 parsing remains disabled pending approval of its proposal.
+Compiler fixtures in the SPA check valid and invalid uses of the shared types. Type-only contracts do not need runtime unit tests; test runtime validation at the adapter boundary. String-length constraints require runtime validation. Descriptor parsing remains future work.
 
 ## Image packaging
 
@@ -37,12 +37,12 @@ The MVP image is the inner control-plane workload, not the future production out
 
 `pnpm dev:deploy` reuses a dedicated single-server `homelab-paas-dev` k3d cluster, builds/loads/imports a content-tagged Linux workload image, applies the local manifests, and waits for readiness. It retains loopback-only ports, a dedicated kubeconfig, and the pinned local K3s version. It never mounts the host Docker socket into workloads.
 
-GitHub Actions installs pinned Node/pnpm, installs with the frozen lock, and runs `pnpm check`, `pnpm test`, and `pnpm build`. A separate packaging job builds the Linux OCI archive, checks its bundle, explicitly loads an image, and runs `deploy/appliance/smoke.mjs` inside a read-only container with no external network. That smoke test verifies packaged HTTP routing, graceful SIGTERM, native Linux locking, durable commits, and recovery. Privileged production-appliance acceptance and publication require dedicated jobs; never run untrusted pull-request code on privileged runners with production secrets.
+GitHub Actions installs pinned Node/pnpm, installs with the frozen lock, and runs `pnpm check`, `pnpm test`, and `pnpm build`. A separate packaging job builds the Linux OCI archive, checks its bundle, explicitly loads an image, and runs `deploy/appliance/smoke.mjs` inside a read-only container with no external network. That smoke test verifies packaged Koa HTTP routing and graceful SIGTERM. Privileged production-appliance acceptance and publication require dedicated jobs; never run untrusted pull-request code on privileged runners with production secrets.
 
 ## References
 
 - [pnpm workspaces](https://pnpm.io/workspaces)
 - [Node filesystem API](https://nodejs.org/docs/latest-v24.x/api/fs.html)
-- [Fastify](https://fastify.dev/docs/latest/)
+- [Koa](https://koajs.com/)
 - [Oxc](https://oxc.rs/)
 - [Vitest](https://vitest.dev/)

@@ -27,8 +27,8 @@ digest = run("docker", "image", "inspect", f"{IMAGE}:dev", "--format", "{{.Id}}"
 tag = f"{IMAGE}:dev-{digest.removeprefix('sha256:')}"
 run("docker", "tag", f"{IMAGE}:dev", tag)
 run("k3d", "image", "import", tag, "--cluster", CLUSTER)
-manifest = (ROOT / "deploy/kubernetes/local.yaml").read_text().replace("homelab-paas/control-plane:dev", tag)
+manifest = (ROOT / "deploy/kubernetes/local.yaml").read_text().replace("homelab-paas/paas:dev", tag)
 run("kubectl", "--context", f"k3d-{CLUSTER}", "apply", "-f", "-", stdin=manifest, env=env)
 run("kubectl", "--context", f"k3d-{CLUSTER}", "-n", "homelab-paas",
-    "rollout", "status", "deployment/control-plane", "--timeout=120s", env=env)
+    "rollout", "status", "deployment/paas", "--timeout=120s", env=env)
 print("Ready: http://127.0.0.1:8080 (health: /api/health)")

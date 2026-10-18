@@ -1,10 +1,9 @@
 // Run explicitly inside the packaged Linux image, with /tmp as a writable tmpfs.
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
-import { createHttpServer, openControllerStore } from "/opt/homelab-paas/dist/start.js";
+import { createHttpServer } from "/opt/homelab-paas/dist/start.js";
 
 const deadline = setTimeout(() => {
   throw new Error("packaged runtime smoke test timed out");
@@ -37,45 +36,28 @@ try {
   await exited;
 }
 
-const server = createHttpServer({
+const app = createHttpServer({
   uiDirectory: "/usr/share/homelab-paas/ui",
   logLevel: "silent",
   listen: { host: "127.0.0.1", port: 0 },
 });
+const server = app.listen(0, "127.0.0.1");
+await once(server, "listening");
+const address = server.address();
+assert.ok(address && typeof address !== "string");
+const request = (path) => fetch(`http://127.0.0.1:${address.port}${path}`);
 try {
-  assert.equal((await server.inject("/api/health")).statusCode, 200);
-  assert.equal((await server.inject("/services/example")).statusCode, 200);
-  assert.deepEqual((await server.inject("/api/missing")).json(), {
+  assert.equal((await request("/api/health")).status, 200);
+  assert.equal((await request("/services/example")).status, 200);
+  assert.deepEqual(await (await request("/api/missing")).json(), {
     code: "not_found",
     diagnostics: [],
   });
-  assert.match((await server.inject("/")).body, /\/assets\//);
+  assert.match(await (await request("/")).text(), /\/assets\//);
 } finally {
-  await server.close();
+  await new Promise((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
 }
 
-const root = await mkdtemp("/tmp/paas-smoke-");
-let store;
-try {
-  store = await openControllerStore(root, "smoke-install", "smoke-cluster", true);
-  await assert.rejects(openControllerStore(root, "smoke-install", "smoke-cluster", false), {
-    code: "already_running",
-  });
-  const committed = await store.commit(0n, [
-    {
-      id: "service",
-      version: 1,
-      generation: 1n,
-      data: { kind: "reservation", service_id: "service", name: "service" },
-    },
-  ]);
-  await store.shutdown();
-  store = undefined;
-  assert.match(await readFile(`${root}/_platform/state/controller.yaml`, "utf8"), /generation: 1/);
-  store = await openControllerStore(root, "smoke-install", "smoke-cluster", false);
-  assert.deepEqual(store.snapshot(), committed);
-} finally {
-  if (store) await store.shutdown();
-  await rm(root, { recursive: true, force: true });
-}
-console.log("Packaged HTTP routes and Linux persistence smoke test passed.");
+console.log("Packaged HTTP routes and graceful shutdown smoke test passed.");

@@ -5,14 +5,14 @@ WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 RUN corepack enable && corepack prepare pnpm@10.34.7 --activate
 COPY packages/shared-contracts/package.json packages/shared-contracts/package.json
-COPY services/control-plane/package.json services/control-plane/package.json
+COPY services/paas/package.json services/paas/package.json
 COPY services/paas-ui/package.json services/paas-ui/package.json
 RUN pnpm install --frozen-lockfile
 COPY tsconfig.json ./
 COPY packages/shared-contracts packages/shared-contracts
-COPY services/control-plane services/control-plane
+COPY services/paas services/paas
 COPY services/paas-ui services/paas-ui
-RUN pnpm build && pnpm --filter @homelab-paas/control-plane --prod deploy --legacy /runtime
+RUN pnpm build && pnpm --filter @homelab-paas/paas --prod deploy --legacy /runtime
 
 FROM node:24.22.0-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS runtime
 RUN rm -rf /usr/local/lib/node_modules /opt/yarn* /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg

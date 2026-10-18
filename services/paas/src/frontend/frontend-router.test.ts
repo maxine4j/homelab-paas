@@ -5,6 +5,7 @@ import { afterEach, expect, test } from "vitest";
 import { createHttpServer } from "../start.ts";
 import { app } from "./frontend-router.ts";
 import { UiUnavailableError } from "./frontend-service.ts";
+import { startTestApi } from "../util/test/router.ts";
 
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -17,11 +18,13 @@ async function fixture() {
   await mkdir(join(directory, "assets"));
   await writeFile(join(directory, "index.html"), "<h1>Hello world</h1>");
   await writeFile(join(directory, "assets/app-123.js"), "console.log('hello')");
-  const server = createHttpServer({
-    uiDirectory: directory,
-    logLevel: "silent",
-    listen: { host: "127.0.0.1", port: 0 },
-  });
+  const server = await startTestApi(
+    createHttpServer({
+      uiDirectory: directory,
+      logLevel: "silent",
+      listen: { host: "127.0.0.1", port: 0 },
+    }),
+  );
   cleanups.push(() => server.close());
   return server;
 }
@@ -57,6 +60,10 @@ test("API and static routes retain method, fallback, and cache boundaries", asyn
   );
   expect((await server.inject("/")).headers["cache-control"]).toBe("no-cache");
   expect((await server.inject("/assets/missing.js")).headers["cache-control"]).toBe("no-cache");
+  expect((await server.inject("/assets/app-123.js")).headers["content-type"]).toContain(
+    "javascript",
+  );
+  expect((await server.inject("/")).headers["content-type"]).toContain("text/html");
 });
 
 test("static files cannot escape the UI directory", async () => {
@@ -74,14 +81,13 @@ test("static files cannot escape the UI directory", async () => {
 
 test("HTTP converts paths and translates service failures without exposing their causes", async () => {
   const paths: string[] = [];
-  const server = app(
-    {
+  const server = await startTestApi(
+    app({
       async resolve(path) {
         paths.push(path);
         throw new UiUnavailableError({ cause: new Error("secret-canary") });
       },
-    },
-    tmpdir(),
+    }),
   );
   cleanups.push(() => server.close());
   const response = await server.inject("/services/hello%20world?token=secret-canary");

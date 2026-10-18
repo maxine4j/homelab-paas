@@ -4,7 +4,7 @@ Required for all control-plane backend source changes. These rules define the in
 
 ## Source layout
 
-Group control-plane modules by domain under `services/control-plane/src`: `frontend/` owns the HTTP router, UI content service, and file adapter; `controller/` owns metadata contracts, policies, codecs, and worker-backed storage. Colocate interfaces with their single implementation or the consumer that owns the dependency seam; do not create separate `*-contracts.ts` files. Shared configuration, lifecycle, logging, YAML, and POSIX utilities live in `util/`. Keep `main.ts` and the `start.ts` composition root at the source root, with tests beside the modules they exercise. Add domain directories when their behavior exists.
+Group control-plane modules by domain under `services/paas/src`: `frontend/` owns the HTTP router, UI content service, and file adapter; `controller/` owns metadata contracts, policies, codecs, and worker-backed storage. Colocate interfaces with their single implementation or the consumer that owns the dependency seam; do not create separate `*-contracts.ts` files. Shared configuration, lifecycle, logging, YAML, and POSIX utilities live in `util/`. Keep `main.ts` and the `start.ts` composition root at the source root, with tests beside the modules they exercise. Add domain directories when their behavior exists.
 
 ## Dependencies and contracts
 

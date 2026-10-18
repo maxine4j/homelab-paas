@@ -1,8 +1,8 @@
 # Homelab PaaS
 
-MVP: a TypeScript/Node 24/Fastify control plane serves a React/Vite hello-world SPA and an empty `GET /api/health` response (200). The browser checks immediately and every five seconds, with a four-second timeout.
+MVP: a TypeScript/Node 24/Koa control plane serves a React/Vite hello-world SPA and an empty `GET /api/health` response (200). The browser checks immediately and every five seconds, with a four-second timeout.
 
-Shared schemas supply strict API errors and generated wire types. Host-configuration validation and durable controller persistence are libraries; runtime integration remains CP-06. Descriptor parsing is an unfinished CP-05 draft. Authentication, reconciliation, management features, and the production outer K3s appliance are not implemented. Do not expose this development deployment publicly.
+Shared TypeScript contracts supply API error types directly, without code generation. Authentication, reconciliation, controller persistence, management features, and the production outer K3s appliance are not implemented in this branch. Do not expose this development deployment publicly.
 
 ## Setup
 
@@ -21,7 +21,7 @@ pnpm test
 pnpm build
 ```
 
-One root pnpm workspace and lockfile own all three packages. TypeScript is pinned to the npm `latest` version resolved during this migration, 7.0.2. Vitest tests every package; Oxc's oxlint and oxfmt lint and format the repository. Use `pnpm format` to apply formatting.
+One root pnpm workspace and lockfile own all three packages. TypeScript is pinned to the npm `latest` version resolved during this migration, 7.0.2. Vitest tests runtime packages; Oxc's oxlint and oxfmt lint and format the repository. Use `pnpm format` to apply formatting.
 
 ## Development
 
@@ -35,11 +35,11 @@ For package-specific work:
 
 ```sh
 pnpm --filter @homelab-paas/shared-contracts build
-pnpm --filter @homelab-paas/control-plane dev
+pnpm --filter @homelab-paas/paas dev
 pnpm --filter @homelab-paas/ui dev
 ```
 
-Production runs compiled JavaScript with `pnpm --filter @homelab-paas/control-plane start`. Set `PAAS_UI_DIR` to the absolute `services/paas-ui/dist` directory to serve a local bundle. Its default is `/usr/share/homelab-paas/ui`. `PAAS_LISTEN` defaults to `127.0.0.1:8080`; `LOG_LEVEL` defaults to `info`.
+Production runs compiled JavaScript with `pnpm --filter @homelab-paas/paas start`. Set `PAAS_UI_DIR` to the absolute `services/paas-ui/dist` directory to serve a local bundle. Its default is `/usr/share/homelab-paas/ui`. `PAAS_LISTEN` defaults to `127.0.0.1:8080`; `LOG_LEVEL` defaults to `info`.
 
 ## Linux image
 
@@ -50,12 +50,12 @@ pnpm image
 pnpm image --arch amd64
 ```
 
-The multi-stage Dockerfile builds the locked workspace and native dependencies for the selected Linux architecture, then packages compiled JavaScript, production dependencies, Node 24, and SPA assets. Its Node base is pinned by multiarchitecture digest and it runs as UID/GID 65532. `artifacts/control-plane-linux-<arch>.oci.tar` is an OCI archive; packaging neither loads nor publishes it.
+The multi-stage Dockerfile builds the locked workspace and native dependencies for the selected Linux architecture, then packages compiled JavaScript, production dependencies, Node 24, and SPA assets. Its Node base is pinned by multiarchitecture digest and it runs as UID/GID 65532. `artifacts/paas-linux-<arch>.oci.tar` is an OCI archive; packaging neither loads nor publishes it.
 
 Packaging creates or reuses the `homelab-paas-build` Buildx container builder and preserves your default builder. Its cache remains available for repeated builds. Validate the packaged backend and SPA assets with:
 
 ```sh
-python3 deploy/appliance/bundle_test.py artifacts/control-plane-linux-arm64.oci.tar
+python3 deploy/appliance/bundle_test.py artifacts/paas-linux-arm64.oci.tar
 ```
 
 The image is the inner control-plane workload; the production outer appliance remains future work. Ordinary checks/tests/builds do not start Docker, k3d, or external services.
@@ -63,6 +63,12 @@ The image is the inner control-plane workload; the production outer appliance re
 ## Local deployment
 
 Start Docker Desktop and finish its setup. Allow at least 4 CPUs, 6 GiB RAM, and several GiB free disk for image builds and K3s.
+
+For an existing development cluster from before the `paas` rename, remove the old Deployment and Service once to release its NodePort before redeploying:
+
+```sh
+kubectl --context k3d-homelab-paas-dev -n homelab-paas delete deployment/control-plane service/control-plane --ignore-not-found
+```
 
 ```sh
 pnpm dev:deploy
@@ -74,7 +80,7 @@ HTTP binds to `127.0.0.1:8080` and the Kubernetes API to `127.0.0.1:6445`. The s
 
 ```sh
 curl -f http://127.0.0.1:8080/api/health
-KUBECONFIG=.dev/kubeconfig kubectl -n homelab-paas logs deployment/control-plane
+KUBECONFIG=.dev/kubeconfig kubectl -n homelab-paas logs deployment/paas
 # Explicit teardown; deletes the development cluster and its data:
 k3d cluster delete homelab-paas-dev
 ```

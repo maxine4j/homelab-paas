@@ -19,9 +19,9 @@ Support both the owner's web applications and existing containerized homelab app
 - K3s supplies Kubernetes, container execution, scheduling, service discovery, and network-policy enforcement.
 - Traefik supplies public HTTP ingress and routes authorization checks to the control plane.
 - One TypeScript control plane on Node 24 owns descriptor parsing, Git polling, reconciliation, the custom auth proxy, certificate lifecycle management, secrets provisioning, managed resources, observability configuration, and the management API.
-- Fastify supplies HTTP routing and structured logging. Use asynchronous clients with cancellation and timeouts; move blocking disk and serialization work into dedicated workers.
-- A React/TypeScript/Vite SPA supplies authenticated onboarding and cluster management. Fastify serves the API and the built SPA from the same runtime image.
-- Shared JSON Schemas define the canonical public data model and validation boundary; generate TypeScript contracts in the shared workspace package and validate untrusted inputs with Ajv.
+- Koa supplies HTTP routing; Pino supplies structured logging. Use asynchronous clients with cancellation and timeouts; move blocking disk and serialization work into dedicated workers.
+- A React/TypeScript/Vite SPA supplies authenticated onboarding and cluster management. Koa serves the API and the built SPA from the same runtime image.
+- Shared TypeScript contracts define the canonical public data model without code generation; validate untrusted inputs with Zod at adapter boundaries.
 - GitHub OAuth2 supplies browser login. Initial TLS/OAuth2 settings, allowed GitHub usernames, and GitHub discovery owners must be explicitly configured in the host file before web onboarding is available.
 - Use GitHub APIs to enumerate repositories owned by configured users/organizations and discover root-level `*.sd.yaml` files. Discovery is read-only; explicit user acceptance enrolls a descriptor for ongoing deployment.
 - Deploy through Git polling only. Do not implement Git webhooks.
@@ -31,7 +31,7 @@ Support both the owner's web applications and existing containerized homelab app
 - Default resource layout: `/var/homelab-paas/<serviceId>/<resourceId>/...`.
 - Controller metadata uses one versioned atomic YAML snapshot at `_platform/state/controller.yaml`, protected by a lifetime OS file lock at `_platform/state/controller.lock`. No controller database server or SQLite store; host configuration and secrets remain separate authoritative files. See [configuration and storage](configuration-and-storage.md) for commit, migration, singleton, and recovery requirements.
 - Allocate one Kubernetes namespace per enrolled service, with separate reserved platform and observability namespaces. Use durable local inventory and owned-field reconciliation, without CRDs. Ordinary removal retains service namespaces, persistent data, and stable credentials. See [reconciliation](reconciliation.md) for ownership and cleanup rules.
-- pnpm is the top-level build, test, contract-generation, and explicit image-packaging entry point. Use one workspace and committed root lockfile with pinned Node 24, TypeScript, and pnpm versions.
+- pnpm is the top-level build, test, and explicit image-packaging entry point. Use one workspace and committed root lockfile with pinned Node 24, TypeScript, and pnpm versions.
 - Keep package manifests in their workspace packages and repository scripts/tooling at the root. Frontend-specific Vite/Vitest configuration remains in `services/paas-ui`.
 - Use Vitest across backend, shared-contract, and frontend packages; use Oxc's oxfmt and oxlint across the workspace. GitHub Actions runs the same pnpm commands used locally.
 
@@ -40,7 +40,7 @@ Support both the owner's web applications and existing containerized homelab app
 1. Native Linux, one host and one K3s node. Availability guarantees apply to compatible application rollouts, not whole-appliance or host upgrades.
 2. GitHub OAuth2 browser login with separate host-configured GitHub username lists for private applications and control-plane administrators. Every web resource defaults to `public: false`; only an explicit `public: true` bypasses the platform auth proxy. Management always requires administrator access. No local account database, bootstrap CLI, setup token, or special setup port.
 3. A custom versioned YAML schema with service metadata and a resource map discriminated by each resource's `type` field.
-4. TypeScript/Node 24/Fastify backend, React/TypeScript/Vite frontend, shared schema contracts, and pnpm workspace management. Maintained asynchronous OAuth2 and ACME libraries implement protocol mechanics; select additional packages with owner approval.
+4. TypeScript/Node 24/Koa backend, React/TypeScript/Vite frontend, shared schema contracts, and pnpm workspace management. Maintained asynchronous OAuth2 and ACME libraries implement protocol mechanics; select additional packages with owner approval.
 5. Reserved `_platform` state directory, configuration editable manually or through the UI, stable generated credentials, and data retention on descriptor deletion.
 6. Primary web resource at `<serviceId>.<clusterDomain>`, additional web resources at `<resourceId>--<serviceId>.<clusterDomain>`, management at `paas.<clusterDomain>`. Services with multiple web resources must explicitly designate exactly one as primary.
 7. DigitalOcean DNS-01 and a wildcard certificate initially.
@@ -67,9 +67,9 @@ The canonical platform directory is `_platform`. Users first edit `/var/homelab-
 
 ### Local development milestone
 
-Use Docker Desktop (macOS) and k3d for a reusable single-server local K3s cluster. The MVP deploys only the control-plane workload image, containing the Fastify healthcheck and hello-world React SPA. Bind its HTTP and Kubernetes API ports to loopback. k3d is development infrastructure, not the production outer appliance supervisor. Repeated deployments reuse the cluster and import content-tagged images without requiring a registry. See [local setup and commands](../README.md).
+Use Docker Desktop (macOS) and k3d for a reusable single-server local K3s cluster. The MVP deploys only the control-plane workload image, containing the Koa healthcheck and hello-world React SPA. Bind its HTTP and Kubernetes API ports to loopback. k3d is development infrastructure, not the production outer appliance supervisor. Repeated deployments reuse the cluster and import content-tagged images without requiring a registry. See [local setup and commands](../README.md).
 
-The MVP has no management functionality or authentication. The public health endpoint and hello-world shell do not enable unauthenticated management bootstrap. Shared schemas already supply strict API errors and generated types; the MVP health response has no body. Host-configuration and persistence libraries exist, while their startup/effect integration remains CP-06.
+The MVP has no management functionality or authentication. The public health endpoint and hello-world shell do not enable unauthenticated management bootstrap. Shared TypeScript contracts supply API error types; the MVP health response has no body. Host-configuration and persistence libraries exist, while their startup/effect integration remains CP-06.
 
 ### Production appliance (not yet implemented)
 
@@ -103,7 +103,7 @@ The MVP has no management functionality or authentication. The public health end
   .oxlintrc.json
   .github/workflows/ci.yml
   services/
-    control-plane/
+    paas/
       package.json
       tsconfig.json
       tsconfig.build.json
@@ -111,7 +111,7 @@ The MVP has no management functionality or authentication. The public health end
         main.ts                # process signals, fatal boundary, exit status
         start.ts               # configuration, composition, startup
         frontend/
-          frontend-router.ts   # Fastify API/static response mapping
+          frontend-router.ts   # Koa API/static response mapping
           frontend-service.ts  # UI content selection
           frontend-store.ts    # UI filesystem inspection
         controller/
@@ -134,12 +134,7 @@ The MVP has no management functionality or authentication. The public health end
     shared-contracts/
       package.json
       src/
-        schemas.ts             # canonical public wire schemas
-        index.ts               # validators and generated type exports
-        descriptor.ts          # CP-05 draft; parsing remains disabled
-        generated/             # ignored generated declarations
-      tools/generate.mjs
-      tests/
+        index.ts               # shared TypeScript wire types; no code generation
   scripts/                     # explicit setup, packaging, local deployment
   deploy/
     appliance/Dockerfile       # inner workload; outer appliance is future
@@ -149,9 +144,9 @@ The MVP has no management functionality or authentication. The public health end
 ```
 
 - Create additional config, API, auth, certificate, GitOps, reconciliation, Kubernetes, resource, network, storage, and observability modules when they contain real implementation. Do not scaffold empty abstractions.
-- Shared contracts own public JSON Schemas, generated TypeScript types, and runtime validation. Use discriminated resource unions and validate domain invariants explicitly.
+- Shared contracts own public TypeScript types. Use discriminated resource unions and validate untrusted values and domain invariants explicitly at runtime boundaries.
 - Both services import the shared workspace package. Public contracts contain no resolved secrets, filesystem logic, Kubernetes clients, or backend adapters. Shared packages never depend on services; the UI never imports backend implementation files.
-- Backend builds depend on shared generation but require no frontend tooling or bundle. Keep normalization/planning pure; put effects behind small explicit adapters.
+- Backend builds depend on the compiled shared types but require no frontend tooling or bundle. Keep normalization/planning pure; put effects behind small explicit adapters.
 - Resource modules implement a consistent lifecycle contract. Extract another package only for a real second consumer or independently maintained boundary. A supporting workload does not require another control-plane service.
 
 ## Testing and release acceptance
@@ -179,6 +174,6 @@ The first usable release is accepted when a fresh documented Linux host can:
 
 - [K3s in Docker](https://docs.k3s.io/advanced#running-k3s-in-docker)
 - [Node fetch](https://nodejs.org/docs/latest-v24.x/api/globals.html#fetch)
-- [Fastify logging](https://fastify.dev/docs/latest/Reference/Logging/)
+- [Pino logging](https://getpino.io/)
 
 Library references are implementation candidates, not unreviewed version pins. Record concrete version/compatibility choices when bootstrapping the workspace.

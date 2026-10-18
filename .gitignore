@@ -4,5 +4,4 @@
 /.dev/
 *.log
 __pycache__/
-**/src/generated/
 /artifacts/

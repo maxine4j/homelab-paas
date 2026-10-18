@@ -27,6 +27,6 @@ jobs:
         with:
           name: homelab-paas-build
       - run: python3 scripts/build-image.py --arch amd64
-      - run: python3 deploy/appliance/bundle_test.py artifacts/control-plane-linux-amd64.oci.tar
-      - run: docker buildx build --builder homelab-paas-build --platform linux/amd64 --file deploy/appliance/Dockerfile --tag homelab-paas/control-plane:ci --load .
-      - run: docker run --rm --read-only --network none --tmpfs /tmp:rw,noexec,nosuid,size=16m --interactive --entrypoint node homelab-paas/control-plane:ci --input-type=module < deploy/appliance/smoke.mjs
+      - run: python3 deploy/appliance/bundle_test.py artifacts/paas-linux-amd64.oci.tar
+      - run: docker buildx build --builder homelab-paas-build --platform linux/amd64 --file deploy/appliance/Dockerfile --tag homelab-paas/paas:ci --load .
+      - run: docker run --rm --read-only --network none --tmpfs /tmp:rw,noexec,nosuid,size=16m --interactive --entrypoint node homelab-paas/paas:ci --input-type=module < deploy/appliance/smoke.mjs

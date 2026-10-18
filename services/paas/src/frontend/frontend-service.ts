@@ -1,5 +1,7 @@
 export type UiEntry = "file" | "missing" | "blocked";
-export type FrontendResult = { kind: "file"; path: string } | { kind: "missing" };
+export type FrontendResult =
+  | { kind: "file"; path: string; content: Uint8Array }
+  | { kind: "missing" };
 
 export class UiUnavailableError extends Error {
   constructor(options?: ErrorOptions) {
@@ -9,6 +11,8 @@ export class UiUnavailableError extends Error {
 }
 
 export interface UiFiles {
+  /** Reads immutable UI content. Throws UiUnavailableError on I/O failure. */
+  read(path: string): Promise<Uint8Array>;
   /** Inspects a relative path without following symbolic links. Throws UiUnavailableError on I/O failure. */
   inspect(path: string): Promise<UiEntry>;
 }
@@ -34,7 +38,7 @@ export class FrontendService implements Frontend {
     const file = path.replace(/^\/+/, "");
     const entry = await this.files.inspect(file);
     if (entry === "blocked") return { kind: "missing" };
-    if (entry === "file") return { kind: "file", path: file };
+    if (entry === "file") return { kind: "file", path: file, content: await this.files.read(file) };
     if (
       path.startsWith("/assets/") ||
       path === "/assets" ||
@@ -42,6 +46,6 @@ export class FrontendService implements Frontend {
       path.split("/").at(-1)?.includes(".")
     )
       return { kind: "missing" };
-    return { kind: "file", path: "index.html" };
+    return { kind: "file", path: "index.html", content: await this.files.read("index.html") };
   }
 }

@@ -10,7 +10,7 @@ parser.add_argument("--arch", choices=["arm64", "amd64"],
                     default="arm64" if platform.machine() in ("arm64", "aarch64") else "amd64")
 args = parser.parse_args()
 require("docker")
-output = ROOT / "artifacts" / f"control-plane-linux-{args.arch}.oci.tar"
+output = ROOT / "artifacts" / f"paas-linux-{args.arch}.oci.tar"
 output.parent.mkdir(exist_ok=True)
 run("docker", "buildx", "build", "--builder", image_builder(), "--platform", f"linux/{args.arch}",
     "--file", "deploy/appliance/Dockerfile", "--tag", f"{IMAGE}:dev",

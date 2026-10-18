@@ -6,5 +6,5 @@
     "homelab/no-recursive-types": "error",
     "import/no-cycle": ["error", { "ignoreTypes": false }]
   },
-  "ignorePatterns": ["**/dist/**", "**/generated/**"]
+  "ignorePatterns": ["**/dist/**"]
 }

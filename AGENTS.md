@@ -3,7 +3,8 @@
 ## Working rules
 
 - Use strict ESM TypeScript on Node 24. Prefer discriminated unions, typed errors, and explicit operation results over stringly typed state or broad optional fields. Never use `any`; narrow `unknown` at untrusted boundaries. Prefer `array.at(index)` for array reads.
-- Use Fastify for HTTP and its structured logger. Reuse clients/connections, set timeouts, redact credentials, and restrict redirects where credentials are involved. Include operation/service/resource/revision identifiers in logs; avoid ad hoc stdout logging in application code.
+- Keep imports at the top of the file, using `import type` for types. Do not use inline import types such as `import("node:http").IncomingHttpHeaders`. Dynamic imports require a concrete reason, such as deliberate asynchronous module loading.
+- Use Koa for HTTP and Pino for structured logging. Reuse clients/connections, set timeouts, redact credentials, and restrict redirects where credentials are involved. Include operation/service/resource/revision identifiers in logs; avoid ad hoc stdout logging in application code.
 - All control-plane backend source changes must follow [Layered architecture](docs/layered-architecture.md).
 - Use maintained asynchronous OAuth2, ACME, and Kubernetes clients with the specified GitHub and Let's Encrypt semantics. Ask the owner, with your recommendation, before adding a third-party dependency they have not authorized; do not invent protocol implementations to avoid this discussion.
 - Use AbortSignal cancellation, bounded queues/concurrency, timers, and graceful shutdown. Put synchronous disk and serialization work in dedicated workers; do not block the request event loop.
@@ -20,8 +21,8 @@
 
 - Build one self-hosted Linux appliance: systemd → outer Docker container → one K3s node. Workloads use the nested runtime, never the host Docker socket.
 - Local development uses Docker and a reusable single-server k3d cluster. Keep this separate from the production appliance lifecycle; never mount the host Docker socket into workloads.
-- One TypeScript/Node 24/Fastify control plane owns platform integration; React/TypeScript/Vite supplies the SPA. Shared JSON Schemas and their generated TypeScript contracts are canonical.
-- pnpm owns repository builds, tests, contract generation, and explicit image packaging commands. Do not add a competing top-level task runner.
+- One TypeScript/Node 24/Koa control plane owns platform integration; React/TypeScript/Vite supplies the SPA. Shared TypeScript contracts are canonical; do not generate them from JSON Schemas. Validate untrusted inputs at runtime with Zod.
+- pnpm owns repository builds, tests, and explicit image packaging commands. Do not add a competing top-level task runner.
 - Discovery is read-only. Only an administrator's explicit per-descriptor enrollment authorizes deployment; updates use Git polling, never webhooks.
 - Require host-file TLS/OAuth2/access/discovery configuration before management login. No unauthenticated bootstrap or first-visitor administration.
 - Web resources are private by default. Private-application and administrator allowlists are independent; management always requires administrator access. Auth failures deny protected traffic.

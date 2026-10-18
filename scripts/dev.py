@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
-IMAGE = "homelab-paas/control-plane"
+IMAGE = "homelab-paas/paas"
 CLUSTER = "homelab-paas-dev"
 BUILDER = "homelab-paas-build"
 
