@@ -2,8 +2,10 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
+import Koa from "koa";
 import { createHttpServer } from "../start.ts";
-import { app } from "./frontend-router.ts";
+import { createFrontendRouter } from "./frontend-router.ts";
+import { httpMiddleware } from "../util/http.ts";
 import { UiUnavailableError } from "./frontend-service.ts";
 import { startTestApi } from "../util/test/router.ts";
 
@@ -35,22 +37,39 @@ test("API and static routes retain method, fallback, and cache boundaries", asyn
     ["GET", "/api/health", 200],
     ["HEAD", "/api/health", 200],
     ["POST", "/api/health", 405],
+    ["OPTIONS", "/api/health", 405],
+    ["GET", "/api/health/", 404],
+    ["GET", "/api/HEALTH", 404],
+    ["GET", "/api%2fhealth", 200],
     ["GET", "/api", 404],
     ["GET", "/api/missing", 404],
+    ["POST", "/api/missing", 404],
+    ["GET", "/%61pi/missing", 404],
+    ["GET", "/%ZZ", 400],
     ["GET", "/", 200],
     ["GET", "/services/example", 200],
+    ["HEAD", "/services/example", 200],
+    ["GET", "/api-example", 200],
     ["GET", "/assets/app-123.js", 200],
     ["GET", "/assets/missing.js", 404],
     ["GET", "/missing.js", 404],
     ["POST", "/", 405],
+    ["OPTIONS", "/", 405],
   ] as const) {
     const response = await server.inject({ method, url });
     expect(response.statusCode, `${method} ${url}`).toBe(status);
-    if (url.startsWith("/api"))
+    if (url === "/api" || url.startsWith("/api/"))
       expect(response.headers["content-type"] ?? "").not.toContain("text/html");
   }
   expect((await server.inject("/services/example")).body).toContain("Hello world");
   expect((await server.inject("/api/health")).body).toBe("");
+  expect((await server.inject("/%ZZ")).json()).toEqual({
+    code: "invalid_request",
+    diagnostics: [],
+  });
+  for (const url of ["/api/health", "/"]) {
+    expect((await server.inject({ method: "POST", url })).headers["allow"]).toBe("GET, HEAD");
+  }
   expect((await server.inject("/api/missing")).json()).toEqual({
     code: "not_found",
     diagnostics: [],
@@ -82,12 +101,14 @@ test("static files cannot escape the UI directory", async () => {
 test("HTTP converts paths and translates service failures without exposing their causes", async () => {
   const paths: string[] = [];
   const server = await startTestApi(
-    app({
-      async resolve(path) {
-        paths.push(path);
-        throw new UiUnavailableError({ cause: new Error("secret-canary") });
-      },
-    }),
+    new Koa().use(httpMiddleware()).use(
+      createFrontendRouter({
+        async resolve(path) {
+          paths.push(path);
+          throw new UiUnavailableError({ cause: new Error("secret-canary") });
+        },
+      }).routes(),
+    ),
   );
   cleanups.push(() => server.close());
   const response = await server.inject("/services/hello%20world?token=secret-canary");
@@ -102,4 +123,21 @@ test("HTTP converts paths and translates service failures without exposing their
   await server.inject("/api/health");
   await server.inject("/api/missing");
   expect(paths).toHaveLength(1);
+});
+
+test("the frontend router composes independently and leaves API requests to other routers", async () => {
+  const paths: string[] = [];
+  const router = createFrontendRouter({
+    async resolve(path) {
+      paths.push(path);
+      return { kind: "missing" };
+    },
+  });
+  const server = await startTestApi(new Koa().use(router.routes()));
+  cleanups.push(() => server.close());
+  expect((await server.inject("/api/health")).statusCode).toBe(404);
+  expect((await server.inject("/api/missing")).statusCode).toBe(404);
+  expect(paths).toEqual([]);
+  expect((await server.inject("/services/example")).statusCode).toBe(404);
+  expect(paths).toEqual(["/services/example"]);
 });

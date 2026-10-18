@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@homelab-paas/shared-contracts": "workspace:*",
+    "@koa/router": "15.7.0",
     "acme-client": "5.4.0",
     "koa": "3.2.1",
     "koffi": "3.3.3",

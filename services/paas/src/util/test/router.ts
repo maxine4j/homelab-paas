@@ -4,7 +4,7 @@ import { once } from "node:events";
 import type Koa from "koa";
 
 /** Exercise Koa through real HTTP, preserving raw paths for traversal checks. */
-export async function startTestApi(app: Koa) {
+export async function startTestApi<State, Context>(app: Koa<State, Context>) {
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();

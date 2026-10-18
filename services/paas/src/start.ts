@@ -1,7 +1,10 @@
 import { createServer } from "node:http";
 import { once } from "node:events";
 import acme from "acme-client";
-import { app } from "./frontend/frontend-router.ts";
+import Koa from "koa";
+import Router from "@koa/router";
+import type { ApiError } from "@homelab-paas/shared-contracts";
+import { createFrontendRouter } from "./frontend/frontend-router.ts";
 import { FrontendService } from "./frontend/frontend-service.ts";
 import { DirectoryUiFiles } from "./frontend/frontend-store.ts";
 import { loadEnv } from "./util/env.ts";
@@ -9,6 +12,8 @@ import type { Env } from "./util/env.ts";
 import type { Lifecycle } from "./util/lifecycle.ts";
 import { createProcessLogger } from "./util/logging.ts";
 import type { Logger } from "./util/logging.ts";
+import { createHealthcheckRouter } from "./util/healthcheck-router.ts";
+import { httpMiddleware } from "./util/http.ts";
 import { GitHubOauth2Provider } from "./ingress/auth/oauth-provider/github.ts";
 import type { GitHubOauthConfig } from "./ingress/auth/oauth-provider/github.ts";
 import type { Oauth2Provider } from "./ingress/auth/oauth-provider/types.ts";
@@ -71,10 +76,23 @@ export function createTlsRenewalTask(
 }
 
 export function createHttpServer(config: Env) {
-  return app(
+  const logger = createProcessLogger(config.logLevel);
+  const server = new Koa();
+  server.silent = true;
+  const router = new Router();
+  const frontendRouter = createFrontendRouter(
     new FrontendService(new DirectoryUiFiles(config.uiDirectory)),
-    createProcessLogger(config.logLevel),
+    logger,
   );
+  router.use(createHealthcheckRouter().routes());
+  router.all(/^\/api(?:\/|$)/, (context) => {
+    context.status = 404;
+    context.body = { code: "not_found", diagnostics: [] } satisfies ApiError;
+  });
+  router.use(frontendRouter.routes());
+  server.use(httpMiddleware(logger));
+  server.use(router.routes());
+  return server;
 }
 
 export async function start(lifecycle: Lifecycle): Promise<void> {
