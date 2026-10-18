@@ -18,6 +18,7 @@ Provide bounded, cancellable infrastructure for background controllers and outbo
 ## Scope
 
 - Extract application state and lifecycle supervision with graceful task and HTTP shutdown.
+- Load `control_plane::config::BootstrapConfig` from the canonical host storage root in a blocking task before enabling management or background effects. Invalid configuration must keep management unavailable. Wire host configuration/secret mounts into local development at the same time; CP-03 supplies the loader without changing the health/hello-world lifecycle.
 - Start effects only after controller state recovery/migrations under the lifetime lock. Shutdown stops mutations, cancels and awaits workers and disk commits, then releases the lock; no worker may act after release. Controller replacement stops the previous process first.
 - Provide reusable timed asynchronous HTTP clients, credential-safe redirect policy, bounded work, and structured operation context.
 - Preserve process liveness and add explicit readiness semantics; package pinned outbound HTTPS trust roots in the runtime image.

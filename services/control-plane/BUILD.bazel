@@ -3,7 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy", "rust_library",
 
 rust_library(
     name = "lib",
-    srcs = ["src/lib.rs"],
+    srcs = glob(["src/**/*.rs"], exclude = ["src/main.rs"]),
     crate_name = "control_plane",
     edition = "2024",
     proc_macro_deps = all_crate_deps(proc_macro = True),

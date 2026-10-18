@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+pub mod config;
+
 use axum::{
     Router,
     body::Body,

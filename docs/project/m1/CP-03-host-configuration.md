@@ -1,6 +1,6 @@
 # CP-03 — Implement host configuration and secret references
 
-Milestone: [M1](../_milestones.md) · Status: Not started · PR: —
+Milestone: [M1](../_milestones.md) · Status: Complete · PR: — (local dev-local commit)
 
 Load the canonical host configuration and reject unsafe or incomplete bootstrap settings.
 
@@ -20,15 +20,15 @@ Load the canonical host configuration and reject unsafe or incomplete bootstrap 
 - Validate domain/callback/TLS settings, explicit non-empty independent username lists, discovery owners, names, and credential references.
 - Provide redacted diagnostics and reusable validation for future configuration APIs; do not introduce a second configuration store.
 
-## Decisions to resolve
+## Recorded decision
 
-Resolve `organization` versus `org` in the configuration guide and update the example consistently. Record owner decisions before implementing dependent behavior; this ticket does not authorize inventing product policy.
+Owner decision, 2026-10-18: use `org` everywhere in the configuration discriminator. The guide and typed schema now agree; `organization` is rejected.
 
 ## Acceptance criteria
 
-- [ ] Missing or invalid bootstrap settings leave management unavailable with actionable local diagnostics.
-- [ ] Case-insensitive username/owner handling preserves separation of application access, administration, and discovery.
-- [ ] Secrets never appear in API representations, errors, or logs; file permissions and missing references are validated.
+- [x] Missing or invalid bootstrap settings leave management unavailable with actionable local diagnostics.
+- [x] Case-insensitive username/owner handling preserves separation of application access, administration, and discovery.
+- [x] Secrets never appear in serializable configuration or debug/error output; file permissions and missing references are validated.
 
 ## Verification
 
@@ -36,6 +36,12 @@ Use valid/invalid file fixtures, case normalization, malformed names, missing se
 
 ## Completion
 
-- [ ] Scope, acceptance criteria, and verification are complete; record evidence and the PR link here.
-- [ ] Update this ticket's status and the corresponding checkbox in [the milestone index](../_milestones.md).
+- [x] Scope, acceptance criteria, and verification are complete. No PR: local workflow.
+- [x] Update this ticket's status and the corresponding checkbox in [the milestone index](../_milestones.md).
+
+Implemented `control_plane::config`: strict typed YAML, reusable parse/validate path, normalized independent scopes, domain/HTTPS callback/ACME checks, named secret resolution, and redacted diagnostics. Host loading uses directory-relative non-symlink opens, regular-file checks, a 1 MiB file limit, and owner-only secret file modes. Secret values have no serialization implementation and redact `Debug` output.
+
+Invalid settings return an error without a usable bootstrap context. Runtime startup integration is CP-06, including local host-file mounts; the existing health/hello-world MVP has no management login or management operations and keeps its current development lifecycle.
+
+Verification: focused tests cover valid/invalid disk inputs, malformed names, empty/duplicate scopes, missing references with field diagnostics, unsafe permissions, symlink escapes, nonregular/oversized files, and serialization/debug/error redaction. `bazel build //:check //services/control-plane:control-plane //services/paas-ui:bundle` and `bazel test //...` pass. No Docker/K3s or external-service execution.
 

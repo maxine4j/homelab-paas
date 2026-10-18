@@ -40,7 +40,7 @@ Default host layout:
 - UI changes update the canonical host configuration atomically. Do not maintain a conflicting configuration copy in a private UI database.
 - Separate non-secret settings from secret values. Store restrictive file permissions, redact secrets in API responses/logs, and never commit secret values into Git.
 - Initial setup is file-based: require the cluster domain, DigitalOcean token, ACME settings, GitHub OAuth2 client ID/secret, registered HTTPS callback URL, separate explicit private-application and administrator username lists, and a non-empty set of discovery owners. Store read credentials as named references to `_platform/secrets.yaml`.
-- Configure private-application access as `auth.github.allowedUsernames`, control-plane administration as `auth.github.adminUsernames`, and discovery scope as `gitops.discovery.owners`, whose entries have `type: user | organization`, `name`, and a repository-read `credentialRef`. All three scopes are independent: scanning an organization does not grant login access, and allowing a user does not automatically scan their repositories or grant administration.
+- Configure private-application access as `auth.github.allowedUsernames`, control-plane administration as `auth.github.adminUsernames`, and discovery scope as `gitops.discovery.owners`, whose entries have `type: user | org`, `name`, and a repository-read `credentialRef`. All three scopes are independent: scanning an organization does not grant login access, and allowing a user does not automatically scan their repositories or grant administration.
 - Require explicit non-empty username/owner sets at bootstrap, reject malformed names, and normalize GitHub username/owner matching case-insensitively. Never populate these sets from the first browser login or repositories returned by a token.
 - Validate bootstrap configuration before issuing certificates or accepting login. Missing/invalid settings produce actionable local diagnostics and leave management access unavailable; do not start a public setup wizard or grant administration to the first visitor.
 - Generate dependency credentials once and persist them. Restart, reconciliation, and redeployment must not regenerate passwords.
@@ -89,13 +89,22 @@ Manual metadata repair and restore require a stopped controller and validated st
 
 Ordinary removal retains resource directories, credential files, aliases, persistent volumes/claims, service namespaces, tombstones, and identity/path reservations. Use explicit `Retain` PV reclaim policy and no disposable owner-reference chains for retained objects. A different source cannot silently acquire retained state. Re-enrollment/reuse policy remains a separate product decision; destructive purge requires its own explicit administrator operation.
 
-## GitHub configuration shape
+## Host configuration shape
 
-Required shape, alongside the existing TLS/OAuth2 settings:
+Complete bootstrap settings shape (secret values belong only in the separate host file):
 
 ```yaml
+clusterDomain: example.com
+tls:
+  digitalOceanTokenRef: digitalocean-dns
+  acme:
+    environment: staging # staging | production (Let's Encrypt)
+    email: admin@example.com
 auth:
   github:
+    clientId: your-github-oauth-client-id
+    clientSecretRef: github-oauth
+    callbackUrl: https://paas.example.com/api/auth/callback
     allowedUsernames:
       - example-user
     adminUsernames:
@@ -111,7 +120,13 @@ gitops:
         credentialRef: github-org-read
 ```
 
-Credential references resolve on the host; they are not browser OAuth2 access tokens or values checked into application repositories. These snippets define configuration shape, not a complete bootstrap configuration.
+Credential references resolve on the host; they are not browser OAuth2 access tokens or values checked into application repositories. `_platform/secrets.yaml` is a flat mapping of credential names to non-empty string values. Supply `digitalocean-dns`, `github-oauth`, `github-personal-read`, and `github-org-read` for the example above. Never commit that file. Use mode `0600` (or read-only `0400`) and make it readable by the control-plane OS user. Files and the `_platform` directory must be real entries beneath the configured storage root, without symlinks. Both files are bounded to 1 MiB and reject duplicate YAML keys; settings reject unknown fields and inline secret fields.
+
+The domain uses ASCII DNS labels (1–63 characters each, at least two labels, at most 248 bytes including dots); IP addresses, wildcards, and trailing dots are rejected. The callback must use HTTPS on `paas.<clusterDomain>`, with a non-empty path under `/api/`, no credentials, query, fragment, or alternate port. This validates the callback shape; the future login implementation owns the concrete callback route, and operators must register its exact URL with GitHub.
+
+GitHub usernames/owner names use 1–39 ASCII letters/digits with single internal hyphens. Matching is normalized to lowercase. Username lists deduplicate within each list; discovery rejects duplicate owner names case-insensitively. Credential names use 1–128 ASCII letters/digits, hyphens or underscores, starting with a letter/digit. Invalid names and missing references report controlled field paths without rejected values. YAML errors report line/column when available and omit parser excerpts and input values.
+
+Owner decision (2026-10-18, CP-03): use `org` consistently as the configuration discriminator; `organization` is rejected. The loader returns a validated immutable configuration view and a separate server-only secret resolver; only configuration references can be serialized. No configuration writer, reload, or credential rotation is introduced here; those remain separate work.
 
 ## Required verification
 
