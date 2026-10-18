@@ -2,7 +2,7 @@
 
 MVP: an Axum control plane serves a React/Vite hello-world SPA and `GET /api/health` (200). The browser checks immediately and every five seconds, showing `healthcheck: up` or `healthcheck: down`; requests time out after four seconds.
 
-This is a local development milestone. Authentication, reconciliation, shared JSON contracts, and the production outer K3s appliance are not implemented. Do not expose this development deployment publicly.
+This is a local development milestone. Shared Rust contracts supply JSON API errors and generated browser schemas/types. Authentication, reconciliation, and the production outer K3s appliance are not implemented. Do not expose this development deployment publicly.
 
 ## First clone (macOS / Homebrew)
 

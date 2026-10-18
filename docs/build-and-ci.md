@@ -41,7 +41,15 @@ bazel run //services/paas-ui:dev
 
 Use `linux-amd64` for x86-64 image builds. `bazel run --config=linux-arm64 //deploy/appliance:load` explicitly loads the control-plane workload image into Docker. The current image target produces only that inner workload, not the future outer K3s appliance. It uses a static musl executable and scratch base, so there is no mutable base image or base digest to resolve. It contains no TLS clients yet; add a pinned certificate bundle when outbound HTTPS is introduced.
 
-The MVP pins Rust 1.90.0 (edition 2024), Bazel 8.4.2, Node 22.14.0, pnpm 10.11.0, and the Bazel rule/toolchain versions in `MODULE.bazel`. Zig supplies Linux cross-linking from macOS and Linux. Cargo and pnpm lockfiles remain the dependency source of truth. Shared-contract generation and privileged production-appliance acceptance targets are deferred until their implementation exists. Formatting uses `cargo fmt --all` and frontend-local `pnpm format`; `//:check` checks Rust formatting/Clippy and frontend formatting/lint/types, while `bazel test //...` runs routing and frontend tests.
+The MVP pins Rust 1.90.0 (edition 2024), Bazel 8.4.2, Node 22.14.0, pnpm 10.11.0, and the Bazel rule/toolchain versions in `MODULE.bazel`. Zig supplies Linux cross-linking from macOS and Linux. Cargo and pnpm lockfiles remain the dependency source of truth. Privileged production-appliance acceptance targets are deferred until their implementation exists. Formatting uses `cargo fmt --all` and frontend-local `pnpm format`; `//:check` checks Rust formatting/Clippy, frontend formatting/lint/types, and contracts, while `bazel test //...` runs routing, contract, and frontend tests.
+
+### Shared contracts
+
+`packages/shared-contracts` owns public Serde models and validation. Its initial configuration primitive, `CredentialReference`, is a non-empty name, never a resolved credential. Deserialization and `TryFrom<String>` enforce that invariant; host lookup, name policy, and bootstrap configuration belong to CP-03. Public `ApiError` diagnostics carry field paths and stable codes without rejected values. Unknown fields and unknown error codes are rejected. Complete descriptor models remain CP-05 work.
+
+`//packages/shared-contracts:schema` runs the Rust exporter on the execution platform and emits a deterministic draft-7 JSON Schema catalog. `//services/paas-ui:contracts` uses pinned `json-schema-to-typescript` tooling under `tools/contracts` to produce `generated/contracts.d.ts` inside Bazel outputs. The bundle, development server, and type-check targets declare the generation dependency. Neither backend builds nor schema export depend on Node.
+
+`//services/paas-ui:contract_check` validates the same valid/invalid examples in `packages/shared-contracts/tests/fixtures.json` as Rust and checks reproducible declarations. `:contract_typecheck` compiles valid and intentionally invalid browser examples against those declarations. Both are in `//:check`; Rust and browser fixture tests also run under `bazel test //...`. Extend the public model catalog and fixtures together. TypeScript cannot enforce string-length constraints; browser runtime validation uses the generated schema, and Rust remains authoritative. Never hand-edit or copy generated declarations into the source tree.
 
 ### Local development with Docker and k3d
 

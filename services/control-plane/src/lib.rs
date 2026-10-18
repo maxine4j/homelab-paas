@@ -48,8 +48,14 @@ pub fn app(ui_dir: PathBuf) -> Router {
         .layer(TraceLayer::new_for_http())
 }
 
-async fn api_not_found() -> StatusCode {
-    StatusCode::NOT_FOUND
+async fn api_not_found() -> impl IntoResponse {
+    (
+        StatusCode::NOT_FOUND,
+        axum::Json(shared_contracts::ApiError {
+            code: shared_contracts::ErrorCode::NotFound,
+            diagnostics: Vec::new(),
+        }),
+    )
 }
 
 async fn cache_policy(request: Request<Body>, next: Next) -> Response {
@@ -70,6 +76,27 @@ async fn cache_policy(request: Request<Body>, next: Next) -> Response {
 mod tests {
     use super::*;
     use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn unknown_api_returns_public_error() -> Result<(), Box<dyn std::error::Error>> {
+        let app = app(tempfile::tempdir()?.path().to_path_buf());
+        for path in ["/api", "/api/missing"] {
+            let response = app
+                .clone()
+                .oneshot(Request::builder().uri(path).body(Body::empty())?)
+                .await?;
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            assert_eq!(
+                response.headers().get(header::CONTENT_TYPE),
+                Some(&HeaderValue::from_static("application/json"))
+            );
+            let body = axum::body::to_bytes(response.into_body(), 4096).await?;
+            let error: shared_contracts::ApiError = serde_json::from_slice(&body)?;
+            assert_eq!(error.code, shared_contracts::ErrorCode::NotFound);
+            assert!(error.diagnostics.is_empty());
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn api_and_static_routing() -> Result<(), Box<dyn std::error::Error>> {

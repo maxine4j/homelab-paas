@@ -1,0 +1,70 @@
+load("@aspect_bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
+load("@crates//:defs.bzl", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_clippy", "rust_library", "rust_test", "rustfmt_test")
+
+rust_library(
+    name = "lib",
+    srcs = ["src/lib.rs"],
+    crate_name = "shared_contracts",
+    edition = "2024",
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    visibility = ["//visibility:public"],
+    deps = all_crate_deps(normal = True),
+)
+
+rust_binary(
+    name = "export_contracts",
+    srcs = ["src/bin/export_contracts.rs"],
+    edition = "2024",
+    deps = [":lib"] + all_crate_deps(normal = True),
+)
+
+genrule(
+    name = "schema",
+    outs = ["contracts.schema.json"],
+    cmd = "$(location :export_contracts) > $@",
+    tools = [":export_contracts"],
+    visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "contract_tests",
+    compile_data = ["tests/fixtures.json"],
+    crate = ":lib",
+)
+
+rust_clippy(
+    name = "clippy",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":export_contracts",
+        ":lib",
+    ],
+)
+
+rustfmt_test(
+    name = "rustfmt",
+    targets = [
+        ":lib",
+        ":export_contracts",
+    ],
+)
+
+filegroup(
+    name = "format_check",
+    testonly = True,
+    srcs = [":rustfmt"],
+    output_group = "rustfmt_checks",
+    visibility = ["//visibility:public"],
+)
+
+exports_files([
+    "Cargo.toml",
+    "tests/fixtures.json",
+])
+
+copy_to_bin(
+    name = "fixtures",
+    srcs = ["tests/fixtures.json"],
+    visibility = ["//visibility:public"],
+)
