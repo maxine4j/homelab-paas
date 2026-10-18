@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@homelab-paas/shared-contracts": "workspace:*",
+    "acme-client": "5.4.0",
     "koa": "3.2.1",
     "koffi": "3.3.3",
     "pino": "10.4.0",
