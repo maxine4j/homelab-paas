@@ -12,27 +12,27 @@ Binding requirements come from [platform architecture](../platform-spec.md), [co
 
 ## Authoritative owners
 
-| Information | Authority | Local representation and recovery |
-| --- | --- | --- |
-| Cluster/bootstrap/access/discovery settings | Administrator's host `_platform/config.yaml` | UI writes this same file atomically; the controller store contains no competing configuration copy. Reload semantics remain a separate decision. |
-| User-supplied secrets | Referenced host secret files, initially `_platform/secrets.yaml` | Metadata contains references only; never secret values. |
-| Application desired state | Explicitly enrolled Git descriptor at an immutable revision | Persist the accepted normalized snapshot and revision/digest for restart recovery. It is a materialized Git version, never a UI override. Retain the last valid snapshot on source failure. |
-| Candidates, ignores, enrollment, approval audit, pinned source, stop/rebind decisions | Local controller metadata | Durable records under `_platform/state`; discovery and Kubernetes cannot manufacture enrollment. |
-| Installation/service/resource identities, reservations, inventory, operation progress | Local controller metadata | Stable identities and pending intents precede external effects. Kubernetes labels are corroborating evidence, not a replacement for this store. |
-| Live objects, UIDs, resource versions, conditions | Kubernetes API | Cached observations are replaceable and refreshed after restart. Desired/applied/healthy revisions remain distinct. |
-| Generated resource credentials | Stable resource `secrets/` files | Controller stores references and materialization progress. Existing files survive restart/removal; Kubernetes Secrets are scoped copies. |
-| Application data and declared volumes | Host resource directories or configured aliases | Inventory tracks identity/retention, not contents. Ordinary cleanup cannot erase them. |
-| ACME/certificate material; K3s state | Their specified `_platform/certificates/` and `_platform/k3s/` stores | Separate lifecycle and backup boundaries; not folded into controller metadata. |
+| Information                                                                           | Authority                                                             | Local representation and recovery                                                                                                                                                           |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cluster/bootstrap/access/discovery settings                                           | Administrator's host `_platform/config.yaml`                          | UI writes this same file atomically; the controller store contains no competing configuration copy. Reload semantics remain a separate decision.                                            |
+| User-supplied secrets                                                                 | Referenced host secret files, initially `_platform/secrets.yaml`      | Metadata contains references only; never secret values.                                                                                                                                     |
+| Application desired state                                                             | Explicitly enrolled Git descriptor at an immutable revision           | Persist the accepted normalized snapshot and revision/digest for restart recovery. It is a materialized Git version, never a UI override. Retain the last valid snapshot on source failure. |
+| Candidates, ignores, enrollment, approval audit, pinned source, stop/rebind decisions | Local controller metadata                                             | Durable records under `_platform/state`; discovery and Kubernetes cannot manufacture enrollment.                                                                                            |
+| Installation/service/resource identities, reservations, inventory, operation progress | Local controller metadata                                             | Stable identities and pending intents precede external effects. Kubernetes labels are corroborating evidence, not a replacement for this store.                                             |
+| Live objects, UIDs, resource versions, conditions                                     | Kubernetes API                                                        | Cached observations are replaceable and refreshed after restart. Desired/applied/healthy revisions remain distinct.                                                                         |
+| Generated resource credentials                                                        | Stable resource `secrets/` files                                      | Controller stores references and materialization progress. Existing files survive restart/removal; Kubernetes Secrets are scoped copies.                                                    |
+| Application data and declared volumes                                                 | Host resource directories or configured aliases                       | Inventory tracks identity/retention, not contents. Ordinary cleanup cannot erase them.                                                                                                      |
+| ACME/certificate material; K3s state                                                  | Their specified `_platform/certificates/` and `_platform/k3s/` stores | Separate lifecycle and backup boundaries; not folded into controller metadata.                                                                                                              |
 
 ## Storage alternatives
 
-| Option | Benefits | Costs and disposition |
-| --- | --- | --- |
-| One versioned metadata snapshot file | Inspectable, no database runtime; one replacement commits related records together | Rewrites the snapshot per commit; bounded metadata only. Selected. |
-| Independent YAML/JSON record files | Small writes and convenient inspection | Renaming multiple files is not one transaction; approval, reservations, and inventory can diverge after a crash. Would require a journal or generation manifest. Not recommended initially. |
-| Append-only file journal plus snapshots | Small durable appends; historical replay | Requires torn-tail handling, replay, compaction, and format evolution. Defer until measured write volume justifies it. |
-| Embedded transactional database, such as SQLite | Existing transaction/recovery machinery and indexed queries | Owner explicitly chose files instead. Not selected. |
-| Kubernetes objects/CRDs as the metadata store | API persistence and watches | Couples controller recovery to cluster state and introduces another authority for approvals; does not replace host config/secrets. Not selected. |
+| Option                                          | Benefits                                                                           | Costs and disposition                                                                                                                                                                       |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One versioned metadata snapshot file            | Inspectable, no database runtime; one replacement commits related records together | Rewrites the snapshot per commit; bounded metadata only. Selected.                                                                                                                          |
+| Independent YAML/JSON record files              | Small writes and convenient inspection                                             | Renaming multiple files is not one transaction; approval, reservations, and inventory can diverge after a crash. Would require a journal or generation manifest. Not recommended initially. |
+| Append-only file journal plus snapshots         | Small durable appends; historical replay                                           | Requires torn-tail handling, replay, compaction, and format evolution. Defer until measured write volume justifies it.                                                                      |
+| Embedded transactional database, such as SQLite | Existing transaction/recovery machinery and indexed queries                        | Owner explicitly chose files instead. Not selected.                                                                                                                                         |
+| Kubernetes objects/CRDs as the metadata store   | API persistence and watches                                                        | Couples controller recovery to cluster state and introduces another authority for approvals; does not replace host config/secrets. Not selected.                                            |
 
 ## File layout and records
 
@@ -42,11 +42,11 @@ The snapshot envelope carries a store schema version, monotonically increasing c
 
 Persist candidates/decisions, enrollment audit and immutable source identity, accepted desired snapshots, revision transitions, operation IDs/intents/results, object inventory, retained storage/credential references, and service/route reservations. Use typed operation states, not arbitrary strings. Enrollment uniqueness uses repository ID, pinned branch, and root descriptor path; repository names are display metadata. Reserve service IDs/routes atomically with enrollment. Repeated requests resolve to the existing durable decision, including when a response was lost.
 
-Keep raw Git repositories, logs, metrics, observed watch streams, and secret-bearing descriptor values out of this file. Store secret references only and reject inline credentials rather than persisting them. Bound snapshot size, record counts, parsing work, queues, and history; exhaustion rejects further mutations visibly instead of dropping enrollment, pending operations, or retained inventory. Exact limits and Rust serialization/library choices belong to CP-04 and the canonical contracts.
+Keep raw Git repositories, logs, metrics, observed watch streams, and secret-bearing descriptor values out of this file. Store secret references only and reject inline credentials rather than persisting them. Bound snapshot size, record counts, parsing work, queues, and history; exhaustion rejects further mutations visibly instead of dropping enrollment, pending operations, or retained inventory. Exact limits and TypeScript serialization/library choices belong to CP-04 and the canonical contracts.
 
 ## Durable commit protocol
 
-Serialize mutations through one bounded writer running disk/serialization work outside Tokio executor threads. Readers use the last committed immutable in-memory snapshot. A transaction checks expected generations, applies all related changes, validates the entire next snapshot, then:
+Serialize mutations through one bounded writer running disk/serialization work in a dedicated worker, outside the request event loop. Readers use the last committed immutable in-memory snapshot. A transaction checks expected generations, applies all related changes, validates the entire next snapshot, then:
 
 1. Create a unique temporary file exclusively in the state directory, without following symlinks; use restrictive directory/file permissions (`0700`/`0600`) and validate containment/ownership. Never truncate the committed file.
 2. Write the complete next snapshot, flush buffered output, and sync the file.
@@ -113,19 +113,19 @@ Destructive purge remains CP-41: a separate administrator-authorized operation t
 
 The following is a design walkthrough, not evidence of implemented fault-injection tests. CP-04 implements the file/lock/migration cases; CP-18/CP-20/CP-22/CP-26 and CP-41 verify their effect boundaries.
 
-| Scenario reviewed | Required outcome |
-| --- | --- |
-| Crash during temporary write/file sync | Old committed snapshot remains authoritative; no effect follows an uncommitted intent. |
-| Crash after rename, before directory sync | Startup validates whichever complete committed generation survived; no automatic temporary-file promotion. Sync failure stops further effects. |
-| Enrollment commit succeeds, enqueue/response is lost | Restart discovers pending deployment; retry returns the same enrollment and IDs. |
-| Create succeeds, result commit is lost | Inspect deterministic target/token; record its UID and resume, without duplicate object or credentials. |
-| Credential file sync succeeds, controller crashes | Reuse the same valid credential before provisioning; corruption/missing provisioned credentials stops recovery. |
-| Two controllers or a migration tool start together | Only the shared lock holder can write or perform effects. No stale-PID takeover. |
-| Migration crashes, fails validation, or runs out of disk | Valid old/new version is selected by committed path; no partial migrations or background mutation. Newer versions are rejected. |
-| Snapshot corrupt, missing on existing install, or mounted to wrong cluster | Fail closed; operator restores matching state. No regenerated approvals/installation identity. |
-| Foreign namespace/object, conflicting fields, or UID replacement | Report conflict; no forced apply, silent adoption, or deletion of replacement objects. |
-| Removal interrupted or namespace contains unrelated objects | Resume exact pending runtime deletions; retain namespace, data, credentials, and tombstones. |
-| Source unreachable/partial scan; descriptor truly deleted | First case retains deployment; only complete enrolled-source evidence permits runtime pruning in the second. |
-| Disk full/unwritable or commit response uncertain | Typed actionable persistence error; pause effects, preserve committed identity, resolve retries using operation IDs. |
+| Scenario reviewed                                                          | Required outcome                                                                                                                               |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Crash during temporary write/file sync                                     | Old committed snapshot remains authoritative; no effect follows an uncommitted intent.                                                         |
+| Crash after rename, before directory sync                                  | Startup validates whichever complete committed generation survived; no automatic temporary-file promotion. Sync failure stops further effects. |
+| Enrollment commit succeeds, enqueue/response is lost                       | Restart discovers pending deployment; retry returns the same enrollment and IDs.                                                               |
+| Create succeeds, result commit is lost                                     | Inspect deterministic target/token; record its UID and resume, without duplicate object or credentials.                                        |
+| Credential file sync succeeds, controller crashes                          | Reuse the same valid credential before provisioning; corruption/missing provisioned credentials stops recovery.                                |
+| Two controllers or a migration tool start together                         | Only the shared lock holder can write or perform effects. No stale-PID takeover.                                                               |
+| Migration crashes, fails validation, or runs out of disk                   | Valid old/new version is selected by committed path; no partial migrations or background mutation. Newer versions are rejected.                |
+| Snapshot corrupt, missing on existing install, or mounted to wrong cluster | Fail closed; operator restores matching state. No regenerated approvals/installation identity.                                                 |
+| Foreign namespace/object, conflicting fields, or UID replacement           | Report conflict; no forced apply, silent adoption, or deletion of replacement objects.                                                         |
+| Removal interrupted or namespace contains unrelated objects                | Resume exact pending runtime deletions; retain namespace, data, credentials, and tombstones.                                                   |
+| Source unreachable/partial scan; descriptor truly deleted                  | First case retains deployment; only complete enrolled-source evidence permits runtime pruning in the second.                                   |
+| Disk full/unwritable or commit response uncertain                          | Typed actionable persistence error; pause effects, preserve committed identity, resolve retries using operation IDs.                           |
 
 Consequences: whole-snapshot writes keep the initial file store understandable, at a cost in write amplification and bounded metadata capacity. The lock requires shared host mounts and controller downtime during replacement. Conservative conflicts and retained namespaces require operator diagnosis rather than automatic adoption. These tradeoffs are accepted; exact limits, library choices, and explicitly out-of-scope product policies remain with their implementation tickets.

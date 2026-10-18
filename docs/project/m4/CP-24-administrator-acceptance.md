@@ -29,7 +29,7 @@ Turn one explicitly reviewed descriptor into durable deployment authorization.
 
 ## Verification
 
-Test stale approval races, duplicate/concurrent acceptance, restart between commit/enqueue, service conflicts, auth/CSRF, and exact first deployment. For implementation changes, run applicable Bazel checks and tests; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
+Test stale approval races, duplicate/concurrent acceptance, restart between commit/enqueue, service conflicts, auth/CSRF, and exact first deployment. For implementation changes, run `pnpm check`, `pnpm test`, and `pnpm build`; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
 
 ## Completion
 

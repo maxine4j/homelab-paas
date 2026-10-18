@@ -32,10 +32,9 @@ Agree explicit administrator confirmation/target semantics and how retained cred
 
 ## Verification
 
-Test unauthorized/stale/active targets, path/symlink attacks, repeated requests, interrupted deletion, and unrelated data preservation. For implementation changes, run applicable Bazel checks and tests; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
+Test unauthorized/stale/active targets, path/symlink attacks, repeated requests, interrupted deletion, and unrelated data preservation. For implementation changes, run `pnpm check`, `pnpm test`, and `pnpm build`; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
 
 ## Completion
 
 - [ ] Scope, acceptance criteria, and verification are complete; record evidence and the PR link here.
 - [ ] Update this ticket's status and the corresponding checkbox in [the milestone index](../_milestones.md).
-

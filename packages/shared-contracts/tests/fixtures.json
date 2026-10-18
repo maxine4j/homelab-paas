@@ -1,13 +1,38 @@
 [
-  {"contract":"CredentialReference","valid":true,"value":"github-personal-read"},
-  {"contract":"CredentialReference","valid":false,"value":""},
-  {"contract":"CredentialReference","valid":false,"value":null},
-  {"contract":"CredentialReference","valid":false,"value":{"value":"secret"}},
-  {"contract":"ApiError","valid":true,"value":{"code":"invalid_request","diagnostics":[{"path":"credentialRef","code":"required"}]}},
-  {"contract":"ApiError","valid":true,"value":{"code":"not_found","diagnostics":[]}},
-  {"contract":"ApiError","valid":false,"value":{"code":"unknown","diagnostics":[]}},
-  {"contract":"ApiError","valid":false,"value":{"code":"not_found"}},
-  {"contract":"ApiError","valid":false,"value":{"code":"not_found","diagnostics":[],"secret":"never echo"}},
-  {"contract":"ApiError","valid":false,"value":{"code":"invalid_request","diagnostics":[{"path":"credentialRef","code":"unknown"}]}},
-  {"contract":"ApiError","valid":false,"value":{"code":"invalid_request","diagnostics":[{"path":"credentialRef","code":"required","value":"never echo"}]}}
+  { "contract": "CredentialReference", "valid": true, "value": "github-personal-read" },
+  { "contract": "CredentialReference", "valid": false, "value": "" },
+  { "contract": "CredentialReference", "valid": false, "value": null },
+  { "contract": "CredentialReference", "valid": false, "value": { "value": "secret" } },
+  {
+    "contract": "ApiError",
+    "valid": true,
+    "value": {
+      "code": "invalid_request",
+      "diagnostics": [{ "path": "credentialRef", "code": "required" }]
+    }
+  },
+  { "contract": "ApiError", "valid": true, "value": { "code": "not_found", "diagnostics": [] } },
+  { "contract": "ApiError", "valid": false, "value": { "code": "unknown", "diagnostics": [] } },
+  { "contract": "ApiError", "valid": false, "value": { "code": "not_found" } },
+  {
+    "contract": "ApiError",
+    "valid": false,
+    "value": { "code": "not_found", "diagnostics": [], "secret": "never echo" }
+  },
+  {
+    "contract": "ApiError",
+    "valid": false,
+    "value": {
+      "code": "invalid_request",
+      "diagnostics": [{ "path": "credentialRef", "code": "unknown" }]
+    }
+  },
+  {
+    "contract": "ApiError",
+    "valid": false,
+    "value": {
+      "code": "invalid_request",
+      "diagnostics": [{ "path": "credentialRef", "code": "required", "value": "never echo" }]
+    }
+  }
 ]

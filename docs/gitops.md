@@ -19,7 +19,7 @@ Discovery finds possible services. Enrollment records the user's deployment deci
 - Discovery scans each repository's current default branch. Resolve its head to an immutable commit, enumerate that commit's root tree without recursion, and inspect only regular root-level files ending in `.sd.yaml`.
 - Fetch candidate contents at that same immutable commit/blob revision. Bound file size and parsing work; never run repository code or resolve arbitrary descriptor includes during discovery.
 - Empty repositories, missing default branches, unreadable files, and invalid descriptors appear as scoped discovery diagnostics. One repository/file failure must not hide other discovered candidates.
-- Parse candidates using the same versioned Rust descriptor contracts as tracking. Show invalid matching files with validation diagnostics; they cannot be accepted for deployment until valid.
+- Parse candidates using the same versioned shared descriptor contracts as tracking. Show invalid matching files with validation diagnostics; they cannot be accepted for deployment until valid.
 - Record repository identity, owner/name, branch, descriptor path, commit/blob revision, service metadata, resource summary, discovery timestamps, and validation status. Use immutable GitHub repository IDs for identity rather than only mutable names/URLs.
 - Deduplicate overlapping scans. Mark forks/archived repositories in the UI rather than silently ignoring repositories that otherwise meet discovery scope.
 - Recommended discovery polling interval: five minutes, with jitter, bounded concurrency, conditional requests/caching, rate-limit handling, and retry backoff. Allow an authenticated administrator to request a rescan.

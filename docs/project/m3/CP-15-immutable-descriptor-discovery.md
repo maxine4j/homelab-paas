@@ -27,10 +27,9 @@ Discover candidates from a stable repository snapshot without executing reposito
 
 ## Verification
 
-Test immutable-snapshot races, exact suffix/type filtering, malformed/oversized files, empty repositories, and no repository execution. For implementation changes, run applicable Bazel checks and tests; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
+Test immutable-snapshot races, exact suffix/type filtering, malformed/oversized files, empty repositories, and no repository execution. For implementation changes, run `pnpm check`, `pnpm test`, and `pnpm build`; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
 
 ## Completion
 
 - [ ] Scope, acceptance criteria, and verification are complete; record evidence and the PR link here.
 - [ ] Update this ticket's status and the corresponding checkbox in [the milestone index](../_milestones.md).
-

@@ -28,10 +28,9 @@ Provide the supported scoped FerretDB access model through explicit consumer bin
 
 ## Verification
 
-Verify actual supported authentication/authorization behavior, denied unrelated access, network isolation, stable credentials, and provisioning recovery. For implementation changes, run applicable Bazel checks and tests; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
+Verify actual supported authentication/authorization behavior, denied unrelated access, network isolation, stable credentials, and provisioning recovery. For implementation changes, run `pnpm check`, `pnpm test`, and `pnpm build`; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
 
 ## Completion
 
 - [ ] Scope, acceptance criteria, and verification are complete; record evidence and the PR link here.
 - [ ] Update this ticket's status and the corresponding checkbox in [the milestone index](../_milestones.md).
-

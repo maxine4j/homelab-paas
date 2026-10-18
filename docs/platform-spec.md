@@ -18,10 +18,10 @@ Support both the owner's web applications and existing containerized homelab app
 
 - K3s supplies Kubernetes, container execution, scheduling, service discovery, and network-policy enforcement.
 - Traefik supplies public HTTP ingress and routes authorization checks to the control plane.
-- One Rust control plane owns descriptor parsing, Git polling, reconciliation, the custom auth proxy, certificate lifecycle management, secrets provisioning, managed resources, observability configuration, and the management API.
-- Axum supplies HTTP routing on Tokio. Use Tokio-compatible asynchronous clients and `tracing` for structured logs and operation spans.
-- A React/TypeScript/Vite SPA supplies authenticated onboarding and cluster management. Axum serves the API and the built SPA from the same runtime image.
-- Shared Rust/Serde contracts define the canonical data model and validation boundary; generate frontend TypeScript contracts and schemas from that model.
+- One TypeScript control plane on Node 24 owns descriptor parsing, Git polling, reconciliation, the custom auth proxy, certificate lifecycle management, secrets provisioning, managed resources, observability configuration, and the management API.
+- Fastify supplies HTTP routing and structured logging. Use asynchronous clients with cancellation and timeouts; move blocking disk and serialization work into dedicated workers.
+- A React/TypeScript/Vite SPA supplies authenticated onboarding and cluster management. Fastify serves the API and the built SPA from the same runtime image.
+- Shared JSON Schemas define the canonical public data model and validation boundary; generate TypeScript contracts in the shared workspace package and validate untrusted inputs with Ajv.
 - GitHub OAuth2 supplies browser login. Initial TLS/OAuth2 settings, allowed GitHub usernames, and GitHub discovery owners must be explicitly configured in the host file before web onboarding is available.
 - Use GitHub APIs to enumerate repositories owned by configured users/organizations and discover root-level `*.sd.yaml` files. Discovery is read-only; explicit user acceptance enrolls a descriptor for ongoing deployment.
 - Deploy through Git polling only. Do not implement Git webhooks.
@@ -31,21 +31,21 @@ Support both the owner's web applications and existing containerized homelab app
 - Default resource layout: `/var/homelab-paas/<serviceId>/<resourceId>/...`.
 - Controller metadata uses one versioned atomic YAML snapshot at `_platform/state/controller.yaml`, protected by a lifetime OS file lock at `_platform/state/controller.lock`. No controller database server or SQLite store; host configuration and secrets remain separate authoritative files. See [configuration and storage](configuration-and-storage.md) for commit, migration, singleton, and recovery requirements.
 - Allocate one Kubernetes namespace per enrolled service, with separate reserved platform and observability namespaces. Use durable local inventory and owned-field reconciliation, without CRDs. Ordinary removal retains service namespaces, persistent data, and stable credentials. See [reconciliation](reconciliation.md) for ownership and cleanup rules.
-- Bazel is the top-level build, test, code-generation, and image-packaging system. Use Bzlmod and pinned Rust and JavaScript toolchains.
-- Use Cargo manifests/lockfiles for Rust dependency declarations and local Rust tooling. Keep pnpm manifests/lockfiles and all frontend-specific tooling under `services/paas-ui`; neither language tool owns the overall repository build.
-- Use rustfmt, Clippy, and Rust's built-in test harness for Rust. Retain Vitest, oxfmt, and oxlint for frontend TypeScript, with GitHub Actions running the Bazel targets.
+- pnpm is the top-level build, test, contract-generation, and explicit image-packaging entry point. Use one workspace and committed root lockfile with pinned Node 24, TypeScript, and pnpm versions.
+- Keep package manifests in their workspace packages and repository scripts/tooling at the root. Frontend-specific Vite/Vitest configuration remains in `services/paas-ui`.
+- Use Vitest across backend, shared-contract, and frontend packages; use Oxc's oxfmt and oxlint across the workspace. GitHub Actions runs the same pnpm commands used locally.
 
 ## Confirmed product decisions
 
 1. Native Linux, one host and one K3s node. Availability guarantees apply to compatible application rollouts, not whole-appliance or host upgrades.
 2. GitHub OAuth2 browser login with separate host-configured GitHub username lists for private applications and control-plane administrators. Every web resource defaults to `public: false`; only an explicit `public: true` bypasses the platform auth proxy. Management always requires administrator access. No local account database, bootstrap CLI, setup token, or special setup port.
 3. A custom versioned YAML schema with service metadata and a resource map discriminated by each resource's `type` field.
-4. Rust/Axum/Tokio backend, React/TypeScript/Vite frontend, shared Rust contracts, and Bazel workspace management. Maintained asynchronous OAuth2 and ACME libraries implement protocol mechanics; this project owns integration and lifecycle.
+4. TypeScript/Node 24/Fastify backend, React/TypeScript/Vite frontend, shared schema contracts, and pnpm workspace management. Maintained asynchronous OAuth2 and ACME libraries implement protocol mechanics; select additional packages with owner approval.
 5. Reserved `_platform` state directory, configuration editable manually or through the UI, stable generated credentials, and data retention on descriptor deletion.
 6. Primary web resource at `<serviceId>.<clusterDomain>`, additional web resources at `<resourceId>--<serviceId>.<clusterDomain>`, management at `paas.<clusterDomain>`. Services with multiple web resources must explicitly designate exactly one as primary.
 7. DigitalOcean DNS-01 and a wildcard certificate initially.
 8. Platform metrics cover every resource; application metrics require a supported endpoint/exporter. Pushgateway is for suitable short-lived jobs, not a replacement for worker scraping.
-9. Bazel owns the build graph for both services and the final appliance image. The SPA is a JavaScript package, with no Cargo wrapper, frontend `build.rs`, or Rust image-packaging crate.
+9. pnpm owns orchestration for both services and explicit Docker Buildx packaging commands. Package compiled JavaScript, production dependencies, Node 24, and the SPA into one control-plane workload image.
 10. Require configured GitHub user/organization owners for repository discovery. Scan each repository's default branch and require separate approval for each root-level `.sd.yaml` descriptor; discovery alone never authorizes deployment.
 
 The canonical platform directory is `_platform`. Users first edit `/var/homelab-paas/_platform/config.yaml` and its referenced secret file to configure domain, DigitalOcean/ACME credentials, GitHub OAuth2 credentials, private-application and administrator username lists, discovery owners, and repository read credentials. The appliance establishes HTTPS before offering GitHub login. Administrator-only onboarding presents discovered services for acceptance rather than requiring users to enter individual repositories manually. No unauthenticated bootstrap workflow is required.
@@ -67,9 +67,9 @@ The canonical platform directory is `_platform`. Users first edit `/var/homelab-
 
 ### Local development milestone
 
-Use Docker Desktop (macOS) and k3d for a reusable single-server local K3s cluster. The MVP deploys only the control-plane workload image, containing the Axum healthcheck and hello-world React SPA. Bind its HTTP and Kubernetes API ports to loopback. k3d is development infrastructure, not the production outer appliance supervisor. Repeated deployments reuse the cluster and import content-tagged images without requiring a registry. See [local setup and commands](../README.md).
+Use Docker Desktop (macOS) and k3d for a reusable single-server local K3s cluster. The MVP deploys only the control-plane workload image, containing the Fastify healthcheck and hello-world React SPA. Bind its HTTP and Kubernetes API ports to loopback. k3d is development infrastructure, not the production outer appliance supervisor. Repeated deployments reuse the cluster and import content-tagged images without requiring a registry. See [local setup and commands](../README.md).
 
-The MVP has no management functionality or authentication. The public health endpoint and hello-world shell do not enable unauthenticated management bootstrap. Shared contracts and schema generation begin when serializable product API models are introduced; the MVP health response has no body.
+The MVP has no management functionality or authentication. The public health endpoint and hello-world shell do not enable unauthenticated management bootstrap. Shared schemas already supply strict API errors and generated types; the MVP health response has no body. Host-configuration and persistence libraries exist, while their startup/effect integration remains CP-06.
 
 ### Production appliance (not yet implemented)
 
@@ -94,119 +94,62 @@ The MVP has no management functionality or authentication. The public health end
 ```text
 /
   AGENTS.md
-  MODULE.bazel
-  MODULE.bazel.lock
-  BUILD.bazel
-  .bazelversion
-  .bazelrc
-  Cargo.toml                    # Rust members/dependencies; not repo orchestration
-  Cargo.lock
-  rust-toolchain.toml
-  rustfmt.toml
-  .github/workflows/
-    ci.yml
-    appliance.yml
+  package.json                 # repository scripts and toolchain pins
+  pnpm-workspace.yaml
+  pnpm-lock.yaml               # one dependency lock for every package
+  .node-version
+  tsconfig.json
+  .oxfmtrc.json
+  .oxlintrc.json
+  .github/workflows/ci.yml
   services/
     control-plane/
-      BUILD.bazel
-      Cargo.toml
-      src/
-        main.rs
-        lib.rs
-        app.rs
-        config/                # host config, secrets, validation, atomic writes
-        api/                   # management routes, authz, errors, status streams
-        auth/                  # GitHub OAuth2, sessions, policies, forward auth
-        certificates/          # ACME lifecycle, DNS provider, TLS publication
-        gitops/                # discovery, approval, tracked revisions, ownership
-          discovery/           # GitHub owner/repository scans and candidates
-          enrollment/          # acceptance, source bindings, durable decisions
-          tracking/            # enrolled-source polling and revision snapshots
-        descriptors/           # parsing, reference resolution, normalization
-        reconciliation/        # planner, queue, orchestration, status, inventory
-        kubernetes/            # kube client/runtime, watches, apply, owned cleanup
-        resources/             # type-specific plans and lifecycle operations
-          web/
-          worker/
-          postgres/
-          ferretdb/
-          rabbitmq/
-        networking/            # ingress, route registry, policies, bindings
-        storage/               # path allocation, aliases, retention, permissions
-        observability/         # stack config, discovery, exporters, dashboards
-        persistence/           # durable controller metadata and migrations
-        platform/              # bootstrap reconciliation and component versions
-      tests/                   # Rust integration-test targets
-        fixtures/
-    paas-ui/
-      BUILD.bazel
       package.json
-      pnpm-lock.yaml
       tsconfig.json
-      .oxfmtrc.json
-      .oxlintrc.json
+      tsconfig.build.json
+      src/
+        main.ts                # listener and graceful HTTP shutdown
+        app.ts                 # Fastify API/static routing
+        config.ts              # host settings, references, validation
+        persistence.ts         # bounded worker facade
+        persistence-model.ts   # typed metadata and validation
+        persistence-writer.ts  # durable commits and migrations
+        persistence-worker.ts  # lifetime lock and disk/serialization worker
+      tests/
+    paas-ui/
+      package.json
+      tsconfig.json
       index.html
       vite.config.ts
       vitest.config.ts
-      tools/
-        contracts/             # schema-to-TypeScript generation and JS tooling
       src/
-        main.tsx
-        app/
-        features/
-          onboarding/
-          discovery/           # scan status, candidate preview, accept/ignore
-          cluster/
-          services/
-          topology/
-          settings/
-        components/
-        api/
-        styles/
   packages/
     shared-contracts/
-      BUILD.bazel
-      Cargo.toml
+      package.json
       src/
-        lib.rs
-        descriptors/
-        config/
-        api/
-        status/
-        errors/
-        bin/
-          export_contracts.rs  # schema exporter used by Bazel code generation
-  tools/
-    build/                     # small shared Bazel macros when needed
+        schemas.ts             # canonical public wire schemas
+        index.ts               # validators and generated type exports
+        descriptor.ts          # CP-05 draft; parsing remains disabled
+        generated/             # ignored generated declarations
+      tools/generate.mjs
+      tests/
+  scripts/                     # explicit setup, packaging, local deployment
   deploy/
-    appliance/
-      BUILD.bazel              # runtime image, outer appliance, load/push targets
-      rootfs/                  # supervisor/configuration files staged into image
-    systemd/                   # installation unit and documented overrides
-    kubernetes/                # platform bootstrap manifests, not app manifests
-  examples/
-    config/
-    services/
-  tests/
-    appliance/
-      BUILD.bazel              # explicit privileged local acceptance target
+    appliance/Dockerfile       # inner workload; outer appliance is future
+    appliance/bundle_test.py
+    kubernetes/local.yaml
   docs/
-    architecture/
-    adr/
-    operations/
 ```
 
-- This is a target structure; create directories when they contain real code. Do not scaffold empty abstractions or speculative packages.
-- `shared-contracts` is a Rust crate owning serializable public models, validation rules, and exportable schemas. Use Serde tagged enums for resource discriminants and validate domain invariants explicitly.
-- The backend depends on the shared Rust crate; the frontend consumes its generated schemas/TypeScript declarations through the Bazel graph. Generated browser contracts contain no secret values, filesystem logic, Kubernetes client, or backend-only implementation.
-- Shared packages never depend on services. The UI never imports backend implementation files, and backend-only builds must not depend on frontend tooling.
-- Keep normalization/planning as pure as practical. Put network, Kubernetes, disk, and process effects behind small explicit adapters.
-- Resource modules implement a consistent lifecycle contract. Extract a package only after a real second consumer or a clear independently maintained boundary exists.
-- A supporting component being configured by the control plane does not require a new Rust service or workspace package.
+- Create additional config, API, auth, certificate, GitOps, reconciliation, Kubernetes, resource, network, storage, and observability modules when they contain real implementation. Do not scaffold empty abstractions.
+- Shared contracts own public JSON Schemas, generated TypeScript types, and runtime validation. Use discriminated resource unions and validate domain invariants explicitly.
+- Both services import the shared workspace package. Public contracts contain no resolved secrets, filesystem logic, Kubernetes clients, or backend adapters. Shared packages never depend on services; the UI never imports backend implementation files.
+- Backend builds depend on shared generation but require no frontend tooling or bundle. Keep normalization/planning pure; put effects behind small explicit adapters.
+- Resource modules implement a consistent lifecycle contract. Extract another package only for a real second consumer or independently maintained boundary. A supporting workload does not require another control-plane service.
 
 ## Testing and release acceptance
 
-Use Rust's built-in unit/integration test harness, including Tokio async test support, exposed as Bazel Rust test targets. Use Vitest for frontend tests through Bazel JavaScript targets. Test meaningful behaviour and failure recovery, not snapshots of implementation structure.
+Use Vitest for backend, shared-contract, and frontend tests through the pnpm workspace. Test meaningful behaviour and failure recovery, not snapshots of implementation structure.
 
 - Appliance acceptance tests: real privileged nested K3s on a Linux runner with the production mount/port topology. Mock Kubernetes tests are insufficient evidence for runtime isolation and host persistence.
 
@@ -228,7 +171,7 @@ The first usable release is accepted when a fresh documented Linux host can:
 ## Reference documentation
 
 - [K3s in Docker](https://docs.k3s.io/advanced#running-k3s-in-docker)
-- [Tokio-compatible HTTP client](https://docs.rs/reqwest/latest/reqwest/)
-- [tracing](https://docs.rs/tracing/latest/tracing/)
+- [Node fetch](https://nodejs.org/docs/latest-v24.x/api/globals.html#fetch)
+- [Fastify logging](https://fastify.dev/docs/latest/Reference/Logging/)
 
 Library references are implementation candidates, not unreviewed version pins. Record concrete version/compatibility choices when bootstrapping the workspace.

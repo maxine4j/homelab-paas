@@ -1,8 +1,0 @@
-common --enable_bzlmod
-build --incompatible_strict_action_env
-build --enable_platform_specific_config
-build --repo_env=HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX=/tmp/homelab-paas-zig
-build --sandbox_writable_path=/tmp/homelab-paas-zig
-build:linux-arm64 --platforms=//tools/build:linux_arm64
-build:linux-amd64 --platforms=//tools/build:linux_amd64
-test --test_output=errors

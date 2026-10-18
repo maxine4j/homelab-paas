@@ -2,7 +2,7 @@
 
 Milestone: [M1](../_milestones.md) · Status: Complete · PR: — (local dev-local workflow)
 
-Create one authoritative Rust model boundary and reproducible browser-contract generation.
+Create one authoritative shared schema boundary and reproducible browser-contract generation.
 
 ## Dependencies
 
@@ -18,33 +18,24 @@ None; follow the repository instructions and binding specifications.
 ## Scope
 
 - Add packages/shared-contracts with initial configuration/API/error primitives and explicit validation boundaries.
-- Export JSON Schema from Rust and derive TypeScript with tooling owned by services/paas-ui/tools/contracts.
-- Wire generation and example validation into Bazel; keep outputs out of the source tree and backend builds independent of frontend tooling.
+- Keep canonical JSON Schemas and TypeScript generation in packages/shared-contracts; both services import the workspace package.
+- Wire generation and example validation into pnpm; keep generated outputs ignored and backend builds independent of frontend tooling.
 
 ## Acceptance criteria
 
 - [x] Backend and generated browser contracts agree on representative valid and invalid payloads.
-- [x] Clean Bazel builds generate contracts without prepared node_modules or source-tree writes.
-- [x] Cargo and Bazel use compatible features/dependencies; generated contracts contain no secret values or backend adapters.
+- [x] Clean pnpm builds generate contracts after a locked dependency install.
+- [x] Both services consume one shared workspace package; generated contracts contain no secret values or backend adapters.
 
 ## Verification
 
-Run contract/export fixtures, Bazel generation and check targets, and a backend-only build. For implementation changes, run applicable Bazel checks and tests; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
+Run contract fixtures, pnpm generation and checks, and a backend-only build. For implementation changes, run `pnpm check`, `pnpm test`, and `pnpm build`; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
 
 ## Completion
 
 - [x] Scope, acceptance criteria, and verification are complete; record evidence and the PR link here.
 - [x] Update this ticket's status and the corresponding checkbox in [the milestone index](../_milestones.md).
 
-Implemented the shared Rust crate with validated credential-name references, closed public error codes, field diagnostics, and strict API errors. Unknown API routes now use the shared JSON error contract. Full bootstrap configuration remains CP-03; descriptor models remain CP-05.
+Implemented the shared TypeScript package with validated credential-name references, closed public error codes, field diagnostics, and strict API errors. Unknown API routes now use the shared JSON error contract. Full bootstrap configuration remains CP-03; descriptor models remain CP-05.
 
-Verification (2026-10-18):
-
-- Observed failing Rust fixtures for empty references and unknown fields, then passing fixtures after validation; observed a failing API error response test, then passing after integration.
-- Observed browser compiler fixtures failing against the empty generator, then passing against Rust-derived declarations. Rust and Ajv validate the same 11 valid/invalid examples; generation reproducibility is checked.
-- `bazel test //...`: all seven test targets passed.
-- After `bazel clean`, `bazel build --sandbox_block_path=/Users/mings/repo/homelab-paas/services/paas-ui/node_modules //:check //services/paas-ui:bundle //services/control-plane:control-plane` passed. Generated schema/declarations remain under Bazel outputs.
-- `bazel build --config=linux-arm64 //services/control-plane:control-plane` passed, without frontend generation.
-- `cargo build -p control-plane --locked` and `cargo test -p shared-contracts -p control-plane --locked` passed. Buildifier and diff whitespace checks passed.
-
-No PR or publication: the requested workflow creates one local commit.
+Migration verification uses `pnpm check`, `pnpm test`, and `pnpm build`. Shared runtime fixtures and compiler fixtures cover empty references, closed error codes, unknown fields, and the absence of resolved secrets. Both services consume the generated declarations. Previous build-system command transcripts were superseded by the workspace migration.

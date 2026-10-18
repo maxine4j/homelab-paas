@@ -9,7 +9,7 @@ Read related requirements only when the change crosses those boundaries: [descri
 ## Kubernetes reconciliation
 
 - Separate parsing, validation/defaulting, planning, mutation, and observation.
-- Use the maintained Tokio-compatible `kube` Rust client/runtime rather than parsing `kubectl` output for core reconciliation.
+- Use a maintained asynchronous Kubernetes client compatible with Node 24 rather than parsing `kubectl` output for core reconciliation. Select the package with owner approval before implementation.
 - Use one namespace per enrolled service, with separate reserved platform and observability namespaces. Descriptors cannot select namespaces. Persist namespace allocation/name and naming algorithm/version before creation, validate DNS limits/collisions before enrollment, and record returned UID after observation. Keep service namespaces on ordinary removal.
 - Persist accepted desired state, inventory, and operation/finalization progress in the versioned atomic YAML snapshot `_platform/state/controller.yaml`, protected by the lifetime lock at `_platform/state/controller.lock`. No CRDs or custom-resource finalizers; future CRD use requires a new architecture decision. Follow the [configuration and storage](configuration-and-storage.md) commit, migration, and singleton protocols; no SQLite or additional metadata database server.
 - Watch observed Kubernetes state and run periodic resynchronization. Reconcile after controller restarts without requiring a new Git commit.
@@ -92,6 +92,6 @@ Read related requirements only when the change crosses those boundaries: [descri
 ## Reference documentation
 
 - [K3s networking services](https://docs.k3s.io/networking/networking-services)
-- [Rust Kubernetes client/runtime](https://docs.rs/kube/latest/kube/)
+- [Kubernetes API client libraries](https://kubernetes.io/docs/reference/using-api/client-libraries/)
 - [Kubernetes deployment semantics](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
 - [Prometheus Pushgateway guidance](https://prometheus.io/docs/practices/pushing/)

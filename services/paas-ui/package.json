@@ -3,37 +3,28 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "pnpm": {
-    "onlyBuiltDependencies": []
-  },
-  "packageManager": "pnpm@10.11.0",
-  "engines": {
-    "node": ">=22.14.0 <23"
-  },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "oxlint src tools/contracts",
-    "format": "oxfmt src tools/contracts *.ts *.json index.html",
-    "format:check": "oxfmt --check src tools/contracts *.ts *.json index.html"
+    "lint": "oxlint src",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
   },
   "dependencies": {
+    "@homelab-paas/shared-contracts": "workspace:*",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
   "devDependencies": {
-    "@types/node": "22.15.21",
     "@types/react": "19.1.6",
     "@types/react-dom": "19.1.5",
     "@vitejs/plugin-react": "4.5.0",
-    "ajv": "8.17.1",
-    "json-schema-to-typescript": "15.0.4",
-    "oxfmt": "0.15.0",
-    "oxlint": "1.19.0",
-    "typescript": "5.8.3",
     "vite": "6.4.4",
     "vitest": "3.2.4"
+  },
+  "engines": {
+    "node": ">=24 <25"
   }
 }

@@ -15,7 +15,7 @@ Current MVP: `GET /api/health` returns an empty HTTP 200 response. The hello-wor
 - Put all backend HTTP endpoints under `/api/`, including login/callback/logout, management, forward-auth, health, and metrics. Treat bare `/api` as part of the API namespace too. Internal endpoints remain restricted even though they share the prefix.
 - In production, serve frontend files from `/usr/share/homelab-paas/ui`, with `index.html` at that directory's root. This is an immutable image path, separate from `/var/homelab-paas` host state.
 - Serve existing static files for non-API GET/HEAD requests and return `index.html` for SPA navigation routes. Missing assets return 404; unsupported methods return an appropriate method error. Unknown `/api` routes return API errors, never the SPA HTML.
-- Use Axum/Tower static-file services with path containment and appropriate content types. Cache fingerprinted assets immutably and require revalidation for `index.html` so deployments do not strand clients on obsolete assets.
+- Use Fastify with `@fastify/static` with path containment and appropriate content types. Cache fingerprinted assets immutably and require revalidation for `index.html` so deployments do not strand clients on obsolete assets.
 - Keep management authorization enforced by API handlers and the configured management ingress policy; serving the SPA does not grant access to management data.
 - Users configure domain, DigitalOcean/ACME settings, GitHub OAuth2 credentials/callback, private-application usernames, administrator usernames, discovery owners, and repository-read credential references through the host file before using the UI.
 - Once HTTPS and administrator GitHub login work, onboarding shows discovery progress and discovered services. Administrators review a candidate and explicitly accept it to start tracking/deployment; scanning an owner or logging in is not acceptance.
@@ -32,11 +32,11 @@ Current MVP: `GET /api/health` returns an empty HTTP 200 response. The hello-wor
 
 ## Frontend conventions
 
-- Keep frontend TypeScript strict and ESM. Use pnpm for its dependency lock, Vitest for UI tests, oxfmt for formatting, and oxlint for linting; TypeScript type checking remains a separate target. All related manifests, configs, scripts, and dependency declarations live under `services/paas-ui`.
+- Keep frontend TypeScript strict and ESM. Use pnpm for its dependency lock, Vitest for UI tests, oxfmt for formatting, and oxlint for linting; TypeScript type checking remains a separate target. Repository tooling, the lockfile, and Oxc settings live at the root; frontend-specific configuration and dependencies live under `services/paas-ui`. Vitest also tests the backend and shared contracts.
 
 - Frontend TypeScript must not use `any`; narrow `unknown` at untrusted boundaries. Prefer `array.at(index)` to indexed array reads.
 
-- Generate frontend wire types from the canonical shared Rust schemas. Keep server-side validation authoritative and do not maintain divergent handwritten interface/schema copies.
+- Generate wire types in `packages/shared-contracts` from its canonical JSON Schemas and import them through the workspace package in both services. Keep server-side validation authoritative and do not maintain divergent handwritten interface/schema copies.
 
 ## Required verification
 
@@ -44,5 +44,5 @@ Current MVP: `GET /api/health` returns an empty HTTP 200 response. The hello-wor
 
 ## Reference documentation
 
-- [Axum](https://docs.rs/axum/latest/axum/)
-- [Tower static-file serving](https://docs.rs/tower-http/latest/tower_http/services/struct.ServeDir.html)
+- [Fastify](https://fastify.dev/docs/latest/)
+- [Fastify static files](https://github.com/fastify/fastify-static)

@@ -32,7 +32,7 @@ Resolved by owner on 2026-10-18: file-based storage with one atomic YAML metadat
 
 ## Verification
 
-Review crash, duplicate-controller, migration, and ownership-conflict scenarios against the ADR. For implementation changes, run applicable Bazel checks and tests; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
+Review crash, duplicate-controller, migration, and ownership-conflict scenarios against the ADR. For implementation changes, run `pnpm check`, `pnpm test`, and `pnpm build`; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
 
 ## Completion
 

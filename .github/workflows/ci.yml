@@ -9,11 +9,24 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: bazel-contrib/setup-bazel@4fd964a13a440a8aeb0be47350db2fc640f19ca8 # 0.15.0
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
-          repository-cache: true
-      - run: bazel build --lockfile_mode=error //:check //services/control-plane:control-plane //services/paas-ui:bundle
-      - run: bazel test --lockfile_mode=error //...
-      - run: bazel build --lockfile_mode=error --config=linux-amd64 //deploy/appliance:image
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm build
+  package:
+    runs-on: ubuntu-24.04
+    needs: build
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        with:
+          name: homelab-paas-build
+      - run: python3 scripts/build-image.py --arch amd64
+      - run: python3 deploy/appliance/bundle_test.py artifacts/control-plane-linux-amd64.oci.tar
+      - run: docker buildx build --builder homelab-paas-build --platform linux/amd64 --file deploy/appliance/Dockerfile --tag homelab-paas/control-plane:ci --load .
+      - run: docker run --rm --read-only --network none --tmpfs /tmp:rw,noexec,nosuid,size=16m --interactive --entrypoint node homelab-paas/control-plane:ci --input-type=module < deploy/appliance/smoke.mjs

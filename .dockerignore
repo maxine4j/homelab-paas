@@ -1,0 +1,9 @@
+.git
+.dev
+node_modules
+**/node_modules
+**/dist
+**/src/generated
+artifacts
+**/__pycache__
+*.log

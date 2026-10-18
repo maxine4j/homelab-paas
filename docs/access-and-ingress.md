@@ -33,7 +33,7 @@ Read related requirements only when the change crosses those boundaries: [config
 
 ## Certificate lifecycle
 
-- The custom manager speaks to Let's Encrypt using a maintained asynchronous Rust ACME library compatible with Tokio.
+- The custom manager speaks to Let's Encrypt using a maintained asynchronous ACME library compatible with Node 24. Select the package with owner approval before implementation.
 - Use DigitalOcean DNS-01 initially, requesting `*.<clusterDomain>` and the apex if the apex is used. Do not implement multiple DNS providers before a requirement exists.
 - Persist ACME registration/account keys, private keys, issued chains, order state, and renewal metadata under platform state with restrictive permissions.
 - Issue/renew certificates centrally and publish the resulting Kubernetes TLS Secret for Traefik to consume.
@@ -53,5 +53,5 @@ Read related requirements only when the change crosses those boundaries: [config
 
 - [GitHub OAuth2 web application flow](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)
 - [GitHub authenticated user API](https://docs.github.com/en/rest/users/users#get-the-authenticated-user)
-- [Rust OAuth2 client](https://docs.rs/oauth2/latest/oauth2/) — configure GitHub endpoints explicitly
-- [Asynchronous Rust ACME client candidate](https://docs.rs/instant-acme/latest/instant_acme/)
+- [GitHub OAuth web flow](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)
+- [Let's Encrypt documentation](https://letsencrypt.org/docs/)

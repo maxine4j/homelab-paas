@@ -32,16 +32,15 @@ Owner decision, 2026-10-18: use `org` everywhere in the configuration discrimina
 
 ## Verification
 
-Use valid/invalid file fixtures, case normalization, malformed names, missing secrets, permission failures, and redaction checks. For implementation changes, run applicable Bazel checks and tests; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
+Use valid/invalid file fixtures, case normalization, malformed names, missing secrets, permission failures, and redaction checks. For implementation changes, run `pnpm check`, `pnpm test`, and `pnpm build`; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
 
 ## Completion
 
 - [x] Scope, acceptance criteria, and verification are complete. No PR: local workflow.
 - [x] Update this ticket's status and the corresponding checkbox in [the milestone index](../_milestones.md).
 
-Implemented `control_plane::config`: strict typed YAML, reusable parse/validate path, normalized independent scopes, domain/HTTPS callback/ACME checks, named secret resolution, and redacted diagnostics. Host loading uses directory-relative non-symlink opens, regular-file checks, a 1 MiB file limit, and owner-only secret file modes. Secret values have no serialization implementation and redact `Debug` output.
+Implemented `services/control-plane/src/config.ts`: strict typed YAML, reusable parse/validate path, normalized independent scopes, domain/HTTPS callback/ACME checks, named secret resolution, and redacted diagnostics. Host loading uses directory-relative non-symlink opens, regular-file checks, a 1 MiB file limit, and owner-only secret file modes. Secret values are private and redact JSON serialization and debug inspection.
 
 Invalid settings return an error without a usable bootstrap context. Runtime startup integration is CP-06, including local host-file mounts; the existing health/hello-world MVP has no management login or management operations and keeps its current development lifecycle.
 
-Verification: focused tests cover valid/invalid disk inputs, malformed names, empty/duplicate scopes, missing references with field diagnostics, unsafe permissions, symlink escapes, nonregular/oversized files, and serialization/debug/error redaction. `bazel build //:check //services/control-plane:control-plane //services/paas-ui:bundle` and `bazel test //...` pass. No Docker/K3s or external-service execution.
-
+Verification: focused tests cover valid/invalid disk inputs, malformed names, empty/duplicate scopes, missing references with field diagnostics, unsafe permissions, symlink escapes, nonregular/oversized files, and serialization/debug/error redaction. Current verification commands are `pnpm check`, `pnpm test`, and `pnpm build`; rerun them for the migrated implementation. No Docker/K3s or external-service execution.

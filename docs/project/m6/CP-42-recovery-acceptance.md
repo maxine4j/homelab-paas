@@ -31,10 +31,9 @@ Demonstrate integrated control-plane recovery and record the boundary of the evi
 
 ## Verification
 
-Run the explicit integrated suite and backup/restore drills; record evidence and unresolved limitations. Privileged Linux appliance tests remain separate and cannot be inferred from local k3d results. For implementation changes, run applicable Bazel checks and tests; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
+Run the explicit integrated suite and backup/restore drills; record evidence and unresolved limitations. Privileged Linux appliance tests remain separate and cannot be inferred from local k3d results. For implementation changes, run `pnpm check`, `pnpm test`, and `pnpm build`; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
 
 ## Completion
 
 - [ ] Scope, acceptance criteria, and verification are complete; record evidence and the PR link here.
 - [ ] Update this ticket's status and the corresponding checkbox in [the milestone index](../_milestones.md).
-

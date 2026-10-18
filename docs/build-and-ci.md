@@ -1,84 +1,46 @@
 # Build tooling, CI, and image packaging
 
-Status: agreed project specification. Requirements and confirmed decisions below are binding. Implementation recommendations remain recommendations until recorded in an architecture decision; they do not reopen settled product choices.
+Status: agreed project specification. The control plane uses TypeScript, Node 24, Fastify, and a top-level pnpm workspace. Ask the owner, with a recommendation, before adding any third-party dependency not already authorized.
 
-Read when changing Bazel rules/targets, toolchains, dependency integration, contract generation, image packaging, or GitHub Actions workflows. Running existing build/test commands for another task does not require this guide.
+Read when changing workspace scripts, toolchains, dependency integration, contract generation, image packaging, or GitHub Actions. Running existing checks does not require this guide.
 
-Read related requirements only when the change crosses those boundaries: [platform architecture and target workspace layout](platform-spec.md), [frontend](frontend.md).
+## Ownership and toolchains
 
-## Build ownership and image packaging
+- The root `package.json` owns repository commands; `pnpm-workspace.yaml` includes `packages/*` and `services/*`. Keep one committed root `pnpm-lock.yaml`, exact direct dependency versions, and the pinned pnpm `packageManager` field.
+- Use Node 24, strict ESM TypeScript, Vitest for backend/shared/frontend tests, and the Oxc tools `oxlint` and `oxfmt` for linting and formatting. The root TypeScript configuration supplies shared strict settings; the SPA uses bundler resolution and DOM types.
+- Node's built-in TypeScript stripping supports small development/build scripts. Production runs compiled JavaScript; do not add a runtime TypeScript loader or another repository task orchestrator.
+- `pnpm install --frozen-lockfile` prepares dependencies. Build/check/test scripts do not install dependencies or contact external services.
+- Shared public JSON Schemas in `packages/shared-contracts/src/schemas.ts` are canonical. The shared package generates TypeScript declarations with the existing `json-schema-to-typescript` tool and validates runtime inputs with Ajv. Both services depend on that package through `workspace:*`; never copy wire types or import backend adapters into the browser.
+- Generated source lives in ignored `packages/shared-contracts/src/generated/`; compiled packages and the SPA use ignored `dist/` directories. Run shared generation before compiling consumers. A backend-only build requires the shared package but no frontend build.
+- Root `pnpm build` runs workspace packages in dependency order. `pnpm check` runs format, lint, generation and type checks; `pnpm test` runs Vitest across packages. Unit tests never start Docker or k3d.
+- Use `pnpm format` to format the repository, and `pnpm dev` for the backend and Vite development servers. Vite proxies API requests to the backend.
 
-- Use Bazel with Bzlmod, `rules_rust`, `rules_js`, and `rules_oci`. Pin Bazel, rule sets, toolchains, dependency locks, and OCI base-image digests.
-- Bazel targets are authoritative for CI and release builds. Cargo and pnpm remain language-specific dependency/development tools, not competing repository orchestrators.
-- Use a Cargo workspace for the backend and shared-contracts crates. Import its manifests and committed `Cargo.lock` through `rules_rust` crate-universe support; do not maintain a separate conflicting list of Rust dependency versions.
-- Keep the SPA's `package.json`, committed `pnpm-lock.yaml`, JavaScript build dependencies, and frontend configuration in `services/paas-ui`. Import `//services/paas-ui:pnpm-lock.yaml` through `rules_js`; do not run ad hoc `pnpm install` inside ordinary build/test actions.
-- Do not add root `package.json`, pnpm lock/workspace files, TypeScript configs, Vite/Vitest configs, oxfmt/oxlint configs, or Node-version files. The SPA is one local pnpm package; it does not require a repository-wide pnpm workspace.
-- Root Bazel module/toolchain registration and aggregate targets may reference frontend Bazel labels and the frontend lockfile. Keep JavaScript dependency declarations, scripts, and tool-specific settings in the SPA directory.
-- Rust compilation uses native Bazel Rust rules. Vite, TypeScript checks, frontend tests, and formatting/lint tools run as declared JavaScript actions with explicit inputs, outputs, and pinned tools.
-- Generate frontend contracts from the shared Rust model as an explicit build dependency before frontend compilation. Export JSON Schema from the Rust contracts and derive TypeScript declarations using tools owned by `services/paas-ui/tools/contracts`; do not maintain parallel handwritten API models or Zod schemas. Rust schema export remains in the shared Rust crate.
-- Keep generated files in declared Bazel outputs. Builds must not modify source files, rely on undeclared `target/` or `dist/` directories, or require a manually prepared `node_modules` tree.
-- Plain Rust development remains available through `cargo build -p control-plane` and `cargo test -p control-plane`; neither builds the frontend or invokes Docker. CI verifies Bazel compilation uses compatible features and contracts.
-- The image target has direct artifact dependencies on the Linux backend executable and complete frontend bundle. No Cargo dependency, `build.rs`, or build-time recursive invocation of Cargo is needed to stage those artifacts.
-- Stage the executable and SPA into the control-plane runtime image, putting the frontend at `/usr/share/homelab-paas/ui`. Keep the assets as files; do not embed them in the Rust executable.
-- Under the nested-workload deployment model, embed that control-plane OCI image into the outer K3s appliance and import it during bootstrap. This still delivers one user-facing Docker image, with no separately installed frontend or backend image.
-- Keep the application binary, static bundle, bundled runtime image, and outer appliance on the same release revision. Verify `index.html` and referenced assets exist in the runtime image.
-- Use `rules_oci` image/layer targets for assembly. Build OCI artifacts without a Docker daemon; image loading, pushing, and privileged runtime tests are explicit actions separate from compilation and assembly.
-- Build target executables for the intended Linux architecture and ABI; never package a developer's macOS executable into the appliance. Keep execution-platform code generators distinct from target-platform application binaries.
-- Node.js, pnpm, Rust compilers, Cargo, and Bazel are build/development dependencies. The production control-plane runtime contains the Rust executable, SPA assets, and required runtime libraries/certificates.
-- Keep dependency fetching in Bazel's declared dependency mechanisms. Ordinary build/test actions must not fetch packages or depend on production services or credentials.
-- Run Docker/K3s acceptance tests explicitly on an isolated Linux runner with local privileged execution. They cannot run as ordinary remote/sandboxed unit tests.
+## Shared contracts
 
-Implemented MVP targets:
+The initial models are a nonempty `CredentialReference` string and strict `ApiError` objects with closed error/diagnostic codes. Runtime validation rejects unknown fields and codes. Errors expose controlled field paths and stable codes, never rejected values or resolved credentials.
 
-```text
-bazel build //services/control-plane:control-plane
-bazel build //services/paas-ui:bundle
-bazel build --config=linux-arm64 //deploy/appliance:image
-bazel test //...
-bazel build //:check                 # formatting checks, lint, type checks, contracts
-bazel run //services/paas-ui:dev
-```
+Shared fixture tests validate `packages/shared-contracts/tests/fixtures.json`; compiler fixtures check valid and invalid use of the generated declarations. Extend canonical schemas and fixtures together. String-length constraints require runtime validation. The draft descriptor model is separate from the approved public schema catalog; CP-05 parsing remains disabled pending approval of its proposal.
 
-Use `linux-amd64` for x86-64 image builds. `bazel run --config=linux-arm64 //deploy/appliance:load` explicitly loads the control-plane workload image into Docker. The current image target produces only that inner workload, not the future outer K3s appliance. It uses a static musl executable and scratch base, so there is no mutable base image or base digest to resolve. It contains no TLS clients yet; add a pinned certificate bundle when outbound HTTPS is introduced.
+## Image packaging
 
-The MVP pins Rust 1.90.0 (edition 2024), Bazel 8.4.2, Node 22.14.0, pnpm 10.11.0, and the Bazel rule/toolchain versions in `MODULE.bazel`. Zig supplies Linux cross-linking from macOS and Linux. Cargo and pnpm lockfiles remain the dependency source of truth. Privileged production-appliance acceptance targets are deferred until their implementation exists. Formatting uses `cargo fmt --all` and frontend-local `pnpm format`; `//:check` checks Rust formatting/Clippy, frontend formatting/lint/types, and contracts, while `bazel test //...` runs routing, contract, and frontend tests.
+`deploy/appliance/Dockerfile` builds the shared package, backend and SPA with the locked workspace, then packages production dependencies, compiled JavaScript, Node 24, and the SPA at `/usr/share/homelab-paas/ui`. It builds native filesystem dependencies for the target Linux architecture, never copies a macOS native module, and runs as UID/GID 65532. Pin the multiarchitecture Node base-image digest. The image contains the Node runtime and its trust roots; development tools are excluded from its final stage.
 
-### Shared contracts
+`pnpm image` invokes `scripts/build-image.py` and Docker Buildx to export a Linux OCI archive under `artifacts/` without loading or publishing it. This explicit command requires Docker/Buildx. It creates or reuses the named `homelab-paas-build` builder with the supported `docker-container` driver and preserves the user's default builder. `--arch amd64` or `--arch arm64` selects the target; the default matches the host. Loading, privileged tests, deployment, and publication are separate explicit actions. Normal builds and checks do not use Docker.
 
-`packages/shared-contracts` owns public Serde models and validation. Its initial configuration primitive, `CredentialReference`, is a non-empty name, never a resolved credential. Deserialization and `TryFrom<String>` enforce that invariant; host lookup, name policy, and bootstrap configuration belong to CP-03. Public `ApiError` diagnostics carry field paths and stable codes without rejected values. Unknown fields and unknown error codes are rejected. Complete descriptor models remain CP-05 work.
+The MVP image is the inner control-plane workload, not the future production outer K3s appliance. When that appliance exists, embed/import the workload image and keep it, the SPA, and the supervisor on one release revision. Verify the packaged `index.html` and referenced assets. Do not claim privileged appliance acceptance from unit tests.
 
-`//packages/shared-contracts:schema` runs the Rust exporter on the execution platform and emits a deterministic draft-7 JSON Schema catalog. `//services/paas-ui:contracts` uses pinned `json-schema-to-typescript` tooling under `tools/contracts` to produce `generated/contracts.d.ts` inside Bazel outputs. The bundle, development server, and type-check targets declare the generation dependency. Neither backend builds nor schema export depend on Node.
+## Local development and CI
 
-`//services/paas-ui:contract_check` validates the same valid/invalid examples in `packages/shared-contracts/tests/fixtures.json` as Rust and checks reproducible declarations. `:contract_typecheck` compiles valid and intentionally invalid browser examples against those declarations. Both are in `//:check`; Rust and browser fixture tests also run under `bazel test //...`. Extend the public model catalog and fixtures together. TypeScript cannot enforce string-length constraints; browser runtime validation uses the generated schema, and Rust remains authoritative. Never hand-edit or copy generated declarations into the source tree.
+`scripts/bootstrap.sh` installs macOS prerequisites from the Brewfile and the locked workspace dependencies. The approved Koffi dependency supplies typed POSIX bindings for secure directory-relative operations and OS locks, replacing separate lock-only bindings. Its install uses supported prebuilt binaries where available; building from source requires Xcode Command Line Tools locally or the compiler in the image build stage.
 
-### Local development with Docker and k3d
+`pnpm dev:deploy` reuses a dedicated single-server `homelab-paas-dev` k3d cluster, builds/loads/imports a content-tagged Linux workload image, applies the local manifests, and waits for readiness. It retains loopback-only ports, a dedicated kubeconfig, and the pinned local K3s version. It never mounts the host Docker socket into workloads.
 
-`scripts/bootstrap.sh` uses the root Brewfile to install macOS development tools and installs pinned Rust/frontend dependencies. `scripts/build-image.py` builds the Linux OCI image through Bazel without a daemon. `scripts/dev-deploy.py` creates or reuses the dedicated single-server `homelab-paas-dev` k3d cluster, builds/loads/imports the control-plane image, applies the local Kubernetes manifests, and waits for readiness. Docker must be running for deployment. Repeat the deployment script during development; it does not recreate the cluster or change the user's default kubeconfig/context. The local K3s version is pinned in that script. Ports are loopback-only. See [README](../README.md) for commands, prerequisites, and teardown.
+GitHub Actions installs pinned Node/pnpm, installs with the frozen lock, and runs `pnpm check`, `pnpm test`, and `pnpm build`. A separate packaging job builds the Linux OCI archive, checks its bundle, explicitly loads an image, and runs `deploy/appliance/smoke.mjs` inside a read-only container with no external network. That smoke test verifies packaged HTTP routing, graceful SIGTERM, native Linux locking, durable commits, and recovery. Privileged production-appliance acceptance and publication require dedicated jobs; never run untrusted pull-request code on privileged runners with production secrets.
 
-This development loop does not replace the production systemd/Docker/K3s topology or its privileged acceptance tests. Neither ordinary Bazel checks nor CI unit tests start Docker or k3d.
+## References
 
-The acceptance target must be tagged for explicit/local execution so `bazel test //...` does not unexpectedly start privileged infrastructure. A normal build/test command must never push or load an image.
-
-## Toolchain conventions
-
-- Use stable Rust with a pinned toolchain, declared minimum supported Rust version, shared dependency versions, and workspace lint settings. Bazel and Cargo development builds must agree on the Rust edition, features, and dependency lock.
-
-- Pin Bazel and Rust in the root workspace/toolchain configuration. Declare frontend Node.js compatibility and the pnpm version in `services/paas-ui/package.json`, and ensure Bazel's pinned JavaScript toolchain agrees. Do not mix npm/yarn lockfiles or fetch undeclared dependencies inside build actions.
-
-## CI security
-
-- Keep privileged runtime tests isolated from production secrets. Untrusted pull-request code must not execute on a privileged self-hosted runner with sensitive access.
-
-## CI and verification targets
-
-Expose Bazel targets for formatting, formatting checks, Clippy, frontend lint/type checks, Rust/frontend tests, contract/example validation, the backend executable, the frontend bundle, and OCI images. Keep privileged acceptance tests and release publication separate from ordinary build/test targets.
-
-GitHub Actions must use the pinned Bazel version and locked Bzlmod, Cargo, and frontend-local pnpm dependencies; run formatting/lint/type checks and relevant tests through Bazel; validate examples against shared schemas; and build both services plus the appliance. Frontend-specific commands use the SPA package/configuration rather than a root JavaScript project. Use separate jobs for privileged acceptance tests and release publication. Release workflows publish versioned OCI artifacts and record component versions. Never publish credentials in images, build caches, or fixtures.
-
-## Reference documentation
-
-- [Bazel Bzlmod/dependencies](https://bazel.build/external/overview)
-- [Bazel Rust rules](https://bazelbuild.github.io/rules_rust/)
-- [Cargo dependency import through crate universe](https://bazelbuild.github.io/rules_rust/crate_universe_bzlmod.html)
-- [Bazel JavaScript rules](https://github.com/aspect-build/rules_js)
-- [Bazel OCI rules](https://github.com/bazel-contrib/rules_oci)
+- [pnpm workspaces](https://pnpm.io/workspaces)
+- [Node filesystem API](https://nodejs.org/docs/latest-v24.x/api/fs.html)
+- [Fastify](https://fastify.dev/docs/latest/)
+- [Oxc](https://oxc.rs/)
+- [Vitest](https://vitest.dev/)

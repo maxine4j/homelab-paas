@@ -17,7 +17,7 @@ Implement the approved atomic YAML metadata snapshot at `_platform/state/control
 ## Scope
 
 - Implement one typed versioned YAML snapshot with schema/commit/record generations, stable identities, invariant validation, bounded capacity, and stale-generation checks. Keep canonical host configuration and secret values separate; no SQLite or database server.
-- Serialize bounded writes outside Tokio executor threads: exclusive same-directory temporary file, write/flush/file sync, atomic replacement, directory sync, then publish/acknowledge. Follow the configuration/storage guide's indeterminate-commit and recovery rules; never promote temporary files or regenerate missing existing identities.
+- Serialize bounded writes in a dedicated worker, outside the request event loop: exclusive same-directory temporary file, write/flush/file sync, atomic replacement, directory sync, then publish/acknowledge. Follow the configuration/storage guide's indeterminate-commit and recovery rules; never promote temporary files or regenerate missing existing identities.
 - Hold the stable lock inode for process lifetime before recovery/migration/effects; contenders fail startup. Back up and sync committed state before ordered whole-snapshot migrations; reject unsupported versions and preserve identities.
 - Expose durable commit operations for desired state, approvals, inventory, revision transitions, and operations without speculative domain workflows.
 - Handle permissions, corruption, full/unwritable storage, unsupported versions, installation/cluster mismatch, and bounded blocking work. Stop further writes/effects on uncertain durability; resolve retries by durable operation identity.
@@ -30,7 +30,7 @@ Implement the approved atomic YAML metadata snapshot at `_platform/state/control
 
 ## Verification
 
-Run persistence fault-injection and restart tests, migration fixtures, and concurrent-writer tests. For implementation changes, run applicable Bazel checks and tests; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
+Run persistence fault-injection and restart tests, migration fixtures, and concurrent-writer tests. For implementation changes, run `pnpm check`, `pnpm test`, and `pnpm build`; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
 
 ## Completion
 
@@ -39,4 +39,4 @@ Run persistence fault-injection and restart tests, migration fixtures, and concu
 
 Evidence (2026-10-18): strict red/green tests cover atomic commit/restart, partial writes and injected full-disk/file-sync/rename/directory-sync failures, lost responses, halted effect admission, shutdown draining, immutable identities and operation intents, stale commit/record generations, bounded capacity, malformed/duplicate/unknown YAML, migration backups/failure, wrong bindings, missing existing state, and unsafe/unwritable entries. A real child process verifies lock contention and crash release. Desired descriptor content uses a validated typed extension point inside the sole YAML snapshot; CP-05 supplies its canonical schema, and CP-06 wires startup/effect dispatch. No domain workflows or external effects were added.
 
-Validation: `bazel build //:check //services/control-plane:control-plane //services/paas-ui:bundle` and `bazel test //...` pass. Fault injection establishes the commit/recovery protocol; privileged appliance/power-loss acceptance remains separate. No PR was created, per the requested local-only workflow.
+Validation: Current verification commands are `pnpm check`, `pnpm test`, and `pnpm build`; rerun them for the migrated implementation. Fault injection establishes the commit/recovery protocol; privileged appliance/power-loss acceptance remains separate. No PR was created, per the requested local-only workflow.

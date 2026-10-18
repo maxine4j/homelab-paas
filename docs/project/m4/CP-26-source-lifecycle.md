@@ -33,7 +33,7 @@ Record any unresolved stop/resume/rebind operational semantics; do not equate st
 
 ## Verification
 
-Exercise path moves/rebinds, rename/transfer, scope removal, missing branches, complete descriptor deletion, stop persistence, and interrupted cleanup. For implementation changes, run applicable Bazel checks and tests; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
+Exercise path moves/rebinds, rename/transfer, scope removal, missing branches, complete descriptor deletion, stop persistence, and interrupted cleanup. For implementation changes, run `pnpm check`, `pnpm test`, and `pnpm build`; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
 
 ## Completion
 

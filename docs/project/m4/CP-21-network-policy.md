@@ -31,10 +31,9 @@ Resolve external internet access per resource/profile and treatment of private c
 
 ## Verification
 
-Run actual K3s denied/permitted connection tests, including DNS, ingress, dependency, and external/private-address boundaries. For implementation changes, run applicable Bazel checks and tests; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
+Run actual K3s denied/permitted connection tests, including DNS, ingress, dependency, and external/private-address boundaries. For implementation changes, run `pnpm check`, `pnpm test`, and `pnpm build`; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
 
 ## Completion
 
 - [ ] Scope, acceptance criteria, and verification are complete; record evidence and the PR link here.
 - [ ] Update this ticket's status and the corresponding checkbox in [the milestone index](../_milestones.md).
-

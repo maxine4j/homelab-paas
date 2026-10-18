@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -11,6 +12,7 @@ import sys
 ROOT = Path(__file__).resolve().parent.parent
 IMAGE = "homelab-paas/control-plane"
 CLUSTER = "homelab-paas-dev"
+BUILDER = "homelab-paas-build"
 
 
 def run(*args: str, capture: bool = False, stdin: str | None = None,
@@ -37,6 +39,19 @@ def architecture() -> str:
     if value in ("x86_64", "amd64"):
         return "amd64"
     raise SystemExit(f"Unsupported Docker architecture: {value}")
+
+
+def image_builder() -> str:
+    """OCI export needs the container driver; preserve the user's default builder."""
+    builders = run("docker", "buildx", "ls", "--format", "json", capture=True)
+    for line in builders.splitlines():
+        builder = json.loads(line)
+        if builder["Name"] == BUILDER:
+            if builder["Driver"] != "docker-container":
+                raise SystemExit(f"Builder {BUILDER} must use the docker-container driver.")
+            return BUILDER
+    run("docker", "buildx", "create", "--name", BUILDER, "--driver", "docker-container")
+    return BUILDER
 
 
 def kube_environment() -> dict[str, str]:

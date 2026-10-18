@@ -2,9 +2,9 @@
 """Create or reuse the local k3d cluster, then build, import, and deploy the MVP."""
 
 import json
-from dev import CLUSTER, IMAGE, ROOT, architecture, kube_environment, require, run
+from dev import CLUSTER, IMAGE, ROOT, architecture, image_builder, kube_environment, require, run
 
-require("bazel", "docker", "k3d", "kubectl")
+require("docker", "k3d", "kubectl")
 arch = architecture()
 clusters = json.loads(run("k3d", "cluster", "list", "--output", "json", capture=True))
 cluster = next((item for item in clusters if item["name"] == CLUSTER), None)
@@ -21,7 +21,8 @@ elif not all(node["State"]["Running"] for node in cluster["nodes"]):
     run("k3d", "cluster", "start", CLUSTER, "--wait", "--timeout", "120s")
 
 env = kube_environment()
-run("bazel", "run", f"--config=linux-{arch}", "//deploy/appliance:load")
+run("docker", "buildx", "build", "--builder", image_builder(), "--platform", f"linux/{arch}",
+    "--file", "deploy/appliance/Dockerfile", "--tag", f"{IMAGE}:dev", "--load", ".")
 digest = run("docker", "image", "inspect", f"{IMAGE}:dev", "--format", "{{.Id}}", capture=True)
 tag = f"{IMAGE}:dev-{digest.removeprefix('sha256:')}"
 run("docker", "tag", f"{IMAGE}:dev", tag)

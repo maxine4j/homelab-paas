@@ -1,4 +1,0 @@
-{
-  "extends": "../../tsconfig.json",
-  "include": ["usage.ts", "../../generated/contracts.d.ts"]
-}

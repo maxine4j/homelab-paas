@@ -32,10 +32,9 @@ CP-27 chooses the backend; record any additional dependency on CP-28 after that 
 
 ## Verification
 
-Exercise backend outage/recovery, interrupted component provisioning, persistent restart, retained deletion, and compatibility rejection. For implementation changes, run applicable Bazel checks and tests; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
+Exercise backend outage/recovery, interrupted component provisioning, persistent restart, retained deletion, and compatibility rejection. For implementation changes, run `pnpm check`, `pnpm test`, and `pnpm build`; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
 
 ## Completion
 
 - [ ] Scope, acceptance criteria, and verification are complete; record evidence and the PR link here.
 - [ ] Update this ticket's status and the corresponding checkbox in [the milestone index](../_milestones.md).
-

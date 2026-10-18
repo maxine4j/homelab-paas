@@ -33,13 +33,13 @@ Read related requirements only when the change crosses those boundaries: [GitOps
 
 Initial resource catalog:
 
-| Type | Platform responsibilities |
-| --- | --- |
-| `web` | Container workload, internal Service, health, HTTP route, TLS/auth policy, logs, metrics, optional storage |
-| `worker` | Container workload, health, lifecycle, dependency bindings, logs, metrics, optional storage |
-| `postgres` | Pinned supported image/version, persistent data, health, scoped credentials, connection bindings, exporter, backup/restore procedure |
+| Type       | Platform responsibilities                                                                                                                 |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `web`      | Container workload, internal Service, health, HTTP route, TLS/auth policy, logs, metrics, optional storage                                |
+| `worker`   | Container workload, health, lifecycle, dependency bindings, logs, metrics, optional storage                                               |
+| `postgres` | Pinned supported image/version, persistent data, health, scoped credentials, connection bindings, exporter, backup/restore procedure      |
 | `ferretdb` | Supported FerretDB/backend combination, required PostgreSQL/DocumentDB components, persistence, credentials, bindings, health, monitoring |
-| `rabbitmq` | Persistent broker, scoped users/vhosts/permissions, bindings, health, monitoring; management ingress private and opt-in |
+| `rabbitmq` | Persistent broker, scoped users/vhosts/permissions, bindings, health, monitoring; management ingress private and opt-in                   |
 
 Managed-resource support includes initialization, stable credentials, health reporting, data retention, and documented version upgrades. It does not imply high availability or zero-downtime upgrades.
 

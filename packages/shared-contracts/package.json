@@ -1,0 +1,30 @@
+{
+  "name": "@homelab-paas/shared-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./descriptor": {
+      "types": "./dist/descriptor.d.ts",
+      "import": "./dist/descriptor.js"
+    }
+  },
+  "scripts": {
+    "build": "node tools/generate.mjs && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run && node tools/generate.mjs --check"
+  },
+  "dependencies": {
+    "ajv": "8.17.1"
+  },
+  "devDependencies": {
+    "json-schema-to-typescript": "15.0.4"
+  }
+}

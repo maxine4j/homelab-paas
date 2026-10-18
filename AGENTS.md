@@ -2,12 +2,12 @@
 
 ## Working rules
 
-- Use rustfmt and Clippy for Rust. Prefer explicit enums, typed errors, `Result`, and clear ownership over stringly typed state or broad optional fields. Do not use panics, `unwrap`, or `expect` for recoverable production failures.
-- Use Axum/Tower on Tokio for HTTP. Prefer asynchronous `reqwest` clients with Rustls and the Tokio-compatible `kube` client/runtime. Reuse clients and connection pools, set timeouts, and restrict redirects where credentials are involved.
-- Use maintained asynchronous Rust OAuth2 and ACME clients, with the same GitHub and Let's Encrypt product semantics already specified. Concrete crate versions and compatibility are pinned when bootstrapping the workspace.
-- Use `tracing` spans/events and `tracing-subscriber` for structured logging. Include operation/service/resource/revision identifiers and redact credentials. Avoid ad hoc stdout logging in application code.
-- Use Tokio cancellation, bounded channels/concurrency, timers, and graceful task shutdown. Do not block async executor threads with synchronous disk, Git, or CPU-heavy operations; use appropriate async APIs or bounded blocking tasks.
-- Use Bazel for repository-wide commands. Do not add a second top-level pnpm/Cargo task runner, Cargo wrappers for JavaScript packages, or an image-build crate.
+- Use strict ESM TypeScript on Node 24. Prefer discriminated unions, typed errors, and explicit operation results over stringly typed state or broad optional fields. Never use `any`; narrow `unknown` at untrusted boundaries. Prefer `array.at(index)` for array reads.
+- Use Fastify for HTTP and its structured logger. Reuse clients/connections, set timeouts, redact credentials, and restrict redirects where credentials are involved. Include operation/service/resource/revision identifiers in logs; avoid ad hoc stdout logging in application code.
+- All control-plane backend source changes must follow [Layered architecture](docs/layered-architecture.md).
+- Use maintained asynchronous OAuth2, ACME, and Kubernetes clients with the specified GitHub and Let's Encrypt semantics. Ask the owner, with your recommendation, before adding a third-party dependency they have not authorized; do not invent protocol implementations to avoid this discussion.
+- Use AbortSignal cancellation, bounded queues/concurrency, timers, and graceful shutdown. Put synchronous disk and serialization work in dedicated workers; do not block the request event loop.
+- Use the top-level pnpm workspace for repository commands, Vitest for all TypeScript tests, and Oxc's oxlint/oxfmt for linting/formatting. Keep one root lockfile and exact dependency pins.
 - Use explicit resource variants, operation results, and public errors. Apply timeouts, cancellation, bounded concurrency, and retry policies appropriate to the operation.
 - Make filesystem writes atomic and reconciliation restart-safe. Handle signals and graceful shutdown explicitly.
 - Avoid shell interpolation for Git, Docker, database, or filesystem operations. Prefer structured APIs or argument-array process calls.
@@ -20,8 +20,8 @@
 
 - Build one self-hosted Linux appliance: systemd → outer Docker container → one K3s node. Workloads use the nested runtime, never the host Docker socket.
 - Local development uses Docker and a reusable single-server k3d cluster. Keep this separate from the production appliance lifecycle; never mount the host Docker socket into workloads.
-- One Rust/Axum/Tokio control plane owns platform integration; React/TypeScript/Vite supplies the SPA. Shared Rust/Serde contracts are canonical.
-- Bazel owns repository builds, tests, code generation, and image packaging. Cargo and frontend-local pnpm support language development.
+- One TypeScript/Node 24/Fastify control plane owns platform integration; React/TypeScript/Vite supplies the SPA. Shared JSON Schemas and their generated TypeScript contracts are canonical.
+- pnpm owns repository builds, tests, contract generation, and explicit image packaging commands. Do not add a competing top-level task runner.
 - Discovery is read-only. Only an administrator's explicit per-descriptor enrollment authorizes deployment; updates use Git polling, never webhooks.
 - Require host-file TLS/OAuth2/access/discovery configuration before management login. No unauthenticated bootstrap or first-visitor administration.
 - Web resources are private by default. Private-application and administrator allowlists are independent; management always requires administrator access. Auth failures deny protected traffic.
@@ -35,19 +35,20 @@
 
 The linked specifications are binding. Read the guide for the task before changing that area; follow related links only for affected boundaries. Requirements and confirmed decisions are settled. Recommendations remain recommendations until recorded in an ADR; ask about unresolved decisions rather than inventing them.
 
-| Task | Guide |
-| --- | --- |
-| Product scope, architecture, appliance lifecycle, workspace layout, release acceptance | [Platform specification](docs/platform-spec.md) |
-| Descriptor schemas, validation/defaults, resource catalog, shared contracts | [Descriptors](docs/descriptors.md) |
-| GitHub discovery, enrollment, source tracking, polling | [GitOps](docs/gitops.md) |
-| Planning, Kubernetes ownership, deployment, network permissions, observability | [Reconciliation](docs/reconciliation.md) |
-| OAuth2, sessions, authorization, routing, DNS, TLS | [Access and ingress](docs/access-and-ingress.md) |
-| Host configuration, secrets, state, storage, retention, backups | [Configuration and storage](docs/configuration-and-storage.md) |
-| UI, management API, onboarding, backend static-file serving | [Frontend and API](docs/frontend.md) |
-| Changes to Bazel, toolchains, dependencies, generation, packaging, GitHub Actions | [Build and CI](docs/build-and-ci.md) |
+| Task                                                                                               | Guide                                                          |
+| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Product scope, architecture, appliance lifecycle, workspace layout, release acceptance             | [Platform specification](docs/platform-spec.md)                |
+| Any control-plane backend source change                                                            | [Layered architecture](docs/layered-architecture.md)           |
+| Descriptor schemas, validation/defaults, resource catalog, shared contracts                        | [Descriptors](docs/descriptors.md)                             |
+| GitHub discovery, enrollment, source tracking, polling                                             | [GitOps](docs/gitops.md)                                       |
+| Planning, Kubernetes ownership, deployment, network permissions, observability                     | [Reconciliation](docs/reconciliation.md)                       |
+| OAuth2, sessions, authorization, routing, DNS, TLS                                                 | [Access and ingress](docs/access-and-ingress.md)               |
+| Host configuration, secrets, state, storage, retention, backups                                    | [Configuration and storage](docs/configuration-and-storage.md) |
+| UI, management API, onboarding, backend static-file serving                                        | [Frontend and API](docs/frontend.md)                           |
+| Changes to pnpm workspace scripts, toolchains, dependencies, generation, packaging, GitHub Actions | [Build and CI](docs/build-and-ci.md)                           |
 
 ## Commands and repository status
 
-The repository implements the hello-world/healthcheck MVP, Bazel/Cargo/Vite builds, a control-plane OCI image, and a reusable local k3d deployment. The production outer appliance and management features remain future work. See [README](README.md) for setup and development commands.
+The repository implements the hello-world/healthcheck MVP, shared contracts, host configuration, controller persistence, TypeScript/Vite builds, a control-plane OCI image, and a reusable local k3d deployment. Descriptor parsing, the production outer appliance, and management features remain future work. See [README](README.md) for setup and development commands.
 
-Use `bazel build //:check`, `bazel test //...`, and the service build targets for routine verification. `scripts/bootstrap.sh` installs macOS development dependencies; `scripts/build-image.py` assembles the Linux image; `scripts/dev-deploy.py` builds and deploys repeatedly to the same local k3d cluster. Running declared checks does not require loading the build guide. Read that guide when changing build machinery itself. Keep Docker/k3d execution, privileged appliance acceptance, and image publication explicit and separate from ordinary verification.
+Use `pnpm check`, `pnpm test`, and `pnpm build` for routine verification. `scripts/bootstrap.sh` installs macOS development dependencies; `pnpm image` assembles the Linux OCI archive; `pnpm dev:deploy` builds and deploys repeatedly to the same local k3d cluster. Running declared checks does not require loading the build guide. Read that guide when changing build machinery itself. Keep Docker/k3d execution, privileged appliance acceptance, and image publication explicit and separate from ordinary verification.

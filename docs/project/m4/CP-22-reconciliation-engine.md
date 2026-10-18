@@ -29,7 +29,7 @@ Execute durable plans idempotently and resume interrupted work without a new Git
 
 ## Verification
 
-Inject crashes between durable commits and effects, queue saturation, watch loss, API failure, and ownership conflicts. For implementation changes, run applicable Bazel checks and tests; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
+Inject crashes between durable commits and effects, queue saturation, watch loss, API failure, and ownership conflicts. For implementation changes, run `pnpm check`, `pnpm test`, and `pnpm build`; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
 
 ## Completion
 

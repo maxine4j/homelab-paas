@@ -29,7 +29,7 @@ Materialize only a resource's permitted storage and secrets with stable identity
 
 ## Verification
 
-Exercise path attacks, concurrent allocation, interrupted generation/publication, full/unwritable storage, and credential stability. For implementation changes, run applicable Bazel checks and tests; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
+Exercise path attacks, concurrent allocation, interrupted generation/publication, full/unwritable storage, and credential stability. For implementation changes, run `pnpm check`, `pnpm test`, and `pnpm build`; see [shared completion rules](../_milestones.md#sequencing-and-verification). Keep Docker/K3s and external-service integration explicit and separate from ordinary tests.
 
 ## Completion
 
