@@ -29,6 +29,8 @@ Support both the owner's web applications and existing containerized homelab app
 - Use files on the host for configuration and secrets. No cloud secret manager is required.
 - Default persistent root: `/var/homelab-paas` on the actual Linux host.
 - Default resource layout: `/var/homelab-paas/<serviceId>/<resourceId>/...`.
+- Controller metadata uses one versioned atomic YAML snapshot at `_platform/state/controller.yaml`, protected by a lifetime OS file lock at `_platform/state/controller.lock`. No controller database server or SQLite store; host configuration and secrets remain separate authoritative files. See [configuration and storage](configuration-and-storage.md) for commit, migration, singleton, and recovery requirements.
+- Allocate one Kubernetes namespace per enrolled service, with separate reserved platform and observability namespaces. Use durable local inventory and owned-field reconciliation, without CRDs. Ordinary removal retains service namespaces, persistent data, and stable credentials. See [reconciliation](reconciliation.md) for ownership and cleanup rules.
 - Bazel is the top-level build, test, code-generation, and image-packaging system. Use Bzlmod and pinned Rust and JavaScript toolchains.
 - Use Cargo manifests/lockfiles for Rust dependency declarations and local Rust tooling. Keep pnpm manifests/lockfiles and all frontend-specific tooling under `services/paas-ui`; neither language tool owns the overall repository build.
 - Use rustfmt, Clippy, and Rust's built-in test harness for Rust. Retain Vitest, oxfmt, and oxlint for frontend TypeScript, with GitHub Actions running the Bazel targets.
@@ -73,8 +75,10 @@ The MVP has no management functionality or authentication. The public health end
 
 - A small appliance entrypoint/supervisor starts K3s, handles signals, and bootstraps the packaged platform resources. Keep business logic in the control plane.
 - Recommended placement: run the control plane as a singleton Kubernetes workload, with the SPA build served by that backend. Traefik uses its internal Service for forward authorization.
+- All controller instances and maintenance tools must share the canonical host state directory and acquire its lifetime lock before recovery, migration, or effects. Stop the old controller and drain its workers/commits before releasing the lock and starting a replacement; replica count alone is insufficient. Controller overlap during upgrades is not supported.
 - Bundle/import the control-plane workload image into the nested runtime as part of the appliance build. Users should not need to manage a second installation artifact.
 - Bootstrap must install enough resources for the control plane to start without depending on its Git reconciler, authentication provider, or certificate issuer.
+- Bootstrap must persist and explicitly hand off ownership of its initial platform objects, mount the same state directory for every controller, and establish the installation/cluster binding. Reconciliation cannot silently adopt bootstrap objects by name or label. Initialize metadata only for a verified fresh installation; missing state on an existing or ambiguous installation requires operator recovery.
 - Install exactly one Traefik instance; choose either the K3s-packaged instance or a platform-managed installation and pin that choice in the appliance release.
 - Polling, reconciliation, auth, and certificate tasks run inside the one control-plane service. Supporting observability and database components remain separate Kubernetes workloads.
 - Persist K3s state separately from application data. Recreating the outer container with the same host mounts must recover the cluster and resource identities.

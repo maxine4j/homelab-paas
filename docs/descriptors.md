@@ -9,6 +9,7 @@ Read related requirements only when the change crosses those boundaries: [GitOps
 ## Service descriptor contract
 
 - Descriptors express platform intent, not Kubernetes object structure.
+- Each enrolled service receives one platform-allocated namespace; descriptors cannot select namespaces or define CRDs. Reserve the `homelab-paas.io/` metadata prefix for platform ownership; descriptor labels cannot override it. Labels never confer ownership of existing objects.
 - Discoverable service descriptors are regular files at the repository root with a filename ending exactly in `.sd.yaml`, such as `media.sd.yaml` or `app.sd.yaml`. Do not recursively search subdirectories, follow symlinks/submodules, or deploy other YAML files by convention.
 - YAML documents have top-level `version`, `metadata`, and `resources` fields. `metadata.serviceId` is required; metadata also supports a display name, description, and string labels.
 - One file identifies a service by stable `metadata.serviceId` and contains a resource map keyed by stable `resourceId`. Every resource requires a literal `type` field that selects its discriminated schema.

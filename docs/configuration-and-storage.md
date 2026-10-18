@@ -15,7 +15,9 @@ Default host layout:
   _platform/
     config.yaml                # bootstrap and cluster configuration
     secrets.yaml               # user-supplied platform/application secret values
-    state/                     # discovery, approvals, tracked sources, inventory
+    state/
+      controller.yaml          # sole committed controller metadata snapshot
+      controller.lock          # stable inode for the lifetime controller lock
     git/                       # fetched repositories and revision snapshots
     k3s/                       # persistent K3s runtime/datastore state
     certificates/              # ACME account, certificate keys, renewal state
@@ -48,7 +50,48 @@ Default host layout:
 - Do not assume a raw copy of a running database directory is a consistent backup. Each managed resource needs documented backup and restore procedures, including its credentials and metadata.
 - Automated backup scheduling and remote backup destinations require a separate scope decision; do not imply they exist merely because data is persistent.
 
-Required GitHub configuration shape, alongside the existing TLS/OAuth2 settings:
+## Authoritative state and controller records
+
+Host `config.yaml` owns cluster/bootstrap/access/discovery settings; referenced host secret files own supplied secret values. Git owns enrolled application desired state. The controller's `state/controller.yaml` owns candidates/ignore decisions, approval audit, enrollments/pinned sources, stop/rebind decisions, installation/service/resource identities, reservations, inventory, revision transitions, operation progress, and retention tombstones. Store accepted normalized Git snapshots with immutable revisions/digests for restart recovery; these are materialized Git versions, never UI overrides. Kubernetes owns live objects/UIDs/resource versions and observed conditions; cached observations are replaceable, not evidence of enrollment.
+
+Generated credentials remain authoritative in resource `secrets/` files; inventory stores references and materialization progress, and Kubernetes Secrets are scoped copies. Application data/volumes, certificates/ACME material, Git caches, observability data, and K3s state remain in their specified directories with separate lifecycle/backup boundaries. No SQLite or additional database server is used for controller metadata.
+
+Use one YAML snapshot to commit related metadata together. Its envelope contains a store schema version, monotonic commit generation, and stable installation ID/cluster binding. Typed records contain kind/version, stable identity, record generation, and explicit operation/result variants. Validate references and uniqueness and reject duplicate keys, unsupported versions, malformed records, and stale expected generations. Bound snapshot size, record counts, parsing, queues, and history; reject mutations at capacity rather than discarding enrollment, pending work, or retained inventory. Concrete limits and Rust libraries remain implementation choices. Keep secret values, raw repositories, logs, metrics, and watch streams out of the snapshot; descriptors may contain secret references only.
+
+## Atomic metadata commits and interrupted writes
+
+Serialize mutations through one bounded writer; run disk and serialization work outside Tokio executor threads. Validate the complete next snapshot before writing. Readers see the last committed immutable in-memory snapshot.
+
+1. Exclusively create a unique temporary file in the state directory without following symlinks. Validate containment/ownership and use `0700` directories and `0600` files; never truncate `controller.yaml` in place.
+2. Write the complete snapshot, flush buffers, and sync the file.
+3. Atomically rename it over `controller.yaml` on the same filesystem.
+4. Sync the state directory before publishing the new in-memory generation, acknowledging success, or starting effects that depend on it. Sync parent entries when first creating state directories.
+
+Require a local persistent filesystem supporting atomic rename, file/directory sync, and OS locking, backed by the host bind mount. Network filesystems and ephemeral container layers are unsupported for controller metadata.
+
+Failure before rename preserves the old commit. Failure after rename but before directory sync is an indeterminate commit: stop further writes/effects, surface an actionable error, and recover the validated committed path on restart. Do not continue from an old in-memory generation or acknowledge durable success. Resolve lost responses using stable operation IDs rather than creating new identities. Already in-flight effects may finish; their durable intents allow inspection on recovery.
+
+After taking the lifetime lock, load and validate only `controller.yaml`; never promote temporary files by timestamp. Discard abandoned temporary snapshots only after validating committed state. Missing/corrupt state on an existing installation fails closed; do not reconstruct approvals from Kubernetes or regenerate identities. Initialize only a verified fresh installation without prior managed state; ambiguous cases require operator recovery. Refresh Kubernetes observations and resume pending intents before new effects.
+
+## Singleton lifecycle
+
+Acquire an exclusive nonblocking OS lock on `controller.lock` before initialization, recovery, migration, management mutation, or background effects. Keep the descriptor open for the entire process lifetime with close-on-exec. Never unlink or replace the lock inode. A competing controller exits with an actionable already-running error. PID files and replica counts are not substitutes.
+
+All controllers and offline repair/migration tools must share the canonical mounted state directory and honor the same advisory lock. Separate state roots targeting one cluster are unsupported; verify installation/cluster binding before mutation. Shutdown stops new mutations, cancels and awaits workers and disk commits, then releases the lock. Replacement stops the previous controller first; no worker may perform effects after lock release. An OS-released lock after a crash permits recovery by the successor.
+
+## Migrations, credentials, and restore
+
+Run explicit ordered schema/record migrations under the lifetime lock before management mutations or reconciliation. Reject newer schemas and unsupported older versions without rewriting them. Before migrating, write, validate, and sync a restrictive backup of the committed snapshot and sync its directory. Transform in memory, validate cross-record invariants and unchanged identities, then publish the entire migrated snapshot through the atomic commit protocol. Never migrate records in place or regenerate identities, accepted revisions, or credentials. Failure stops startup without external effects; a crash leaves an old or new complete committed version. Do not silently restore a stale backup after newer operations may have run. Safe downgrade after migration is not promised.
+
+Before creating paths/credentials or provisioning dependencies, persist their stable identities and pending intents. Materialize generated credentials atomically without overwriting existing files; sync file and directory before external use. Recovery validates and reuses existing credentials. Missing/corrupt credentials for an already provisioned resource require recovery, never password regeneration. Record results only after observing effects; failed result commits leave pending intents for inspection.
+
+Manual metadata repair and restore require a stopped controller and validated state before restart. Restore metadata with matching host configuration, secrets/certificates, K3s state, and resource-specific data backups; verify installation/cluster identity and refresh observations. The metadata snapshot alone is not a database backup. Session persistence, configuration reload, rotation behavior, backup scheduling, and remote destinations remain separate decisions.
+
+Ordinary removal retains resource directories, credential files, aliases, persistent volumes/claims, service namespaces, tombstones, and identity/path reservations. Use explicit `Retain` PV reclaim policy and no disposable owner-reference chains for retained objects. A different source cannot silently acquire retained state. Re-enrollment/reuse policy remains a separate product decision; destructive purge requires its own explicit administrator operation.
+
+## GitHub configuration shape
+
+Required shape, alongside the existing TLS/OAuth2 settings:
 
 ```yaml
 auth:
@@ -69,3 +112,11 @@ gitops:
 ```
 
 Credential references resolve on the host; they are not browser OAuth2 access tokens or values checked into application repositories. These snippets define configuration shape, not a complete bootstrap configuration.
+
+## Required verification
+
+- Inject crashes during temporary writes, file sync, replacement, and directory sync; recover only a complete committed snapshot. Test indeterminate commits and lost responses without duplicate operations or identities.
+- Start competing controllers and maintenance tools against the same directory; only the lifetime lock holder may mutate or perform effects. Verify crash release and shutdown ordering, including outstanding disk commits.
+- Exercise migration fixtures, crash/failure during migration, full/unwritable storage, unsupported versions, corrupt/missing existing snapshots, and installation/cluster mismatch. Fail closed without regenerating identities or silently restoring stale backups.
+- Interrupt credential materialization/publication and result commits; reuse stable credentials and inspect pending effects. Missing/corrupt provisioned credentials must require recovery.
+- Restore matching metadata, configuration, secrets, K3s state, and resource-specific backups; refresh observations before new effects. Ordinary removal must preserve retained storage/credentials and reservations.

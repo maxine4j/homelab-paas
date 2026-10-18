@@ -10,8 +10,8 @@ Read related requirements only when the change crosses those boundaries: [descri
 
 - Separate parsing, validation/defaulting, planning, mutation, and observation.
 - Use the maintained Tokio-compatible `kube` Rust client/runtime rather than parsing `kubectl` output for core reconciliation.
-- Recommended model: one namespace per service with resource labels; persist accepted desired state and ownership metadata in a versioned controller store. Custom Kubernetes CRDs are optional, not a prerequisite for being operator-style.
-- Decide the controller store and any CRD use in an ADR before implementing persistence. Avoid adding a second database server for control-plane metadata.
+- Use one namespace per enrolled service, with separate reserved platform and observability namespaces. Descriptors cannot select namespaces. Persist namespace allocation/name and naming algorithm/version before creation, validate DNS limits/collisions before enrollment, and record returned UID after observation. Keep service namespaces on ordinary removal.
+- Persist accepted desired state, inventory, and operation/finalization progress in the versioned atomic YAML snapshot `_platform/state/controller.yaml`, protected by the lifetime lock at `_platform/state/controller.lock`. No CRDs or custom-resource finalizers; future CRD use requires a new architecture decision. Follow the [configuration and storage](configuration-and-storage.md) commit, migration, and singleton protocols; no SQLite or additional metadata database server.
 - Watch observed Kubernetes state and run periodic resynchronization. Reconcile after controller restarts without requiring a new Git commit.
 - Use idempotent operations, bounded queues, per-service serialization, retry backoff, and explicit operation deadlines.
 - Apply only platform-owned objects/fields. Surface conflicting manual changes; do not silently seize unrelated resources.
@@ -20,6 +20,29 @@ Read related requirements only when the change crosses those boundaries: [descri
 - Ensure ownership cleanup cannot cascade into persistent data deletion. Finalization and failure recovery must be restart-safe.
 - Track observed generation/revision and conditions such as Accepted, Reconciling, Ready, Degraded, and Deleting, with actionable reasons.
 - A control-plane crash midway through provisioning must leave enough persisted identity/inventory to resume without duplicate resources or new credentials.
+
+### Durable effects and restart recovery
+
+- Commit stable target identities, object ownership tokens, desired generations, and pending operation intents before creating Kubernetes objects, paths, credentials, or dependency-side resources. Use deterministic names/idempotency keys where supported. The durable pending set, not the in-memory queue, is the source for restart scheduling.
+- Effects follow durable intent → bounded idempotent effect → durable observation/result. Inspect uncertain outcomes before retrying. Record returned UIDs/resource versions and completion only after observation; a failed result commit leaves the existing intent pending. Keep accepted/applied/healthy revisions distinct and advance only on their verified conditions.
+- Pause new external mutations on any durable-write failure or indeterminate commit. Already in-flight effects may finish; recover them from previously committed intents. Never report unrecorded progress as durably successful.
+- After restart, validate metadata and installation/cluster binding under the lifetime lock, refresh live observations, and resume pending operations. Do not reconstruct approvals from Kubernetes or regenerate identities/credentials when state is missing or corrupt.
+
+### Object, label, and field ownership
+
+- Reserve the `homelab-paas.io/` metadata prefix for installation, service, resource (where applicable), and stable object ownership IDs; revision/generation are diagnostic metadata. Descriptor labels cannot override it. Labels select and corroborate objects but never independently authorize adoption or deletion.
+- Inventory records target cluster, API group/resource, namespace/name, expected kind/version, returned UID, enrollment/service/resource identity, ownership token, desired generation, field manager, and lifecycle class (`runtime` or `retained`). Namespace inventory has no namespace; cluster-scoped objects require explicit platform inventory. Pending creates have a persisted target/token but no fabricated UID.
+- Create absent targets using create requests carrying the durable ownership token. An existing target is a conflict unless its recorded UID/ownership match. Recover an interrupted create by binding its observed UID only when the exact token and durable pending-create intent match. A racing foreign create remains a conflict; apply cannot adopt unknown objects.
+- Bootstrap must explicitly persist/handoff its initial platform object ownership. Names and labels alone do not authorize reconciliation to seize existing objects.
+- Update verified owned objects with server-side apply, a stable platform field manager, and `force: false`. Manage generated specification/reserved metadata only; leave status, allocated fields, and other managers' fields alone. Surface manual intent changes, field-manager conflicts, or concurrent replacement with target/field diagnostics; never force ownership transfer or silently overwrite conflicting edits.
+- Owner references belong only within disposable runtime hierarchies (for example Deployment → ReplicaSet → Pod). Retained storage/credential objects cannot depend on disposable owners, and services cannot depend on the controller Pod's lifetime.
+
+### Removal and retained inventory
+
+- Only explicit authorized removal or descriptor absence in a complete successfully fetched enrolled revision permits runtime pruning. Source errors, invalid desired state, incomplete scans, and discovery omissions do not.
+- Commit deletion intent with exact inventory targets before effects. Verify current ownership and delete runtime objects with UID/resource-version preconditions. Changed UID, metadata mismatch, or unexpected dependents are conflicts, not grounds for broader deletion. Record observed absence before completing inventory transitions; inspect pending deletes after timeouts/restart.
+- Never use selector-wide cleanup or ordinary namespace/root-directory deletion. Retain service namespaces, data directories, credential files, aliases, PVs/PVCs, tombstones, and identity/path reservations. Set PV reclaim policy explicitly to `Retain`; avoid owner-reference/provisioning cascades into retained state. Unknown dependencies block potentially cascading cleanup until diagnosed.
+- Destructive purge is a separate administrator-authorized operation over exact retained identities with active-resource protection and durable progress. Ordinary reconciliation cannot call it. Re-enrollment/reuse policy is not implied by retained inventory.
 
 ## Deployment and availability semantics
 

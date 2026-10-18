@@ -28,6 +28,8 @@
 - Only the platform owns ingress, TLS, and network policy. Descriptors cannot elevate privileges, select arbitrary host paths, or consume platform secrets.
 - Keep secrets out of Git, API responses, and logs. Preserve data and stable credentials on removal; destructive purge requires an explicit administrator action.
 - Keep application desired state in Git and canonical cluster configuration on the host. Do not create conflicting UI overrides or silently seize unrelated Kubernetes objects.
+- Store controller metadata in one atomic versioned YAML snapshot at `_platform/state/controller.yaml`, with a lifetime OS lock on the stable `_platform/state/controller.lock` inode. No SQLite or controller database server. Follow the configuration/storage guide for durable commits, migrations, and recovery.
+- Allocate one namespace per enrolled service, with separate platform/observability namespaces and no CRDs. Use durable inventory and owned-field apply without forced adoption; ordinary cleanup retains namespaces, data, credentials, and identity reservations.
 
 ## Read only the relevant guides
 
