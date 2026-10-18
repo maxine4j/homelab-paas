@@ -1,4 +1,5 @@
-import type { ClientAutoOptions } from "acme-client";
+import acme from "acme-client";
+import type { Client, ClientAutoOptions } from "acme-client";
 import type {
   CertificateAuthority,
   CertificateBundle,
@@ -9,17 +10,48 @@ import type { DnsAcmeChallengeProvider } from "./dns-challenge/types.ts";
 
 /** SDK-shaped seam stays inside this adapter; services use CertificateAuthority. */
 export interface AcmeSession {
+  createCsr(altNames: string[]): Promise<{ key: string; csr: string }>;
   auto(options: ClientAutoOptions): Promise<string>;
 }
-export type CreateCsr = (altNames: string[]) => Promise<{ key: string; csr: string }>;
+
+export interface AcmeSessionConfig {
+  environment: "staging" | "production";
+  /** Stable account key loaded from private platform storage. */
+  accountKey: string;
+}
+
+export class AcmeSdkSession implements AcmeSession {
+  private readonly client: Client;
+
+  constructor(config: AcmeSessionConfig, signal: AbortSignal) {
+    // The SDK shares one HTTP client; configure once for the appliance's lifetime.
+    acme.axios.defaults.timeout = 30_000;
+    acme.axios.defaults.maxRedirects = 0;
+    acme.axios.defaults.signal = signal;
+    this.client = new acme.Client({
+      directoryUrl: acme.directory.letsencrypt[config.environment],
+      accountKey: config.accountKey,
+      backoffAttempts: 10,
+      backoffMin: 5_000,
+      backoffMax: 30_000,
+    });
+  }
+
+  async createCsr(altNames: string[]): Promise<{ key: string; csr: string }> {
+    const [key, csr] = await acme.crypto.createCsr({ altNames });
+    return { key: key.toString(), csr: csr.toString() };
+  }
+
+  auto(options: ClientAutoOptions): Promise<string> {
+    return this.client.auto(options);
+  }
+}
 
 export class AcmeCertificateClient implements CertificateAuthority {
   private readonly client: AcmeSession;
-  private readonly createCsr: CreateCsr;
   private readonly provider: DnsAcmeChallengeProvider;
-  constructor(client: AcmeSession, createCsr: CreateCsr, provider: DnsAcmeChallengeProvider) {
+  constructor(client: AcmeSession, provider: DnsAcmeChallengeProvider) {
     this.client = client;
-    this.createCsr = createCsr;
     this.provider = provider;
   }
 
@@ -33,7 +65,7 @@ export class AcmeCertificateClient implements CertificateAuthority {
     let failed = false;
     try {
       signal?.throwIfAborted();
-      const { key, csr } = await this.createCsr(request.altNames);
+      const { key, csr } = await this.client.createCsr(request.altNames);
       const cert = await this.client.auto({
         csr,
         email: request.email,

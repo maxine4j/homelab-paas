@@ -1,6 +1,5 @@
 import { createServer } from "node:http";
 import { once } from "node:events";
-import acme from "acme-client";
 import Koa from "koa";
 import Router from "@koa/router";
 import type { ApiError } from "@homelab-paas/shared-contracts";
@@ -17,7 +16,7 @@ import { httpMiddleware } from "./util/http.ts";
 import { GitHubOauth2Provider } from "./ingress/auth/oauth-provider/github.ts";
 import type { GitHubOauthConfig } from "./ingress/auth/oauth-provider/github.ts";
 import type { Oauth2Provider } from "./ingress/auth/oauth-provider/types.ts";
-import { AcmeCertificateClient } from "./ingress/tls/acme-client.ts";
+import { AcmeCertificateClient, AcmeSdkSession } from "./ingress/tls/acme-client.ts";
 import { TlsCertProvisionService } from "./ingress/tls/cert-provision-service.ts";
 import { TlsCertRenewalTask } from "./ingress/tls/cert-renewal-task.ts";
 import type { CertificateTarget } from "./ingress/tls/cert-renewal-task.ts";
@@ -46,22 +45,8 @@ export function createTlsRenewalTask(
   signal: AbortSignal,
   logger: Logger,
 ): TlsCertRenewalTask {
-  // acme-client exposes one shared HTTP client. Configure it once for this appliance's lifetime.
-  acme.axios.defaults.timeout = 30_000;
-  acme.axios.defaults.maxRedirects = 0;
-  acme.axios.defaults.signal = signal;
   const authority = new AcmeCertificateClient(
-    new acme.Client({
-      directoryUrl: acme.directory.letsencrypt[config.environment],
-      accountKey: config.accountKey,
-      backoffAttempts: 10,
-      backoffMin: 5_000,
-      backoffMax: 30_000,
-    }),
-    async (altNames) => {
-      const [key, csr] = await acme.crypto.createCsr({ altNames });
-      return { key: key.toString(), csr: csr.toString() };
-    },
+    new AcmeSdkSession(config, signal),
     new DigitalOceanDnsAcmeChallengeProvider(config.dns, fetch),
   );
   return new TlsCertRenewalTask(

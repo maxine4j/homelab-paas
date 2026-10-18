@@ -20,6 +20,10 @@ it("maps ACME callbacks into independent DNS challenges and always retries clean
   const removeChallenge = vi.fn(async () => {});
   const client = new AcmeCertificateClient(
     {
+      createCsr: async (names) => {
+        expect(names).toEqual(["example.com", "*.example.com"]);
+        return { key: "key", csr: "csr" };
+      },
       auto: async (options: ClientAutoOptions) => {
         expect(options.email).toBe("admin@example.com");
         expect(options.challengePriority).toEqual(["dns-01"]);
@@ -28,10 +32,6 @@ it("maps ACME callbacks into independent DNS challenges and always retries clean
         await options.challengeRemoveFn(authz, challenge, "value");
         return "certificate";
       },
-    },
-    async (names) => {
-      expect(names).toEqual(["example.com", "*.example.com"]);
-      return { key: "key", csr: "csr" };
     },
     { createStatefulChallenge: () => ({ createChallenge, removeChallenge }) },
   );
@@ -49,12 +49,12 @@ it("cleans up outstanding challenges even when ACME fails before its remove call
   const removeChallenge = vi.fn(async () => {});
   const client = new AcmeCertificateClient(
     {
+      createCsr: async () => ({ key: "key", csr: "csr" }),
       auto: async (options) => {
         await options.challengeCreateFn(authz, challenge, "value");
         throw new Error("vendor error with credentials");
       },
     },
-    async () => ({ key: "key", csr: "csr" }),
     { createStatefulChallenge: () => ({ createChallenge: async () => {}, removeChallenge }) },
   );
   await expect(
@@ -67,12 +67,12 @@ it("rejects unsupported challenge types and cancellation without creating DNS re
   const createChallenge = vi.fn(async () => {});
   const client = new AcmeCertificateClient(
     {
+      createCsr: async () => ({ key: "key", csr: "csr" }),
       auto: async (options) => {
         await options.challengeCreateFn(authz, { ...challenge, type: "http-01" }, "value");
         return "cert";
       },
     },
-    async () => ({ key: "key", csr: "csr" }),
     { createStatefulChallenge: () => ({ createChallenge, removeChallenge: async () => {} }) },
   );
   await expect(
