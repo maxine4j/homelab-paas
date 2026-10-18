@@ -1,0 +1,8 @@
+.DS_Store
+/bazel-*
+/target/
+**/node_modules/
+**/dist/
+/.dev/
+*.log
+__pycache__/

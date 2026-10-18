@@ -19,6 +19,7 @@
 ## Essential constraints
 
 - Build one self-hosted Linux appliance: systemd → outer Docker container → one K3s node. Workloads use the nested runtime, never the host Docker socket.
+- Local development uses Docker and a reusable single-server k3d cluster. Keep this separate from the production appliance lifecycle; never mount the host Docker socket into workloads.
 - One Rust/Axum/Tokio control plane owns platform integration; React/TypeScript/Vite supplies the SPA. Shared Rust/Serde contracts are canonical.
 - Bazel owns repository builds, tests, code generation, and image packaging. Cargo and frontend-local pnpm support language development.
 - Discovery is read-only. Only an administrator's explicit per-descriptor enrollment authorizes deployment; updates use Git polling, never webhooks.
@@ -45,6 +46,6 @@ The linked specifications are binding. Read the guide for the task before changi
 
 ## Commands and repository status
 
-This repository currently contains the specification only. Build targets and source code are not implemented; do not present proposed commands as working commands.
+The repository implements the hello-world/healthcheck MVP, Bazel/Cargo/Vite builds, a control-plane OCI image, and a reusable local k3d deployment. The production outer appliance and management features remain future work. See [README](README.md) for setup and development commands.
 
-Once implemented, use the repository's declared Bazel targets for routine builds, checks, and tests. Running those commands to validate a feature does not require loading the build guide. Read that guide when changing the build machinery itself. Keep privileged appliance acceptance and image publication explicit and separate from ordinary verification.
+Use `bazel build //:check`, `bazel test //...`, and the service build targets for routine verification. `scripts/bootstrap.sh` installs macOS development dependencies; `scripts/build-image.py` assembles the Linux image; `scripts/dev-deploy.py` builds and deploys repeatedly to the same local k3d cluster. Running declared checks does not require loading the build guide. Read that guide when changing build machinery itself. Keep Docker/k3d execution, privileged appliance acceptance, and image publication explicit and separate from ordinary verification.

@@ -1,0 +1,108 @@
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//services/paas-ui:oxfmt/package_json.bzl", oxfmt = "bin")
+load("@npm//services/paas-ui:oxlint/package_json.bzl", oxlint = "bin")
+load("@npm//services/paas-ui:typescript/package_json.bzl", typescript = "bin")
+load("@npm//services/paas-ui:vite/package_json.bzl", vite = "bin")
+load("@npm//services/paas-ui:vitest/package_json.bzl", vitest = "bin")
+
+npm_link_all_packages(name = "node_modules")
+
+filegroup(
+    name = "sources",
+    srcs = glob([
+        "src/**",
+        "*.ts",
+        "*.json",
+        "index.html",
+        ".ox*.json",
+    ]),
+)
+
+vite.vite(
+    name = "bundle",
+    srcs = [
+        ":node_modules",
+        ":sources",
+    ],
+    args = [
+        "build",
+        "--outDir",
+        "dist",
+    ],
+    chdir = package_name(),
+    out_dirs = ["dist"],
+    visibility = ["//visibility:public"],
+)
+
+typescript.tsc(
+    name = "typecheck",
+    srcs = [
+        ":node_modules",
+        ":sources",
+    ],
+    args = [
+        "--noEmit",
+        "--project",
+        "tsconfig.json",
+    ],
+    chdir = package_name(),
+    stdout = "typecheck.txt",
+    visibility = ["//visibility:public"],
+)
+
+oxlint.oxlint(
+    name = "lint",
+    srcs = [
+        ":node_modules",
+        ":sources",
+    ],
+    args = ["src"],
+    chdir = package_name(),
+    stdout = "lint.txt",
+    visibility = ["//visibility:public"],
+)
+
+oxfmt.oxfmt(
+    name = "format_check",
+    srcs = [
+        ":node_modules",
+        ":sources",
+    ],
+    args = [
+        "--check",
+        "src",
+        "vite.config.ts",
+        "vitest.config.ts",
+        "tsconfig.json",
+        "package.json",
+        "index.html",
+    ],
+    chdir = package_name(),
+    stdout = "format.txt",
+    visibility = ["//visibility:public"],
+)
+
+vitest.vitest_test(
+    name = "tests",
+    args = ["run"],
+    chdir = package_name(),
+    data = [
+        ":node_modules",
+        ":sources",
+    ],
+)
+
+vite.vite_binary(
+    name = "dev",
+    args = [
+        "--host",
+        "127.0.0.1",
+    ],
+    chdir = package_name(),
+    data = [
+        ":node_modules",
+        ":sources",
+    ],
+)
+
+exports_files(["pnpm-lock.yaml"])

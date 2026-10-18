@@ -28,18 +28,26 @@ Read related requirements only when the change crosses those boundaries: [platfo
 - Keep dependency fetching in Bazel's declared dependency mechanisms. Ordinary build/test actions must not fetch packages or depend on production services or credentials.
 - Run Docker/K3s acceptance tests explicitly on an isolated Linux runner with local privileged execution. They cannot run as ordinary remote/sandboxed unit tests.
 
-Suggested public targets, to be implemented with the workspace:
+Implemented MVP targets:
 
 ```text
 bazel build //services/control-plane:control-plane
 bazel build //services/paas-ui:bundle
-bazel build //deploy/appliance:image
+bazel build --config=linux-arm64 //deploy/appliance:image
 bazel test //...
 bazel build //:check                 # formatting checks, lint, type checks, contracts
-bazel run //:format                  # explicitly formats source files
 bazel run //services/paas-ui:dev
-bazel test //tests/appliance:acceptance  # explicit privileged local test
 ```
+
+Use `linux-amd64` for x86-64 image builds. `bazel run --config=linux-arm64 //deploy/appliance:load` explicitly loads the control-plane workload image into Docker. The current image target produces only that inner workload, not the future outer K3s appliance. It uses a static musl executable and scratch base, so there is no mutable base image or base digest to resolve. It contains no TLS clients yet; add a pinned certificate bundle when outbound HTTPS is introduced.
+
+The MVP pins Rust 1.90.0 (edition 2024), Bazel 8.4.2, Node 22.14.0, pnpm 10.11.0, and the Bazel rule/toolchain versions in `MODULE.bazel`. Zig supplies Linux cross-linking from macOS and Linux. Cargo and pnpm lockfiles remain the dependency source of truth. Shared-contract generation and privileged production-appliance acceptance targets are deferred until their implementation exists. Formatting uses `cargo fmt --all` and frontend-local `pnpm format`; `//:check` checks Rust formatting/Clippy and frontend formatting/lint/types, while `bazel test //...` runs routing and frontend tests.
+
+### Local development with Docker and k3d
+
+`scripts/bootstrap.sh` uses the root Brewfile to install macOS development tools and installs pinned Rust/frontend dependencies. `scripts/build-image.py` builds the Linux OCI image through Bazel without a daemon. `scripts/dev-deploy.py` creates or reuses the dedicated single-server `homelab-paas-dev` k3d cluster, builds/loads/imports the control-plane image, applies the local Kubernetes manifests, and waits for readiness. Docker must be running for deployment. Repeat the deployment script during development; it does not recreate the cluster or change the user's default kubeconfig/context. The local K3s version is pinned in that script. Ports are loopback-only. See [README](../README.md) for commands, prerequisites, and teardown.
+
+This development loop does not replace the production systemd/Docker/K3s topology or its privileged acceptance tests. Neither ordinary Bazel checks nor CI unit tests start Docker or k3d.
 
 The acceptance target must be tagged for explicit/local execution so `bazel test //...` does not unexpectedly start privileged infrastructure. A normal build/test command must never push or load an image.
 

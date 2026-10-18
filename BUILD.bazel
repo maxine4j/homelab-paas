@@ -1,0 +1,17 @@
+filegroup(
+    name = "check",
+    testonly = True,
+    srcs = [
+        "//services/control-plane:clippy",
+        "//services/control-plane:format_check",
+        "//services/paas-ui:format_check",
+        "//services/paas-ui:lint",
+        "//services/paas-ui:typecheck",
+    ],
+)
+
+exports_files([
+    "Cargo.toml",
+    "Cargo.lock",
+    "rustfmt.toml",
+])

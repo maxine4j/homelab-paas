@@ -8,6 +8,8 @@ Read related requirements only when the change crosses those boundaries: [descri
 
 ## Management SPA and API
 
+Current MVP: `GET /api/health` returns an empty HTTP 200 response. The hello-world SPA checks immediately and every five seconds, with a four-second timeout, displaying `healthcheck: up` only for 200 and `healthcheck: down` for errors/timeouts. This is process liveness, not cluster readiness. There are no JSON wire models or management endpoints yet; introduce the canonical shared-contracts crate and schema generation with the first structured API. The MVP uses the same static routing and caching boundaries required below.
+
 - `services/paas-ui` is a Vite SPA with `src/`; its production assets are served by the control-plane backend under the management origin.
 - Development may use Vite's dev server with an API proxy; production does not require a separate frontend server.
 - Put all backend HTTP endpoints under `/api/`, including login/callback/logout, management, forward-auth, health, and metrics. Treat bare `/api` as part of the API namespace too. Internal endpoints remain restricted even though they share the prefix.

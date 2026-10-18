@@ -63,6 +63,14 @@ The canonical platform directory is `_platform`. Users first edit `/var/homelab-
 
 ## Runtime and appliance lifecycle
 
+### Local development milestone
+
+Use Docker Desktop (macOS) and k3d for a reusable single-server local K3s cluster. The MVP deploys only the control-plane workload image, containing the Axum healthcheck and hello-world React SPA. Bind its HTTP and Kubernetes API ports to loopback. k3d is development infrastructure, not the production outer appliance supervisor. Repeated deployments reuse the cluster and import content-tagged images without requiring a registry. See [local setup and commands](../README.md).
+
+The MVP has no management functionality or authentication. The public health endpoint and hello-world shell do not enable unauthenticated management bootstrap. Shared contracts and schema generation begin when serializable product API models are introduced; the MVP health response has no body.
+
+### Production appliance (not yet implemented)
+
 - A small appliance entrypoint/supervisor starts K3s, handles signals, and bootstraps the packaged platform resources. Keep business logic in the control plane.
 - Recommended placement: run the control plane as a singleton Kubernetes workload, with the SPA build served by that backend. Traefik uses its internal Service for forward authorization.
 - Bundle/import the control-plane workload image into the nested runtime as part of the appliance build. Users should not need to manage a second installation artifact.
