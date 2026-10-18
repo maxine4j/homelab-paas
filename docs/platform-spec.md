@@ -108,14 +108,21 @@ The MVP has no management functionality or authentication. The public health end
       tsconfig.json
       tsconfig.build.json
       src/
-        main.ts                # listener and graceful HTTP shutdown
-        app.ts                 # Fastify API/static routing
-        config.ts              # host settings, references, validation
-        persistence.ts         # bounded worker facade
-        persistence-model.ts   # typed metadata and validation
-        persistence-writer.ts  # durable commits and migrations
-        persistence-worker.ts  # lifetime lock and disk/serialization worker
-      tests/
+        main.ts                # process signals, fatal boundary, exit status
+        start.ts               # configuration, composition, startup
+        frontend/
+          frontend-router.ts   # Fastify API/static response mapping
+          frontend-service.ts  # UI content selection
+          frontend-store.ts    # UI filesystem inspection
+        controller/
+          controller-policy.ts # metadata and transition invariants
+          controller-codec.ts  # bounded YAML/schema conversion
+          controller-store.ts  # bounded worker-backed metadata store
+          controller-writer.ts # atomic commits and migrations
+          controller-worker.ts # lifetime lock and disk/serialization worker
+          thread-channel.ts
+        util/                  # config, host files, lifecycle, logging, POSIX, YAML
+        # Tests live beside their modules.
     paas-ui/
       package.json
       tsconfig.json

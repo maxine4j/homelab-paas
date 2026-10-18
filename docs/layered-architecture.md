@@ -2,10 +2,14 @@
 
 Required for all control-plane backend source changes. These rules define the intended standard; they do not imply existing code fully complies.
 
+## Source layout
+
+Group control-plane modules by domain under `services/control-plane/src`: `frontend/` owns the HTTP router, UI content service, and file adapter; `controller/` owns metadata contracts, policies, codecs, and worker-backed storage. Colocate interfaces with their single implementation or the consumer that owns the dependency seam; do not create separate `*-contracts.ts` files. Shared configuration, lifecycle, logging, YAML, and POSIX utilities live in `util/`. Keep `main.ts` and the `start.ts` composition root at the source root, with tests beside the modules they exercise. Add domain directories when their behavior exists.
+
 ## Dependencies and contracts
 
 - Use classes for services, stores, clients, and other components that own behavior and dependencies. Inject collaborators through constructors and type them as interfaces, never concrete implementation classes.
-- Define contracts around consumer needs in separate modules: interfaces, domain data types, operation results, and documented errors. Contracts must not import implementations or vendor SDK types. Do not derive interfaces from concrete classes with utilities such as `Pick`.
+- Define interfaces, domain data types, operation results, and documented errors around consumer needs. Colocate interfaces with their single implementation or owning consumer, and import interfaces with `import type`. Keep contract declarations independent of implementation details and vendor SDK types. Do not derive interfaces from concrete classes with utilities such as `Pick`.
 - Consumers import contracts; implementations implement them. Use `import type` for interfaces and data types, ordinary imports for runtime error classes.
 - Exchange primitives, plain objects, arrays, and discriminated unions. Async operations return promises. Keep framework objects, transport metadata, driver values, SDK models, and objects with hidden I/O out of contracts. Plain fields can still leak infrastructure semantics, such as HTTP status codes.
 - Inject every side effect or nondeterministic dependency through a contract or small function, including time (`now: () => Date`), UUID generation (`generateUuid: () => string`), randomness, timers, and I/O. Small functions need no wrapper classes. Concrete adapters implement effects; SDK objects remain inside them.

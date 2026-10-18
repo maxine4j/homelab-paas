@@ -2,7 +2,9 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { app } from "./app.ts";
+import { createHttpServer } from "../start.ts";
+import { app } from "./frontend-router.ts";
+import { UiUnavailableError } from "./frontend-service.ts";
 
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -15,7 +17,11 @@ async function fixture() {
   await mkdir(join(directory, "assets"));
   await writeFile(join(directory, "index.html"), "<h1>Hello world</h1>");
   await writeFile(join(directory, "assets/app-123.js"), "console.log('hello')");
-  const server = app(directory);
+  const server = createHttpServer({
+    uiDirectory: directory,
+    logLevel: "silent",
+    listen: { host: "127.0.0.1", port: 0 },
+  });
   cleanups.push(() => server.close());
   return server;
 }
@@ -64,4 +70,30 @@ test("static files cannot escape the UI directory", async () => {
     const response = await server.inject(url);
     expect(response.statusCode).toBe(404);
   }
+});
+
+test("HTTP converts paths and translates service failures without exposing their causes", async () => {
+  const paths: string[] = [];
+  const server = app(
+    {
+      async resolve(path) {
+        paths.push(path);
+        throw new UiUnavailableError({ cause: new Error("secret-canary") });
+      },
+    },
+    tmpdir(),
+  );
+  cleanups.push(() => server.close());
+  const response = await server.inject("/services/hello%20world?token=secret-canary");
+  expect(paths).toEqual(["/services/hello world"]);
+  expect(response.statusCode).toBe(500);
+  expect(response.json()).toEqual({
+    statusCode: 500,
+    error: "Internal Server Error",
+    message: "UI content is unavailable",
+  });
+  expect(response.body).not.toContain("canary");
+  await server.inject("/api/health");
+  await server.inject("/api/missing");
+  expect(paths).toHaveLength(1);
 });

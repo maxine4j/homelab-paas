@@ -39,7 +39,7 @@ Use valid/invalid file fixtures, case normalization, malformed names, missing se
 - [x] Scope, acceptance criteria, and verification are complete. No PR: local workflow.
 - [x] Update this ticket's status and the corresponding checkbox in [the milestone index](../_milestones.md).
 
-Implemented `services/control-plane/src/config.ts`: strict typed YAML, reusable parse/validate path, normalized independent scopes, domain/HTTPS callback/ACME checks, named secret resolution, and redacted diagnostics. Host loading uses directory-relative non-symlink opens, regular-file checks, a 1 MiB file limit, and owner-only secret file modes. Secret values are private and redact JSON serialization and debug inspection.
+Implemented `services/control-plane/src/util/host-config.ts`, composed through `loadBootstrapConfig` in `src/start.ts`: strict typed YAML, reusable parse/validate path, normalized independent scopes, domain/HTTPS callback/ACME checks, named secret resolution, and redacted diagnostics. Host loading uses directory-relative non-symlink opens, regular-file checks, a 1 MiB file limit, and owner-only secret file modes. Secret values are private and redact JSON serialization and debug inspection.
 
 Invalid settings return an error without a usable bootstrap context. Runtime startup integration is CP-06, including local host-file mounts; the existing health/hello-world MVP has no management login or management operations and keeps its current development lifecycle.
 

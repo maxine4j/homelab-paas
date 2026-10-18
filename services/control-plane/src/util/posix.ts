@@ -74,7 +74,7 @@ function checked(operation: () => number): number {
     const value = operation();
     if (value >= 0) return value;
     const errno = koffi.errno();
-    if (errno === koffi.os.errno.EINTR) continue;
+    if (errno === koffi.os.errno["EINTR"]) continue;
     throw new PosixError(getSystemErrorName(-errno));
   }
 }

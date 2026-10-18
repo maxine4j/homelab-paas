@@ -6,7 +6,8 @@
   "scripts": {
     "build": "pnpm -r build",
     "typecheck": "pnpm --filter @homelab-paas/shared-contracts build && pnpm -r typecheck",
-    "test": "pnpm --filter @homelab-paas/shared-contracts build && pnpm -r test",
+    "test": "pnpm test:tooling && pnpm --filter @homelab-paas/shared-contracts build && pnpm -r test",
+    "test:tooling": "vitest run scripts/lint-rules.test.mjs",
     "lint": "oxlint --deny-warnings .",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",

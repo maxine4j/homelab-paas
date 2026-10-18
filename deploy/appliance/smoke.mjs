@@ -4,8 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
-import { app } from "/opt/homelab-paas/dist/app.js";
-import { Store } from "/opt/homelab-paas/dist/persistence.js";
+import { createHttpServer, openControllerStore } from "/opt/homelab-paas/dist/start.js";
 
 const deadline = setTimeout(() => {
   throw new Error("packaged runtime smoke test timed out");
@@ -38,7 +37,11 @@ try {
   await exited;
 }
 
-const server = app("/usr/share/homelab-paas/ui");
+const server = createHttpServer({
+  uiDirectory: "/usr/share/homelab-paas/ui",
+  logLevel: "silent",
+  listen: { host: "127.0.0.1", port: 0 },
+});
 try {
   assert.equal((await server.inject("/api/health")).statusCode, 200);
   assert.equal((await server.inject("/services/example")).statusCode, 200);
@@ -54,8 +57,8 @@ try {
 const root = await mkdtemp("/tmp/paas-smoke-");
 let store;
 try {
-  store = await Store.open(root, "smoke-install", "smoke-cluster", true);
-  await assert.rejects(Store.open(root, "smoke-install", "smoke-cluster", false), {
+  store = await openControllerStore(root, "smoke-install", "smoke-cluster", true);
+  await assert.rejects(openControllerStore(root, "smoke-install", "smoke-cluster", false), {
     code: "already_running",
   });
   const committed = await store.commit(0n, [
@@ -69,7 +72,7 @@ try {
   await store.shutdown();
   store = undefined;
   assert.match(await readFile(`${root}/_platform/state/controller.yaml`, "utf8"), /generation: 1/);
-  store = await Store.open(root, "smoke-install", "smoke-cluster", false);
+  store = await openControllerStore(root, "smoke-install", "smoke-cluster", false);
   assert.deepEqual(store.snapshot(), committed);
 } finally {
   if (store) await store.shutdown();
