@@ -1,0 +1,9 @@
+{
+    "serviceId": "test-service",
+    "image": "test-service:latest",
+    "networking": {
+        "ingress": {
+            "containerPort": 8080
+        }
+    }
+}
