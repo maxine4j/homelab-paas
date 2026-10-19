@@ -1,34 +1,29 @@
-import type { Lifecycle } from "../util/lifecycle.ts";
-import type { Logger } from "../util/logging.ts";
-import type { TaskRunner } from "./types.ts";
+import { Lifecycle } from "../util/lifecycle.ts";
+import { logger } from "../util/logger.ts";
+import { sleep } from "../util/sleep.ts";
+import { TaskRunner } from "./types";
 
 export interface PeriodicTask {
-  run(): Promise<void>;
-}
-
-export interface PeriodicTaskRunnerDependencies {
-  lifecycle: Lifecycle;
-  periodMs: number;
-  task: PeriodicTask;
-  sleep(delayMs: number): Promise<void>;
+	run(): Promise<void>;
 }
 
 export class PeriodicTaskRunner implements TaskRunner {
-  private readonly logger: Logger;
-  private readonly deps: PeriodicTaskRunnerDependencies;
-  constructor(deps: PeriodicTaskRunnerDependencies, logger: Logger) {
-    this.deps = deps;
-    this.logger = logger;
-  }
+	constructor(
+		private readonly deps: {
+			lifecycle: Lifecycle;
+			periodMs: number;
+			task: PeriodicTask;
+		},
+	) {}
 
-  public async start() {
-    while (this.deps.lifecycle.isOpen()) {
-      try {
-        await this.deps.task.run();
-      } catch {
-        this.logger.error({ operation: "run_task" }, "Task failed");
-      }
-      await this.deps.sleep(this.deps.periodMs);
-    }
-  }
+	public async start() {
+		while (this.deps.lifecycle.isOpen()) {
+			try {
+				await this.deps.task.run();
+			} catch (error) {
+				logger.error(error);
+			}
+			await sleep(this.deps.periodMs);
+		}
+	}
 }

@@ -1,23 +1,18 @@
-import type { Logger } from "../util/logging.ts";
-import type { TaskRunner } from "./types.ts";
+import { logger } from "../util/logger";
+import { TaskRunner } from "./types";
 
 export interface StartupTask {
-  run(): Promise<void>;
+	run(): Promise<void>;
 }
 
 export class StartupTaskRunner implements TaskRunner {
-  private readonly task: StartupTask;
-  private readonly logger: Logger;
-  constructor(task: StartupTask, logger: Logger) {
-    this.task = task;
-    this.logger = logger;
-  }
+	constructor(private readonly task: StartupTask) {}
 
-  public async start() {
-    try {
-      await this.task.run();
-    } catch {
-      this.logger.error({ operation: "run_task" }, "Task failed");
-    }
-  }
+	public async start() {
+		try {
+			await this.task.run();
+		} catch (error) {
+			logger.error(error);
+		}
+	}
 }

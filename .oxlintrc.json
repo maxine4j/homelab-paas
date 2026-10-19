@@ -1,10 +1,10 @@
 {
-  "plugins": ["typescript", "react", "react-hooks", "import"],
-  "jsPlugins": ["./scripts/lint-rules.mjs"],
-  "rules": {
-    "typescript/no-explicit-any": "error",
-    "homelab/no-recursive-types": "error",
-    "import/no-cycle": ["error", { "ignoreTypes": false }]
-  },
-  "ignorePatterns": ["**/dist/**"]
+	"plugins": ["typescript", "react", "react-hooks", "import"],
+	"jsPlugins": ["./scripts/lint-rules.mjs"],
+	"rules": {
+		"typescript/no-explicit-any": "error",
+		"homelab/no-recursive-types": "error",
+		"import/no-cycle": ["error", { "ignoreTypes": false }]
+	},
+	"ignorePatterns": ["**/dist/**"]
 }
