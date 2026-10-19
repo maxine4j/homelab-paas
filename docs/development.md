@@ -46,3 +46,24 @@ Run from the repository root:
 Run checks appropriate to the change. For code changes, use `pnpm check`, relevant tests, and `pnpm build` when build output or packaging is affected. For documentation-only changes, check formatting and relative links; application tests are unnecessary.
 
 Consult the scripts before invoking `pnpm image` or `pnpm dev:deploy`: these are existing packaging and deployment entry points, and may still require alignment with the intended architecture.
+
+## Local container environment
+
+From `local/`, run `docker compose up --build -d`. This starts Envoy and the minimal control-plane HTTP server. Control-plane source is bind-mounted and Node watches for changes. Only Envoy publishes a port, on loopback.
+
+`services/paas/Dockerfile` uses Node 24 Alpine with separate build, production dependency installation, and runtime stages. The runtime image contains compiled JavaScript and production dependencies. Compose overrides its command to watch the mounted TypeScript source during local development.
+
+- `etc/` maps to `/etc/homelab-paas` and holds `config.yaml` and static `envoy.yaml`.
+- `var/` maps to `/var/homelab-paas` and is ignored by Git. `docker compose down` retains it.
+- The Docker socket is mounted for future Engine integration.
+- The repository is mounted read-only at `/workspace`; the desired configuration references its `spike-v2` branch and `services/test-service/test-service.sd.yaml`. Commit descriptor edits before future Git reconciliation can see them.
+
+The control plane currently serves only `/health` on port 8080. It does not read platform configuration or deploy descriptors yet. Auth, TLS, reconciliation, and generated Envoy configuration remain unimplemented. `config.yaml` records the local deployment source; auth and TLS settings are intentionally omitted until implemented.
+
+Compose starts only the control plane and Envoy. The PaaS will eventually deploy test-service from its configured descriptor and manage its network and Envoy routes. Check the bootstrap with:
+
+```sh
+curl --fail http://localhost:8080/health
+```
+
+Envoy uses static HTTP routes for this bootstrap. It has no published admin interface. Future Docker bind mounts created by the control plane must use absolute **host** paths under this checkout’s `local/var`, not the container path `/var/homelab-paas`; that translation is not implemented yet.

@@ -1,9 +1,11 @@
-{
-    "serviceId": "test-service",
-    "image": "test-service:latest",
-    "networking": {
-        "ingress": {
-            "containerPort": 8080
-        }
-    }
-}
+version: 1
+metadata:
+    serviceId: test-service
+resources:
+    app:
+        type: web
+        image: test-service:local
+        ingress:
+            public: true
+            port: 8080
+        healthcheckUrl: /health

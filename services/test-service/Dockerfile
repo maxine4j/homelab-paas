@@ -1,25 +1,15 @@
-FROM node:22 AS base
+FROM node:24-bookworm-slim AS build
 WORKDIR /app
 RUN corepack enable
-RUN yarn global add turbo@2
-RUN turbo telemetry disable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY services/test-service/package.json services/test-service/package.json
+RUN pnpm install --frozen-lockfile --filter @homelab-paas/test-service
+COPY tsconfig.json ./
+COPY services/test-service services/test-service
+RUN pnpm --filter @homelab-paas/test-service build
 
-FROM base AS builder
-COPY . .
-RUN turbo prune test-service --docker
-
-FROM base AS installer
-COPY --from=builder /app/out/json/ .
-COPY --from=builder /app/out/yarn.lock ./yarn.lock
-COPY --from=builder /app/tsconfig.json ./tsconfig.json
-COPY --from=builder /app/.yarnrc.yml ./.yarnrc.yml
-RUN yarn install --frozen-lockfile
-COPY --from=builder /app/out/full/ .
-RUN yarn turbo run build --filter=test-service
-
-FROM base AS runner
-COPY --from=installer --chown=app:app /app/node_modules ./node_modules
-COPY --from=installer --chown=app:app /app/services/test-service/dist ./
+FROM build AS runtime
+USER node
+WORKDIR /app/services/test-service
 EXPOSE 8080
-
-CMD ["node", "/app/main.js"]
+CMD ["node", "dist/main.js"]

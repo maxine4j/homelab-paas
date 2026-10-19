@@ -1,0 +1,19 @@
+# Desired configuration for future reconciliation. Bootstrap does not read it yet.
+version: 1
+metadata:
+    clusterId: local
+ingress:
+    baseDomain: localhost
+    httpPort: 8080
+    httpsPort: 8443
+git:
+    pollIntervalSeconds: 5
+    operationTimeoutSeconds: 60
+reconciliation:
+    retryBackoffSeconds: 5
+    maxRetryBackoffSeconds: 60
+services:
+    test-service:
+        remote: /workspace
+        branch: spike-v2
+        descriptorPath: services/test-service/test-service.sd.yaml

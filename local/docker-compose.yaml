@@ -1,0 +1,42 @@
+name: homelab-paas-local
+services:
+    paas:
+        build:
+            context: ..
+            dockerfile: services/paas/Dockerfile
+        init: true
+        command: [node, --watch, src/main.ts]
+        environment:
+            NODE_ENV: development
+        volumes:
+            - ./etc:/etc/homelab-paas:ro
+            - ./var:/var/homelab-paas
+            - /var/run/docker.sock:/var/run/docker.sock
+            - ..:/workspace:ro
+            - ../services/paas/src:/app/services/paas/src:ro
+        healthcheck:
+            test:
+                [
+                    CMD,
+                    node,
+                    -e,
+                    "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+                ]
+            interval: 5s
+            timeout: 3s
+            retries: 10
+        networks: [platform]
+    envoy:
+        image: envoyproxy/envoy:v1.37.0
+        command: [-c, /etc/homelab-paas/envoy.yaml]
+        ports:
+            - "127.0.0.1:8080:8080"
+        volumes:
+            - ./etc:/etc/homelab-paas:ro
+            - ./var:/var/homelab-paas:ro
+        depends_on:
+            paas:
+                condition: service_healthy
+        networks: [platform]
+networks:
+    platform: {}

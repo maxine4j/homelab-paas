@@ -2,7 +2,7 @@
 
 ## Project
 
-homelab-paas is a single-host platform using Docker Engine, Envoy, and one TypeScript/Node.js control-plane container. Docker Compose is not used.
+homelab-paas is a single-host platform using Docker Engine, Envoy, and one TypeScript/Node.js control-plane container. Docker Compose is used only for the local development bootstrap; see [development](docs/development.md#local-container-environment).
 
 The documents below define the intended platform. Align changes with them; existing implementation is not the source of product requirements. Keep the management UI as a stub until its requirements are defined.
 
@@ -15,6 +15,7 @@ The documents below define the intended platform. Align changes with them; exist
 - Ask the owner before adding a third-party dependency.
 - Keep requirements in one authoritative document and cross-link related topics. Update the relevant document when changing a contract.
 - Never expose secrets in logs or status responses. Preserve persistent data and generated credentials when removing resources.
+- `main.ts` and `start.ts` are exempt from unit-test and unit-test TDD requirements for process setup, composition, and startup/shutdown wiring. Validate them with typechecking, builds, and appropriate startup smoke checks. Keep business logic in separately tested modules.
 
 ## Read for the task
 

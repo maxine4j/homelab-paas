@@ -14,7 +14,7 @@ The stack consists of:
 
 The control plane manages Git reconciliation, Docker resources, Envoy configuration, GitHub authentication, JWT sessions, managed resource credentials, and TLS certificates.
 
-Docker Compose is not used.
+Docker Compose is not used by the platform. The [local development bootstrap](development.md#local-container-environment) uses Compose to start its containers before reconciliation is implemented.
 
 ## Initial scope
 

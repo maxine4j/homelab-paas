@@ -1,8 +1,8 @@
 import { extname } from "node:path";
 
 import Router from "@koa/router";
+import type { Logger } from "pino";
 
-import type { Logger } from "../util/logging.ts";
 import type { Frontend } from "./frontend-service.ts";
 import { UiUnavailableError } from "./frontend-service.ts";
 

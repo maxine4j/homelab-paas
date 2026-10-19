@@ -100,6 +100,31 @@ importers:
         specifier: 3.2.4
         version: 3.2.4(@types/node@26.6.5)(yaml@2.9.1)
 
+  services/test-service:
+    dependencies:
+      '@koa/bodyparser':
+        specifier: 6.1.0
+        version: 6.1.0(koa@3.2.1)
+      '@koa/router':
+        specifier: 15.7.0
+        version: 15.7.0(koa@3.2.1)
+      koa:
+        specifier: 3.2.1
+        version: 3.2.1
+      koa-pino-logger:
+        specifier: 5.0.0
+        version: 5.0.0
+      pino:
+        specifier: 10.4.0
+        version: 10.4.0
+    devDependencies:
+      '@types/koa':
+        specifier: 3.0.3
+        version: 3.0.3
+      '@types/koa-pino-logger':
+        specifier: 3.0.5
+        version: 3.0.5
+
 packages:
 
   '@babel/code-frame@7.29.7':
