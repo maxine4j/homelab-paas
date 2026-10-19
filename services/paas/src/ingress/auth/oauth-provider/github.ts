@@ -1,105 +1,113 @@
-import { z } from "zod";
+import { ConfigService } from '../../../util/config';
+import { ContextualError } from '../../../util/error';
+import { logger } from '../../../util/logger';
+import { AuthedUserDetails, Oauth2Provider } from './types';
 
-import type { AuthedUserDetails, LoginRequest, Oauth2Provider } from "./types.ts";
-import { OauthProviderError } from "./types.ts";
-
-export interface GitHubOauthConfig {
-	clientId: string;
-	clientSecret: string;
-	callbackUrl: string;
-}
-
-const tokenSchema = z.object({ access_token: z.string().min(1) });
-const userSchema = z.object({
-	id: z.number().int().positive().safe(),
-	login: z.string().min(1),
-	name: z.string().nullable(),
-	avatar_url: z.url().optional(),
-});
-const emailsSchema = z.array(z.object({ email: z.email(), primary: z.boolean(), verified: z.boolean() }));
-
-/** External-system client: all HTTP and response decoding stays here. */
 export class GitHubOauth2Provider implements Oauth2Provider {
-	private readonly config: GitHubOauthConfig;
-	private readonly request: typeof fetch;
-	constructor(config: GitHubOauthConfig, request: typeof fetch) {
-		this.config = config;
-		this.request = request;
-	}
+  constructor(private readonly configService: ConfigService) {}
 
-	getLoginUrl({ state, codeChallenge }: LoginRequest): string {
-		const url = new URL("https://github.com/login/oauth/authorize");
-		url.search = new URLSearchParams({
-			response_type: "code",
-			client_id: this.config.clientId,
-			redirect_uri: this.config.callbackUrl,
-			scope: "user:email",
-			state,
-			code_challenge: codeChallenge,
-			code_challenge_method: "S256",
-		}).toString();
-		return url.toString();
-	}
+  public getLoginUrl(finalRedirectUri: string): string {
+    const { rootDomain, clientId } = this.getConfig();
+    const redirectUri = `https://${rootDomain}/auth/callback?redirect_uri=${encodeURI(finalRedirectUri)}`;
+    return `https://github.com/login/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURI(redirectUri)}&scope=${encodeURI('user:email')}`;
+  }
 
-	async fetchAccessToken(code: string, codeVerifier: string, signal?: AbortSignal): Promise<string> {
-		try {
-			const body = await this.json(
-				"https://github.com/login/oauth/access_token",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json", Accept: "application/json" },
-					body: JSON.stringify({
-						client_id: this.config.clientId,
-						client_secret: this.config.clientSecret,
-						code,
-						redirect_uri: this.config.callbackUrl,
-						code_verifier: codeVerifier,
-					}),
-				},
-				signal,
-			);
-			return tokenSchema.parse(body).access_token;
-		} catch {
-			throw new OauthProviderError();
-		}
-	}
+  public async fetchAccessToken(code: string): Promise<string> {
+    const { clientId, clientSecret } = this.getConfig();
+    const response = await fetch(
+      'https://github.com/login/oauth/access_token',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          client_id: clientId,
+          client_secret: clientSecret,
+          code: code,
+        }),
+      },
+    );
+    const responseBody = await response.json();
+    const accessToken = responseBody['access_token'];
+    logger.info(
+      { status: response.status },
+      'Fetched access token from github',
+    );
 
-	async fetchUserDetails(accessToken: string, signal?: AbortSignal): Promise<AuthedUserDetails> {
-		const options = {
-			method: "GET",
-			headers: {
-				Accept: "application/vnd.github+json",
-				Authorization: `Bearer ${accessToken}`,
-				"X-GitHub-Api-Version": "2022-11-28",
-			},
-		};
-		try {
-			const [userBody, emailsBody] = await Promise.all([
-				this.json("https://api.github.com/user", options, signal),
-				this.json("https://api.github.com/user/emails", options, signal),
-			]);
-			const user = userSchema.parse(userBody);
-			const email = emailsSchema.parse(emailsBody).find((entry) => entry.primary && entry.verified)?.email;
-			return {
-				userId: String(user.id),
-				username: user.login.toLowerCase(),
-				...(user.name === null ? {} : { name: user.name }),
-				...(user.avatar_url === undefined ? {} : { avatarUrl: user.avatar_url }),
-				...(email === undefined ? {} : { email }),
-			};
-		} catch {
-			throw new OauthProviderError();
-		}
-	}
+    return accessToken;
+  }
 
-	private async json(url: string, options: RequestInit, signal?: AbortSignal): Promise<unknown> {
-		const timeout = AbortSignal.timeout(30_000);
-		const response = await this.request(url, {
-			...options,
-			redirect: "error",
-			signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-		});
-		if (!response.ok) throw new OauthProviderError();
-		return response.json();
-	}
+  public async fetchUserDetails(
+    accessToken: string,
+  ): Promise<AuthedUserDetails> {
+    const [user, email] = await Promise.all([
+      this.fetchGithubUser(accessToken),
+      this.fetchUserEmail(accessToken),
+    ]);
+
+    return {
+      userId: user.username,
+      name: user.name,
+      email,
+      avatarUrl: user.avatarUrl,
+    };
+  }
+
+  private async fetchGithubUser(accessToken: string) {
+    const response = await fetch('https://api.github.com/user', {
+      method: 'GET',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${accessToken}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    });
+    const responseBody = await response.json();
+    logger.info(
+      { status: response.status },
+      'Fetched user details from github',
+    );
+
+    return {
+      username: responseBody['login'],
+      name: responseBody['name'],
+      avatarUrl: responseBody['avatar_url'],
+    };
+  }
+
+  private async fetchUserEmail(accessToken: string) {
+    const response = await fetch('https://api.github.com/user/emails', {
+      method: 'GET',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${accessToken}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    });
+    const responseBody = (await response.json()) as Array<{
+      email: string;
+      primary: boolean;
+    }>;
+    logger.info({ status: response.status }, 'Fetched user emails from github');
+
+    return responseBody.find((emailResponse) => emailResponse.primary)?.email;
+  }
+
+  private getConfig() {
+    const providerConfig =
+      this.configService.getConfig().paas.auth.oauth2Provider;
+    if (providerConfig.type !== 'github') {
+      throw new ContextualError(
+        'Failed to configure github oauth2 provider. Missing provider config',
+      );
+    }
+
+    return {
+      rootDomain: this.configService.getConfig().paas.rootDomain,
+      clientId: providerConfig.clientId,
+      clientSecret: providerConfig.clientSecret,
+    };
+  }
 }

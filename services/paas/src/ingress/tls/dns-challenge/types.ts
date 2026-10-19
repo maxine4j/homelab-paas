@@ -1,13 +1,17 @@
-/** Challenge IDs distinguish simultaneous apex/wildcard authorizations. */
-export interface StatefulDnsChallenge {
-	/** Throws DnsChallengeError; record identifiers remain private to the client. */
-	createChallenge(id: string, domain: string, value: string, signal?: AbortSignal): Promise<void>;
-	/** Idempotent after successful deletion; failures retain the ID for retry. */
-	removeChallenge(id: string, signal?: AbortSignal): Promise<void>;
-}
+import acme from 'acme-client';
+import { Challenge } from 'acme-client/types/rfc8555';
 
 export interface DnsAcmeChallengeProvider {
-	createStatefulChallenge(): StatefulDnsChallenge;
+  createStatefulChallenge(): {
+    createChallenge: (
+      authz: acme.Authorization,
+      challenge: Challenge,
+      keyAuthorization: string,
+    ) => Promise<void>;
+    removeChallenge: (
+      authz: acme.Authorization,
+      challenge: unknown,
+      keyAuthorization: string,
+    ) => Promise<void>;
+  };
 }
-
-export class DnsChallengeError extends Error {}

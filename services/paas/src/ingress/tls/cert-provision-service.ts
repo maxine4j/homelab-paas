@@ -1,40 +1,65 @@
-export interface CertificateBundle {
-	key: string;
-	cert: string;
-}
-export interface CertificateRequest {
-	altNames: string[];
-	email: string;
-}
-export interface CertificateAuthority {
-	/** Throws CertificateProvisionError on issuance failure. */
-	issueCertificate(request: CertificateRequest, signal?: AbortSignal): Promise<CertificateBundle>;
-}
-export interface CertificateProvisioner {
-	/** Throws CertificateProvisionError on issuance failure. */
-	provisionCert(signal?: AbortSignal): Promise<CertificateBundle>;
-}
-export class CertificateProvisionError extends Error {
-	constructor() {
-		super("Certificate issuance failed");
-	}
-}
+import acme from 'acme-client';
+import { ConfigService } from '../../util/config';
+import { logger } from '../../util/logger';
+import { DnsAcmeChallengeProviderRegistry } from './dns-challenge/registry';
 
-export class TlsCertProvisionService implements CertificateProvisioner {
-	private readonly config: { rootDomain: string; email: string };
-	private readonly authority: CertificateAuthority;
-	constructor(config: { rootDomain: string; email: string }, authority: CertificateAuthority) {
-		this.config = config;
-		this.authority = authority;
-	}
+export class TlsCertProvisionService {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly challengeProviderRegistry: DnsAcmeChallengeProviderRegistry,
+  ) {}
 
-	provisionCert(signal?: AbortSignal): Promise<CertificateBundle> {
-		return this.authority.issueCertificate(
-			{
-				altNames: [this.config.rootDomain, `*.${this.config.rootDomain}`],
-				email: this.config.email,
-			},
-			signal,
-		);
-	}
+  public async provisionCert() {
+    const { challengeProvider, rootDomain } =
+      this.getConfig();
+
+    const client = new acme.Client({
+      directoryUrl: this.getDirectoryUrl(),
+      accountKey: await acme.crypto.createPrivateKey(),
+    });
+
+    const altNames = [rootDomain, `*.${rootDomain}`];
+    const [key, csr] = await acme.crypto.createCsr({
+      altNames,
+    });
+    logger.info({ altNames }, 'Created certificate signing request');
+
+    const statefulChallenge = challengeProvider.createStatefulChallenge();
+    const cert = await client.auto({
+      csr,
+      email: 'null@gmail.com',
+      termsOfServiceAgreed: true,
+      challengePriority: ['dns-01'],
+      challengeCreateFn: statefulChallenge.createChallenge,
+      challengeRemoveFn: statefulChallenge.removeChallenge,
+    });
+
+    logger.info({ altNames }, 'Provisioned certificate');
+    return {
+      key: key.toString(),
+      cert: cert.toString(),
+    };
+  }
+
+  private getDirectoryUrl() {
+    const { envType } = this.getConfig();
+    switch (envType) {
+      case 'production':
+        return acme.directory.letsencrypt.production;
+      case 'staging':
+        return acme.directory.letsencrypt.staging;
+    }
+  }
+
+  private getConfig() {
+    const config = this.configService.getConfig();
+
+    return {
+      envType: config.paas.tls.envType,
+      rootDomain: config.paas.rootDomain,
+      challengeProvider: this.challengeProviderRegistry.getProvider(
+        config.paas.tls.dnsChallengeProvider.type,
+      ),
+    };
+  }
 }

@@ -1,7 +1,7 @@
 import { type Lifecycle } from "../util/lifecycle.js";
-import { logger } from "../util/logger";
-import { sleep } from "../util/sleep";
-import { TaskRunner } from "./types";
+import { logger } from "../util/logger.ts";
+import { sleep } from "../util/sleep.ts";
+import { type TaskRunner } from "./types.ts";
 
 export interface QueueTask<TTask> {
 	run(task: TaskEnvelope<TTask>): Promise<void>;

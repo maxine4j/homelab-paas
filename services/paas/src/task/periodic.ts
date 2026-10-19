@@ -1,7 +1,7 @@
-import { Lifecycle } from "../util/lifecycle.ts";
+import { type Lifecycle } from "../util/lifecycle.ts";
 import { logger } from "../util/logger.ts";
 import { sleep } from "../util/sleep.ts";
-import { TaskRunner } from "./types";
+import { type TaskRunner } from "./types.ts";
 
 export interface PeriodicTask {
 	run(): Promise<void>;

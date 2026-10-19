@@ -1,74 +1,83 @@
-import type { PeriodicTask } from "../../task/periodic.ts";
-import type { Logger } from "../../util/logging.ts";
-import type { CertificateBundle, CertificateProvisioner } from "./cert-provision-service.ts";
+import { X509Certificate } from 'crypto';
+import { PeriodicTask } from '../../task/periodic';
+import { daysBetween } from '../../util/date';
+import { logger } from '../../util/logger';
+import { TlsCertProvisionService } from './cert-provision-service';
 
-export interface CertificateStore {
-	load(): Promise<CertificateBundle | undefined>;
-	/** Atomically and durably save the key/chain together with restrictive permissions. */
-	save(bundle: CertificateBundle): Promise<void>;
+const privateKeyFilePem = '/etc/homelab-paas/key.pem';
+const certificateFilePem = '/etc/homelab-paas/cert.pem';
+
+const certificateMinDaysUntilExpiry = 30;
+
+interface HttpsServer {
+  setSecureContext: (options: { cert: string; key: string }) => void;
 }
-export interface CertificateTarget {
-	activate(bundle: CertificateBundle): Promise<void>;
-}
-export interface CertificateInspector {
-	/** Reject malformed certificates and mismatched keys. */
-	inspect(bundle: CertificateBundle): { validFrom: Date; validTo: Date };
-}
-export class CertificateRenewalError extends Error {}
 
 export class TlsCertRenewalTask implements PeriodicTask {
-	private readonly provisioner: CertificateProvisioner;
-	private readonly store: CertificateStore;
-	private readonly target: CertificateTarget;
-	private readonly inspector: CertificateInspector;
-	private readonly now: () => Date;
-	private readonly logger: Logger;
-	private readonly signal: AbortSignal | undefined;
-	private running: Promise<void> | undefined;
-	constructor(
-		provisioner: CertificateProvisioner,
-		store: CertificateStore,
-		target: CertificateTarget,
-		inspector: CertificateInspector,
-		now: () => Date,
-		logger: Logger,
-		signal?: AbortSignal,
-	) {
-		this.provisioner = provisioner;
-		this.store = store;
-		this.target = target;
-		this.inspector = inspector;
-		this.now = now;
-		this.logger = logger;
-		this.signal = signal;
-	}
+  constructor(
+    private readonly tlsCertProvisionService: TlsCertProvisionService,
+    private readonly httpsServer: HttpsServer,
+    private readonly writeFile: (name: string, data: string) => Promise<void>,
+    private readonly readFile: (name: string) => Promise<string | undefined>,
+    private readonly now: () => Date,
+  ) {}
 
-	run(): Promise<void> {
-		this.running ??= this.renew().finally(() => {
-			this.running = undefined;
-		});
-		return this.running;
-	}
+  public async run() {
+    logger.info('Starting cert renewal task');
+    await this.updateHttpsServerCertIfExists();
 
-	private async renew(): Promise<void> {
-		this.signal?.throwIfAborted();
-		const current = await this.store.load();
-		this.signal?.throwIfAborted();
-		const now = this.now().getTime();
-		if (current) {
-			const validity = this.inspector.inspect(current);
-			if (validity.validFrom.getTime() <= now && validity.validTo.getTime() > now)
-				await this.target.activate(current);
-			if (validity.validFrom.getTime() <= now && validity.validTo.getTime() - now >= 30 * 86400000) return;
-		}
-		this.logger.info({ operation: "renew_certificate" }, "Requesting certificate renewal");
-		const replacement = await this.provisioner.provisionCert(this.signal);
-		this.signal?.throwIfAborted();
-		const validity = this.inspector.inspect(replacement);
-		if (!(validity.validFrom.getTime() <= now && validity.validTo.getTime() > now))
-			throw new CertificateRenewalError("Certificate is not currently valid");
-		await this.store.save(replacement);
-		await this.target.activate(replacement);
-		this.logger.info({ operation: "renew_certificate" }, "Certificate renewed");
-	}
+    if (!(await this.certificateRequiresRenewal())) {
+      return;
+    }
+
+    const { key, cert } = await this.tlsCertProvisionService.provisionCert();
+    await Promise.all([
+      this.writeFile(privateKeyFilePem, key),
+      this.writeFile(certificateFilePem, cert),
+    ]);
+
+    this.httpsServer.setSecureContext({
+      cert,
+      key,
+    });
+  }
+
+  private async updateHttpsServerCertIfExists() {
+    const certificatePem = await this.readFile(certificateFilePem);
+    const privateKetPem = await this.readFile(privateKeyFilePem);
+    if (certificatePem && privateKetPem) {
+      this.httpsServer.setSecureContext({
+        cert: certificatePem,
+        key: privateKetPem,
+      });
+    }
+  }
+
+  private async certificateRequiresRenewal() {
+    const certificatePem = await this.readFile(certificateFilePem);
+    if (!certificatePem) {
+      logger.info('No certificate found, requesting renewal');
+      return true;
+    }
+
+    const { validTo, subject, subjectAltName } = new X509Certificate(
+      certificatePem,
+    );
+    const daysUntilExpiry = daysBetween(this.now(), new Date(validTo));
+
+    logger.info(
+      { validTo, daysUntilExpiry, subject, subjectAltName },
+      'Existing certificate found',
+    );
+
+    if (daysUntilExpiry < certificateMinDaysUntilExpiry) {
+      logger.info(
+        `Certificate requires renewal, valid for less than ${certificateMinDaysUntilExpiry} days`,
+      );
+      return true;
+    }
+
+    logger.info('Certificate does not require renewal');
+    return false;
+  }
 }

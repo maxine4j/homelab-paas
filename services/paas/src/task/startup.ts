@@ -1,5 +1,5 @@
-import { logger } from "../util/logger";
-import { TaskRunner } from "./types";
+import { logger } from "../util/logger.ts";
+import { type TaskRunner } from "./types.ts";
 
 export interface StartupTask {
 	run(): Promise<void>;

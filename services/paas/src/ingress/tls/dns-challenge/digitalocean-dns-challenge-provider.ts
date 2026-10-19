@@ -1,85 +1,128 @@
-import { z } from "zod";
+import { Authorization } from 'acme-client';
+import { Challenge } from 'acme-client/types/rfc8555';
+import { ConfigService } from '../../../util/config';
+import { ContextualError } from '../../../util/error';
+import { logger } from '../../../util/logger';
+import { DnsAcmeChallengeProvider } from './types';
 
-import type { DnsAcmeChallengeProvider, StatefulDnsChallenge } from "./types.ts";
-import { DnsChallengeError } from "./types.ts";
+export class DigitalOceanDnsAcmeChallengeProvider
+  implements DnsAcmeChallengeProvider
+{
+  constructor(private readonly configService: ConfigService) {}
 
-export interface DigitalOceanDnsConfig {
-	domain: string;
-	accessToken: string;
-}
-const recordSchema = z.object({
-	domain_record: z.object({ id: z.number().int().positive().safe() }),
-});
+  public createStatefulChallenge() {
+    let challengeRecordId: string | undefined;
 
-export class DigitalOceanDnsAcmeChallengeProvider implements DnsAcmeChallengeProvider {
-	private readonly config: DigitalOceanDnsConfig;
-	private readonly request: typeof fetch;
-	constructor(config: DigitalOceanDnsConfig, request: typeof fetch) {
-		this.config = config;
-		this.request = request;
-	}
+    return {
+      createChallenge: async (
+        authz: Authorization,
+        challenge: Challenge,
+        keyAuthorization: string,
+      ) => {
+        if (challenge.type !== 'dns-01') {
+          throw new ContextualError('Unsupported challenge type', {
+            type: challenge.type,
+          });
+        }
+        challengeRecordId = await this.createChallenge(
+          authz.identifier.value,
+          keyAuthorization,
+        );
+      },
+      removeChallenge: async () => {
+        if (!challengeRecordId) {
+          throw new ContextualError(
+            'Failed to remove challenge record, no challengeRecordId founds',
+          );
+        }
+        await this.removeChallenge(challengeRecordId);
+      },
+    };
+  }
 
-	createStatefulChallenge(): StatefulDnsChallenge {
-		const records = new Map<string, number>();
-		const pending = new Set<string>();
-		return {
-			createChallenge: async (id, domain, value, signal) => {
-				const suffix = `.${this.config.domain}`;
-				if (domain !== this.config.domain && !domain.endsWith(suffix))
-					throw new DnsChallengeError("Challenge outside configured DNS zone");
-				if (pending.has(id) || records.has(id)) throw new DnsChallengeError("Challenge already exists");
-				pending.add(id);
-				try {
-					const prefix = domain === this.config.domain ? "" : `.${domain.slice(0, -suffix.length)}`;
-					const response = await this.send(
-						"",
-						{
-							method: "POST",
-							body: JSON.stringify({
-								type: "TXT",
-								name: `_acme-challenge${prefix}`,
-								data: value,
-								ttl: 300,
-							}),
-						},
-						signal,
-					);
-					records.set(id, recordSchema.parse(await response.json()).domain_record.id);
-				} catch {
-					throw new DnsChallengeError("DNS challenge request failed");
-				} finally {
-					pending.delete(id);
-				}
-			},
-			removeChallenge: async (id, signal) => {
-				const record = records.get(id);
-				if (record === undefined) return;
-				try {
-					await this.send(`/${record}`, { method: "DELETE" }, signal);
-					records.delete(id);
-				} catch {
-					throw new DnsChallengeError("DNS challenge request failed");
-				}
-			},
-		};
-	}
+  private async createChallenge(
+    authzIdentifier: string,
+    keyAuthorization: string,
+  ) {
+    const { accessToken, domain } = this.getConfig();
 
-	private async send(path: string, options: RequestInit, signal?: AbortSignal): Promise<Response> {
-		const timeout = AbortSignal.timeout(30_000);
-		const response = await this.request(
-			`https://api.digitalocean.com/v2/domains/${encodeURIComponent(this.config.domain)}/records${path}`,
-			{
-				...options,
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${this.config.accessToken}`,
-				},
-				redirect: "error",
-				signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-			},
-		);
-		if (!response.ok && !(options.method === "DELETE" && response.status === 404))
-			throw new DnsChallengeError("DNS challenge request failed");
-		return response;
-	}
+    const prunedIdentified = authzIdentifier.split(`.${domain}`)[0];
+    logger.info(
+      { authzIdentifier, prunedIdentified },
+      'Creating digitalocean dns challenge',
+    );
+    const name = `_acme-challenge.${prunedIdentified}`;
+    const value = keyAuthorization;
+
+    const response = await fetch(
+      `https://api.digitalocean.com/v2/domains/${domain}/records`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          type: 'TXT',
+          name,
+          data: value,
+          ttl: 300,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const responseBody = await response.json();
+      throw new ContextualError(
+        'Failed to create TXT record for acme challenge, bad response from digitalocean',
+        { responseStatus: response.status, responseBody },
+      );
+    }
+
+    const responseBody = (await response.json()) as {
+      domain_record: { id: string };
+    };
+    return responseBody.domain_record.id;
+  }
+
+  private async removeChallenge(challengeRecordId: string) {
+    const { accessToken, domain } = this.getConfig();
+
+    if (!challengeRecordId) {
+      throw new ContextualError(
+        'Failed to clean up TXT record for acme challenge, challengeRecordId not defined',
+      );
+    }
+
+    const response = await fetch(
+      `https://api.digitalocean.com/v2/domains/${domain}/records/${challengeRecordId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new ContextualError(
+        'Failed to remove challenge record, bad response from digitalocean',
+      );
+    }
+  }
+
+  private getConfig() {
+    const providerConfig =
+      this.configService.getConfig().paas.tls.dnsChallengeProvider;
+    if (providerConfig.type !== 'digitalocean') {
+      throw new ContextualError(
+        'Failed to configure digitalocean dnc acme challenge provider. Missing provider config',
+      );
+    }
+    return {
+      accessToken: providerConfig.accessToken,
+      domain: providerConfig.domain,
+    };
+  }
 }
