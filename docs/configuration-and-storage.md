@@ -112,28 +112,28 @@ Complete bootstrap settings shape (secret values belong only in the separate hos
 ```yaml
 clusterDomain: example.com
 tls:
-  digitalOceanTokenRef: digitalocean-dns
-  acme:
-    environment: staging # staging | production (Let's Encrypt)
-    email: admin@example.com
+    digitalOceanTokenRef: digitalocean-dns
+    acme:
+        environment: staging # staging | production (Let's Encrypt)
+        email: admin@example.com
 auth:
-  github:
-    clientId: your-github-oauth-client-id
-    clientSecretRef: github-oauth
-    callbackUrl: https://paas.example.com/api/auth/callback
-    allowedUsernames:
-      - example-user
-    adminUsernames:
-      - example-admin
+    github:
+        clientId: your-github-oauth-client-id
+        clientSecretRef: github-oauth
+        callbackUrl: https://paas.example.com/api/auth/callback
+        allowedUsernames:
+            - example-user
+        adminUsernames:
+            - example-admin
 gitops:
-  discovery:
-    owners:
-      - type: user
-        name: example-user
-        credentialRef: github-personal-read
-      - type: org
-        name: example-org
-        credentialRef: github-org-read
+    discovery:
+        owners:
+            - type: user
+              name: example-user
+              credentialRef: github-personal-read
+            - type: org
+              name: example-org
+              credentialRef: github-org-read
 ```
 
 Credential references resolve on the host; they are not browser OAuth2 access tokens or values checked into application repositories. `_platform/secrets.yaml` is a flat mapping of credential names to non-empty string values. Supply `digitalocean-dns`, `github-oauth`, `github-personal-read`, and `github-org-read` for the example above. Never commit that file. Use mode `0600` (or read-only `0400`) and make it readable by the control-plane OS user. Files and the `_platform` directory must be real entries beneath the configured storage root, without symlinks. Both files are bounded to 1 MiB and reject duplicate YAML keys; settings reject unknown fields and inline secret fields.

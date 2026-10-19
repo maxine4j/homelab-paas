@@ -48,19 +48,19 @@ Descriptor shape:
 ```yaml
 version: 1
 metadata:
-  serviceId: example
-  name: Example application
-  description: A web application and its database
-  labels:
-    owner: homelab
+    serviceId: example
+    name: Example application
+    description: A web application and its database
+    labels:
+        owner: homelab
 resources:
-  app:
-    type: web
-    public: false
-    image: ghcr.io/example/app:1.0.0
-    port: 3000
-  db:
-    type: postgres
+    app:
+        type: web
+        public: false
+        image: ghcr.io/example/app:1.0.0
+        port: 3000
+    db:
+        type: postgres
 ```
 
 This shows the document structure; resource defaults, bindings, and supported version fields are defined by the shared schemas. Here `app` is the only web resource, so its primary route is implicit. Its explicit `public: false` is equivalent to omitting `public`.

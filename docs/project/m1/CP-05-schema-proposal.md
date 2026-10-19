@@ -23,15 +23,15 @@ Use one strict YAML document with camelCase fields:
 ```yaml
 version: 1
 metadata:
-  serviceId: example
-  name: Example # optional
-  description: Example app # optional
-  labels: {} # default
+    serviceId: example
+    name: Example # optional
+    description: Example app # optional
+    labels: {} # default
 resources:
-  app:
-    type: web
-    image: ghcr.io/example/app:1.0.0
-    port: 3000
+    app:
+        type: web
+        image: ghcr.io/example/app:1.0.0
+        port: 3000
 ```
 
 - Require integer `version: 1`; reject other versions, unknown fields, duplicate mapping keys, merge keys, aliases, and additional documents.
@@ -71,12 +71,12 @@ One optional `healthcheck` uses discriminated shapes:
 
 ```yaml
 healthcheck:
-  type: http # http | tcp | exec
-  path: /
-  initialDelaySeconds: 0
-  periodSeconds: 10
-  timeoutSeconds: 1
-  failureThreshold: 3
+    type: http # http | tcp | exec
+    path: /
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 1
+    failureThreshold: 3
 ```
 
 - HTTP requires `path`; TCP has no extra endpoint fields; both use the resource's top-level web port and are web-only. Exec requires a nonempty `command` string array and is available to web resources and workers. Reject fields belonging to another variant.
@@ -95,23 +95,23 @@ No descriptor ingress settings in this version. Reject `ingress`, custom timeout
 
 ```yaml
 storage:
-  cache:
-    type: ephemeral
-    mountPath: /app/cache
-    readOnly: false
-  data:
-    type: data
-    mountPath: /app/data
-    readOnly: false
-  assets:
-    type: persistent
-    mountPath: /app/assets
-    readOnly: false
-  media:
-    type: alias
-    alias: media-library
-    mountPath: /media
-    readOnly: true
+    cache:
+        type: ephemeral
+        mountPath: /app/cache
+        readOnly: false
+    data:
+        type: data
+        mountPath: /app/data
+        readOnly: false
+    assets:
+        type: persistent
+        mountPath: /app/assets
+        readOnly: false
+    media:
+        type: alias
+        alias: media-library
+        mountPath: /media
+        readOnly: true
 ```
 
 - `readOnly` defaults to false except for alias mounts, where it defaults to true. Alias write access requires explicit caller-provided authorization.
