@@ -1,5 +1,5 @@
-import acme from 'acme-client';
-import { Challenge } from 'acme-client/types/rfc8555';
+import type acme from 'acme-client';
+import type { Challenge } from 'acme-client/types/rfc8555';
 
 export interface DnsAcmeChallengeProvider {
   createStatefulChallenge(): {

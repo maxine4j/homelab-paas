@@ -1,6 +1,6 @@
-import { ConfigService } from '../../../util/config';
-import { DigitalOceanDnsAcmeChallengeProvider } from './digitalocean-dns-challenge-provider';
-import { DnsAcmeChallengeProvider } from './types';
+import { ConfigService } from '../../../util/config.ts';
+import { DigitalOceanDnsAcmeChallengeProvider } from './digitalocean-dns-challenge-provider.ts';
+import type { DnsAcmeChallengeProvider } from './types.ts';
 
 type DnsAcmeChallengeProviderType = 'digitalocean';
 

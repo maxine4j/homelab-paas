@@ -1,6 +1,6 @@
-import { ConfigService } from '../../../util/config';
-import { GitHubOauth2Provider } from './github';
-import { Oauth2Provider } from './types';
+import { ConfigService } from '../../../util/config.ts';
+import { GitHubOauth2Provider } from './github.ts';
+import type { Oauth2Provider } from './types.ts';
 
 type Oauth2ProviderType = 'github';
 

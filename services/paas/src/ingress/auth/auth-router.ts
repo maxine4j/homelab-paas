@@ -1,8 +1,8 @@
 import Router from '@koa/router';
-import { ConfigService } from '../../util/config';
-import { ContextualError } from '../../util/error';
-import { logger } from '../../util/logger';
-import { AuthService } from './auth-service';
+import { ConfigService } from '../../util/config.ts';
+import { ContextualError } from '../../util/error.ts';
+import { logger } from '../../util/logger.ts';
+import { AuthService } from './auth-service.ts';
 
 export const createAuthRouter = (
   authService: AuthService,

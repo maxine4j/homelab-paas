@@ -1,8 +1,8 @@
 import jwt from 'jsonwebtoken';
-import { ConfigService } from '../../util/config';
-import { logger } from '../../util/logger';
-import { Oauth2ProviderRegistry } from './oauth-provider/registry';
-import { AuthedUserDetails } from './oauth-provider/types';
+import { ConfigService } from '../../util/config.ts';
+import { logger } from '../../util/logger.ts';
+import { Oauth2ProviderRegistry } from './oauth-provider/registry.ts';
+import type { AuthedUserDetails } from './oauth-provider/types.ts';
 
 export class AuthService {
   constructor(

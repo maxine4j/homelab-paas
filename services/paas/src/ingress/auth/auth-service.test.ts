@@ -1,6 +1,6 @@
-import { ConfigService, PaasConfig } from '../../util/config';
-import { Oauth2ProviderRegistry } from './oauth-provider/registry';
-import { AuthService } from './auth-service';
+import { ConfigService, type PaasConfig } from '../../util/config.ts';
+import { Oauth2ProviderRegistry } from './oauth-provider/registry.ts';
+import { AuthService } from './auth-service.ts';
 
 describe('user authorization service', () => {
   const mockConfigService: jest.Mocked<ConfigService> = {

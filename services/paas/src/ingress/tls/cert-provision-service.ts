@@ -1,7 +1,7 @@
 import acme from 'acme-client';
-import { ConfigService } from '../../util/config';
-import { logger } from '../../util/logger';
-import { DnsAcmeChallengeProviderRegistry } from './dns-challenge/registry';
+import { ConfigService } from '../../util/config.ts';
+import { logger } from '../../util/logger.ts';
+import { DnsAcmeChallengeProviderRegistry } from './dns-challenge/registry.ts';
 
 export class TlsCertProvisionService {
   constructor(

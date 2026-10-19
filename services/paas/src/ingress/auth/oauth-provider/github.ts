@@ -1,7 +1,7 @@
-import { ConfigService } from '../../../util/config';
-import { ContextualError } from '../../../util/error';
-import { logger } from '../../../util/logger';
-import { AuthedUserDetails, Oauth2Provider } from './types';
+import { ConfigService } from '../../../util/config.ts';
+import { ContextualError } from '../../../util/error.ts';
+import { logger } from '../../../util/logger.ts';
+import type { AuthedUserDetails, Oauth2Provider } from './types.ts';
 
 export class GitHubOauth2Provider implements Oauth2Provider {
   constructor(private readonly configService: ConfigService) {}

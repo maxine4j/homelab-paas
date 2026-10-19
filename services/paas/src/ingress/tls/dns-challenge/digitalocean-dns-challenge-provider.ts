@@ -1,9 +1,9 @@
-import { Authorization } from 'acme-client';
-import { Challenge } from 'acme-client/types/rfc8555';
-import { ConfigService } from '../../../util/config';
-import { ContextualError } from '../../../util/error';
-import { logger } from '../../../util/logger';
-import { DnsAcmeChallengeProvider } from './types';
+import type { Authorization } from 'acme-client';
+import type { Challenge } from 'acme-client/types/rfc8555';
+import { ConfigService } from '../../../util/config.ts';
+import { ContextualError } from '../../../util/error.ts';
+import { logger } from '../../../util/logger.ts';
+import type { DnsAcmeChallengeProvider } from './types.ts';
 
 export class DigitalOceanDnsAcmeChallengeProvider
   implements DnsAcmeChallengeProvider
