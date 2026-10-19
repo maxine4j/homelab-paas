@@ -1,5 +1,7 @@
 # Networking and authentication
 
+The [deployment MVP](configuration.md#implemented-deployment-mvp) exposes public HTTP at `http://{serviceId}.{baseDomain}:{httpPort}` (port 80 by default). It has no authentication, TLS, internal listener, or inter-service discovery. The control plane and Envoy attach to each service's dedicated Docker network; workloads publish no host ports. Bootstrap containers must carry `homelab-paas.cluster={clusterId}` and `homelab-paas.role=control-plane` or `envoy` labels so the control plane can discover them. Envoy loads generated filesystem xDS from the shared platform state directory. Its administration/configuration interfaces have no published ports. The remaining sections describe the complete intended platform.
+
 ## Networking
 
 Each service receives a dedicated Docker network.

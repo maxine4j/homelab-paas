@@ -1,6 +1,4 @@
 import { type Lifecycle } from "../util/lifecycle.ts";
-import { logger } from "../util/logger.ts";
-import { sleep } from "../util/sleep.ts";
 import { type TaskRunner } from "./types.ts";
 
 export interface PeriodicTask {
@@ -13,6 +11,8 @@ export class PeriodicTaskRunner implements TaskRunner {
 			lifecycle: Lifecycle;
 			periodMs: number;
 			task: PeriodicTask;
+			pause: (ms: number) => Promise<void>;
+			report: () => void;
 		},
 	) {}
 
@@ -20,10 +20,10 @@ export class PeriodicTaskRunner implements TaskRunner {
 		while (this.deps.lifecycle.isOpen()) {
 			try {
 				await this.deps.task.run();
-			} catch (error) {
-				logger.error(error);
+			} catch {
+				this.deps.report();
 			}
-			await sleep(this.deps.periodMs);
+			if (this.deps.lifecycle.isOpen()) await this.deps.pause(this.deps.periodMs);
 		}
 	}
 }

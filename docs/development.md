@@ -49,21 +49,34 @@ Consult the scripts before invoking `pnpm image` or `pnpm dev:deploy`: these are
 
 ## Local container environment
 
-From `local/`, run `docker compose up --build -d`. This starts Envoy and the minimal control-plane HTTP server. Control-plane source is bind-mounted and Node watches for changes. Only Envoy publishes a port, on loopback.
+Build the fixture image from the repository root, then start the bootstrap:
+
+```sh
+docker build -f services/test-service/Dockerfile -t test-service:local .
+docker compose -f local/docker-compose.yaml up --build -d
+```
+
+Compose starts only Envoy and the control plane. The control plane deploys test-service itself through Docker Engine using its committed descriptor. Control-plane source is bind-mounted and Node watches for changes; `--experimental-transform-types` enables TypeScript constructor parameter properties in Node 24. Only Envoy publishes a port, on loopback port 80.
 
 `services/paas/Dockerfile` uses Node 24 Alpine with separate build, production dependency installation, and runtime stages. The runtime image contains compiled JavaScript and production dependencies. Compose overrides its command to watch the mounted TypeScript source during local development.
 
-- `etc/` maps to `/etc/homelab-paas` and holds `config.yaml` and static `envoy.yaml`.
+- `etc/` maps to `/etc/homelab-paas` and holds `config.yaml` and the Envoy bootstrap `envoy.yaml`.
 - `var/` maps to `/var/homelab-paas` and is ignored by Git. `docker compose down` retains it.
-- The Docker socket is mounted for future Engine integration.
-- The repository is mounted read-only at `/workspace`; the desired configuration references its `spike-v2` branch and `services/test-service/test-service.sd.yaml`. Commit descriptor edits before future Git reconciliation can see them.
+- The Docker socket is mounted for Engine integration.
+- The repository is mounted read-only at `/mnt/repo`. The magic `remote: local` reads `/mnt/repo/services/test-service/test-service.sd.yaml` through Git at the checkout's `HEAD`. Commit descriptor edits before reconciliation can see them; other control-plane source edits reload immediately.
+- Bootstrap containers carry cluster/role labels for network attachment. PaaS attaches itself and Envoy to each dedicated service network.
 
-The control plane currently serves only `/health` on port 8080. It does not read platform configuration or deploy descriptors yet. Auth, TLS, reconciliation, and generated Envoy configuration remain unimplemented. `config.yaml` records the local deployment source; auth and TLS settings are intentionally omitted until implemented.
+The control plane reads platform configuration at startup, serves `/health` internally on port 8080, and runs the [deployment MVP](configuration.md#implemented-deployment-mvp). Polling defaults in the checked-in local configuration are five seconds. The fixture descriptor already matches the MVP schema and explicitly uses `/health`. Auth, TLS, and advanced resources are omitted.
 
-Compose starts only the control plane and Envoy. The PaaS will eventually deploy test-service from its configured descriptor and manage its network and Envoy routes. Check the bootstrap with:
+Check both the control plane and the deployed service through Envoy:
 
 ```sh
-curl --fail http://localhost:8080/health
+curl --fail http://localhost/health
+curl --fail http://test-service.localhost/health
+# If your resolver does not resolve *.localhost:
+curl --fail --resolve test-service.localhost:80:127.0.0.1 http://test-service.localhost/health
 ```
 
-Envoy uses static HTTP routes for this bootstrap. It has no published admin interface. Future Docker bind mounts created by the control plane must use absolute **host** paths under this checkout’s `local/var`, not the container path `/var/homelab-paas`; that translation is not implemented yet.
+Both checks return `{"status":"up"}` once the workload is ready. Envoy reads generated `cds.yaml` and `lds.yaml` from `local/var/_paas/`; deployment checkpoints and routes are YAML files beside them. No database is used. Stop or remove the managed workload to exercise recovery on the next poll. Restarting the control plane preserves the workload and routing state.
+
+`docker compose down` stops only the bootstrap containers; Docker-managed workloads and their service networks remain. Workloads have no published ports. Advanced volume mounts remain deferred; when implemented, Docker bind sources must use absolute **host** paths, not container paths.

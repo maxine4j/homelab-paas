@@ -1,5 +1,15 @@
 # Reconciliation and deployments
 
+## Implemented deployment MVP
+
+The runtime checks configured services at startup and periodically, serializes reconciliation, validates the entire descriptor, and reconciles one public web container per service. Unchanged resource specifications keep their containers even if the repository commit changes. Docker labels record cluster, service, resource, source revision, and specification identities. Each poll inspects actual Docker state and recovers stopped or missing containers. Git and descriptor failures leave the working deployment and routes intact. Failures retry with exponential backoff bounded by the configured maximum; another service can still reconcile.
+
+Recreate resolves the image before withdrawing the route and stopping previous containers. It then creates the replacement, checks readiness, and publishes its endpoint through Envoy filesystem xDS. Images are pulled for creation or a changed reference; development images tagged `:local` use an already loaded Docker image when available. Readiness allows 30 attempts, separated by one second, with a two-second HTTP timeout per probe. Envoy also checks health every five seconds and excludes unhealthy endpoints.
+
+Additional state uses simple YAML files under `/var/homelab-paas/_paas/`: `{serviceId}.state.yaml` records revision, phase, and sanitized failure information; `routes.yaml` preserves ready endpoints; `cds.yaml` and `lds.yaml` contain generated Envoy discovery resources. Writes use atomic file replacement. On restart, persisted routes are restored and actual workloads are reconstructed from Docker labels before any deployment work. No database is used. Git fetch repositories live in `_paas/git/`.
+
+Docker event subscriptions, configuration reload, service removal, advanced resources, surge, and multiple replicas are deferred. The sections below describe the complete intended lifecycle. See [configuration](configuration.md#implemented-deployment-mvp) for the accepted MVP contract.
+
 ## Deployments
 
 Web and worker resources support:

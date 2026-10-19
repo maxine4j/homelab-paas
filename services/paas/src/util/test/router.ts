@@ -1,22 +1,15 @@
-import { bodyParser } from "@koa/bodyparser";
-import Router from "@koa/router";
-import Koa, { Middleware } from "koa";
-import koaPino from "koa-pino-logger";
+import { once } from "node:events";
 
-import { errorMiddleware } from "../error";
+import type Koa from "koa";
 
-export const startTestApi = (routes: ReturnType<Router["routes"]>) => {
-	const app = new Koa();
-
-	app.use(bodyParser()).use(koaPino()).use(routes).use(errorMiddleware);
-
-	return app.listen();
-};
-
-export const startMiddlewareTestApi = (...middlewares: Middleware[]) => {
-	const app = new Koa();
-
-	middlewares.map((middleware) => app.use(middleware));
-
-	return app.listen();
-};
+export async function startTestApi<State, Context>(app: Koa<State, Context>) {
+	const server = app.listen(0, "127.0.0.1");
+	await once(server, "listening");
+	const address = server.address();
+	if (!address || typeof address === "string") throw new Error("Missing test server address");
+	return {
+		origin: `http://127.0.0.1:${address.port}`,
+		close: () =>
+			new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+	};
+}

@@ -10,7 +10,7 @@
 		"build": "tsc -p tsconfig.build.json",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
-		"dev": "node --watch src/main.ts",
+		"dev": "node --watch --experimental-transform-types src/main.ts",
 		"start": "node dist/main.js"
 	},
 	"dependencies": {

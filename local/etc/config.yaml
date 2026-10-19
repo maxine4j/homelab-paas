@@ -1,11 +1,10 @@
-# Desired configuration for future reconciliation. Bootstrap does not read it yet.
+# HTTP-only MVP configuration. The local source reads committed files through Git.
 version: 1
 metadata:
     clusterId: local
 ingress:
     baseDomain: localhost
-    httpPort: 8080
-    httpsPort: 8443
+    httpPort: 80
 git:
     pollIntervalSeconds: 5
     operationTimeoutSeconds: 60
@@ -14,6 +13,5 @@ reconciliation:
     maxRetryBackoffSeconds: 60
 services:
     test-service:
-        remote: /workspace
-        branch: spike-v2
-        descriptorPath: services/test-service/test-service.sd.yaml
+        remote: local
+        descriptorPath: /mnt/repo/services/test-service/test-service.sd.yaml

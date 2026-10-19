@@ -1,10 +1,11 @@
-import type { ApiError, CredentialReference } from "@homelab-paas/shared-contracts";
+import type { ServiceDescriptor } from "@homelab-paas/shared-contracts";
 
-// Browser compiler fixtures exercise the same workspace boundary as the backend.
-const reference: CredentialReference = "github-read";
-const missing: ApiError = { code: "not_found", diagnostics: [] };
-// @ts-expect-error Error codes are closed.
-const unknownCode: ApiError = { code: "unknown", diagnostics: [] };
-// @ts-expect-error Resolved credentials are absent from public contracts.
-const secret: ApiError = { code: "not_found", diagnostics: [], secret: "value" };
-void [reference, missing, unknownCode, secret];
+// Verify the browser can consume the public descriptor without backend imports.
+const descriptor: ServiceDescriptor = {
+	version: 1,
+	metadata: { serviceId: "example" },
+	resources: { app: { type: "web", image: "example:1", ingress: { public: true, port: 8080 } } },
+};
+// @ts-expect-error Backend deployment state is not part of the descriptor.
+descriptor.activeRevision = "commit";
+void descriptor;

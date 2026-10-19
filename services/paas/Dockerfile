@@ -22,6 +22,7 @@ RUN --mount=type=cache,id=homelab-paas-pnpm,target=/pnpm/store \
     pnpm install --prod --frozen-lockfile --filter @homelab-paas/paas... --store-dir /pnpm/store
 
 FROM base AS runner
+RUN apk add --no-cache git openssh-client
 ENV NODE_ENV=production
 COPY --from=installer /app/node_modules ./node_modules
 COPY --from=installer /app/services/paas/package.json services/paas/package.json

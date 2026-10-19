@@ -2,6 +2,37 @@
 
 Platform and service configuration contracts, including defaults and complete examples. See [architecture](architecture.md) for the host filesystem layout.
 
+## Implemented deployment MVP
+
+The current runtime supports exactly one public `web` resource per service, one replica, and `recreate` deployment. Descriptors use the schema below with only `version`, `metadata`, and `resources` at the top level. Web fields are `type`, `image`, `ingress`, optional `replicas: 1`, `rolloutStrategy: recreate`, `healthcheckUrl`, `command`, literal `env` values, and `termination.timeoutSeconds` (default 30, maximum 300). Unknown fields and unsupported features fail validation before changing workloads. The public TypeScript descriptor contract lives in `@homelab-paas/shared-contracts`; platform configuration and deployment state stay in the backend.
+
+Auth, TLS, workers, managed databases/brokers, secret references, volumes, limits, egress, surge, and multiple replicas are deferred. Ingress must explicitly set `public: true`. The remaining examples describe the intended complete platform, not additional features accepted by the MVP.
+
+The MVP platform configuration contains `version: 1`, `metadata.clusterId`, `ingress.baseDomain`, optional `ingress.httpPort` (default 80), `git`, `reconciliation`, and `services`. Auth, TLS, credentials, and `ingress.httpsPort` are not accepted. Polling, operation timeout, and retry bounds are required positive integer seconds. Restart the control plane to apply platform configuration changes.
+
+For normal remotes, `branch` defaults to `main` and `descriptorPath` defaults to `{serviceId}.sd.yaml` relative to the repository root. Git fetches the configured branch into platform-owned repositories and reads the descriptor at its resolved commit.
+
+The magic remote `local` reads an existing Git repository on the control-plane container's filesystem. It requires an absolute `descriptorPath`; the enclosing repository is discovered with Git. An omitted branch means the mounted repository's `HEAD`, including its currently checked-out branch. An explicit branch selects that local ref. Descriptors are always read with `git show` at a resolved commit; uncommitted edits are ignored. This mode does not fetch or read the YAML directly from the working tree.
+
+```yaml
+version: 1
+metadata:
+    clusterId: local
+ingress:
+    baseDomain: localhost
+    httpPort: 80
+git:
+    pollIntervalSeconds: 5
+    operationTimeoutSeconds: 60
+reconciliation:
+    retryBackoffSeconds: 5
+    maxRetryBackoffSeconds: 60
+services:
+    test-service:
+        remote: local
+        descriptorPath: /mnt/repo/services/test-service/test-service.sd.yaml
+```
+
 ## Service descriptors
 
 Each configured service has a descriptor named:
