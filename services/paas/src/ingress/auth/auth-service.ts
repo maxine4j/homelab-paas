@@ -1,6 +1,5 @@
 import jwt from 'jsonwebtoken';
 import { ConfigService } from '../../util/config.ts';
-import { logger } from '../../util/logger.ts';
 import { Oauth2ProviderRegistry } from './oauth-provider/registry.ts';
 import type { AuthedUserDetails } from './oauth-provider/types.ts';
 
@@ -46,28 +45,6 @@ export class AuthService {
     } catch {
       return undefined;
     }
-  }
-
-  public isDeployTokenAuthorized(serviceId: string, token: string): boolean {
-    const { deployTokens } = this.getConfig();
-
-    const deployTokenConfig = deployTokens.find(
-      (deployToken) => deployToken.token === token,
-    );
-    if (!deployTokenConfig) {
-      logger.info({ serviceId }, 'Deploy token not found');
-      return false;
-    }
-
-    if (deployTokenConfig.authorizedServices.includes(serviceId)) {
-      return true;
-    }
-
-    logger.info(
-      { serviceId, deployTokenName: deployTokenConfig.name },
-      'Deploy token bearer is not authorized to deploy service',
-    );
-    return false;
   }
 
   public isUserAuthorizedToAccessService(
@@ -116,7 +93,6 @@ export class AuthService {
       jwtSecret: config.paas.auth.jwtSecret,
       authorizedUserIds: config.paas.auth.authorizedUserIds,
       adminUserIds: config.paas.auth.adminUserIds,
-      deployTokens: config.paas.auth.deployTokens,
     };
   }
 }
