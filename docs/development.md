@@ -80,4 +80,12 @@ curl --fail --resolve test-service.localhost:80:127.0.0.1 http://test-service.lo
 
 Both checks return `{"status":"up"}` once the workload is ready. Envoy reads generated `cds.yaml` and `lds.yaml` from `local/var/_paas/`; deployment checkpoints and routes are YAML files beside them. No database is used. Stop or remove the managed workload to exercise recovery on the next poll. Restarting the control plane preserves the workload and routing state.
 
+For an end-to-end deployment check, also request `/ping` on `test-service.localhost` and expect `{"message":"pong"}`. Record the workload ID and image with `docker inspect`, remove only that test-service container, and wait for reconciliation. Verify a new container ID uses the built `test-service:local` image, has no published ports, and serves both `/health` and `/ping` through Envoy. Check `local/var/_paas/test-service.state.yaml` reports `phase: ready` and the expected committed revision. Restart the control plane and repeat the requests; the replacement workload ID should remain unchanged.
+
+### Local startup troubleshooting
+
+Only control-plane source is watched. Shared contracts and dependencies are baked into the control-plane image; rerun `docker compose -f local/docker-compose.yaml up --build -d` after changing them. A missing shared-contract export at startup can indicate an old image.
+
+Legacy `local/var/_paas/routes.yaml` entries created before ingress policies were persisted lack `public`. The state store intentionally rejects these entries. Stop the control plane, add an explicit `public` value to each affected endpoint matching that service's committed descriptor, then restart the bootstrap. The checked-in test-service descriptor uses `public: true`. Do not infer public access for other services or delete persistent state to bypass validation. Private ingress requires configured auth and TLS.
+
 `docker compose down` stops only the bootstrap containers; Docker-managed workloads and their service networks remain. Workloads have no published ports. Advanced volume mounts remain deferred; when implemented, Docker bind sources must use absolute **host** paths, not container paths.
