@@ -48,6 +48,16 @@ Run checks appropriate to the change. For code changes, use `pnpm check`, releva
 
 On macOS, `./scripts/bootstrap.sh` installs the tools in `Brewfile` and the pinned workspace dependencies. Add Homebrew's `node@24/bin` directory to your shell `PATH` and start Docker Desktop before running container commands. Kubernetes and appliance packaging scripts are no longer used.
 
+## Continuous integration and image publishing
+
+The [CI workflow](../.github/workflows/ci.yml) runs on pull requests, pushes to `main`, and pushed release tags matching `vX.X.X` (nonnegative integers without leading zeroes). Prerelease and build metadata suffixes are not supported. Other branch pushes do not trigger CI independently of a pull request.
+
+Every run installs the pinned dependencies, runs `pnpm check` (formatting, linting, and typechecking), `pnpm test`, and `pnpm build`, then builds the control-plane and test-service Docker images for `linux/amd64` and validates the local Compose configuration. Publishing requires all these checks to pass; the fixture image is never published.
+
+Pull requests only build images. Pushes to `main` publish `ghcr.io/maxine4j/homelab-paas:<full-commit-sha>`. Release tag pushes publish the same image name with the exact Git tag, for example `ghcr.io/maxine4j/homelab-paas:v1.2.3`. No `latest` tag is published. Invalid release tags caught by the broad trigger fail before building or publishing.
+
+Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no registry secret is required. The repository must be allowed to publish the GHCR package. Package visibility and deployment credentials for pulling private images are managed separately in GitHub. See [GitHub's container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
 ## Local container environment
 
 Run `pnpm dev:deploy` from the repository root to build the fixture image and start the bootstrap. It runs:
