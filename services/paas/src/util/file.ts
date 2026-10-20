@@ -1,4 +1,3 @@
-import fsSync from "fs";
 import fs from "fs/promises";
 
 export type FileWriter = (path: string, data: string) => Promise<void>;

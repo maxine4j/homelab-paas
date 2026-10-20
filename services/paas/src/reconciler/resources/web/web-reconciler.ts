@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 
 import type { WebResource } from "@homelab-paas/shared-contracts";
-import type { Logger } from "pino";
 
 import type { IDockerService } from "../../../docker/docker-service.ts";
+import type { HttpProbe } from "../../../util/healthcheck.ts";
+import { logger } from "../../../util/logger.ts";
 import type { IDeploymentService } from "../../deployment/deployment-service.ts";
+import type { INetworkingService } from "../../networking/networking-service.ts";
 
 export interface WebReconciliationRequest {
 	serviceId: string;
@@ -21,7 +23,7 @@ export interface IWebResourceReconciler {
 	reconcile(request: WebReconciliationRequest): Promise<void>;
 }
 
-/** Detects drift; deployment services own all mutations and rollout sequencing. */
+/** Repairs connectivity and routing; deployment services own workload rollout. */
 export class WebResourceReconciler implements IWebResourceReconciler {
 	readonly type = "web";
 	readonly lifecycle = "deployment";
@@ -29,7 +31,8 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 	constructor(
 		private readonly docker: IDockerService,
 		private readonly deployment: IDeploymentService,
-		private readonly logger: Logger,
+		private readonly networking: INetworkingService,
+		private readonly probe: HttpProbe,
 	) {}
 
 	async reconcile(request: WebReconciliationRequest): Promise<void> {
@@ -41,16 +44,23 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 		if (containers.length === 1 && current?.spec === spec && current.state === "running") {
 			const network = await this.docker.inspectServiceNetwork(serviceId);
 			const container = await this.docker.inspectServiceContainer(serviceId, current.id);
-			if (
-				network
-				&& container?.running
-				&& network.containerIds.includes(container.id)
-				&& container.networks[network.name]?.address
-			)
+			const address = network && container?.networks[network.name]?.address;
+			if (network && container?.running && network.containerIds.includes(container.id) && address) {
+				// A restarted control plane may need attaching to an existing service network.
+				await this.docker.prepareServiceNetwork(serviceId);
+				const endpoint = {
+					address,
+					port: resource.ingress.port,
+					healthcheckPath: resource.healthcheckUrl ?? "/healthcheck",
+				};
+				if (!(await this.probe(endpoint.address, endpoint.port, endpoint.healthcheckPath)))
+					throw new Error("Container readiness failed; check healthcheckUrl");
+				await this.networking.routeTo(serviceId, endpoint);
 				return;
+			}
 		}
 
-		this.logger.info({ serviceId, resourceId }, "Detected drift for web resource");
+		logger.info({ serviceId, resourceId }, "Detected drift for web resource");
 		await this.deployment.deploy({ ...request, spec });
 	}
 

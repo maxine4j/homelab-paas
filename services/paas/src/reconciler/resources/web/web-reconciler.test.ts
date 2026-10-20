@@ -14,6 +14,14 @@ function fixture() {
 	const requests: DeploymentRequest[] = [];
 	const queries: unknown[] = [];
 	let containers: ServiceContainer[] = [];
+	const routes: unknown[] = [];
+	let healthy = true;
+	const networking = {
+		async routeTo(...args: unknown[]) {
+			routes.push(args);
+		},
+		async withdraw() {},
+	};
 	const docker: IDockerService = {
 		async listServiceContainers(...args) {
 			queries.push(args);
@@ -38,7 +46,7 @@ function fixture() {
 			};
 		},
 		async prepareServiceNetwork() {
-			throw new Error("reconciler must not mutate Docker");
+			queries.push("prepare-network");
 		},
 		async resolveImage() {
 			throw new Error("reconciler must not resolve images");
@@ -65,7 +73,11 @@ function fixture() {
 		docker,
 		requests,
 		queries,
-		reconciler: new WebResourceReconciler(docker, deployment),
+		routes,
+		setHealthy(value: boolean) {
+			healthy = value;
+		},
+		reconciler: new WebResourceReconciler(docker, deployment, networking, async () => healthy),
 		setContainers(value: ServiceContainer[]) {
 			containers = value;
 		},
@@ -203,10 +215,33 @@ test("observation failures do not deploy and deployment failures propagate", asy
 	};
 	await expect(f.reconciler.reconcile(input)).rejects.toThrow("observation failed");
 	expect(f.requests).toEqual([]);
-	const reconciler = new WebResourceReconciler(fixture().docker, {
-		async deploy() {
-			throw new Error("deployment failed");
+	const reconciler = new WebResourceReconciler(
+		fixture().docker,
+		{
+			async deploy() {
+				throw new Error("deployment failed");
+			},
 		},
-	});
+		{ async routeTo() {}, async withdraw() {} },
+		async () => true,
+	);
 	await expect(reconciler.reconcile(input)).rejects.toThrow("deployment failed");
+});
+
+test("repairs network attachment and republishes ready unchanged endpoints without deployment", async () => {
+	const f = fixture();
+	await f.converge();
+	await f.reconciler.reconcile(input);
+	expect(f.requests).toEqual([]);
+	expect(f.queries).toContain("prepare-network");
+	expect(f.routes).toEqual([["demo", { address: "10.0.0.2", port: 8080, healthcheckPath: "/healthcheck" }]]);
+});
+
+test("unhealthy unchanged containers do not receive newly published routes", async () => {
+	const f = fixture();
+	await f.converge();
+	f.setHealthy(false);
+	await expect(f.reconciler.reconcile(input)).rejects.toThrow("readiness");
+	expect(f.routes).toEqual([]);
+	expect(f.requests).toEqual([]);
 });

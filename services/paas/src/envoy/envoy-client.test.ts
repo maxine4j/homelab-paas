@@ -149,3 +149,28 @@ test("sanitizes transport failures", async () => {
 	};
 	await expect(f.client.apply(configuration)).rejects.toThrow(new EnvoyClientError());
 });
+
+test("waits for the admin API to start before confirming initial discovery", async () => {
+	const f = fixture();
+	const read = f.transport.readConfigDump.bind(f.transport);
+	let attempts = 0;
+	f.transport.readConfigDump = async () => {
+		if (++attempts < 3) throw new Error("connection refused");
+		return read();
+	};
+	await f.client.apply(configuration);
+	expect(f.calls).toEqual(["cds.yaml", "sleep", "sleep", "dump", "lds.yaml", "dump"]);
+});
+
+test("bounds retries when the admin API stays unavailable", async () => {
+	const f = fixture();
+	let attempts = 0;
+	f.transport.readConfigDump = async () => {
+		attempts++;
+		throw new Error("private connection details");
+	};
+	await expect(f.client.apply(configuration)).rejects.toThrow(new EnvoyClientError());
+	expect(attempts).toBe(3);
+	expect(f.calls).toEqual(["cds.yaml", "sleep", "sleep"]);
+	expect(f.files.has("lds.yaml")).toBe(false);
+});

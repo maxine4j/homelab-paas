@@ -1,5 +1,5 @@
 import type { PeriodicTask } from "../task/periodic.ts";
-import type { IReconcilerService } from "./reconciler-service.ts";
+import type { IReconcilerService } from "./types.ts";
 
 export class ReconcilerTask implements PeriodicTask {
 	constructor(private readonly reconcilerService: IReconcilerService) {}

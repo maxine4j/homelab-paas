@@ -44,14 +44,17 @@ export class EnvoyClient implements IEnvoyClient {
 		await this.transport.writeDiscoveryFile(`${kind}.yaml`, yaml.stringify({ version_info: version, resources }));
 		const names = resources.map(({ name }) => name).sort();
 		for (let attempt = 0; attempt < this.polling.attempts; attempt++) {
-			const response = await this.transport.readConfigDump();
-			if (response.status !== 200) throw new EnvoyClientError();
-			const dump = dumpSchema.parse(JSON.parse(response.body));
-			const type = kind === "cds" ? "ClustersConfigDump" : "ListenersConfigDump";
-			const config = dump.configs.find(
-				(entry) => entry["@type"] === `type.googleapis.com/envoy.admin.v3.${type}`,
-			);
-			if (config && this.accepted(kind, config, version, names)) return;
+			// The bootstrap starts Envoy only after the control-plane health server is up.
+			const response = await this.transport.readConfigDump().catch(() => undefined);
+			if (response) {
+				if (response.status !== 200) throw new EnvoyClientError();
+				const dump = dumpSchema.parse(JSON.parse(response.body));
+				const type = kind === "cds" ? "ClustersConfigDump" : "ListenersConfigDump";
+				const config = dump.configs.find(
+					(entry) => entry["@type"] === `type.googleapis.com/envoy.admin.v3.${type}`,
+				);
+				if (config && this.accepted(kind, config, version, names)) return;
+			}
 			if (attempt + 1 < this.polling.attempts) await this.sleep(this.polling.intervalMs);
 		}
 		throw new EnvoyClientError();
