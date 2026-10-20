@@ -6,7 +6,7 @@ if ! command -v brew >/dev/null 2>&1; then
   exit 1
 fi
 brew bundle --file=Brewfile
-export PATH="$(brew --prefix node@24)/bin:$(brew --prefix python@3.13)/libexec/bin:$(brew --prefix)/bin:$PATH"
+export PATH="$(brew --prefix node@24)/bin:$(brew --prefix)/bin:$PATH"
 pnpm install --frozen-lockfile
-echo 'Dependencies installed. Start Docker Desktop before running scripts/dev-deploy.py.'
+echo 'Dependencies installed. Start Docker Desktop, then run pnpm dev:deploy.'
 echo 'For development, add the Homebrew node@24/bin directory to your shell PATH.'

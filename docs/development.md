@@ -10,7 +10,6 @@ The existing tooling is part of the stack:
 - Oxc's `oxlint` and `oxfmt`, using the checked-in configuration and lint rules.
 - Vitest for tests.
 - React and Vite for the management UI stub.
-- Python for the existing development and image scripts.
 
 Keep versions and commands in their existing manifests and configuration files. Do not introduce a competing package manager, formatter, linter, or test runner.
 
@@ -40,16 +39,18 @@ Run from the repository root:
 | `pnpm lint`                      | Run Oxc lint checks with warnings treated as errors                             |
 | `pnpm typecheck`                 | Build shared contracts and typecheck workspace packages                         |
 | `pnpm check`                     | Run formatting, lint, and type checks                                           |
-| `pnpm test`                      | Run tooling tests, build shared contracts, and run workspace tests              |
+| `pnpm test`                      | Build shared contracts and run workspace tests                                  |
 | `pnpm build`                     | Build workspace packages                                                        |
+| `pnpm image`                     | Build the control-plane Docker image tagged `homelab-paas/paas:dev`             |
+| `pnpm dev:deploy`                | Build the fixture image and start the local Compose bootstrap                   |
 
 Run checks appropriate to the change. For code changes, use `pnpm check`, relevant tests, and `pnpm build` when build output or packaging is affected. For documentation-only changes, check formatting and relative links; application tests are unnecessary.
 
-Consult the scripts before invoking `pnpm image` or `pnpm dev:deploy`: these are existing packaging and deployment entry points, and may still require alignment with the intended architecture.
+On macOS, `./scripts/bootstrap.sh` installs the tools in `Brewfile` and the pinned workspace dependencies. Add Homebrew's `node@24/bin` directory to your shell `PATH` and start Docker Desktop before running container commands. Kubernetes and appliance packaging scripts are no longer used.
 
 ## Local container environment
 
-Build the fixture image from the repository root, then start the bootstrap:
+Run `pnpm dev:deploy` from the repository root to build the fixture image and start the bootstrap. It runs:
 
 ```sh
 docker build -f services/test-service/Dockerfile -t test-service:local .
