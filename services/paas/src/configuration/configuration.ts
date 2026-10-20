@@ -1,4 +1,5 @@
 import type { ServiceDescriptor } from "@homelab-paas/shared-contracts";
+import { parseDescriptor } from "@homelab-paas/shared-contracts";
 import yaml from "yaml";
 import { z } from "zod";
 
@@ -33,50 +34,6 @@ const id = z
 	.max(63);
 const positive = z.number().int().positive();
 const port = positive.max(65535);
-const web = z.strictObject({
-	type: z.literal("web"),
-	image: z.string().min(1),
-	replicas: z.literal(1).default(1),
-	rolloutStrategy: z.literal("recreate").default("recreate"),
-	ingress: z.strictObject({ public: z.literal(true), port }),
-	healthcheckUrl: z
-		.string()
-		.regex(/^\/(?!\/)[^\s]*$/)
-		.default("/healthcheck"),
-	command: z.array(z.string()).min(1).optional(),
-	env: z
-		.array(
-			z.strictObject({
-				name: z
-					.string()
-					.regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
-					.refine((name) => !name.startsWith("PAAS_")),
-				value: z.string(),
-			}),
-		)
-		.optional(),
-	termination: z.strictObject({ timeoutSeconds: positive.max(300) }).optional(),
-});
-const descriptor = z.strictObject({
-	version: z.literal(1),
-	metadata: z.strictObject({
-		serviceId: id,
-		description: z.string().optional(),
-		labels: z.record(z.string(), z.string()).optional(),
-	}),
-	resources: z.record(id, web).refine((resources) => Object.keys(resources).length === 1),
-});
-
-/** Rejects unsupported features before any Docker changes; never includes input values in errors. */
-export function parseDescriptor(value: unknown, serviceId: string): ServiceDescriptor {
-	const result = descriptor.safeParse(value);
-	if (!result.success || result.data.metadata.serviceId !== serviceId)
-		throw new Error(
-			"Invalid service descriptor: expected one public web resource matching the configured service ID",
-		);
-	return result.data;
-}
-
 const source = z.strictObject({
 	remote: z.string().min(1),
 	branch: z
