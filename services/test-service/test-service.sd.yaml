@@ -6,6 +6,6 @@ resources:
         type: web
         image: test-service:local
         ingress:
-            public: true
+            public: false
             port: 8080
         healthcheckUrl: /health

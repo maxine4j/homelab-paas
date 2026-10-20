@@ -83,7 +83,10 @@ export class ArtifactService implements IArtifactService {
 	constructor(private readonly store: IArtifactStore) {}
 
 	async save(artifact: Artifact): Promise<void> {
-		await this.store.save({ ...artifact, content: this.normalizeContent(artifact.content) });
+		await this.store.save({
+			...artifact,
+			content: this.normalizeContent(artifact.content),
+		});
 	}
 
 	private normalizeContent(content: string): string {
