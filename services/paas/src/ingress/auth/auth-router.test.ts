@@ -102,8 +102,8 @@ test("validates return targets and callback parameters, sets secure cookies and 
 		]) {
 			expect((await request(`/oauth/github/login?redirect_uri=${encodeURIComponent(target)}`)).status).toBe(400);
 		}
-		expect((await request("/oauth/github/callback?code=code")).status).toBe(400);
-		const callback = await request("/oauth/github/callback?code=code&state=state", "__Host-paas_oauth=nonce");
+		expect((await request("/auth/callback?code=code")).status).toBe(400);
+		const callback = await request("/auth/callback?code=code&state=state", "__Host-paas_oauth=nonce");
 		expect(completeLogin).toHaveBeenCalledWith("code", "state", "nonce");
 		expect(callback.status).toBe(302);
 		expect(callback.headers.getSetCookie()).toContain(

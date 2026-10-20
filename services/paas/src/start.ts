@@ -1,13 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
-import { readFile } from "node:fs/promises";
 import { setTimeout } from "node:timers/promises";
 
 import acme from "acme-client";
 import Koa from "koa";
+import { nanoid } from "nanoid";
 
 import { bootstrap } from "./bootstrap.ts";
-import { Configuration, decodeDescriptorYaml } from "./configuration/configuration.ts";
+import { PaasConfig, decodeDescriptorYaml } from "./config/paas-config.ts";
 import { DockerClient } from "./docker/docker-client.ts";
 import { DockerService } from "./docker/docker-service.ts";
 import { NodeDockerTransport } from "./docker/docker-transport.ts";
@@ -28,22 +28,25 @@ import { FileCertificateStore } from "./ingress/tls/certificate-store.ts";
 import { DigitalOceanDnsAcmeChallengeProvider } from "./ingress/tls/dns-challenge/digitalocean-dns-challenge-provider.ts";
 import { DeploymentService } from "./reconciler/deployment/deployment-service.ts";
 import { RecreateDeploymentStrategy } from "./reconciler/deployment/strategy/recreate-deployment-strategy.ts";
+import { SurgeDeploymentStrategy } from "./reconciler/deployment/strategy/surge-deployment-strategy.ts";
 import { FileReconciliationStore } from "./reconciler/file-reconciliation-store.ts";
 import { NetworkingService } from "./reconciler/networking/networking-service.ts";
 import { ReconcilerService } from "./reconciler/reconciler-service.ts";
 import { ReconcilerTask } from "./reconciler/reconciler-task.ts";
 import { WebResourceReconciler } from "./reconciler/resources/web/web-reconciler.ts";
 import { PeriodicTaskRunner } from "./task/periodic.ts";
+import { readFile } from "./util/file.ts";
 import { createHealthCheckRouter, probe } from "./util/healthcheck.ts";
 import type { Lifecycle } from "./util/lifecycle.ts";
 import { logger } from "./util/logger.ts";
 import { sleep } from "./util/sleep.ts";
 
+const STATE_DIRECTORY = "/var/homelab-paas/_paas";
+
 export async function start(lifecycle: Lifecycle): Promise<void> {
-	const config = await new Configuration((path) => readFile(path, "utf8")).load();
-	const stateDirectory = "/var/homelab-paas/_paas";
-	await bootstrap(stateDirectory);
-	const store = new FileReconciliationStore(stateDirectory);
+	const config = await new PaasConfig(readFile, process.env).load();
+	await bootstrap(STATE_DIRECTORY);
+	const store = new FileReconciliationStore(STATE_DIRECTORY);
 	const docker = new DockerService(
 		new DockerClient(
 			new NodeDockerTransport({
@@ -57,7 +60,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 	const envoy = new EnvoyService(
 		new EnvoyClient(
 			new NodeEnvoyTransport({
-				directory: stateDirectory,
+				directory: STATE_DIRECTORY,
 				adminUrl: "http://envoy:9901",
 				timeoutMs: 2000,
 				maxResponseBytes: 16 * 1024 * 1024,
@@ -67,14 +70,17 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 		),
 		config.ingress,
 	);
-	const networking = new NetworkingService(store, envoy);
-	const deployment = new DeploymentService([new RecreateDeploymentStrategy(docker, networking, probe, sleep)]);
+	const networking = new NetworkingService(store, envoy, sleep);
+	const deployment = new DeploymentService([
+		new RecreateDeploymentStrategy(docker, networking, probe, sleep),
+		new SurgeDeploymentStrategy(docker, networking, probe, sleep, () => nanoid(10)),
+	]);
 	const reconciler = new ReconcilerService(
 		config.services,
 		config.reconciliation,
 		new GitService(
 			new GitClient(new NodeGitTransport(config.git.operationTimeoutSeconds * 1000, process.env)),
-			`${stateDirectory}/git`,
+			`${STATE_DIRECTORY}/git`,
 		),
 		decodeDescriptorYaml,
 		new WebResourceReconciler(docker, deployment, networking, probe),
@@ -98,7 +104,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 		report: () => logger.error("Reconciliation task failed; check persistent state and Docker access"),
 	});
 	const app = new Koa().use(createHealthCheckRouter().routes());
-	const certificates = new FileCertificateStore(stateDirectory);
+	const certificates = new FileCertificateStore(STATE_DIRECTORY);
 	let renewal: TlsCertRenewalTask | undefined;
 	if (config.auth && config.tls) {
 		const auth = new AuthService(
@@ -107,6 +113,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 			config.auth.github.allowedUsers,
 			() => randomBytes(32).toString("base64url"),
 			store,
+			{ baseDomain: config.ingress.baseDomain, httpsPort: config.ingress.httpsPort! },
 		);
 		app.use(
 			createAuthRouter(auth, {

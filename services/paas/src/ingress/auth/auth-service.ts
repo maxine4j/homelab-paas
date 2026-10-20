@@ -16,6 +16,7 @@ export class AuthService implements IAuthService {
 		private readonly allowedUsers: string[],
 		private readonly generateNonce: () => string,
 		private readonly endpoints: IEndpointsStore,
+		private readonly ingress: { baseDomain: string; httpsPort: number },
 	) {}
 	async authorize(serviceId: string, token: string | undefined): Promise<"allowed" | "login" | "missing"> {
 		const endpoint = (await this.endpoints.getAll())[serviceId];
@@ -25,13 +26,13 @@ export class AuthService implements IAuthService {
 	beginLogin(redirectUri: string): Login {
 		const nonce = this.generateNonce();
 		const state = this.tokens.issue({ redirectUri, nonce }, "state");
-		return { url: this.provider.getLoginUrl(state), state, nonce };
+		return { url: this.provider.getLoginUrl(state, this.callbackUrl()), state, nonce };
 	}
 	async completeLogin(code: string, state: string, nonce: string | undefined): Promise<LoginResult> {
 		try {
 			const claims = this.tokens.verify(state, "state");
 			if (!code || !nonce || claims?.nonce !== nonce || !claims.redirectUri) throw new Error();
-			const accessToken = await this.provider.fetchAccessToken(code);
+			const accessToken = await this.provider.fetchAccessToken(code, this.callbackUrl());
 			const user = await this.provider.fetchUserDetails(accessToken);
 			if (!this.isAllowed(user.userId)) throw new Error();
 			return { session: this.tokens.issue({ userId: user.userId }, "session"), redirectUri: claims.redirectUri };
@@ -45,6 +46,10 @@ export class AuthService implements IAuthService {
 	}
 	private isAllowed(userId: string): boolean {
 		return this.allowedUsers.some((allowed) => allowed.toLowerCase() === userId.toLowerCase());
+	}
+	private callbackUrl(): string {
+		const port = this.ingress.httpsPort === 443 ? "" : `:${this.ingress.httpsPort}`;
+		return `https://auth.${this.ingress.baseDomain}${port}/auth/callback`;
 	}
 }
 

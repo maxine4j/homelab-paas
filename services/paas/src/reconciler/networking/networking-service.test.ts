@@ -1,9 +1,39 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import type { IEnvoyService } from "../../envoy/envoy-service.ts";
 import { InMemoryEndpointsStore } from "./endpoints-store.ts";
 import { NetworkingError, NetworkingService } from "./networking-service.ts";
 import type { Endpoint } from "./types.ts";
+
+test("keeps previous containers alive for the drain budget before allowing immediate stop", async () => {
+	let release = () => {};
+	const sleep = vi.fn(
+		() =>
+			new Promise<void>((resolve) => {
+				release = resolve;
+			}),
+	);
+	const f = fixture();
+	const service = new NetworkingService(f.endpoints, f.envoy, sleep);
+	let complete = false;
+	const draining = service.drain("demo", ["old"], 45).then((remaining) => {
+		complete = true;
+		return remaining;
+	});
+	expect(sleep).toHaveBeenCalledWith(45_000);
+	await Promise.resolve();
+	expect(complete).toBe(false);
+	release();
+	await expect(draining).resolves.toBe(0);
+});
+
+test("drain failures reject with a sanitized networking error", async () => {
+	const f = fixture();
+	const service = new NetworkingService(f.endpoints, f.envoy, async () => {
+		throw new Error("sensitive detail");
+	});
+	await expect(service.drain("demo", ["old"], 30)).rejects.toThrow(new NetworkingError());
+});
 
 const old: Endpoint = { address: "10.0.0.1", port: 8080, healthcheckPath: "/ready", public: true };
 const replacement: Endpoint = { ...old, address: "10.0.0.2" };
@@ -16,7 +46,7 @@ function fixture() {
 			snapshots.push(routes);
 		},
 	};
-	return { endpoints, envoy, snapshots, service: new NetworkingService(endpoints, envoy) };
+	return { endpoints, envoy, snapshots, service: new NetworkingService(endpoints, envoy, async () => {}) };
 }
 
 test("switches containers and withdraws a service while preserving other services", async () => {

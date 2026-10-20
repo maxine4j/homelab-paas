@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { DockerContainerDetails, ServiceContainer } from "../../../docker/types.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
-import { SurgeDeploymentStrategy, type IDeploymentDrainer } from "./surge-deployment-strategy.ts";
+import { SurgeDeploymentStrategy } from "./surge-deployment-strategy.ts";
 import type { DeploymentRequest } from "./types.ts";
 
 const request: DeploymentRequest = {
@@ -83,8 +83,6 @@ function fixture() {
 		async withdraw(serviceId) {
 			record("route", serviceId, undefined);
 		},
-	};
-	const drainer: IDeploymentDrainer = {
 		async drain(...args) {
 			record("drain", ...args);
 			return 10;
@@ -101,12 +99,11 @@ function fixture() {
 	return {
 		docker,
 		routes,
-		drainer,
 		calls,
 		probe,
 		sleep,
 		generateInstanceId,
-		strategy: new SurgeDeploymentStrategy(docker, routes, probe, sleep, drainer, generateInstanceId),
+		strategy: new SurgeDeploymentStrategy(docker, routes, probe, sleep, generateInstanceId),
 	};
 }
 
@@ -174,7 +171,7 @@ test.each([false, undefined])("publishes private policy when public is %s", asyn
 
 test("uses the default shutdown budget and allows immediate termination after draining exhausts it", async () => {
 	const f = fixture();
-	f.drainer.drain = async (...args) => {
+	f.routes.drain = async (...args) => {
 		f.calls.push({ action: "drain", args });
 		return 0;
 	};
@@ -241,7 +238,6 @@ test("readiness retries absence, stopped containers, missing addresses and faile
 		f.routes,
 		async () => ++probes > 1,
 		f.sleep,
-		f.drainer,
 		f.generateInstanceId,
 	);
 	await strategy.deploy(request);
@@ -260,7 +256,6 @@ test("readiness exhaustion preserves the previous revision and removes only the 
 			return false;
 		},
 		f.sleep,
-		f.drainer,
 		f.generateInstanceId,
 	);
 	await expect(strategy.deploy(request)).rejects.toThrow("Container readiness failed");
@@ -281,7 +276,7 @@ test("publication failure keeps both revisions because route acceptance is uncer
 
 test("draining failure keeps the newly routed replacement and the old revision", async () => {
 	const f = fixture();
-	f.drainer.drain = async () => {
+	f.routes.drain = async () => {
 		throw new Error("drain failed");
 	};
 	await expect(f.strategy.deploy(request)).rejects.toThrow("drain failed");
@@ -291,7 +286,7 @@ test("draining failure keeps the newly routed replacement and the old revision",
 
 test.each([-1, 46, NaN, 1.5])("rejects invalid remaining shutdown budgets: %s", async (remaining) => {
 	const f = fixture();
-	f.drainer.drain = async () => remaining;
+	f.routes.drain = async () => remaining;
 	await expect(f.strategy.deploy(request)).rejects.toThrow("Invalid remaining termination budget");
 	expect(f.calls.some((c) => c.action === "stop")).toBe(false);
 });

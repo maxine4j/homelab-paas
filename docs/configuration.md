@@ -4,13 +4,25 @@ Platform and service configuration contracts, including defaults and complete ex
 
 ## Implemented deployment MVP
 
-The current runtime supports exactly one `web` resource per service, one replica, and `recreate` deployment. Descriptors use the schema below with only `version`, `metadata`, and `resources` at the top level. Runtime-supported web fields are `type`, `image`, `ingress`, optional `replicas: 1`, `rolloutStrategy: recreate`, `healthcheckUrl`, `command`, literal `env` values, and `termination.timeoutSeconds` (default 30, maximum 300). Unknown fields fail descriptor validation; unsupported runtime features fail a separate capability check before changing workloads. The public TypeScript types, Zod schema, and `parseDescriptor` validator in `@homelab-paas/shared-contracts` describe the complete service descriptor contract below. Platform configuration, runtime capability checks, and deployment state stay in the backend.
+The current runtime supports exactly one `web` resource per service, one replica, and `recreate` or `surge` deployment. Descriptors use the schema below with only `version`, `metadata`, and `resources` at the top level. Runtime-supported web fields are `type`, `image`, `ingress`, optional `replicas: 1`, `rolloutStrategy` (`recreate` or `surge`), `healthcheckUrl`, `command`, literal `env` values, and `termination.timeoutSeconds` (default 30, maximum 300). Unknown fields fail descriptor validation; unsupported runtime features fail a separate capability check before changing workloads. The public TypeScript types, Zod schema, and `parseDescriptor` validator in `@homelab-paas/shared-contracts` describe the complete service descriptor contract below. Platform configuration, runtime capability checks, and deployment state stay in the backend.
 
-Workers, managed databases/brokers, secret references, volumes, limits, egress, surge, and multiple replicas are deferred. Private ingress (including the default `public: false`) requires platform auth and TLS. Without them, ingress must explicitly set `public: true`. The remaining service examples include capabilities beyond the deployed runtime.
+Workers, managed databases/brokers, secret references, volumes, limits, egress, and multiple replicas are deferred. Private ingress (including the default `public: false`) requires platform auth and TLS. Without them, ingress must explicitly set `public: true`. The remaining service examples include capabilities beyond the deployed runtime.
+
+At startup, supplied environment variables override the corresponding YAML fields before validation:
+
+| Environment variable     | YAML field                     |
+| ------------------------ | ------------------------------ |
+| `GITHUB_CLIENT_ID`       | `auth.github.clientId`         |
+| `GITHUB_CLIENT_SECRET`   | `auth.github.clientSecret`     |
+| `SESSION_SIGNING_KEY`    | `auth.session.signingKey`      |
+| `DIGITALOCEAN_API_TOKEN` | `tls.dns.credentials.apiToken` |
+| `ACME_EMAIL`             | `tls.acme.email`               |
+
+Unset variables preserve YAML values; empty overrides fail validation when their section is configured. Environment credentials alone do not enable authentication or TLS. The YAML must still contain the corresponding sections, GitHub allowlist and session settings. Keep local credentials in the ignored Compose `.env` file; see [development](development.md#local-container-environment).
 
 Platform configuration contains `version: 1`, `metadata.clusterId`, `ingress.baseDomain`, optional `ingress.httpPort` (default 80), `git`, `reconciliation`, and `services`. The `auth` and `tls` sections shown below are optional together; supplying only one fails startup. With both enabled, `ingress.httpsPort` defaults to 443 and HTTP redirects to HTTPS. HTTP and HTTPS ports must differ. Without auth/TLS, `httpsPort` is rejected and public HTTP remains available for local development. Git credentials remain deferred. Polling, operation timeout, and retry bounds are required positive integer seconds. Restart the control plane to apply platform configuration changes.
 
-GitHub client ID, client secret, callback URL, and a nonempty username allowlist are required when authentication is enabled. Username matching is case-insensitive. The callback must be exactly `https://auth.{baseDomain}/oauth/github/callback`, including `:{httpsPort}` for a nonstandard HTTPS port. The service ID `auth` is reserved in this mode. Session issuer, audience, signing key (at least 32 characters), and positive integer lifetime in seconds are required. TLS requires an ACME email and DigitalOcean API token; provider selection is fixed to `digitalocean`. Certificate paths, production ACME directory, and renewal timing are platform-owned; see [TLS](networking-and-auth.md#tls).
+GitHub client ID, client secret, and a nonempty username allowlist are required when authentication is enabled. Username matching is case-insensitive. `AuthService` derives the callback as `https://auth.{baseDomain}/auth/callback`, including `:{httpsPort}` for a nonstandard HTTPS port; `callbackUrl` is not a configurable field. Register this derived URL in the GitHub OAuth application. The service ID `auth` is reserved in this mode. Session issuer, audience, signing key (at least 32 characters), and positive integer lifetime in seconds are required. TLS requires an ACME email and DigitalOcean API token; provider selection is fixed to `digitalocean`. Certificate paths, production ACME directory, and renewal timing are platform-owned; see [TLS](networking-and-auth.md#tls).
 
 For normal remotes, `branch` defaults to `main` and `descriptorPath` defaults to `{serviceId}.sd.yaml` relative to the repository root. Git fetches the configured branch into platform-owned repositories and reads the descriptor at its resolved commit.
 
@@ -125,7 +137,6 @@ auth:
     github:
         clientId: replace-me
         clientSecret: replace-me
-        callbackUrl: https://auth.apps.example.com/oauth/github/callback
         allowedUsers:
             - your-github-username
 

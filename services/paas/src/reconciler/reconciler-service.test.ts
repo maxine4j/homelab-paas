@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 
-import { decodeDescriptorYaml } from "../configuration/configuration.ts";
+import { decodeDescriptorYaml } from "../config/paas-config.ts";
 import type { GitFile } from "../git/types.ts";
 import { ReconcilerService } from "./reconciler-service.ts";
 import type { ReconciliationState } from "./types.ts";
@@ -75,6 +75,22 @@ test("fetches a committed descriptor, validates it and reconciles actual state o
 	expect(f.states.get("demo")).toEqual({ desiredRevision: "rev", activeRevision: "rev", phase: "ready" });
 });
 
+test("accepts surge and passes it to the web reconciler", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "surge",
+		content: JSON.stringify({
+			...descriptor,
+			resources: { app: { ...descriptor.resources.app, rolloutStrategy: "surge" } },
+		}),
+	});
+	await f.service.reconcile();
+	expect(f.reconcile).toHaveBeenCalledWith(
+		expect.objectContaining({ resource: expect.objectContaining({ rolloutStrategy: "surge" }) }),
+	);
+	expect(f.states.get("demo")).toEqual({ desiredRevision: "surge", activeRevision: "surge", phase: "ready" });
+});
+
 test("accepts private ingress when platform authentication and TLS are enabled", async () => {
 	const f = fixture();
 	f.fetchFile.mockResolvedValue({
@@ -107,7 +123,6 @@ test.each([
 	{ ...descriptor.resources, queue: { type: "rabbitmq", image: "rabbitmq:4" } },
 	{},
 	{ app: { ...descriptor.resources.app, replicas: 2 } },
-	{ app: { ...descriptor.resources.app, rolloutStrategy: "surge" } },
 	{ app: { ...descriptor.resources.app, ingress: { public: false, port: 8080 } } },
 	{ app: { ...descriptor.resources.app, env: [{ name: "TOKEN", secret: true }] } },
 	{ app: { ...descriptor.resources.app, volumes: [{ source: "data", target: "/data" }] } },

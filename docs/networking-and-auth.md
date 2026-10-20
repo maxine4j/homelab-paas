@@ -72,7 +72,7 @@ Login and OAuth callback routes are exempt from requiring an existing session.
 
 ### GitHub login and JWT sessions
 
-The control plane implements GitHub OAuth login. A configured GitHub user allowlist determines who may create a session.
+The control plane implements GitHub OAuth login. A configured GitHub user allowlist determines who may create a session. `AuthService` derives the callback URL from the configured ingress domain and HTTPS port and supplies the same URL to the provider for authorization and token exchange. See [configuration](configuration.md#implemented-deployment-mvp) for the derived URL to register with GitHub.
 
 After successful login, the platform issues a local JWT session using secure, HTTP-only cookies. It validates the signature, issuer, audience, and expiration on subsequent requests.
 
@@ -82,7 +82,7 @@ Login must work across service hostnames without exposing platform session token
 
 Envoy's HTTPS listener performs HTTP `ext_authz` checks against the private control-plane `/auth/check` prefix for every application request, including public ingress. The control plane reads the persisted routing policy, validates sessions locally, and replaces the upstream `Cookie` header with only application cookies. Platform cookies are stripped for both public and private applications; other application credentials are preserved. Unknown services are denied and authorization errors fail closed.
 
-Private requests without a valid session redirect to `https://auth.{baseDomain}/oauth/github/login`, preserving the original service URL in validated OAuth state. Only login and `/oauth/github/callback` are routed to the control plane on that hostname; the authorization endpoint and management paths are never exposed there. Login targets must use a configured service hostname and the configured HTTPS port. Signed, ten-minute OAuth state is bound to a random browser nonce in a host-only, secure, HTTP-only cookie and cleared on callback. The GitHub username allowlist is checked before issuing a session and on session validation.
+Private requests without a valid session redirect to `https://auth.{baseDomain}/oauth/github/login`, preserving the original service URL in validated OAuth state. Only login and `/auth/callback` are routed to the control plane on that hostname; the authorization endpoint and management paths are never exposed there. Login targets must use a configured service hostname and the configured HTTPS port. Signed, ten-minute OAuth state is bound to a random browser nonce in a host-only, secure, HTTP-only cookie and cleared on callback. The GitHub username allowlist is checked before issuing a session and on session validation.
 
 Sessions use the secure, HTTP-only `__Secure-paas_session` cookie scoped to the base domain with `SameSite=Lax`; Envoy removes it before proxying to workloads. JWTs use HS256 with required signature, issuer, audience, purpose, and expiration validation. OAuth state and session tokens have distinct purposes. Application-provided duplicate platform cookies do not authenticate a request. GitHub access tokens are used only during login and are never stored in session cookies. There is no service-specific allowlist or administrator role in the current contract.
 
@@ -104,7 +104,7 @@ Renewal must update Envoy without restarting workloads. Renewal failures retain 
 
 The production ACME account key persists at `_paas/acme-account.pem`. One certificate covers the base domain and its wildcard. DigitalOcean zone discovery selects the longest managed suffix of the base domain; challenge records are tracked individually and cleanup removes only records created for that challenge. The certificate chain and matching private key are validated before atomic replacement of `_paas/ingress.pem`. `_paas/sds.yaml` references that combined PEM; filesystem SDS watches its directory and reloads Envoy's TLS context on replacement. Private material uses mode `0600` within the platform state directory.
 
-Startup provisions a missing or expiring certificate before publishing the HTTPS listener. Renewal checks then run every twelve hours and renew with fewer than thirty days remaining. A renewal failure retains an existing usable certificate; startup fails if no usable certificate exists. HTTPS port publication remains an operator/bootstrap responsibility; the local Compose fixture remains HTTP-only.
+Startup provisions a missing or expiring certificate before publishing the HTTPS listener. Renewal checks then run every twelve hours and renew with fewer than thirty days remaining. A renewal failure retains an existing usable certificate; startup fails if no usable certificate exists. HTTPS port publication remains an operator/bootstrap responsibility; the local Compose fixture publishes loopback ports 80 and 443 for `local.maxine4j.com`.
 
 DNS records pointing service and authentication hostnames at the Docker host are an operator prerequisite.
 

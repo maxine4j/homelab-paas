@@ -57,35 +57,40 @@ docker build -f services/test-service/Dockerfile -t test-service:local .
 docker compose -f local/docker-compose.yaml up --build -d
 ```
 
-Compose starts only Envoy and the control plane. The control plane deploys test-service itself through Docker Engine using its committed descriptor. Control-plane source is bind-mounted and Node watches for changes; `--experimental-transform-types` enables TypeScript constructor parameter properties in Node 24. Only Envoy publishes a port, on loopback port 80.
+Compose starts only Envoy and the control plane. The control plane deploys test-service itself through Docker Engine using its committed descriptor. Only Envoy publishes ports, on loopback ports 80 and 443.
 
-`services/paas/Dockerfile` uses Node 24 Alpine with separate build, production dependency installation, and runtime stages. The runtime image contains compiled JavaScript and production dependencies. Compose overrides its command to watch the mounted TypeScript source during local development.
+`services/paas/Dockerfile` uses Node 24 Alpine with separate build, production dependency installation, and runtime stages. Compose runs the same runtime image and default `node dist/main.js` command used in production, with compiled JavaScript and production dependencies. Source is not mounted into the application directory. Rerun `pnpm dev:deploy` to rebuild and replace the control plane after code or dependency changes.
+
+Copy `local/.env.example` to `local/.env` and supply `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `SESSION_SIGNING_KEY` (at least 32 characters), `DIGITALOCEAN_API_TOKEN`, and `ACME_EMAIL`. Compose interpolates these values into the control-plane environment; they [override YAML credentials](configuration.md#implemented-deployment-mvp). The `.env` file is ignored by Git and excluded from Docker build contexts. Keep the signing key stable across redeployments to preserve sessions.
+
+Local ingress uses `local.maxine4j.com` with HTTPS on port 443. Register `https://auth.local.maxine4j.com/auth/callback` in the GitHub OAuth application. Point the base domain and wildcard hostnames at `127.0.0.1` using DNS or local resolver configuration. The DigitalOcean token must manage the domain's DNS zone for certificate issuance.
 
 - `etc/` maps to `/etc/homelab-paas` and holds `config.yaml` and the Envoy bootstrap `envoy.yaml`.
 - `var/` maps to `/var/homelab-paas` and is ignored by Git. `docker compose down` retains it.
 - The Docker socket is mounted for Engine integration.
-- The repository is mounted read-only at `/mnt/repo`. The magic `remote: local` reads `/mnt/repo/services/test-service/test-service.sd.yaml` through Git at the checkout's `HEAD`. Commit descriptor edits before reconciliation can see them; other control-plane source edits reload immediately.
+- The repository is mounted read-only at `/mnt/repo`. The magic `remote: local` reads `/mnt/repo/services/test-service/test-service.sd.yaml` through Git at the checkout's `HEAD`. Commit descriptor edits before reconciliation can see them.
 - Bootstrap containers carry cluster/role labels for network attachment. PaaS attaches itself and Envoy to each dedicated service network.
 - Envoy's admin listener uses container port 9901 for configuration acceptance checks. It has no host port publication. Restart Envoy after changing its bootstrap configuration.
+- Envoy retains UID 0 via `ENVOY_UID` to read the control plane's root-owned, restricted state and certificate files.
 
-The control plane reads platform configuration at startup, serves `/health` internally on port 8080, and runs the [deployment MVP](configuration.md#implemented-deployment-mvp). Polling defaults in the checked-in local configuration are five seconds. The fixture descriptor already matches the MVP schema and explicitly uses `/health`. Auth, TLS, and advanced resources are omitted.
+The control plane reads platform configuration at startup, serves `/health` internally on port 8080, and runs the [deployment MVP](configuration.md#implemented-deployment-mvp). Polling defaults in the checked-in local configuration are five seconds. The fixture descriptor already matches the MVP schema and explicitly uses `/health`. Local configuration enables GitHub auth and DigitalOcean TLS; advanced resources are omitted.
 
-Check both the control plane and the deployed service through Envoy:
+Check the control plane inside its container and the public deployed service through Envoy:
 
 ```sh
-curl --fail http://localhost/health
-curl --fail http://test-service.localhost/health
-# If your resolver does not resolve *.localhost:
-curl --fail --resolve test-service.localhost:80:127.0.0.1 http://test-service.localhost/health
+docker compose -f local/docker-compose.yaml exec -T paas node -e "fetch('http://127.0.0.1:8080/health').then(async r => { console.log(await r.text()); process.exit(r.ok ? 0 : 1); })"
+curl --fail https://test-service.local.maxine4j.com/health
+# If local DNS is not configured:
+curl --fail --resolve test-service.local.maxine4j.com:443:127.0.0.1 https://test-service.local.maxine4j.com/health
 ```
 
 Both checks return `{"status":"up"}` once the workload is ready. Envoy reads generated `cds.yaml` and `lds.yaml` from `local/var/_paas/`; deployment checkpoints and routes are YAML files beside them. No database is used. Stop or remove the managed workload to exercise recovery on the next poll. Restarting the control plane preserves the workload and routing state.
 
-For an end-to-end deployment check, also request `/ping` on `test-service.localhost` and expect `{"message":"pong"}`. Record the workload ID and image with `docker inspect`, remove only that test-service container, and wait for reconciliation. Verify a new container ID uses the built `test-service:local` image, has no published ports, and serves both `/health` and `/ping` through Envoy. Check `local/var/_paas/test-service.state.yaml` reports `phase: ready` and the expected committed revision. Restart the control plane and repeat the requests; the replacement workload ID should remain unchanged.
+For an end-to-end deployment check, also request `/ping` on `test-service.local.maxine4j.com` and expect `{"message":"pong"}`. Private ingress requires a browser login first. Record the workload ID and image with `docker inspect`, remove only that test-service container, and wait for reconciliation. Verify a new container ID uses the built `test-service:local` image, has no published ports, and serves both `/health` and `/ping` through Envoy. Check `local/var/_paas/test-service.state.yaml` reports `phase: ready` and the expected committed revision. Restart the control plane and repeat the requests; the replacement workload ID should remain unchanged.
 
 ### Local startup troubleshooting
 
-Only control-plane source is watched. Shared contracts and dependencies are baked into the control-plane image; rerun `docker compose -f local/docker-compose.yaml up --build -d` after changing them. A missing shared-contract export at startup can indicate an old image.
+Control-plane code, shared contracts and dependencies are baked into the image; rerun `pnpm dev:deploy` after changing them. A missing shared-contract export at startup can indicate an old image.
 
 Legacy `local/var/_paas/routes.yaml` entries created before ingress policies were persisted lack `public`. The state store intentionally rejects these entries. Stop the control plane, add an explicit `public` value to each affected endpoint matching that service's committed descriptor, then restart the bootstrap. The checked-in test-service descriptor uses `public: true`. Do not infer public access for other services or delete persistent state to bypass validation. Private ingress requires configured auth and TLS.
 

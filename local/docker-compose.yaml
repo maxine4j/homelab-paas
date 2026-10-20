@@ -5,9 +5,12 @@ services:
             context: ..
             dockerfile: services/paas/Dockerfile
         init: true
-        command: [node, --watch, --experimental-transform-types, src/main.ts]
         environment:
-            NODE_ENV: development
+            GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+            GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+            SESSION_SIGNING_KEY: ${SESSION_SIGNING_KEY}
+            DIGITALOCEAN_API_TOKEN: ${DIGITALOCEAN_API_TOKEN}
+            ACME_EMAIL: ${ACME_EMAIL}
         labels:
             homelab-paas.cluster: local
             homelab-paas.role: control-plane
@@ -16,7 +19,6 @@ services:
             - ./var:/var/homelab-paas
             - /var/run/docker.sock:/var/run/docker.sock
             - ..:/mnt/repo:ro
-            - ../services/paas/src:/app/services/paas/src:ro
         healthcheck:
             test:
                 [
@@ -32,11 +34,14 @@ services:
     envoy:
         image: envoyproxy/envoy:v1.37.0
         command: [-c, /etc/homelab-paas/envoy.yaml]
+        environment:
+            ENVOY_UID: "0"
         labels:
             homelab-paas.cluster: local
             homelab-paas.role: envoy
         ports:
             - "127.0.0.1:80:80"
+            - "127.0.0.1:443:443"
         volumes:
             - ./etc:/etc/homelab-paas:ro
             - ./var:/var/homelab-paas:ro

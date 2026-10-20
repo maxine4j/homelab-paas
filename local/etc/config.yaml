@@ -1,10 +1,29 @@
-# HTTP-only MVP configuration. The local source reads committed files through Git.
+# Local source reads committed files through Git.
 version: 1
 metadata:
     clusterId: local
 ingress:
-    baseDomain: localhost
+    baseDomain: local.maxine4j.com
     httpPort: 80
+    httpsPort: 443
+auth:
+    github:
+        clientId: ""
+        clientSecret: ""
+        allowedUsers:
+            - maxine4j
+    session:
+        issuer: homelab-paas-local
+        audience: homelab-paas-local
+        signingKey: ""
+        ttlSeconds: 3600
+tls:
+    acme:
+        email: ""
+    dns:
+        provider: digitalocean
+        credentials:
+            apiToken: ""
 git:
     pollIntervalSeconds: 5
     operationTimeoutSeconds: 60

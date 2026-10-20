@@ -16,6 +16,9 @@ function fixture() {
 	const routes: unknown[] = [];
 	let healthy = true;
 	const networking = {
+		async drain() {
+			return 0;
+		},
 		async routeTo(...args: unknown[]) {
 			routes.push(args);
 		},
@@ -221,7 +224,13 @@ test("observation failures do not deploy and deployment failures propagate", asy
 				throw new Error("deployment failed");
 			},
 		},
-		{ async routeTo() {}, async withdraw() {} },
+		{
+			async routeTo() {},
+			async withdraw() {},
+			async drain() {
+				return 0;
+			},
+		},
 		async () => true,
 	);
 	await expect(reconciler.reconcile(input)).rejects.toThrow("deployment failed");

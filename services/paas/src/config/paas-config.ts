@@ -4,12 +4,54 @@ import yaml from "yaml";
 import { z } from "zod";
 
 import type { GitFileSource } from "../git/types.ts";
+import type { FileReader } from "../util/file.ts";
 
-export class Configuration {
-	constructor(private readonly readFile: (path: string) => Promise<string>) {}
+const PAAS_CONFIG_PATH = "/etc/homelab-paas/config.yaml";
+
+export class PaasConfig {
+	constructor(
+		private readonly readFile: FileReader,
+		private readonly environment: Readonly<Record<string, string | undefined>> = {},
+	) {}
 	async load(): Promise<PlatformConfig> {
 		try {
-			return parseConfig(yaml.parse(await this.readFile("/etc/homelab-paas/config.yaml")));
+			const fileContent = await this.readFile(PAAS_CONFIG_PATH);
+			if (!fileContent) throw Error();
+			const value = z
+				.object({
+					auth: z
+						.object({
+							github: z.record(z.string(), z.unknown()),
+							session: z.record(z.string(), z.unknown()),
+						})
+						.passthrough()
+						.optional(),
+					tls: z
+						.object({
+							acme: z.record(z.string(), z.unknown()),
+							dns: z.object({ credentials: z.record(z.string(), z.unknown()) }).passthrough(),
+						})
+						.passthrough()
+						.optional(),
+				})
+				.passthrough()
+				.parse(yaml.parse(fileContent));
+			if (value.auth) {
+				const github = value.auth.github;
+				if (this.environment["GITHUB_CLIENT_ID"] !== undefined)
+					github["clientId"] = this.environment["GITHUB_CLIENT_ID"];
+				if (this.environment["GITHUB_CLIENT_SECRET"] !== undefined)
+					github["clientSecret"] = this.environment["GITHUB_CLIENT_SECRET"];
+				if (this.environment["SESSION_SIGNING_KEY"] !== undefined)
+					value.auth.session["signingKey"] = this.environment["SESSION_SIGNING_KEY"];
+			}
+			if (value.tls) {
+				if (this.environment["ACME_EMAIL"] !== undefined)
+					value.tls.acme["email"] = this.environment["ACME_EMAIL"];
+				if (this.environment["DIGITALOCEAN_API_TOKEN"] !== undefined)
+					value.tls.dns.credentials["apiToken"] = this.environment["DIGITALOCEAN_API_TOKEN"];
+			}
+			return parseConfig(value);
 		} catch {
 			throw new Error(
 				"Cannot load platform configuration; check /etc/homelab-paas/config.yaml against the platform configuration contract",
@@ -36,7 +78,6 @@ const auth = z.strictObject({
 	github: z.strictObject({
 		clientId: z.string().min(1),
 		clientSecret: z.string().min(1),
-		callbackUrl: z.url(),
 		allowedUsers: z.array(z.string().regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/)).min(1),
 	}),
 	session: z.strictObject({
@@ -95,15 +136,8 @@ export function parseConfig(value: unknown): PlatformConfig {
 		throw new Error("Invalid platform configuration: auth and TLS must be configured together");
 	if (data.auth) {
 		data.ingress.httpsPort ??= 443;
-		const origin = `https://auth.${data.ingress.baseDomain}${data.ingress.httpsPort === 443 ? "" : `:${data.ingress.httpsPort}`}`;
-		if (
-			data.ingress.httpPort === data.ingress.httpsPort
-			|| data.auth.github.callbackUrl !== `${origin}/oauth/github/callback`
-			|| "auth" in data.services
-		)
-			throw new Error(
-				"Invalid platform configuration: check ingress ports, reserved auth hostname and GitHub callback URL",
-			);
+		if (data.ingress.httpPort === data.ingress.httpsPort || "auth" in data.services)
+			throw new Error("Invalid platform configuration: check ingress ports and reserved auth hostname");
 	}
 	const services: Record<string, GitFileSource> = {};
 	for (const [serviceId, entry] of Object.entries(result.data.services)) {

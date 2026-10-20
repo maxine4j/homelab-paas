@@ -5,14 +5,6 @@ import type { INetworkingService } from "../../networking/networking-service.ts"
 import type { Endpoint } from "../../networking/types.ts";
 import type { DeploymentRequest, DeploymentStrategy } from "./types.ts";
 
-export interface IDeploymentDrainer {
-	/** After route acceptance, drain previous endpoints within timeoutSeconds.
-	 * Return the remaining whole seconds available for graceful container stop.
-	 * A failure must reject; it must not report an unconfirmed drain as complete.
-	 */
-	drain(serviceId: string, containerIds: string[], timeoutSeconds: number): Promise<number>;
-}
-
 /** Keeps the old revision until the replacement is ready and its route accepted.
  * Callers serialize deployments and schedule retries. Draining and termination
  * share one shutdown budget; retirement failures retain the routed replacement.
@@ -25,7 +17,6 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 		private readonly networking: INetworkingService,
 		private readonly probe: HttpProbe,
 		private readonly sleep: ISleep,
-		private readonly drainer: IDeploymentDrainer,
 		/** Must return a fresh Docker-name-safe identity for every attempt. */
 		private readonly generateInstanceId: () => string,
 	) {}
@@ -69,7 +60,7 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 		await this.networking.routeTo(serviceId, endpoint);
 		if (current.length === 0) return;
 		const timeoutSeconds = resource.termination?.timeoutSeconds ?? 30;
-		const remainingSeconds = await this.drainer.drain(
+		const remainingSeconds = await this.networking.drain(
 			serviceId,
 			current.map((container) => container.id),
 			timeoutSeconds,

@@ -85,7 +85,7 @@ export const createAuthRouter = (
 			ctx.set("Referrer-Policy", "no-referrer");
 			ctx.redirect(login.url);
 		})
-		.get("/oauth/github/callback", async (ctx) => {
+		.get("/auth/callback", async (ctx) => {
 			ctx.set("Cache-Control", "no-store");
 			ctx.set("Referrer-Policy", "no-referrer");
 			if (ctx.get("host") !== authAuthority) {

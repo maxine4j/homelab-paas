@@ -4,19 +4,19 @@ import type { AuthedUserDetails } from "../types.ts";
 import type { Oauth2Provider } from "./types.ts";
 export class GitHubOauth2Provider implements Oauth2Provider {
 	constructor(
-		private readonly config: { clientId: string; clientSecret: string; callbackUrl: string },
+		private readonly config: { clientId: string; clientSecret: string },
 		private readonly request: typeof fetch,
 	) {}
-	getLoginUrl(state: string): string {
+	getLoginUrl(state: string, callbackUrl: string): string {
 		const url = new URL("https://github.com/login/oauth/authorize");
 		url.search = new URLSearchParams({
 			client_id: this.config.clientId,
-			redirect_uri: this.config.callbackUrl,
+			redirect_uri: callbackUrl,
 			state,
 		}).toString();
 		return url.href;
 	}
-	async fetchAccessToken(code: string): Promise<string> {
+	async fetchAccessToken(code: string, callbackUrl: string): Promise<string> {
 		try {
 			const response = await this.request("https://github.com/login/oauth/access_token", {
 				method: "POST",
@@ -24,7 +24,7 @@ export class GitHubOauth2Provider implements Oauth2Provider {
 				body: JSON.stringify({
 					client_id: this.config.clientId,
 					client_secret: this.config.clientSecret,
-					redirect_uri: this.config.callbackUrl,
+					redirect_uri: callbackUrl,
 					code,
 				}),
 				signal: AbortSignal.timeout(10_000),

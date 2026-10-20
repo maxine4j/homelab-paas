@@ -79,7 +79,7 @@ test("secures external traffic with SDS, fail-closed authorization and isolated 
 	const text = JSON.stringify(listeners);
 	expect(text).toContain("https_redirect");
 	expect(text).toContain("auth.apps.example.com");
-	expect(text).toContain("/oauth/github/callback");
+	expect(text).toContain("/auth/callback");
 	expect(text).toContain("/var/homelab-paas/_paas/sds.yaml");
 	expect(text).toContain('"failure_mode_allow":false');
 	expect(text).toContain('"path_prefix":"/auth/check"');

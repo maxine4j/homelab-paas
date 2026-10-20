@@ -117,7 +117,7 @@ export class EnvoyService implements IEnvoyService {
 		const authHost = {
 			name: "auth",
 			domains: [`auth.${this.ingress.baseDomain}`, `auth.${this.ingress.baseDomain}:*`],
-			routes: ["/oauth/github/login", "/oauth/github/callback"].map((path) => ({
+			routes: ["/oauth/github/login", "/auth/callback"].map((path) => ({
 				match: { path },
 				route: { cluster: "paas" },
 				typed_per_filter_config: disabled,

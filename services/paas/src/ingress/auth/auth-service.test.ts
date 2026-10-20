@@ -5,7 +5,7 @@ import { AuthService } from "./auth-service.ts";
 import { JwtClient } from "./jwt-client.ts";
 
 const session = { issuer: "paas", audience: "paas", signingKey: "a".repeat(32), ttlSeconds: 3600 };
-const fixture = () => {
+const fixture = (httpsPort = 443, baseDomain = "example.test") => {
 	let now = 1_800_000_000_000;
 	const tokens = new JwtClient(session, () => now);
 	const provider = {
@@ -18,7 +18,14 @@ const fixture = () => {
 		private: { address: "10.0.0.3", port: 80, healthcheckPath: "/", public: false },
 	}));
 	return {
-		service: new AuthService(provider, tokens, ["Alice"], () => "random-nonce", { getAll, set: vi.fn() }),
+		service: new AuthService(
+			provider,
+			tokens,
+			["Alice"],
+			() => "random-nonce",
+			{ getAll, set: vi.fn() },
+			{ baseDomain, httpsPort },
+		),
 		provider,
 		getAll,
 		advance: (ms: number) => {
@@ -34,10 +41,28 @@ test("binds login state to the browser and return target before issuing an allow
 	const result = await f.service.completeLogin("code", login.state, "random-nonce");
 	expect(result.redirectUri).toBe("https://demo.example.test/a?b=c");
 	expect(f.service.verifyAuthCookie(result.session)).toEqual({ userId: "alice" });
-	expect(f.provider.fetchAccessToken).toHaveBeenCalledWith("code");
+	expect(f.provider.fetchAccessToken).toHaveBeenCalledWith("code", "https://auth.example.test/auth/callback");
 	expect(f.provider.fetchUserDetails).toHaveBeenCalledWith("access");
 	f.advance(3600_000);
 	expect(f.service.verifyAuthCookie(result.session)).toBeUndefined();
+});
+
+test.each([443, 8443])(
+	"derives the same platform callback for authorization and token exchange on port %s",
+	async (port) => {
+		const f = fixture(port);
+		const login = f.service.beginLogin("https://demo.example.test/");
+		const callback = `https://auth.example.test${port === 443 ? "" : `:${port}`}/auth/callback`;
+		expect(f.provider.getLoginUrl).toHaveBeenCalledWith(login.state, callback);
+		await f.service.completeLogin("code", login.state, "random-nonce");
+		expect(f.provider.fetchAccessToken).toHaveBeenCalledWith("code", callback);
+	},
+);
+
+test("derives the local development callback", () => {
+	const f = fixture(443, "local.maxine4j.com");
+	const login = f.service.beginLogin("https://test-service.local.maxine4j.com/");
+	expect(f.provider.getLoginUrl).toHaveBeenCalledWith(login.state, "https://auth.local.maxine4j.com/auth/callback");
 });
 
 test("rejects tampered, expired and browser-mismatched state before contacting GitHub", async () => {
