@@ -82,6 +82,7 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 					address,
 					port: resource.ingress.port,
 					healthcheckPath: resource.healthcheckUrl ?? DEFAULT_HEALTHCHECK_URL,
+					public: resource.ingress.public ?? false,
 				};
 				if (await this.probe(endpoint.address, endpoint.port, endpoint.healthcheckPath)) return endpoint;
 			}

@@ -1,63 +1,20 @@
-import acme from "acme-client";
+import type { IAcmeClient } from "./acme-client.ts";
+import type { Certificate } from "./types.ts";
 
-import { ConfigService } from "../../util/config";
-import { logger } from "../../util/logger";
-import { DnsAcmeChallengeProviderRegistry } from "./dns-challenge/registry";
+export interface ITlsCertProvisionService {
+	/** Provisions the platform base-domain and wildcard certificate. Provisioning failures propagate. */
+	provisionCert(): Promise<Certificate>;
+}
 
-export class TlsCertProvisionService {
+export class TlsCertProvisionService implements ITlsCertProvisionService {
 	constructor(
-		private readonly configService: ConfigService,
-		private readonly challengeProviderRegistry: DnsAcmeChallengeProviderRegistry,
+		private readonly config: { baseDomain: string; email: string },
+		private readonly client: IAcmeClient,
 	) {}
-
-	public async provisionCert() {
-		const { challengeProvider, rootDomain } = this.getConfig();
-
-		const client = new acme.Client({
-			directoryUrl: this.getDirectoryUrl(),
-			accountKey: await acme.crypto.createPrivateKey(),
+	async provisionCert(): Promise<Certificate> {
+		return this.client.provision({
+			domains: [this.config.baseDomain, `*.${this.config.baseDomain}`],
+			email: this.config.email,
 		});
-
-		const altNames = [rootDomain, `*.${rootDomain}`];
-		const [key, csr] = await acme.crypto.createCsr({
-			altNames,
-		});
-		logger.info({ altNames }, "Created certificate signing request");
-
-		const statefulChallenge = challengeProvider.createStatefulChallenge();
-		const cert = await client.auto({
-			csr,
-			email: "null@gmail.com",
-			termsOfServiceAgreed: true,
-			challengePriority: ["dns-01"],
-			challengeCreateFn: statefulChallenge.createChallenge,
-			challengeRemoveFn: statefulChallenge.removeChallenge,
-		});
-
-		logger.info({ altNames }, "Provisioned certificate");
-		return {
-			key: key.toString(),
-			cert: cert.toString(),
-		};
-	}
-
-	private getDirectoryUrl() {
-		const { envType } = this.getConfig();
-		switch (envType) {
-			case "production":
-				return acme.directory.letsencrypt.production;
-			case "staging":
-				return acme.directory.letsencrypt.staging;
-		}
-	}
-
-	private getConfig() {
-		const config = this.configService.getConfig();
-
-		return {
-			envType: config.paas.tls.envType,
-			rootDomain: config.paas.rootDomain,
-			challengeProvider: this.challengeProviderRegistry.getProvider(config.paas.tls.dnsChallengeProvider.type),
-		};
 	}
 }

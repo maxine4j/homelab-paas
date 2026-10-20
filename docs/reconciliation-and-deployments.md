@@ -2,7 +2,7 @@
 
 ## Implemented deployment MVP
 
-The runtime checks configured services at startup and periodically, serializes reconciliation, validates the entire descriptor, and reconciles one public web container per service. Unchanged resource specifications keep their containers even if the repository commit changes. Docker labels record cluster, service, resource, source revision, and specification identities. Each poll inspects actual Docker state and recovers stopped or missing containers. Git and descriptor failures leave the working deployment and routes intact. Failures retry with exponential backoff bounded by the configured maximum; another service can still reconcile.
+The runtime checks configured services at startup and periodically, serializes reconciliation, validates the entire descriptor, and reconciles one web container per service. Private ingress requires platform auth/TLS; see [configuration](configuration.md#implemented-deployment-mvp). Unchanged resource specifications keep their containers even if the repository commit changes. Docker labels record cluster, service, resource, source revision, and specification identities. Each poll inspects actual Docker state and recovers stopped or missing containers. Git and descriptor failures leave the working deployment and routes intact. Failures retry with exponential backoff bounded by the configured maximum; another service can still reconcile.
 
 New workload containers are named `paas-{clusterId}-{serviceId}-{resourceId}-{specPrefix}`, where `specPrefix` is the first 12 characters of the resource specification hash. These names make `docker ps` readable; Docker labels remain authoritative for programmatic identification and reconciliation.
 

@@ -133,7 +133,7 @@ test("recreate resolves first, withdraws routing, replaces scoped containers and
 	expect(f.calls.find((c) => c.action === "probe")?.args).toEqual(["10.0.0.2", 8080, "/ready"]);
 	expect(f.calls.filter((c) => c.action === "route").map((c) => c.args)).toEqual([
 		["demo", undefined],
-		["demo", { address: "10.0.0.2", port: 8080, healthcheckPath: "/ready" }],
+		["demo", { address: "10.0.0.2", port: 8080, healthcheckPath: "/ready", public: true }],
 	]);
 });
 
@@ -146,7 +146,7 @@ test("uses descriptor defaults for termination and health checks", async () => {
 	expect(f.calls.find((c) => c.action === "stop")?.args).toEqual(["demo", "old", 30]);
 	expect(f.calls.at(-1)?.args).toEqual([
 		"demo",
-		{ address: "10.0.0.2", port: 8080, healthcheckPath: "/healthcheck" },
+		{ address: "10.0.0.2", port: 8080, healthcheckPath: "/healthcheck", public: true },
 	]);
 });
 
@@ -156,6 +156,15 @@ test("initial deployment handles an empty current state", async () => {
 	await f.strategy.deploy(request);
 	expect(f.calls.some((c) => ["stop", "remove"].includes(c.action))).toBe(false);
 	expect(f.calls.at(-1)?.action).toBe("route");
+});
+
+test.each([false, undefined])("publishes private policy when public is %s", async (publicPolicy) => {
+	const f = fixture();
+	await f.strategy.deploy({
+		...request,
+		resource: { ...request.resource, ingress: { port: 8080, public: publicPolicy } },
+	});
+	expect(f.calls.at(-1)?.args).toEqual(["demo", expect.objectContaining({ public: false })]);
 });
 
 test.each(["resolveImage", "prepareServiceNetwork", "inspectServiceNetwork"] as const)(

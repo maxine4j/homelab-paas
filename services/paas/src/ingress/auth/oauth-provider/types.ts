@@ -1,12 +1,7 @@
-export interface AuthedUserDetails {
-	userId: string;
-	name?: string;
-	email?: string;
-	avatarUrl?: string;
-}
+import type { AuthedUserDetails } from "../types.ts";
 
 export interface Oauth2Provider {
-	getLoginUrl(finalRedirectUri: string): string;
+	getLoginUrl(state: string): string;
 	fetchAccessToken(code: string): Promise<string>;
 	fetchUserDetails(accessToken: string): Promise<AuthedUserDetails>;
 }

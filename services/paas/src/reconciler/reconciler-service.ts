@@ -18,6 +18,7 @@ export class ReconcilerService implements IReconcilerService {
 		private readonly state: IReconciliationStateStore,
 		private readonly now: () => number,
 		private readonly report: (serviceId: string, message: string) => void,
+		private readonly privateIngressEnabled = false,
 	) {}
 
 	reconcile(): Promise<void> {
@@ -48,7 +49,7 @@ export class ReconcilerService implements IReconcilerService {
 			message = "Invalid descriptor; check service identity and supported web resource fields";
 			const descriptor = this.decode(file.content, serviceId);
 			message =
-				"Unsupported descriptor capabilities; runtime requires one public web resource, one replica and recreate deployment";
+				"Unsupported descriptor capabilities; runtime requires one web resource, one replica, recreate deployment and configured auth/TLS for private ingress";
 			const resources = this.deploymentResources(descriptor);
 			await this.state.write(serviceId, {
 				desiredRevision,
@@ -83,7 +84,7 @@ export class ReconcilerService implements IReconcilerService {
 		return entries.map(([resourceId, resource]) => {
 			if (
 				resource.type !== "web"
-				|| resource.ingress.public !== true
+				|| (!this.privateIngressEnabled && resource.ingress.public !== true)
 				|| (resource.replicas ?? 1) !== 1
 				|| (resource.rolloutStrategy ?? "recreate") !== "recreate"
 				|| resource.volumes !== undefined

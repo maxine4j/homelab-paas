@@ -1,149 +1,79 @@
-import { ConfigService, PaasConfig } from "../../util/config";
-import { AuthService } from "./auth-service";
-import { Oauth2ProviderRegistry } from "./oauth-provider/registry";
+import { expect, test, vi } from "vitest";
 
-describe("user authorization service", () => {
-	const mockConfigService: jest.Mocked<ConfigService> = {
-		getConfig: jest.fn(),
-	} as Partial<jest.Mocked<ConfigService>> as jest.Mocked<ConfigService>;
+import type { Endpoint } from "../../reconciler/networking/types.ts";
+import { AuthService } from "./auth-service.ts";
+import { JwtClient } from "./jwt-client.ts";
 
-	const mockProviderRegistry: jest.Mocked<Oauth2ProviderRegistry> = {
-		getProvider: jest.fn(),
-	} as Partial<jest.Mocked<Oauth2ProviderRegistry>> as jest.Mocked<Oauth2ProviderRegistry>;
-
-	const setupConfigMock = (args: {
-		authorizedUserIds?: PaasConfig["paas"]["auth"]["authorizedUserIds"];
-		deployTokens?: PaasConfig["paas"]["auth"]["deployTokens"];
-		adminUserIds?: PaasConfig["paas"]["auth"]["adminUserIds"];
-	}) => {
-		mockConfigService.getConfig.mockReturnValue({
-			paas: {
-				rootDomain: "paas.localhost",
-				auth: {
-					authorizedUserIds: args.authorizedUserIds ?? [],
-					adminUserIds: args.adminUserIds ?? [],
-					jwtSecret: "jwt-secret-123",
-					oauth2Provider: {
-						type: "github",
-						clientId: "client-id-123",
-						clientSecret: "client-secret-123",
-					},
-					sessionLifetimeSeconds: 123,
-					deployTokens: args.deployTokens,
-				},
-			} as Partial<PaasConfig["paas"]>,
-		} as Partial<PaasConfig> as PaasConfig);
+const session = { issuer: "paas", audience: "paas", signingKey: "a".repeat(32), ttlSeconds: 3600 };
+const fixture = () => {
+	let now = 1_800_000_000_000;
+	const tokens = new JwtClient(session, () => now);
+	const provider = {
+		getLoginUrl: vi.fn((state: string) => `https://github.com/login?state=${state}`),
+		fetchAccessToken: vi.fn(async () => "access"),
+		fetchUserDetails: vi.fn(async () => ({ userId: "alice" })),
 	};
+	const getAll = vi.fn(async (): Promise<Record<string, Endpoint>> => ({
+		public: { address: "10.0.0.2", port: 80, healthcheckPath: "/", public: true },
+		private: { address: "10.0.0.3", port: 80, healthcheckPath: "/", public: false },
+	}));
+	return {
+		service: new AuthService(provider, tokens, ["Alice"], () => "random-nonce", { getAll, set: vi.fn() }),
+		provider,
+		getAll,
+		advance: (ms: number) => {
+			now += ms;
+		},
+	};
+};
 
-	let authService: AuthService;
+test("binds login state to the browser and return target before issuing an allowlisted session", async () => {
+	const f = fixture();
+	const login = f.service.beginLogin("https://demo.example.test/a?b=c");
+	expect(login.url).toBe(`https://github.com/login?state=${login.state}`);
+	const result = await f.service.completeLogin("code", login.state, "random-nonce");
+	expect(result.redirectUri).toBe("https://demo.example.test/a?b=c");
+	expect(f.service.verifyAuthCookie(result.session)).toEqual({ userId: "alice" });
+	expect(f.provider.fetchAccessToken).toHaveBeenCalledWith("code");
+	expect(f.provider.fetchUserDetails).toHaveBeenCalledWith("access");
+	f.advance(3600_000);
+	expect(f.service.verifyAuthCookie(result.session)).toBeUndefined();
+});
 
-	beforeEach(() => {
-		jest.clearAllMocks();
-		authService = new AuthService(mockConfigService, mockProviderRegistry);
-	});
+test("rejects tampered, expired and browser-mismatched state before contacting GitHub", async () => {
+	const f = fixture();
+	const login = f.service.beginLogin("https://demo.example.test/");
+	for (const [state, nonce] of [
+		[`${login.state}x`, "random-nonce"],
+		[login.state, "other"],
+		[login.state, undefined],
+	]) {
+		await expect(f.service.completeLogin("code", state!, nonce)).rejects.toThrow("Authentication failed");
+	}
+	f.advance(600_000);
+	await expect(f.service.completeLogin("code", login.state, "random-nonce")).rejects.toThrow("Authentication failed");
+	expect(f.provider.fetchAccessToken).not.toHaveBeenCalled();
+	expect(f.service.verifyAuthCookie(login.state)).toBeUndefined();
+});
 
-	describe("isDeployTokenAuthorized", () => {
-		test("should allow bearer if deploy token is configured for service", () => {
-			setupConfigMock({
-				deployTokens: [
-					{
-						name: "deploy-pipe",
-						token: "valid-deploy-token",
-						authorizedServices: ["test-service"],
-					},
-				],
-			});
+test("denies users outside the allowlist and sanitizes provider failures", async () => {
+	const f = fixture();
+	const login = f.service.beginLogin("https://demo.example.test/");
+	f.provider.fetchUserDetails.mockResolvedValue({ userId: "mallory" });
+	await expect(f.service.completeLogin("code", login.state, "random-nonce")).rejects.toThrow("Authentication failed");
+	f.provider.fetchAccessToken.mockRejectedValue(new Error("SECRET"));
+	await expect(f.service.completeLogin("code", login.state, "random-nonce")).rejects.toThrow("Authentication failed");
+});
 
-			expect(authService.isDeployTokenAuthorized("test-service", "valid-deploy-token")).toBe(true);
-		});
-
-		test("should deny bearer if no deploy tokens are configured for service", () => {
-			setupConfigMock({
-				deployTokens: [],
-			});
-
-			expect(authService.isDeployTokenAuthorized("test-service", "some-deploy-token")).toBe(false);
-		});
-
-		test("should deny bearer if deploy token does not authorize requested service", () => {
-			setupConfigMock({
-				deployTokens: [
-					{
-						name: "deploy-pipe",
-						token: "valid-deploy-token",
-						authorizedServices: ["another-service"],
-					},
-				],
-			});
-
-			expect(authService.isDeployTokenAuthorized("test-service", "valid-deploy-token")).toBe(false);
-		});
-	});
-
-	describe("isUserAuthorizedToAccessService", () => {
-		test("should deny user who is not in paas users, even if they are present in service users", () => {
-			const serviceAuthorizedUserIds = ["user-service"];
-			setupConfigMock({
-				authorizedUserIds: ["user-pass"],
-			});
-
-			expect(authService.isUserAuthorizedToAccessService("user-service", serviceAuthorizedUserIds)).toBe(false);
-		});
-
-		test("should deny user who is not in service users, even if they are present in paas users", () => {
-			const serviceAuthorizedUserIds = ["user-service"];
-			setupConfigMock({
-				authorizedUserIds: ["user-pass"],
-			});
-
-			expect(authService.isUserAuthorizedToAccessService("user-paas", serviceAuthorizedUserIds)).toBe(false);
-		});
-
-		test("should allow user who is present in both paas and service users", () => {
-			const serviceAuthorizedUserIds = ["user-both"];
-			setupConfigMock({
-				authorizedUserIds: ["user-both"],
-			});
-
-			expect(authService.isUserAuthorizedToAccessService("user-both", serviceAuthorizedUserIds)).toBe(true);
-		});
-
-		test("should allow paas user is there is no authorization list defined for the service", () => {
-			const serviceAuthorizedUserIds = undefined;
-			setupConfigMock({
-				authorizedUserIds: ["user-paas"],
-			});
-
-			expect(authService.isUserAuthorizedToAccessService("user-paas", serviceAuthorizedUserIds)).toBe(true);
-		});
-	});
-
-	describe("isUserAuthorizedToAccessPaas", () => {
-		test("should deny user who is not in paas users nor admin", () => {
-			setupConfigMock({
-				authorizedUserIds: [],
-				adminUserIds: [],
-			});
-
-			expect(authService.isUserAuthorizedToAccessPaas("some-user")).toBe(false);
-		});
-
-		test("should deny user who is not in paas users, even if they are an admin", () => {
-			setupConfigMock({
-				authorizedUserIds: [],
-				adminUserIds: ["admin-user"],
-			});
-
-			expect(authService.isUserAuthorizedToAccessPaas("admin-user")).toBe(false);
-		});
-
-		test("should allow user who is present in both paas users and admins", () => {
-			setupConfigMock({
-				authorizedUserIds: ["admin-user"],
-				adminUserIds: ["admin-user"],
-			});
-
-			expect(authService.isUserAuthorizedToAccessPaas("admin-user")).toBe(true);
-		});
-	});
+test("authorizes public and private routed services locally, and denies unknown routes", async () => {
+	const f = fixture();
+	expect(await f.service.authorize("public", undefined)).toBe("allowed");
+	expect(await f.service.authorize("private", undefined)).toBe("login");
+	expect(await f.service.authorize("missing", undefined)).toBe("missing");
+	const login = f.service.beginLogin("https://private.example.test/");
+	const { session } = await f.service.completeLogin("code", login.state, "random-nonce");
+	expect(await f.service.authorize("private", session)).toBe("allowed");
+	f.getAll.mockRejectedValue(new Error("unavailable"));
+	await expect(f.service.authorize("public", session)).rejects.toThrow();
+	expect(f.provider.fetchUserDetails).toHaveBeenCalledTimes(1);
 });

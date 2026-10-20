@@ -9,11 +9,11 @@ export interface IEnvoyService {
 	configureRoutes(endpoints: Record<string, Endpoint>): Promise<void>;
 }
 
-/** Public HTTP routing for the standalone reconciler; auth/TLS remain deferred. */
+/** Generates external routing, authorization and filesystem SDS configuration. */
 export class EnvoyService implements IEnvoyService {
 	constructor(
 		private readonly client: IEnvoyClient,
-		private readonly ingress: { baseDomain: string; httpPort: number },
+		private readonly ingress: { baseDomain: string; httpPort: number; httpsPort?: number },
 	) {}
 
 	async configureRoutes(endpoints: Record<string, Endpoint>): Promise<void> {
@@ -54,6 +54,11 @@ export class EnvoyService implements IEnvoyService {
 				],
 			})),
 		];
+		if (this.ingress.httpsPort) {
+			await this.client.apply({ clusters, listeners: this.secureListeners(entries.map(([id]) => id)) });
+			return;
+		}
+		if (entries.some(([, endpoint]) => endpoint.public === false)) throw new EnvoyClientError();
 		await this.client.apply({
 			clusters,
 			listeners: [
@@ -100,6 +105,127 @@ export class EnvoyService implements IEnvoyService {
 				},
 			],
 		});
+	}
+
+	private secureListeners(serviceIds: string[]) {
+		const disabled = {
+			"envoy.filters.http.ext_authz": {
+				"@type": "type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute",
+				disabled: true,
+			},
+		};
+		const authHost = {
+			name: "auth",
+			domains: [`auth.${this.ingress.baseDomain}`, `auth.${this.ingress.baseDomain}:*`],
+			routes: ["/oauth/github/login", "/oauth/github/callback"].map((path) => ({
+				match: { path },
+				route: { cluster: "paas" },
+				typed_per_filter_config: disabled,
+			})),
+		};
+		const httpFilters = [
+			{
+				name: "envoy.filters.http.ext_authz",
+				typed_config: {
+					"@type": "type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz",
+					failure_mode_allow: false,
+					allowed_headers: { patterns: [{ exact: "cookie" }] },
+					http_service: {
+						server_uri: { uri: "http://paas:8080", cluster: "paas", timeout: "2s" },
+						path_prefix: "/auth/check",
+						authorization_response: {
+							// Envoy 1.37 also selects denied-response headers from this list.
+							allowed_upstream_headers: { patterns: [{ exact: "cookie" }, { exact: "location" }] },
+							allowed_client_headers: { patterns: [{ exact: "location" }] },
+						},
+					},
+				},
+			},
+			{
+				name: "envoy.filters.http.router",
+				typed_config: { "@type": "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router" },
+			},
+		];
+		const manager = (name: string, virtualHosts: unknown[], filters: unknown[]) => ({
+			name: "envoy.filters.network.http_connection_manager",
+			typed_config: {
+				"@type":
+					"type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+				stat_prefix: name,
+				route_config: { name, virtual_hosts: virtualHosts },
+				http_filters: filters,
+			},
+		});
+		return [
+			{
+				"@type": "type.googleapis.com/envoy.config.listener.v3.Listener",
+				name: "http",
+				address: socket("0.0.0.0", this.ingress.httpPort),
+				filter_chains: [
+					{
+						filters: [
+							manager(
+								"redirect",
+								[
+									{
+										name: "redirect",
+										domains: ["*"],
+										routes: [
+											{
+												match: { prefix: "/" },
+												redirect: {
+													https_redirect: true,
+													port_redirect: this.ingress.httpsPort,
+												},
+											},
+										],
+									},
+								],
+								httpFilters.slice(1),
+							),
+						],
+					},
+				],
+			},
+			{
+				"@type": "type.googleapis.com/envoy.config.listener.v3.Listener",
+				name: "https",
+				address: socket("0.0.0.0", this.ingress.httpsPort!),
+				filter_chains: [
+					{
+						transport_socket: {
+							name: "envoy.transport_sockets.tls",
+							typed_config: {
+								"@type":
+									"type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext",
+								common_tls_context: {
+									tls_certificate_sds_secret_configs: [
+										{
+											name: "ingress",
+											sds_config: {
+												path_config_source: { path: "/var/homelab-paas/_paas/sds.yaml" },
+											},
+										},
+									],
+								},
+							},
+						},
+						filters: [
+							manager(
+								"https",
+								[
+									authHost,
+									...serviceIds.map((id) =>
+										virtualHost(id, `${id}.${this.ingress.baseDomain}`, `service-${id}`),
+									),
+								],
+								httpFilters,
+							),
+						],
+					},
+				],
+			},
+		];
 	}
 }
 

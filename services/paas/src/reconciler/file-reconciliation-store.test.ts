@@ -21,7 +21,7 @@ test("persists checkpoints and endpoints across instances without overwriting ot
 			retryAt: 1234,
 		};
 		await store.write("demo", state);
-		const endpoint = { address: "10.0.0.2", port: 8080, healthcheckPath: "/health" };
+		const endpoint = { address: "10.0.0.2", port: 8080, healthcheckPath: "/health", public: false };
 		await store.set("demo", endpoint);
 		await store.set("other", endpoint);
 		const restarted = new FileReconciliationStore(directory);
@@ -36,12 +36,12 @@ test("persists checkpoints and endpoints across instances without overwriting ot
 	}
 });
 
-test("validates persisted data, sanitizes failures and reads legacy routes", async () => {
+test("validates persisted data, sanitizes failures and rejects routes without an ingress policy", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "paas-reconciliation-"));
 	try {
 		const store = new FileReconciliationStore(directory);
 		await writeFile(join(directory, "routes.yaml"), "demo:\n  address: 10.0.0.2\n  port: 80\n");
-		expect((await store.getAll())["demo"]?.healthcheckPath).toBe("/healthcheck");
+		await expect(store.getAll()).rejects.toThrow("Cannot read reconciliation data");
 		await writeFile(join(directory, "routes.yaml"), "secret: [PASSWORD");
 		await expect(store.getAll()).rejects.toThrow("Cannot read reconciliation data");
 		await writeFile(join(directory, "demo.state.yaml"), "phase: garbage\n");

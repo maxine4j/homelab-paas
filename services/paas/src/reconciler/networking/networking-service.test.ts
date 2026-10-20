@@ -5,7 +5,7 @@ import { InMemoryEndpointsStore } from "./endpoints-store.ts";
 import { NetworkingError, NetworkingService } from "./networking-service.ts";
 import type { Endpoint } from "./types.ts";
 
-const old: Endpoint = { address: "10.0.0.1", port: 8080, healthcheckPath: "/ready" };
+const old: Endpoint = { address: "10.0.0.1", port: 8080, healthcheckPath: "/ready", public: true };
 const replacement: Endpoint = { ...old, address: "10.0.0.2" };
 
 function fixture() {

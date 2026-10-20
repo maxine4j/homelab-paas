@@ -97,6 +97,7 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 					address,
 					port: resource.ingress.port,
 					healthcheckPath: resource.healthcheckUrl ?? "/healthcheck",
+					public: resource.ingress.public ?? false,
 				};
 				if (await this.probe(address, endpoint.port, endpoint.healthcheckPath)) return endpoint;
 			}

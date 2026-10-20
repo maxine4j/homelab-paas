@@ -16,7 +16,9 @@ test("formats service destinations, health checks, stable hostnames, and withdra
 			httpPort: 80,
 		},
 	);
-	await service.configureRoutes({ demo: { address: "10.0.0.2", port: 3000, healthcheckPath: "/ready" } });
+	await service.configureRoutes({
+		demo: { address: "10.0.0.2", port: 3000, healthcheckPath: "/ready", public: true },
+	});
 	expect(configurations.at(0)?.clusters).toContainEqual(
 		expect.objectContaining({
 			name: "service-demo",
@@ -42,9 +44,9 @@ test("formats service destinations, health checks, stable hostnames, and withdra
 });
 
 test.each([
-	{ address: "not-an-ip", port: 80, healthcheckPath: "/ready" },
-	{ address: "10.0.0.2", port: 0, healthcheckPath: "/ready" },
-	{ address: "10.0.0.2", port: 80, healthcheckPath: "ready" },
+	{ address: "not-an-ip", port: 80, healthcheckPath: "/ready", public: true },
+	{ address: "10.0.0.2", port: 0, healthcheckPath: "/ready", public: true },
+	{ address: "10.0.0.2", port: 80, healthcheckPath: "ready", public: true },
 ])("rejects unusable destinations before publication", async (endpoint) => {
 	let calls = 0;
 	const service = new EnvoyService(
@@ -57,4 +59,30 @@ test.each([
 	);
 	await expect(service.configureRoutes({ demo: endpoint })).rejects.toThrow(EnvoyClientError);
 	expect(calls).toBe(0);
+});
+
+test("secures external traffic with SDS, fail-closed authorization and isolated login routes", async () => {
+	const configurations: EnvoyConfiguration[] = [];
+	const service = new EnvoyService(
+		{
+			async apply(config) {
+				configurations.push(config);
+			},
+		},
+		{ baseDomain: "apps.example.com", httpPort: 80, httpsPort: 443 },
+	);
+	await service.configureRoutes({
+		demo: { address: "10.0.0.2", port: 3000, healthcheckPath: "/health", public: false },
+	});
+	const listeners = configurations.at(0)!.listeners;
+	expect(listeners.map(({ name }) => name)).toEqual(["http", "https"]);
+	const text = JSON.stringify(listeners);
+	expect(text).toContain("https_redirect");
+	expect(text).toContain("auth.apps.example.com");
+	expect(text).toContain("/oauth/github/callback");
+	expect(text).toContain("/var/homelab-paas/_paas/sds.yaml");
+	expect(text).toContain('"failure_mode_allow":false');
+	expect(text).toContain('"path_prefix":"/auth/check"');
+	expect(text).toContain('"allowed_upstream_headers":{"patterns":[{"exact":"cookie"},{"exact":"location"}]}');
+	expect(text).not.toContain('"prefix":"/","route":{"cluster":"paas"}');
 });

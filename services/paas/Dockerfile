@@ -28,6 +28,7 @@ COPY --from=installer /app/node_modules ./node_modules
 COPY --from=installer /app/services/paas/package.json services/paas/package.json
 COPY --from=installer /app/services/paas/node_modules services/paas/node_modules
 COPY --from=installer /app/packages/shared-contracts/package.json packages/shared-contracts/package.json
+COPY --from=installer /app/packages/shared-contracts/node_modules packages/shared-contracts/node_modules
 COPY --from=builder /app/packages/shared-contracts/dist packages/shared-contracts/dist
 COPY --from=builder /app/services/paas/dist services/paas/dist
 WORKDIR /app/services/paas

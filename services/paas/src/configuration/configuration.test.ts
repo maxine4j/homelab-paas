@@ -25,7 +25,7 @@ test("loads the fixed configuration file and sanitizes YAML and filesystem failu
 	expect(() => decodeDescriptorYaml("env: [secret", "test-service")).toThrow("Invalid service descriptor");
 });
 
-test("configuration defaults remote branches, requires absolute local paths and excludes auth/TLS", () => {
+test("defaults remote branches, requires absolute local paths and rejects incomplete authentication", () => {
 	const config = {
 		version: 1,
 		metadata: { clusterId: "local" },
@@ -47,4 +47,38 @@ test("configuration defaults remote branches, requires absolute local paths and 
 		parseConfig({ ...config, services: { demo: { remote: "local", descriptorPath: "/mnt/repo/demo.sd.yaml" } } })
 			.services["demo"]?.remote,
 	).toBe("local");
+});
+
+test("accepts paired auth/TLS configuration, validates secrets and fixes the GitHub callback origin", () => {
+	const value = {
+		version: 1,
+		metadata: { clusterId: "prod" },
+		ingress: { baseDomain: "apps.example.com" },
+		git: { pollIntervalSeconds: 5, operationTimeoutSeconds: 60 },
+		reconciliation: { retryBackoffSeconds: 5, maxRetryBackoffSeconds: 60 },
+		services: {},
+		auth: {
+			github: {
+				clientId: "id",
+				clientSecret: "secret",
+				callbackUrl: "https://auth.apps.example.com/oauth/github/callback",
+				allowedUsers: ["alice"],
+			},
+			session: { issuer: "paas", audience: "paas", signingKey: "a".repeat(32), ttlSeconds: 3600 },
+		},
+		tls: {
+			acme: { email: "admin@example.com" },
+			dns: { provider: "digitalocean", credentials: { apiToken: "token" } },
+		},
+	};
+	expect(parseConfig(value).ingress.httpsPort).toBe(443);
+	for (const change of [
+		{ tls: undefined },
+		{ auth: undefined },
+		{ ingress: { baseDomain: "apps.example.com", httpsPort: 80 } },
+		{ auth: { ...value.auth, github: { ...value.auth.github, callbackUrl: "https://evil.test/callback" } } },
+		{ auth: { ...value.auth, session: { ...value.auth.session, signingKey: "short" } } },
+	]) {
+		expect(() => parseConfig({ ...value, ...change })).toThrow("Invalid platform configuration");
+	}
 });

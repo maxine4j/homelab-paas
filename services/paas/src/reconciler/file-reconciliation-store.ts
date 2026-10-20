@@ -73,5 +73,6 @@ const routesSchema = z.record(
 		address: z.union([z.ipv4(), z.ipv6()]),
 		port: z.number().int().min(1).max(65535),
 		healthcheckPath: z.string().startsWith("/").default("/healthcheck"),
+		public: z.boolean(),
 	}),
 );

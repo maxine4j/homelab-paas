@@ -34,8 +34,18 @@ function fixture() {
 		now: () => time,
 		report,
 	};
-	const createService = (services = deps.services) =>
-		new ReconcilerService(services, deps.retry, deps.git, deps.decode, deps.web, deps.state, deps.now, deps.report);
+	const createService = (services = deps.services, privateIngressEnabled = false) =>
+		new ReconcilerService(
+			services,
+			deps.retry,
+			deps.git,
+			deps.decode,
+			deps.web,
+			deps.state,
+			deps.now,
+			deps.report,
+			privateIngressEnabled,
+		);
 	return {
 		deps,
 		states,
@@ -63,6 +73,21 @@ test("fetches a committed descriptor, validates it and reconciles actual state o
 		resource: expect.objectContaining({ image: "app:1" }),
 	});
 	expect(f.states.get("demo")).toEqual({ desiredRevision: "rev", activeRevision: "rev", phase: "ready" });
+});
+
+test("accepts private ingress when platform authentication and TLS are enabled", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "private",
+		content: JSON.stringify({
+			...descriptor,
+			resources: { app: { ...descriptor.resources.app, ingress: { port: 8080 } } },
+		}),
+	});
+	await f.createService(f.deps.services, true).reconcile();
+	expect(f.reconcile).toHaveBeenCalledWith(
+		expect.objectContaining({ resource: expect.objectContaining({ ingress: { public: false, port: 8080 } }) }),
+	);
 });
 
 test("validates the entire descriptor before invoking a resource reconciler", async () => {

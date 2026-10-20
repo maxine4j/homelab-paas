@@ -143,7 +143,7 @@ test("starts alongside the old revision, switches only after readiness, drains t
 	expect(f.calls.find((c) => c.action === "probe")?.args).toEqual(["10.0.0.2", 8080, "/ready"]);
 	expect(f.calls.find((c) => c.action === "route")?.args).toEqual([
 		"demo",
-		{ address: "10.0.0.2", port: 8080, healthcheckPath: "/ready" },
+		{ address: "10.0.0.2", port: 8080, healthcheckPath: "/ready", public: true },
 	]);
 	expect(f.calls.find((c) => c.action === "drain")?.args).toEqual(["demo", ["old"], 45]);
 	expect(f.calls.find((c) => c.action === "stop")?.args).toEqual(["demo", "old", 10]);
@@ -158,6 +158,18 @@ test("uses defaults and skips draining on initial deployment", async () => {
 	});
 	expect(f.calls.find((c) => c.action === "probe")?.args).toEqual(["10.0.0.2", 8080, "/healthcheck"]);
 	expect(f.calls.some((c) => ["drain", "stop", "remove"].includes(c.action))).toBe(false);
+});
+
+test.each([false, undefined])("publishes private policy when public is %s", async (publicPolicy) => {
+	const f = fixture();
+	await f.strategy.deploy({
+		...request,
+		resource: { ...request.resource, ingress: { port: 8080, public: publicPolicy } },
+	});
+	expect(f.calls.find((call) => call.action === "route")?.args).toEqual([
+		"demo",
+		expect.objectContaining({ public: false }),
+	]);
 });
 
 test("uses the default shutdown budget and allows immediate termination after draining exhausts it", async () => {

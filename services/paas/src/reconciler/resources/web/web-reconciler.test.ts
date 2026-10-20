@@ -233,7 +233,9 @@ test("repairs network attachment and republishes ready unchanged endpoints witho
 	await f.reconciler.reconcile(input);
 	expect(f.requests).toEqual([]);
 	expect(f.queries).toContain("prepare-network");
-	expect(f.routes).toEqual([["demo", { address: "10.0.0.2", port: 8080, healthcheckPath: "/healthcheck" }]]);
+	expect(f.routes).toEqual([
+		["demo", { address: "10.0.0.2", port: 8080, healthcheckPath: "/healthcheck", public: true }],
+	]);
 });
 
 test("unhealthy unchanged containers do not receive newly published routes", async () => {
