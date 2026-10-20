@@ -14,6 +14,8 @@ The stack consists of:
 
 The control plane manages Git reconciliation, Docker resources, Envoy configuration, GitHub authentication, JWT sessions, managed resource credentials, and TLS certificates.
 
+The Docker client exposes low-level network, container, and image operations through platform-owned types. It validates Engine responses and translates failures into sanitized typed errors. Inspection returns absence explicitly; callers decide whether missing resources are acceptable. The Docker service owns platform labels, naming, image resolution, and service-scoped container and network helpers. Container queries include stopped containers and validate deployment identity labels. Lifecycle operations verify ownership; stopping or removing an absent container succeeds. Service-network preparation validates the cluster's control-plane and Envoy identities before creating or attaching resources. Reconcilers use these helpers to observe actual state and compare it with the descriptor's desired state. The new client and service are implemented separately from the existing deployment MVP; reconciler integration remains pending.
+
 Docker Compose is not used by the platform. The [local development bootstrap](development.md#local-container-environment) uses Compose to start its containers before reconciliation is implemented.
 
 ## Initial scope

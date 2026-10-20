@@ -31,6 +31,8 @@ PostgreSQL and RabbitMQ always use recreate deployment.
 
 Surge requires sufficient spare capacity and an application that tolerates overlapping instances. For workers, this includes tolerating concurrent execution across revisions.
 
+The standalone `SurgeDeploymentStrategy` implements one web replacement separately from the active deployment MVP. It uses a unique instance suffix on the container name so even identical resource specifications can overlap; identity labels remain authoritative. Startup or readiness failures remove only the replacement. An uncertain route-publication outcome retains both revisions. After route acceptance, an injected drainer returns the remaining termination budget, which is shared by graceful stops of the previous containers. Retirement failures are reported without removing the newly routed replacement. Composition must provide a route publisher that confirms acceptance and a drainer; the MVP descriptor parser still accepts only recreate.
+
 ### Web rollout sequence
 
 For a surge deployment, the platform:
@@ -100,6 +102,8 @@ The reconciler must:
 - Expose desired revision, active revision, deployment phase, and actionable errors.
 
 Git failures and invalid descriptors preserve the last working deployment.
+
+The standalone Git layers in `src/git/` are implemented separately from the deployment MVP and are not wired into reconciliation. `GitClient` owns bare-repository initialization, shallow branch fetches, local repository discovery, commit resolution, and committed-file reads. It translates infrastructure failures into sanitized `GitClientError` values. Its injected `NodeGitTransport` owns filesystem calls and noninteractive Git subprocesses, bounded by the configured operation timeout and a 1 MiB output limit. `GitService.fetchFile` owns service-scoped cache directories and the remote/local workflows, using the branch defaults defined in [configuration](configuration.md#implemented-deployment-mvp). It returns only the revision and content; invalid service identities or file paths reject with `GitServiceError`. Callers must serialize reads for each service because remote fetches share its repository's `FETCH_HEAD`.
 
 ### Container updates and images
 

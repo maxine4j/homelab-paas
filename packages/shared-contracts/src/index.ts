@@ -10,7 +10,7 @@ export interface WebResource {
 	type: "web";
 	image: string;
 	replicas?: 1;
-	rolloutStrategy?: "recreate";
+	rolloutStrategy?: "recreate" | "surge";
 	ingress: { public: true; port: number };
 	healthcheckUrl?: string;
 	command?: string[];
