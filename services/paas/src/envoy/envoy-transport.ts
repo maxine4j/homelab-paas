@@ -1,8 +1,10 @@
-import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+
+import { atomicWriteFile, createFileIfMissing, mkdir } from "../util/file.ts";
 
 /** Wire/filesystem boundary. Failures are translated by EnvoyClient. */
 export interface IEnvoyTransport {
+	createDiscoveryFile(name: "cds.yaml" | "lds.yaml", content: string): Promise<void>;
 	writeDiscoveryFile(name: "cds.yaml" | "lds.yaml", content: string): Promise<void>;
 	readConfigDump(): Promise<{ status: number; body: string }>;
 }
@@ -20,9 +22,12 @@ export class NodeEnvoyTransport implements IEnvoyTransport {
 
 	async writeDiscoveryFile(name: "cds.yaml" | "lds.yaml", content: string): Promise<void> {
 		await mkdir(this.options.directory, { recursive: true, mode: 0o700 });
-		const target = join(this.options.directory, name);
-		await writeFile(`${target}.tmp`, content, { mode: 0o600 });
-		await rename(`${target}.tmp`, target);
+		await atomicWriteFile(join(this.options.directory, name), content, { mode: 0o600 });
+	}
+
+	async createDiscoveryFile(name: "cds.yaml" | "lds.yaml", content: string): Promise<void> {
+		await mkdir(this.options.directory, { recursive: true, mode: 0o700 });
+		await createFileIfMissing(join(this.options.directory, name), content, { mode: 0o600 });
 	}
 
 	async readConfigDump(): Promise<{ status: number; body: string }> {

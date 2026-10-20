@@ -3,10 +3,26 @@ import { expect, test } from "vitest";
 import { EnvoyService } from "./envoy-service.ts";
 import { EnvoyClientError, type EnvoyConfiguration } from "./types.ts";
 
+test("bootstrap delegates discovery initialization to the client", async () => {
+	let initialized = false;
+	const service = new EnvoyService(
+		{
+			async bootstrap() {
+				initialized = true;
+			},
+			async apply() {},
+		},
+		{ baseDomain: "example.test", httpPort: 80 },
+	);
+	await service.bootstrap();
+	expect(initialized).toBe(true);
+});
+
 test("formats service destinations, health checks, stable hostnames, and withdrawal", async () => {
 	const configurations: EnvoyConfiguration[] = [];
 	const service = new EnvoyService(
 		{
+			async bootstrap() {},
 			async apply(config) {
 				configurations.push(config);
 			},
@@ -51,6 +67,7 @@ test.each([
 	let calls = 0;
 	const service = new EnvoyService(
 		{
+			async bootstrap() {},
 			async apply() {
 				calls++;
 			},
@@ -65,6 +82,7 @@ test("secures external traffic with SDS, fail-closed authorization and isolated 
 	const configurations: EnvoyConfiguration[] = [];
 	const service = new EnvoyService(
 		{
+			async bootstrap() {},
 			async apply(config) {
 				configurations.push(config);
 			},

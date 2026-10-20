@@ -1,13 +1,15 @@
 import { createHash } from "node:crypto";
 
-import yaml from "yaml";
 import { z } from "zod";
 
 import type { ISleep } from "../util/sleep.ts";
+import { stringifyYaml } from "../util/yaml.ts";
 import type { IEnvoyTransport } from "./envoy-transport.ts";
 import { EnvoyClientError, type EnvoyConfiguration, type EnvoyResource } from "./types.ts";
 
 export interface IEnvoyClient {
+	/** Seed missing discovery files; preserve existing state. Rejects with EnvoyClientError. */
+	bootstrap(): Promise<void>;
 	/** Publish and confirm active configuration. Rejects with EnvoyClientError;
 	 * publication may have occurred. Callers serialize all updates.
 	 */
@@ -39,9 +41,19 @@ export class EnvoyClient implements IEnvoyClient {
 		}
 	}
 
+	async bootstrap(): Promise<void> {
+		try {
+			const content = stringifyYaml({ version_info: "bootstrap", resources: [] });
+			await this.transport.createDiscoveryFile("cds.yaml", content);
+			await this.transport.createDiscoveryFile("lds.yaml", content);
+		} catch {
+			throw new EnvoyClientError();
+		}
+	}
+
 	private async publish(kind: "cds" | "lds", resources: EnvoyResource[]): Promise<void> {
 		const version = createHash("sha256").update(JSON.stringify(resources)).digest("hex");
-		await this.transport.writeDiscoveryFile(`${kind}.yaml`, yaml.stringify({ version_info: version, resources }));
+		await this.transport.writeDiscoveryFile(`${kind}.yaml`, stringifyYaml({ version_info: version, resources }));
 		const names = resources.map(({ name }) => name).sort();
 		for (let attempt = 0; attempt < this.polling.attempts; attempt++) {
 			// The bootstrap starts Envoy only after the control-plane health server is up.

@@ -1,5 +1,7 @@
 import { request } from "node:http";
 
+import type { ISleep } from "../util/sleep.ts";
+
 /** Internal wire boundary. Implementations own connection settings and deadlines. */
 export interface IDockerTransport {
 	request(method: string, path: string, body?: unknown): Promise<{ status: number; body: string }>;
@@ -13,7 +15,10 @@ export interface DockerTransportOptions {
 
 /** HTTP transport for Docker API v1.48 over a Unix socket. */
 export class NodeDockerTransport implements IDockerTransport {
-	constructor(private readonly options: DockerTransportOptions) {}
+	constructor(
+		private readonly options: DockerTransportOptions,
+		private readonly sleep: ISleep,
+	) {}
 
 	request(method: string, path: string, body?: unknown): Promise<{ status: number; body: string }> {
 		return new Promise((resolve, reject) => {
@@ -54,11 +59,16 @@ export class NodeDockerTransport implements IDockerTransport {
 					});
 				},
 			);
-			const deadline = setTimeout(
-				() => req.destroy(new Error("Docker request timed out")),
-				this.options.timeoutMs,
+			const deadline = new AbortController();
+			void this.sleep(this.options.timeoutMs, deadline.signal).then(
+				() => {
+					if (!deadline.signal.aborted) req.destroy(new Error("Docker request timed out"));
+				},
+				() => {
+					if (!deadline.signal.aborted) req.destroy(new Error("Docker deadline failed"));
+				},
 			);
-			req.on("close", () => clearTimeout(deadline));
+			req.on("close", () => deadline.abort());
 			req.on("error", reject);
 			req.end(payload);
 		});

@@ -5,6 +5,8 @@ import type { IEnvoyClient } from "./envoy-client.ts";
 import { EnvoyClientError } from "./types.ts";
 
 export interface IEnvoyService {
+	/** Seed missing discovery before accepting startup traffic. Rejects with EnvoyClientError. */
+	bootstrap(): Promise<void>;
 	/** Replace service routes and confirm activation. Rejects with EnvoyClientError. */
 	configureRoutes(endpoints: Record<string, Endpoint>): Promise<void>;
 }
@@ -15,6 +17,10 @@ export class EnvoyService implements IEnvoyService {
 		private readonly client: IEnvoyClient,
 		private readonly ingress: { baseDomain: string; httpPort: number; httpsPort?: number },
 	) {}
+
+	async bootstrap(): Promise<void> {
+		await this.client.bootstrap();
+	}
 
 	async configureRoutes(endpoints: Record<string, Endpoint>): Promise<void> {
 		const entries = Object.entries(endpoints).sort(([a], [b]) => a.localeCompare(b));

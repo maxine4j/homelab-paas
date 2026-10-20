@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
-import yaml from "yaml";
 import { z } from "zod";
 
+import { parseYaml } from "../util/yaml.ts";
 import { EnvoyClient } from "./envoy-client.ts";
 import type { IEnvoyTransport } from "./envoy-transport.ts";
 import { EnvoyClientError, type EnvoyConfiguration } from "./types.ts";
@@ -16,9 +16,13 @@ function fixture() {
 	const calls: string[] = [];
 	const files = new Map<string, z.infer<typeof discoverySchema>>();
 	const transport: IEnvoyTransport = {
+		async createDiscoveryFile(name, content) {
+			calls.push(`seed:${name}`);
+			if (!files.has(name)) files.set(name, discoverySchema.parse(parseYaml(content, name)));
+		},
 		async writeDiscoveryFile(name, content) {
 			calls.push(name);
-			files.set(name, discoverySchema.parse(yaml.parse(content)));
+			files.set(name, discoverySchema.parse(parseYaml(content, name)));
 		},
 		async readConfigDump() {
 			calls.push("dump");
@@ -54,6 +58,21 @@ function fixture() {
 	};
 	return { transport, calls, files, client: new EnvoyClient(transport, sleep, { attempts: 3, intervalMs: 1 }) };
 }
+
+test("bootstrap seeds missing discovery without waiting for Envoy acceptance", async () => {
+	const f = fixture();
+	await f.client.bootstrap();
+	expect(f.calls).toEqual(["seed:cds.yaml", "seed:lds.yaml"]);
+	expect(f.files.get("cds.yaml")).toEqual({ version_info: "bootstrap", resources: [] });
+});
+
+test("bootstrap translates storage failures to a safe client error", async () => {
+	const f = fixture();
+	f.transport.createDiscoveryFile = async () => {
+		throw new Error("SECRET");
+	};
+	await expect(f.client.bootstrap()).rejects.toThrow(EnvoyClientError);
+});
 
 test("publishes deterministic discovery versions and confirms clusters before listeners", async () => {
 	const f = fixture();

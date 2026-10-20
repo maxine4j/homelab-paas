@@ -56,6 +56,7 @@ test("all task runners scope each execution and failure report, without logging 
 		lifecycle,
 		queue,
 		idleDelayMs: 1,
+		pause: async () => {},
 		taskName: "queued",
 		generateTaskId,
 		task: {

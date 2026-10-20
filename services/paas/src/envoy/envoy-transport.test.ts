@@ -1,10 +1,10 @@
-import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { expect, test } from "vitest";
 
+import { mkdtemp, readFile, readdir, rm, stat } from "../util/file.ts";
 import { NodeEnvoyTransport } from "./envoy-transport.ts";
 
 test("atomically replaces discovery files with restricted permissions", async () => {
@@ -18,7 +18,7 @@ test("atomically replaces discovery files with restricted permissions", async ()
 		});
 		await transport.writeDiscoveryFile("cds.yaml", "first");
 		await transport.writeDiscoveryFile("cds.yaml", "replacement");
-		expect(await readFile(join(directory, "cds.yaml"), "utf8")).toBe("replacement");
+		expect(await readFile(join(directory, "cds.yaml"))).toBe("replacement");
 		expect(await readdir(directory)).toEqual(["cds.yaml"]);
 		expect((await stat(join(directory, "cds.yaml"))).mode & 0o777).toBe(0o600);
 	} finally {

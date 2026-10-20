@@ -1,6 +1,6 @@
 import { type Lifecycle } from "../util/lifecycle.ts";
 import { logger, withLogContext } from "../util/logger.ts";
-import { sleep } from "../util/sleep.ts";
+import type { ISleep } from "../util/sleep.ts";
 import { type TaskRunner } from "./types.ts";
 
 export interface QueueTask<TTask> {
@@ -40,6 +40,7 @@ export class QueueTaskRunner<TTask> implements TaskRunner {
 			taskName: string;
 			generateTaskId: () => string;
 			task: QueueTask<TTask>;
+			pause: ISleep;
 		},
 	) {}
 
@@ -47,7 +48,7 @@ export class QueueTaskRunner<TTask> implements TaskRunner {
 		while (this.deps.lifecycle.isOpen()) {
 			const taskEnvelope = await this.deps.queue.dequeue();
 			if (!taskEnvelope) {
-				await sleep(this.deps.idleDelayMs);
+				await this.deps.pause(this.deps.idleDelayMs);
 				continue;
 			}
 			const taskId = this.deps.generateTaskId();

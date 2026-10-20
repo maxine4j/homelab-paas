@@ -1,12 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
-import { setTimeout } from "node:timers/promises";
 
 import acme from "acme-client";
 import Koa from "koa";
 import { nanoid } from "nanoid";
 
-import { bootstrap } from "./bootstrap.ts";
 import { PaasConfig, decodeDescriptorYaml } from "./config/paas-config.ts";
 import { DockerClient } from "./docker/docker-client.ts";
 import { DockerService } from "./docker/docker-service.ts";
@@ -21,6 +19,7 @@ import { createAuthRouter } from "./ingress/auth/auth-router.ts";
 import { AuthService } from "./ingress/auth/auth-service.ts";
 import { JwtClient } from "./ingress/auth/jwt-client.ts";
 import { GitHubOauth2Provider } from "./ingress/auth/oauth-provider/github.ts";
+import { AcmeAccountStore } from "./ingress/tls/acme-account-store.ts";
 import { AcmeClient } from "./ingress/tls/acme-client.ts";
 import { TlsCertProvisionService } from "./ingress/tls/cert-provision-service.ts";
 import { TlsCertRenewalTask } from "./ingress/tls/cert-renewal-task.ts";
@@ -29,13 +28,15 @@ import { DigitalOceanDnsAcmeChallengeProvider } from "./ingress/tls/dns-challeng
 import { DeploymentService } from "./reconciler/deployment/deployment-service.ts";
 import { RecreateDeploymentStrategy } from "./reconciler/deployment/strategy/recreate-deployment-strategy.ts";
 import { SurgeDeploymentStrategy } from "./reconciler/deployment/strategy/surge-deployment-strategy.ts";
-import { FileReconciliationStore } from "./reconciler/file-reconciliation-store.ts";
+import { EndpointsStore } from "./reconciler/networking/endpoints-store.ts";
 import { NetworkingService } from "./reconciler/networking/networking-service.ts";
 import { ReconcilerService } from "./reconciler/reconciler-service.ts";
 import { ReconcilerTask } from "./reconciler/reconciler-task.ts";
+import { ReconciliationStore } from "./reconciler/reconciliation-store.ts";
 import { WebResourceReconciler } from "./reconciler/resources/web/web-reconciler.ts";
+import { FileSystemKeyValueStore } from "./store/file-system-store.ts";
 import { PeriodicTaskRunner } from "./task/periodic.ts";
-import { readFile } from "./util/file.ts";
+import { atomicWriteFile, mkdir, readFile, rm, type FileWriter } from "./util/file.ts";
 import { createHealthCheckRouter, probe } from "./util/healthcheck.ts";
 import type { Lifecycle } from "./util/lifecycle.ts";
 import { createRequestLogger, logger, withLogContext } from "./util/logger.ts";
@@ -45,15 +46,26 @@ const STATE_DIRECTORY = "/var/homelab-paas/_paas";
 
 export async function start(lifecycle: Lifecycle): Promise<void> {
 	const config = await new PaasConfig(readFile, process.env).load();
-	await bootstrap(STATE_DIRECTORY);
-	const store = new FileReconciliationStore(STATE_DIRECTORY);
+	const secureWrite: FileWriter = async (path, content) => {
+		await mkdir(STATE_DIRECTORY, { recursive: true, mode: 0o700 });
+		await atomicWriteFile(path, content, { mode: 0o600 });
+	};
+	const remove = async (path: string): Promise<void> => {
+		await rm(path, { force: true });
+	};
+	const state = new FileSystemKeyValueStore<unknown>(STATE_DIRECTORY, readFile, secureWrite, remove, "yaml");
+	const store = new ReconciliationStore(state);
+	const endpoints = new EndpointsStore(state);
 	const docker = new DockerService(
 		new DockerClient(
-			new NodeDockerTransport({
-				socketPath: "/var/run/docker.sock",
-				timeoutMs: 120_000,
-				maxResponseBytes: 16 * 1024 * 1024,
-			}),
+			new NodeDockerTransport(
+				{
+					socketPath: "/var/run/docker.sock",
+					timeoutMs: 120_000,
+					maxResponseBytes: 16 * 1024 * 1024,
+				},
+				sleep,
+			),
 		),
 		config.metadata.clusterId,
 	);
@@ -70,7 +82,8 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 		),
 		config.ingress,
 	);
-	const networking = new NetworkingService(store, envoy);
+	await envoy.bootstrap();
+	const networking = new NetworkingService(endpoints, envoy);
 	const deployment = new DeploymentService([
 		new RecreateDeploymentStrategy(docker, networking, probe, sleep),
 		new SurgeDeploymentStrategy(docker, networking, probe, sleep, () => nanoid(10)),
@@ -89,24 +102,25 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 		Boolean(config.auth),
 	);
 	const abort = new AbortController();
+	const pause = async (ms: number): Promise<void> => {
+		try {
+			await sleep(ms, abort.signal);
+		} catch (error) {
+			if (!abort.signal.aborted) throw error;
+		}
+	};
 	const runner = new PeriodicTaskRunner({
 		lifecycle,
 		periodMs: config.git.pollIntervalSeconds * 1000,
 		taskName: "reconciliation",
 		generateTaskId: nanoid,
 		task: new ReconcilerTask(reconciler),
-		pause: async (ms) => {
-			try {
-				await setTimeout(ms, undefined, { signal: abort.signal });
-			} catch {
-				/* Shutdown interrupts the polling delay. */
-			}
-		},
+		pause,
 		report: () => logger.error("Reconciliation task failed; check persistent state and Docker access"),
 	});
 	const app = new Koa().use(createRequestLogger()).use(createHealthCheckRouter().routes());
 	app.on("error", () => logger.error("HTTP request failed"));
-	const certificates = new FileCertificateStore(STATE_DIRECTORY);
+	const certificates = new FileCertificateStore(STATE_DIRECTORY, readFile, secureWrite);
 	let renewal: TlsCertRenewalTask | undefined;
 	if (config.auth && config.tls) {
 		const auth = new AuthService(
@@ -114,7 +128,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 			new JwtClient(config.auth.session, Date.now),
 			config.auth.github.allowedUsers,
 			() => randomBytes(32).toString("base64url"),
-			store,
+			endpoints,
 			{ baseDomain: config.ingress.baseDomain, httpsPort: config.ingress.httpsPort! },
 		);
 		app.use(
@@ -133,7 +147,13 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 						{ baseDomain: config.ingress.baseDomain, apiToken: config.tls.dns.credentials.apiToken },
 						fetch,
 					),
-					certificates,
+					new AcmeAccountStore(
+						new FileSystemKeyValueStore<string>(STATE_DIRECTORY, readFile, secureWrite, remove, {
+							extension: "pem",
+							serialize: (value) => value,
+							deserialize: (value) => value,
+						}),
+					),
 					acme,
 				),
 			),
@@ -166,7 +186,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 		}
 	}
 	if (!lifecycle.isOpen()) return;
-	await envoy.configureRoutes(await store.getAll());
+	await envoy.configureRoutes(await endpoints.getAll());
 	if (!lifecycle.isOpen()) return;
 	const runners = [runner];
 	if (renewal)
@@ -177,13 +197,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 				taskName: "certificate-renewal",
 				generateTaskId: nanoid,
 				task: renewal,
-				pause: async (ms) => {
-					try {
-						await setTimeout(ms, undefined, { signal: abort.signal });
-					} catch {
-						/* Shutdown interrupts renewal delay. */
-					}
-				},
+				pause,
 				report: () => logger.error("Certificate renewal failed; retaining the current certificate"),
 			}),
 		);
