@@ -88,7 +88,10 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 	const app = new Koa().use(createHealthCheckRouter().routes());
 	const server = app.listen(8080, "0.0.0.0");
 	lifecycle.registerShutdownHandler(
-		() => new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+		() =>
+			new Promise<void>((resolve, reject) =>
+				server.close((error: unknown) => (error ? reject(error) : resolve())),
+			),
 	);
 	await once(server, "listening");
 	await envoy.configureRoutes(await store.getAll());
