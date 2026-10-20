@@ -6,8 +6,8 @@ import type { Endpoint } from "../../networking/types.ts";
 import type { DeploymentRequest, DeploymentStrategy } from "./types.ts";
 
 /** Keeps the old revision until the replacement is ready and its route accepted.
- * Callers serialize deployments and schedule retries. Draining and termination
- * share one shutdown budget; retirement failures retain the routed replacement.
+ * Callers serialize deployments and schedule retries. Retirement failures retain
+ * the routed replacement; old containers receive their full graceful-stop timeout.
  */
 export class SurgeDeploymentStrategy implements DeploymentStrategy {
 	readonly name = "surge";
@@ -60,17 +60,9 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 		await this.networking.routeTo(serviceId, endpoint);
 		if (current.length === 0) return;
 		const timeoutSeconds = resource.termination?.timeoutSeconds ?? 30;
-		const remainingSeconds = await this.networking.drain(
-			serviceId,
-			current.map((container) => container.id),
-			timeoutSeconds,
-		);
-		if (!Number.isInteger(remainingSeconds) || remainingSeconds < 0 || remainingSeconds > timeoutSeconds) {
-			throw new Error("Invalid remaining termination budget");
-		}
 		const results = await Promise.allSettled(
 			current.map(async (container) => {
-				await this.docker.stopServiceContainer(serviceId, container.id, remainingSeconds);
+				await this.docker.stopServiceContainer(serviceId, container.id, timeoutSeconds);
 				await this.docker.removeServiceContainer(serviceId, container.id);
 			}),
 		);

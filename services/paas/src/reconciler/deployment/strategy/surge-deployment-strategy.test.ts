@@ -83,10 +83,6 @@ function fixture() {
 		async withdraw(serviceId) {
 			record("route", serviceId, undefined);
 		},
-		async drain(...args) {
-			record("drain", ...args);
-			return 10;
-		},
 	};
 	const probe = async (...args: [string, number, string]) => {
 		record("probe", ...args);
@@ -107,7 +103,7 @@ function fixture() {
 	};
 }
 
-test("starts alongside the old revision, switches only after readiness, drains then retires", async () => {
+test("starts alongside the old revision, switches only after readiness, then gracefully retires", async () => {
 	const f = fixture();
 	await f.strategy.deploy(request);
 	expect(f.calls.map((c) => c.action)).toEqual([
@@ -120,7 +116,6 @@ test("starts alongside the old revision, switches only after readiness, drains t
 		"inspect",
 		"probe",
 		"route",
-		"drain",
 		"stop",
 		"remove",
 	]);
@@ -142,11 +137,10 @@ test("starts alongside the old revision, switches only after readiness, drains t
 		"demo",
 		{ address: "10.0.0.2", port: 8080, healthcheckPath: "/ready", public: true },
 	]);
-	expect(f.calls.find((c) => c.action === "drain")?.args).toEqual(["demo", ["old"], 45]);
-	expect(f.calls.find((c) => c.action === "stop")?.args).toEqual(["demo", "old", 10]);
+	expect(f.calls.find((c) => c.action === "stop")?.args).toEqual(["demo", "old", 45]);
 });
 
-test("uses defaults and skips draining on initial deployment", async () => {
+test("uses defaults and skips retirement on initial deployment", async () => {
 	const f = fixture();
 	f.docker.listServiceContainers = async () => [];
 	await f.strategy.deploy({
@@ -154,7 +148,7 @@ test("uses defaults and skips draining on initial deployment", async () => {
 		resource: { type: "web", image: "app:2", ingress: { public: true, port: 8080 } },
 	});
 	expect(f.calls.find((c) => c.action === "probe")?.args).toEqual(["10.0.0.2", 8080, "/healthcheck"]);
-	expect(f.calls.some((c) => ["drain", "stop", "remove"].includes(c.action))).toBe(false);
+	expect(f.calls.some((c) => ["sleep", "stop", "remove"].includes(c.action))).toBe(false);
 });
 
 test.each([false, undefined])("publishes private policy when public is %s", async (publicPolicy) => {
@@ -169,15 +163,10 @@ test.each([false, undefined])("publishes private policy when public is %s", asyn
 	]);
 });
 
-test("uses the default shutdown budget and allows immediate termination after draining exhausts it", async () => {
+test("uses the default graceful shutdown timeout", async () => {
 	const f = fixture();
-	f.routes.drain = async (...args) => {
-		f.calls.push({ action: "drain", args });
-		return 0;
-	};
 	await f.strategy.deploy({ ...request, resource: { ...request.resource, termination: undefined } });
-	expect(f.calls.find((c) => c.action === "drain")?.args).toEqual(["demo", ["old"], 30]);
-	expect(f.calls.find((c) => c.action === "stop")?.args).toEqual(["demo", "old", 0]);
+	expect(f.calls.find((c) => c.action === "stop")?.args).toEqual(["demo", "old", 30]);
 });
 
 test.each([
@@ -192,7 +181,7 @@ test.each([
 		throw new Error("failed");
 	};
 	await expect(f.strategy.deploy(request)).rejects.toThrow("failed");
-	expect(f.calls.some((c) => ["route", "stop", "remove", "drain"].includes(c.action))).toBe(false);
+	expect(f.calls.some((c) => ["route", "stop", "remove"].includes(c.action))).toBe(false);
 });
 
 test("missing prepared network fails before creating the replacement", async () => {
@@ -237,7 +226,11 @@ test("readiness retries absence, stopped containers, missing addresses and faile
 		f.docker,
 		f.routes,
 		async () => ++probes > 1,
-		f.sleep,
+		async (ms) => {
+			expect(ms).toBe(1000);
+			expect(f.calls.some((c) => ["route", "stop", "remove"].includes(c.action))).toBe(false);
+			await f.sleep(ms);
+		},
 		f.generateInstanceId,
 	);
 	await strategy.deploy(request);
@@ -262,7 +255,7 @@ test("readiness exhaustion preserves the previous revision and removes only the 
 	expect(probes).toBe(30);
 	expect(f.calls.filter((c) => c.action === "sleep")).toHaveLength(29);
 	expect(f.calls.filter((c) => c.action === "stop").map((c) => c.args)).toEqual([["demo", "new", 45]]);
-	expect(f.calls.some((c) => ["route", "drain"].includes(c.action))).toBe(false);
+	expect(f.calls.some((c) => c.action === "route")).toBe(false);
 });
 
 test("publication failure keeps both revisions because route acceptance is uncertain", async () => {
@@ -271,24 +264,7 @@ test("publication failure keeps both revisions because route acceptance is uncer
 		throw new Error("route failed");
 	};
 	await expect(f.strategy.deploy(request)).rejects.toThrow("route failed");
-	expect(f.calls.some((c) => ["drain", "stop", "remove"].includes(c.action))).toBe(false);
-});
-
-test("draining failure keeps the newly routed replacement and the old revision", async () => {
-	const f = fixture();
-	f.routes.drain = async () => {
-		throw new Error("drain failed");
-	};
-	await expect(f.strategy.deploy(request)).rejects.toThrow("drain failed");
-	expect(f.calls.some((c) => c.action === "route")).toBe(true);
-	expect(f.calls.some((c) => ["stop", "remove"].includes(c.action))).toBe(false);
-});
-
-test.each([-1, 46, NaN, 1.5])("rejects invalid remaining shutdown budgets: %s", async (remaining) => {
-	const f = fixture();
-	f.routes.drain = async () => remaining;
-	await expect(f.strategy.deploy(request)).rejects.toThrow("Invalid remaining termination budget");
-	expect(f.calls.some((c) => c.action === "stop")).toBe(false);
+	expect(f.calls.some((c) => ["sleep", "stop", "remove"].includes(c.action))).toBe(false);
 });
 
 test("retirement tries every old container, reports failures, and retains the routed replacement", async () => {

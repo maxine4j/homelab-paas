@@ -76,9 +76,6 @@ function fixture() {
 		},
 	};
 	const routes: INetworkingService = {
-		async drain() {
-			return 0;
-		},
 		async routeTo(...args) {
 			record("route", ...args);
 		},

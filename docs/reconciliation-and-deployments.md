@@ -31,7 +31,7 @@ PostgreSQL and RabbitMQ always use recreate deployment.
 
 Surge requires sufficient spare capacity and an application that tolerates overlapping instances. For workers, this includes tolerating concurrent execution across revisions.
 
-`SurgeDeploymentStrategy` implements one web replacement and is registered alongside recreate at startup. It uses a unique instance suffix on the container name so even identical resource specifications can overlap; identity labels remain authoritative. Startup or readiness failures remove only the replacement. An uncertain route-publication outcome retains both revisions. After route acceptance, the [networking service](networking-and-auth.md#networking) keeps the previous containers alive for the full termination timeout to allow existing requests to drain. It does not inspect active request counts. Once this bounded period expires, no graceful-stop budget remains and the old containers are stopped with a zero-second timeout and removed. Retirement failures are reported without removing the newly routed replacement. Recreate also retains its ready replacement after uncertain publication and aborts replacement creation if retiring existing containers fails.
+`SurgeDeploymentStrategy` implements one web replacement and is registered alongside recreate at startup. It uses a unique instance suffix on the container name so even identical resource specifications can overlap; identity labels remain authoritative. The strategy sleeps one second between unsuccessful readiness checks while keeping the previous containers active. Startup or readiness failures remove only the replacement. An uncertain route-publication outcome retains both revisions. After the [networking service](networking-and-auth.md#networking) confirms route acceptance, the strategy gracefully stops the previous containers with the full termination timeout and removes them. There is no separate drain delay or active-request inspection. Retirement failures are reported without removing the newly routed replacement. Recreate also retains its ready replacement after uncertain publication and aborts replacement creation if retiring existing containers fails.
 
 ### Web rollout sequence
 
@@ -42,8 +42,8 @@ For a surge deployment, the platform:
 3. Waits for successful readiness checks.
 4. Updates Envoy and confirms configuration acceptance.
 5. Stops assigning new requests to the previous revision.
-6. Drains existing requests within the termination timeout.
-7. Stops and removes the previous containers.
+6. Gracefully stops the previous containers within the termination timeout, allowing applications to finish existing requests.
+7. Removes the previous containers.
 
 If replacement readiness fails, the previous revision remains active.
 
@@ -80,7 +80,7 @@ termination:
     timeoutSeconds: 60
 ```
 
-When omitted, the platform uses its default timeout. Containers receive a graceful stop signal, followed by forced termination if the timeout expires. Web request draining shares this bounded shutdown period.
+When omitted, the platform uses its default timeout. Containers receive a graceful stop signal, followed by forced termination if the timeout expires. Applications are responsible for finishing existing requests during graceful shutdown.
 
 The platform does not guarantee uninterrupted long-lived streams or connections during deployment.
 

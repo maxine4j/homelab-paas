@@ -70,7 +70,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 		),
 		config.ingress,
 	);
-	const networking = new NetworkingService(store, envoy, sleep);
+	const networking = new NetworkingService(store, envoy);
 	const deployment = new DeploymentService([
 		new RecreateDeploymentStrategy(docker, networking, probe, sleep),
 		new SurgeDeploymentStrategy(docker, networking, probe, sleep, () => nanoid(10)),

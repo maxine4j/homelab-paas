@@ -1,5 +1,4 @@
 import type { IEnvoyService } from "../../envoy/envoy-service.ts";
-import type { ISleep } from "../../util/sleep.ts";
 import type { IEndpointsStore } from "./endpoints-store.ts";
 import type { Endpoint } from "./types.ts";
 
@@ -17,11 +16,6 @@ export interface INetworkingService {
 	routeTo(serviceId: string, endpoint: Endpoint): Promise<void>;
 	/** Stop assigning new requests before stopping containers. Rejects with NetworkingError. */
 	withdraw(serviceId: string): Promise<void>;
-	/** After route acceptance, keep previous endpoints alive for the full termination
-	 * budget. Returns zero remaining stop seconds once the bounded drain expires.
-	 * Rejects with NetworkingError if waiting fails; callers retain both revisions.
-	 */
-	drain(serviceId: string, containerIds: string[], timeoutSeconds: number): Promise<number>;
 }
 
 /** Serializes complete routing snapshots across services. Store desired state first
@@ -33,7 +27,6 @@ export class NetworkingService implements INetworkingService {
 	constructor(
 		private readonly endpoints: IEndpointsStore,
 		private readonly envoy: IEnvoyService,
-		private readonly sleep: ISleep,
 	) {}
 
 	routeTo(serviceId: string, endpoint: Endpoint): Promise<void> {
@@ -42,15 +35,6 @@ export class NetworkingService implements INetworkingService {
 
 	withdraw(serviceId: string): Promise<void> {
 		return this.update(serviceId, undefined);
-	}
-
-	async drain(_serviceId: string, _containerIds: string[], timeoutSeconds: number): Promise<number> {
-		try {
-			await this.sleep(timeoutSeconds * 1000);
-			return 0;
-		} catch {
-			throw new NetworkingError();
-		}
 	}
 
 	private update(serviceId: string, endpoint: Endpoint | undefined): Promise<void> {

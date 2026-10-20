@@ -16,9 +16,6 @@ function fixture() {
 	const routes: unknown[] = [];
 	let healthy = true;
 	const networking = {
-		async drain() {
-			return 0;
-		},
 		async routeTo(...args: unknown[]) {
 			routes.push(args);
 		},
@@ -227,9 +224,6 @@ test("observation failures do not deploy and deployment failures propagate", asy
 		{
 			async routeTo() {},
 			async withdraw() {},
-			async drain() {
-				return 0;
-			},
 		},
 		async () => true,
 	);
