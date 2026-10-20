@@ -1,0 +1,18 @@
+/** Envoy configuration values stay within the Envoy layers. */
+export interface EnvoyResource {
+	name: string;
+	"@type": string;
+	[key: string]: unknown;
+}
+
+export interface EnvoyConfiguration {
+	clusters: EnvoyResource[];
+	listeners: EnvoyResource[];
+}
+
+export class EnvoyClientError extends Error {
+	constructor() {
+		super("Cannot publish or confirm Envoy configuration");
+		this.name = "EnvoyClientError";
+	}
+}

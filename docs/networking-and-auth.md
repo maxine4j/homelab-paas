@@ -4,6 +4,10 @@ The [deployment MVP](configuration.md#implemented-deployment-mvp) exposes public
 
 ## Networking
 
+The standalone reconciler uses `INetworkingService.routeTo` to switch a ready service endpoint and `withdraw` to stop assigning new requests before container retirement. `NetworkingService` serializes updates across services and records desired endpoints in its injected endpoints store before publication. Failed or uncertain publication retains that desired state for retry; callers must retain containers that may receive traffic. The supplied in-memory endpoints store does not survive restarts.
+
+`EnvoyService` converts plain endpoint values into public HTTP routing and health-check configuration. `EnvoyClient` serializes filesystem xDS, waits for active CDS resources before publishing LDS, and confirms active listeners through the private admin `/config_dump` API with bounded polling. Unchanged resources may retain earlier per-resource versions; acceptance checks the discovery version, active resource identities, and absence of warming replacements. `NodeEnvoyTransport` owns atomic discovery-file replacement and bounded admin HTTP I/O. Composition must provide a shared state directory, a private Envoy admin address, and polling limits. These layers are separate from the active deployment MVP; authentication, TLS, and the internal listener remain deferred in this implementation.
+
 Each service receives a dedicated Docker network.
 
 - Resources within a service communicate directly using resource names, such as `store:5432`.

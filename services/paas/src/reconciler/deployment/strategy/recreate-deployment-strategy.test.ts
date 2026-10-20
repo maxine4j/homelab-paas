@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { DockerContainerDetails, ServiceContainer } from "../../../docker/types.ts";
+import type { INetworkingService } from "../../networking/networking-service.ts";
 import { RecreateDeploymentStrategy } from "./recreate-deployment-strategy.ts";
 import type { DeploymentRequest } from "./types.ts";
 
@@ -74,9 +75,12 @@ function fixture() {
 			record("remove", ...args);
 		},
 	};
-	const routes = {
-		async set(...args: [string, { address: string; port: number; healthcheckPath: string } | undefined]) {
+	const routes: INetworkingService = {
+		async routeTo(...args) {
 			record("route", ...args);
+		},
+		async withdraw(serviceId) {
+			record("route", serviceId, undefined);
 		},
 	};
 	const probe = async (...args: [string, number, string]) => {
@@ -175,7 +179,7 @@ test("a missing prepared network fails before withdrawing the active route", asy
 
 test("withdrawal failure prevents stopping containers", async () => {
 	const f = fixture();
-	f.routes.set = async () => {
+	f.routes.withdraw = async () => {
 		throw new Error("route failed");
 	};
 	await expect(f.strategy.deploy(request)).rejects.toThrow("route failed");
@@ -192,7 +196,11 @@ test.each([
 	f.docker[method] = async () => {
 		throw new Error("deployment failed");
 	};
-	await expect(f.strategy.deploy(request)).rejects.toThrow("deployment failed");
+	await expect(f.strategy.deploy(request)).rejects.toThrow(
+		method === "stopServiceContainer" || method === "removeServiceContainer"
+			? "Container retirement failed"
+			: "deployment failed",
+	);
 	expect(f.calls.filter((c) => c.action === "route").map((c) => c.args)).toEqual([["demo", undefined]]);
 });
 
@@ -244,12 +252,12 @@ test("readiness exhaustion is bounded and never publishes an unready endpoint", 
 
 test("route publication failures propagate for the caller to retry", async () => {
 	const f = fixture();
-	f.routes.set = async (_serviceId, endpoint) => {
-		if (endpoint) throw new Error("publication failed");
+	f.routes.routeTo = async () => {
+		throw new Error("publication failed");
 	};
 	await expect(f.strategy.deploy(request)).rejects.toThrow("publication failed");
-	expect(f.calls.slice(-2)).toEqual([
-		{ action: "stop", args: ["demo", "new", 45] },
-		{ action: "remove", args: ["demo", "new"] },
+	expect(f.calls.filter((c) => ["stop", "remove"].includes(c.action))).toEqual([
+		{ action: "stop", args: ["demo", "old", 45] },
+		{ action: "remove", args: ["demo", "old"] },
 	]);
 });

@@ -1,22 +1,13 @@
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { HttpProbe } from "../../../util/healthcheck.ts";
 import type { ISleep } from "../../../util/sleep.ts";
+import type { INetworkingService } from "../../networking/networking-service.ts";
+import type { Endpoint } from "../../networking/types.ts";
 import type { DeploymentRequest, DeploymentStrategy } from "./types.ts";
 
 const DEFAULT_TERMINATION_TIMEOUT_SEC = 30;
-const DEFAULT_HEALTHCHECK_URL = "/health";
+const DEFAULT_HEALTHCHECK_URL = "/healthcheck";
 const MAX_STARTUP_PROBE_ATTEMPTS = 30;
-
-export interface WebEndpoint {
-	address: string;
-	port: number;
-	healthcheckPath: string;
-}
-
-/** Persists and publishes routes; withdrawal must complete before containers stop. */
-export interface IDeploymentRoutes {
-	set(serviceId: string, endpoint: WebEndpoint | undefined): Promise<void>;
-}
 
 /** Recreate owns replacement sequencing; callers own serialization and retries. */
 export class RecreateDeploymentStrategy implements DeploymentStrategy {
@@ -24,7 +15,7 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 
 	constructor(
 		private readonly docker: IDockerService,
-		private readonly routes: IDeploymentRoutes,
+		private readonly networking: INetworkingService,
 		private readonly probe: HttpProbe,
 		private readonly sleep: ISleep,
 	) {}
@@ -36,8 +27,8 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 		await this.docker.prepareServiceNetwork(serviceId);
 		const network = await this.docker.inspectServiceNetwork(serviceId);
 		if (!network) throw new Error("Service network is unavailable");
-		await this.routes.set(serviceId, undefined);
-		await Promise.allSettled(
+		await this.networking.withdraw(serviceId);
+		const retirements = await Promise.allSettled(
 			current.map(async (container) => {
 				await this.docker.stopServiceContainer(
 					serviceId,
@@ -47,6 +38,10 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 				await this.docker.removeServiceContainer(serviceId, container.id);
 			}),
 		);
+		const failures: unknown[] = retirements.flatMap((result) =>
+			result.status === "rejected" ? [result.reason] : [],
+		);
+		if (failures.length > 0) throw new AggregateError(failures, "Container retirement failed");
 		const containerId = await this.docker.createResourceContainer({
 			serviceId,
 			resourceId,
@@ -56,10 +51,10 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 			command: resource.command,
 			env: Object.fromEntries((resource.env ?? []).map(({ name, value }) => [name, value])),
 		});
+		let endpoint: Endpoint;
 		try {
 			await this.docker.startServiceContainer(serviceId, containerId);
-			const endpoint = await this.waitReady(request, containerId, network.name);
-			await this.routes.set(serviceId, endpoint);
+			endpoint = await this.waitReady(request, containerId, network.name);
 		} catch (error) {
 			// A failed replacement must not look converged on the next observation.
 			try {
@@ -73,19 +68,17 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 			}
 			throw error;
 		}
+		// Publication may succeed before confirmation fails. Keep the ready container.
+		await this.networking.routeTo(serviceId, endpoint);
 	}
 
-	private async waitReady(
-		request: DeploymentRequest,
-		containerId: string,
-		networkName: string,
-	): Promise<WebEndpoint> {
+	private async waitReady(request: DeploymentRequest, containerId: string, networkName: string): Promise<Endpoint> {
 		const { serviceId, resource } = request;
 		for (let attempt = 0; attempt < MAX_STARTUP_PROBE_ATTEMPTS; attempt++) {
 			const container = await this.docker.inspectServiceContainer(serviceId, containerId);
 			const address = container?.networks[networkName]?.address;
 			if (container?.running && address) {
-				const endpoint: WebEndpoint = {
+				const endpoint: Endpoint = {
 					address,
 					port: resource.ingress.port,
 					healthcheckPath: resource.healthcheckUrl ?? DEFAULT_HEALTHCHECK_URL,

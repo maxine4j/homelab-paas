@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { DockerContainerDetails, ServiceContainer } from "../../../docker/types.ts";
-import type { IDeploymentRoutes } from "./recreate-deployment-strategy.ts";
+import type { INetworkingService } from "../../networking/networking-service.ts";
 import { SurgeDeploymentStrategy, type IDeploymentDrainer } from "./surge-deployment-strategy.ts";
 import type { DeploymentRequest } from "./types.ts";
 
@@ -76,9 +76,12 @@ function fixture() {
 			record("remove", ...args);
 		},
 	};
-	const routes: IDeploymentRoutes = {
-		async set(...args) {
+	const routes: INetworkingService = {
+		async routeTo(...args) {
 			record("route", ...args);
+		},
+		async withdraw(serviceId) {
+			record("route", serviceId, undefined);
 		},
 	};
 	const drainer: IDeploymentDrainer = {
@@ -257,7 +260,7 @@ test("readiness exhaustion preserves the previous revision and removes only the 
 
 test("publication failure keeps both revisions because route acceptance is uncertain", async () => {
 	const f = fixture();
-	f.routes.set = async () => {
+	f.routes.routeTo = async () => {
 		throw new Error("route failed");
 	};
 	await expect(f.strategy.deploy(request)).rejects.toThrow("route failed");

@@ -1,7 +1,8 @@
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { HttpProbe } from "../../../util/healthcheck.ts";
 import type { ISleep } from "../../../util/sleep.ts";
-import type { IDeploymentRoutes, WebEndpoint } from "./recreate-deployment-strategy.ts";
+import type { INetworkingService } from "../../networking/networking-service.ts";
+import type { Endpoint } from "../../networking/types.ts";
 import type { DeploymentRequest, DeploymentStrategy } from "./types.ts";
 
 export interface IDeploymentDrainer {
@@ -21,7 +22,7 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 
 	constructor(
 		private readonly docker: IDockerService,
-		private readonly routes: IDeploymentRoutes,
+		private readonly networking: INetworkingService,
 		private readonly probe: HttpProbe,
 		private readonly sleep: ISleep,
 		private readonly drainer: IDeploymentDrainer,
@@ -46,7 +47,7 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 			command: resource.command,
 			env: Object.fromEntries((resource.env ?? []).map(({ name, value }) => [name, value])),
 		});
-		let endpoint: WebEndpoint;
+		let endpoint: Endpoint;
 		try {
 			await this.docker.startServiceContainer(serviceId, containerId);
 			endpoint = await this.waitReady(request, containerId, network.name);
@@ -65,7 +66,7 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 		}
 		// A rejected publication can have an uncertain outcome. Keep both revisions
 		// alive rather than deleting a replacement that may already receive traffic.
-		await this.routes.set(serviceId, endpoint);
+		await this.networking.routeTo(serviceId, endpoint);
 		if (current.length === 0) return;
 		const timeoutSeconds = resource.termination?.timeoutSeconds ?? 30;
 		const remainingSeconds = await this.drainer.drain(
@@ -86,17 +87,13 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 		if (failures.length > 0) throw new AggregateError(failures, "Failed to retire previous containers");
 	}
 
-	private async waitReady(
-		request: DeploymentRequest,
-		containerId: string,
-		networkName: string,
-	): Promise<WebEndpoint> {
+	private async waitReady(request: DeploymentRequest, containerId: string, networkName: string): Promise<Endpoint> {
 		const { serviceId, resource } = request;
 		for (let attempt = 0; attempt < 30; attempt++) {
 			const container = await this.docker.inspectServiceContainer(serviceId, containerId);
 			const address = container?.networks[networkName]?.address;
 			if (container?.running && address) {
-				const endpoint: WebEndpoint = {
+				const endpoint: Endpoint = {
 					address,
 					port: resource.ingress.port,
 					healthcheckPath: resource.healthcheckUrl ?? "/healthcheck",

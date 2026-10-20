@@ -1,3 +1,5 @@
-// put route types here
-
-export interface Endpoint {}
+export interface Endpoint {
+	address: string;
+	port: number;
+	healthcheckPath: string;
+}

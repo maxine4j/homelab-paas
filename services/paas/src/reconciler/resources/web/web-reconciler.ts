@@ -21,29 +21,6 @@ export interface IWebResourceReconciler {
 	reconcile(request: WebReconciliationRequest): Promise<void>;
 }
 
-function fingerprint(resourceId: string, resource: WebResource): string {
-	const env = Object.entries(Object.fromEntries((resource.env ?? []).map(({ name, value }) => [name, value]))).sort(
-		([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
-	);
-	return createHash("sha256")
-		.update(
-			JSON.stringify([
-				resourceId,
-				{
-					image: resource.image,
-					command: resource.command ?? null,
-					env,
-					replicas: resource.replicas ?? 1,
-					rolloutStrategy: resource.rolloutStrategy ?? "recreate",
-					ingress: { public: resource.ingress.public, port: resource.ingress.port },
-					healthcheckUrl: resource.healthcheckUrl ?? "/healthcheck",
-					terminationTimeoutSeconds: resource.termination?.timeoutSeconds ?? 30,
-				},
-			]),
-		)
-		.digest("hex");
-}
-
 /** Detects drift; deployment services own all mutations and rollout sequencing. */
 export class WebResourceReconciler implements IWebResourceReconciler {
 	readonly type = "web";
@@ -57,7 +34,7 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 
 	async reconcile(request: WebReconciliationRequest): Promise<void> {
 		const { serviceId, resourceId, resource } = request;
-		const spec = fingerprint(resourceId, resource);
+		const spec = this.fingerprint(resourceId, resource);
 		const containers = await this.docker.listServiceContainers(serviceId, resourceId);
 		const current = containers.at(0);
 
@@ -75,5 +52,28 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 
 		this.logger.info({ serviceId, resourceId }, "Detected drift for web resource");
 		await this.deployment.deploy({ ...request, spec });
+	}
+
+	private fingerprint(resourceId: string, resource: WebResource): string {
+		const env = Object.entries(
+			Object.fromEntries((resource.env ?? []).map(({ name, value }) => [name, value])),
+		).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+		return createHash("sha256")
+			.update(
+				JSON.stringify([
+					resourceId,
+					{
+						image: resource.image,
+						command: resource.command ?? null,
+						env,
+						replicas: resource.replicas ?? 1,
+						rolloutStrategy: resource.rolloutStrategy ?? "recreate",
+						ingress: { public: resource.ingress.public, port: resource.ingress.port },
+						healthcheckUrl: resource.healthcheckUrl ?? "/healthcheck",
+						terminationTimeoutSeconds: resource.termination?.timeoutSeconds ?? 30,
+					},
+				]),
+			)
+			.digest("hex");
 	}
 }
