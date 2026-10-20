@@ -1,6 +1,3 @@
 packages:
     - packages/*
     - services/*
-onlyBuiltDependencies:
-    - esbuild
-    - koffi
