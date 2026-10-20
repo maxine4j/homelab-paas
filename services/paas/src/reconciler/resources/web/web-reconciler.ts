@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { HttpProbe } from "../../../util/healthcheck.ts";
-import { logger } from "../../../util/logger.ts";
+import { createLogger } from "../../../util/logger.ts";
 import type { IDeploymentService } from "../../deployment/deployment-service.ts";
 import type { DeploymentWebResource } from "../../deployment/strategy/types.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
@@ -24,6 +24,7 @@ export interface IWebResourceReconciler {
 
 /** Repairs connectivity and routing; deployment services own workload rollout. */
 export class WebResourceReconciler implements IWebResourceReconciler {
+	private readonly log = createLogger(WebResourceReconciler.name);
 	readonly type = "web";
 	readonly lifecycle = "deployment";
 
@@ -60,7 +61,22 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 			}
 		}
 
-		logger.info({ serviceId, resourceId }, "Detected drift for web resource");
+		let reason = "network-drift";
+		if (!current) reason = "missing";
+		else if (containers.length !== 1) reason = "duplicates";
+		else if (current.spec !== spec) reason = "specification-changed";
+		else if (current.state !== "running") reason = "not-running";
+		this.log.info(
+			{
+				event: "resource.drift",
+				serviceId,
+				resourceId,
+				revision: request.revision,
+				reason,
+				strategy: resource.rolloutStrategy ?? "recreate",
+			},
+			"Detected web resource drift; deploying replacement",
+		);
 		await this.deployment.deploy({ ...request, spec });
 	}
 

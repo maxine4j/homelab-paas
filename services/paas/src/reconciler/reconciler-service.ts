@@ -2,11 +2,13 @@ import type { ServiceDescriptor } from "@homelab-paas/shared-contracts";
 
 import type { IGitService } from "../git/git-service.ts";
 import type { GitFileSource } from "../git/types.ts";
+import { createLogger } from "../util/logger.ts";
 import type { DeploymentWebResource } from "./deployment/strategy/types.ts";
 import type { IWebResourceReconciler } from "./resources/web/web-reconciler.ts";
 import type { DescriptorDecoder, IReconcilerService, IReconciliationStateStore } from "./types.ts";
 
 export class ReconcilerService implements IReconcilerService {
+	private readonly log = createLogger(ReconcilerService.name);
 	private pending: Promise<void> = Promise.resolve();
 
 	constructor(
@@ -17,7 +19,6 @@ export class ReconcilerService implements IReconcilerService {
 		private readonly web: IWebResourceReconciler,
 		private readonly state: IReconciliationStateStore,
 		private readonly now: () => number,
-		private readonly report: (serviceId: string, message: string) => void,
 		private readonly privateIngressEnabled = false,
 	) {}
 
@@ -27,8 +28,8 @@ export class ReconcilerService implements IReconcilerService {
 				try {
 					await this.reconcileService(serviceId, source);
 				} catch {
-					this.report(
-						serviceId,
+					this.log.error(
+						{ event: "reconciliation.state-failed", serviceId },
 						"Cannot persist reconciliation state; check platform state directory access",
 					);
 				}
@@ -51,6 +52,11 @@ export class ReconcilerService implements IReconcilerService {
 			message =
 				"Unsupported descriptor capabilities; runtime requires one web resource, one replica, recreate or surge deployment and configured auth/TLS for private ingress";
 			const resources = this.deploymentResources(descriptor);
+			if (previous?.desiredRevision !== desiredRevision)
+				this.log.info(
+					{ event: "reconciliation.revision", serviceId, revision: desiredRevision },
+					"Detected new valid descriptor revision; reconciling resources",
+				);
 			await this.state.write(serviceId, {
 				desiredRevision,
 				activeRevision: previous?.activeRevision,
@@ -61,20 +67,29 @@ export class ReconcilerService implements IReconcilerService {
 				await this.web.reconcile({ serviceId, resourceId, revision: desiredRevision, resource });
 			}
 			await this.state.write(serviceId, { desiredRevision, activeRevision: desiredRevision, phase: "ready" });
+			if (previous?.phase === "failed")
+				this.log.info(
+					{ event: "reconciliation.recovered", serviceId, revision: desiredRevision },
+					"Service recovered; clearing retry backoff",
+				);
 		} catch {
 			const failures = Math.min((previous?.failures ?? 0) + 1, 1024);
 			const delay =
 				Math.min(this.retry.maxRetryBackoffSeconds, this.retry.retryBackoffSeconds * 2 ** (failures - 1))
 				* 1000;
+			const retryAt = this.now() + delay;
 			await this.state.write(serviceId, {
 				desiredRevision,
 				activeRevision: previous?.activeRevision,
 				phase: "failed",
 				error: message,
 				failures,
-				retryAt: this.now() + delay,
+				retryAt,
 			});
-			this.report(serviceId, message);
+			this.log.error(
+				{ event: "reconciliation.failed", serviceId, failures, retryAt },
+				`${message}; retry scheduled`,
+			);
 		}
 	}
 

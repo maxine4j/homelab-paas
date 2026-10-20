@@ -2,6 +2,7 @@ import { expect, test, vi } from "vitest";
 
 import { decodeDescriptorYaml } from "../config/paas-config.ts";
 import type { GitFile } from "../git/types.ts";
+import { captureLogs } from "../util/test/logs.ts";
 import { ReconcilerService } from "./reconciler-service.ts";
 import type { ReconciliationState } from "./types.ts";
 
@@ -16,7 +17,6 @@ function fixture() {
 	const states = new Map<string, ReconciliationState>();
 	const fetchFile = vi.fn(async (): Promise<GitFile> => ({ revision: "rev", content: JSON.stringify(descriptor) }));
 	const reconcile = vi.fn(async () => {});
-	const report = vi.fn();
 	const deps = {
 		services: { demo: { remote: "local", descriptorPath: "/repo/demo.sd.yaml" } },
 		retry: { retryBackoffSeconds: 1, maxRetryBackoffSeconds: 4 },
@@ -32,7 +32,6 @@ function fixture() {
 			},
 		},
 		now: () => time,
-		report,
 	};
 	const createService = (services = deps.services, privateIngressEnabled = false) =>
 		new ReconcilerService(
@@ -43,7 +42,6 @@ function fixture() {
 			deps.web,
 			deps.state,
 			deps.now,
-			deps.report,
 			privateIngressEnabled,
 		);
 	return {
@@ -51,7 +49,6 @@ function fixture() {
 		states,
 		fetchFile,
 		reconcile,
-		report,
 		createService,
 		service: createService(),
 		advance(ms: number) {
@@ -146,7 +143,30 @@ test("Git failures preserve active state, sanitize errors and do not prevent oth
 	expect(f.reconcile).toHaveBeenCalledTimes(1);
 	expect(f.states.get("demo")).toMatchObject({ activeRevision: "rev", desiredRevision: "rev", phase: "failed" });
 	expect(JSON.stringify([...f.states])).not.toContain("SECRET");
-	expect(JSON.stringify(f.report.mock.calls)).not.toContain("SECRET");
+});
+
+test("logs changed revisions, retry schedules and recovery without logging unchanged passes", async () => {
+	const f = fixture();
+	const capture = captureLogs();
+	try {
+		await f.service.reconcile();
+		await f.service.reconcile();
+		f.fetchFile.mockRejectedValueOnce(new Error("SECRET"));
+		await f.service.reconcile();
+		await f.service.reconcile();
+		f.advance(1000);
+		await f.service.reconcile();
+	} finally {
+		capture.restore();
+	}
+	const records = capture.lines.map((line) => JSON.parse(line));
+	expect(records.map(({ event }) => event)).toEqual([
+		"reconciliation.revision",
+		"reconciliation.failed",
+		"reconciliation.recovered",
+	]);
+	expect(records.at(1)).toMatchObject({ serviceId: "demo", failures: 1, retryAt: 1000 });
+	expect(capture.lines.join("")).not.toContain("SECRET");
 });
 
 test("persists deploying before mutation and applies bounded exponential retries across restarts", async () => {

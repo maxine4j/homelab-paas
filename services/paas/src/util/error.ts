@@ -36,7 +36,7 @@ export const errorMiddleware: Middleware = async (ctx, next) => {
 				message: error.message,
 				validationErrors: error.errors,
 			};
-			logger.error({ error }, "Validation Error");
+			logger.error("Validation Error");
 			return;
 		}
 
@@ -45,7 +45,7 @@ export const errorMiddleware: Middleware = async (ctx, next) => {
 			ctx.body = {
 				message: error.message,
 			};
-			logger.error({ error }, "Domain Error");
+			logger.error("Domain Error");
 			return;
 		}
 
@@ -53,6 +53,6 @@ export const errorMiddleware: Middleware = async (ctx, next) => {
 		ctx.body = {
 			message: "Internal server error",
 		};
-		logger.error({ error }, "Internal Server Error");
+		logger.error("Internal Server Error");
 	}
 };

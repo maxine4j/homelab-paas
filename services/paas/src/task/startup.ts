@@ -1,4 +1,4 @@
-import { logger } from "../util/logger.ts";
+import { logger, withLogContext } from "../util/logger.ts";
 import { type TaskRunner } from "./types.ts";
 
 export interface StartupTask {
@@ -6,13 +6,19 @@ export interface StartupTask {
 }
 
 export class StartupTaskRunner implements TaskRunner {
-	constructor(private readonly task: StartupTask) {}
+	constructor(
+		private readonly task: StartupTask,
+		private readonly taskName: string,
+		private readonly generateTaskId: () => string,
+	) {}
 
 	public async start() {
-		try {
-			await this.task.run();
-		} catch (error) {
-			logger.error(error);
-		}
+		await withLogContext({ task: this.taskName, taskId: this.generateTaskId() }, async () => {
+			try {
+				await this.task.run();
+			} catch {
+				logger.error("Startup task failed");
+			}
+		});
 	}
 }

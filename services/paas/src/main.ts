@@ -6,22 +6,22 @@ const lifecycle = createLifecycle();
 
 process
 	.on("SIGTERM", async () => {
-		logger.info({}, "Recieved SIGTERM, shutting down...");
+		logger.info({}, "Received SIGTERM; shutting down");
 		await lifecycle.shutdown();
 		process.exit(0);
 	})
 	.on("SIGINT", async () => {
-		logger.info({}, "Recieved SIGINT, shutting down...");
+		logger.info({}, "Received SIGINT; shutting down");
 		await lifecycle.shutdown();
 		process.exit(0);
 	})
-	.on("uncaughtException", async (error) => {
-		logger.error({ operation: "fatal", error }, "Fatal process failure: uncaughtException");
+	.on("uncaughtException", async () => {
+		logger.error({ operation: "fatal" }, "Fatal process failure: uncaughtException");
 		await lifecycle.shutdown();
 		process.exit(1);
 	})
-	.on("unhandledRejection", async (error) => {
-		logger.error({ operation: "fatal", error }, "Fatal process failure: unhandledRejection");
+	.on("unhandledRejection", async () => {
+		logger.error({ operation: "fatal" }, "Fatal process failure: unhandledRejection");
 		await lifecycle.shutdown();
 		process.exit(1);
 	});

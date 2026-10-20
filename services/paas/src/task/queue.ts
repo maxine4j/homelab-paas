@@ -1,5 +1,5 @@
-import { type Lifecycle } from "../util/lifecycle.js";
-import { logger } from "../util/logger.ts";
+import { type Lifecycle } from "../util/lifecycle.ts";
+import { logger, withLogContext } from "../util/logger.ts";
 import { sleep } from "../util/sleep.ts";
 import { type TaskRunner } from "./types.ts";
 
@@ -37,6 +37,8 @@ export class QueueTaskRunner<TTask> implements TaskRunner {
 			lifecycle: Lifecycle;
 			queue: TaskQueue<TTask>;
 			idleDelayMs: number;
+			taskName: string;
+			generateTaskId: () => string;
 			task: QueueTask<TTask>;
 		},
 	) {}
@@ -48,11 +50,14 @@ export class QueueTaskRunner<TTask> implements TaskRunner {
 				await sleep(this.deps.idleDelayMs);
 				continue;
 			}
-			try {
-				await this.deps.task.run(taskEnvelope);
-			} catch (error) {
-				logger.error(error);
-			}
+			const taskId = this.deps.generateTaskId();
+			await withLogContext({ task: this.deps.taskName, taskId }, async () => {
+				try {
+					await this.deps.task.run({ ...taskEnvelope, taskId });
+				} catch {
+					logger.error("Queued task failed");
+				}
+			});
 		}
 	}
 }

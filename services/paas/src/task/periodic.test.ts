@@ -16,6 +16,8 @@ test("runs at startup and serially each period, reports failures and stops with 
 			},
 		},
 		periodMs: 5000,
+		taskName: "test",
+		generateTaskId: () => "id",
 		task: {
 			async run() {
 				runs++;

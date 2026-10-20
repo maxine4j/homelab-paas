@@ -48,6 +48,14 @@ Run checks appropriate to the change. For code changes, use `pnpm check`, releva
 
 On macOS, `./scripts/bootstrap.sh` installs the tools in `Brewfile` and the pinned workspace dependencies. Add Homebrew's `node@24/bin` directory to your shell `PATH` and start Docker Desktop before running container commands. Kubernetes and appliance packaging scripts are no longer used.
 
+## Backend logging
+
+The control plane writes Pino JSON lines to stdout with ISO UTC timestamps, numeric severity, and a message. Import `logger` or use `private readonly log = createLogger(Component.name)` from `services/paas/src/util/logger.ts`; child loggers add a stable `component` field. Source file/line stack inspection is intentionally omitted; component and event fields identify operations without per-log stack capture or production source maps.
+
+Task runners establish AsyncLocalStorage context for each execution. Every nested log automatically receives `task` (the configured task name) and `taskId` (a fresh nanoid generated at execution, including retries). Supply the ID generator from the composition root. Queued task envelopes receive the execution ID when dispatched. Callers never pass tracing fields to log methods. Context remains isolated across overlapping runs and is restored when an execution finishes; failure reports run inside the same context.
+
+Log detected drift and the resulting action, changed descriptor revisions, deployment outcomes, retry schedules/recovery, and certificate renewal. Successful unchanged polling passes and certificate checks stay silent. Koa logs method, path without query, status, and elapsed milliseconds; successful `/health` checks stay silent. Headers, bodies and raw request/response objects are excluded. Never log descriptors, environment values, credential material or raw infrastructure failures. Root `error`, `err`, and `command` fields are removed as a defensive measure; use fixed actionable summaries and safe identifiers.
+
 ## Continuous integration and image publishing
 
 The [CI workflow](../.github/workflows/ci.yml) runs on pull requests, pushes to `main`, and pushed release tags matching `vX.X.X` (nonnegative integers without leading zeroes). Prerelease and build metadata suffixes are not supported. Other branch pushes do not trigger CI independently of a pull request.

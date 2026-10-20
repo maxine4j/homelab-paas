@@ -38,7 +38,7 @@ import { PeriodicTaskRunner } from "./task/periodic.ts";
 import { readFile } from "./util/file.ts";
 import { createHealthCheckRouter, probe } from "./util/healthcheck.ts";
 import type { Lifecycle } from "./util/lifecycle.ts";
-import { logger } from "./util/logger.ts";
+import { createRequestLogger, logger, withLogContext } from "./util/logger.ts";
 import { sleep } from "./util/sleep.ts";
 
 const STATE_DIRECTORY = "/var/homelab-paas/_paas";
@@ -86,13 +86,14 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 		new WebResourceReconciler(docker, deployment, networking, probe),
 		store,
 		Date.now,
-		(serviceId, message) => logger.error({ serviceId }, message),
 		Boolean(config.auth),
 	);
 	const abort = new AbortController();
 	const runner = new PeriodicTaskRunner({
 		lifecycle,
 		periodMs: config.git.pollIntervalSeconds * 1000,
+		taskName: "reconciliation",
+		generateTaskId: nanoid,
 		task: new ReconcilerTask(reconciler),
 		pause: async (ms) => {
 			try {
@@ -103,7 +104,8 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 		},
 		report: () => logger.error("Reconciliation task failed; check persistent state and Docker access"),
 	});
-	const app = new Koa().use(createHealthCheckRouter().routes());
+	const app = new Koa().use(createRequestLogger()).use(createHealthCheckRouter().routes());
+	app.on("error", () => logger.error("HTTP request failed"));
 	const certificates = new FileCertificateStore(STATE_DIRECTORY);
 	let renewal: TlsCertRenewalTask | undefined;
 	if (config.auth && config.tls) {
@@ -149,9 +151,15 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 	await once(server, "listening");
 	if (renewal) {
 		try {
-			await renewal.run();
+			await withLogContext({ task: "certificate-renewal", taskId: nanoid() }, async () => {
+				try {
+					await renewal!.run();
+				} catch (error) {
+					logger.error("Certificate renewal failed; retaining the current certificate");
+					throw error;
+				}
+			});
 		} catch {
-			logger.error("Certificate renewal failed; retaining the current certificate");
 			const current = await certificates.read();
 			if (!current || current.expiresAt <= Date.now())
 				throw new Error("No usable ingress certificate; check ACME and DigitalOcean configuration");
@@ -166,6 +174,8 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 			new PeriodicTaskRunner({
 				lifecycle,
 				periodMs: 12 * 60 * 60 * 1000,
+				taskName: "certificate-renewal",
+				generateTaskId: nanoid,
 				task: renewal,
 				pause: async (ms) => {
 					try {
@@ -178,6 +188,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 			}),
 		);
 	const running = Promise.all(runners.map((task) => task.start()));
+	logger.info({ port: 8080 }, "Control plane ready; background reconciliation enabled");
 	lifecycle.registerShutdownHandler(async () => {
 		abort.abort();
 		await running;

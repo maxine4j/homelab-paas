@@ -1,6 +1,7 @@
 import Koa from "koa";
 import { expect, test } from "vitest";
 
+import { captureLogs } from "../util/test/logs.ts";
 import { startTestApi } from "../util/test/router.ts";
 import { createFrontendRouter } from "./frontend-router.ts";
 import { FrontendService, UiUnavailableError } from "./frontend-service.ts";
@@ -46,6 +47,7 @@ test("standalone UI routing preserves navigation, asset caching and API boundari
 
 test("UI router decodes paths and sanitizes failures without handling API requests", async () => {
 	const paths: string[] = [];
+	const capture = captureLogs();
 	const server = await startTestApi(
 		new Koa().use(
 			createFrontendRouter({
@@ -71,5 +73,9 @@ test("UI router decodes paths and sanitizes failures without handling API reques
 		expect(paths).toHaveLength(1);
 	} finally {
 		await server.close();
+		capture.restore();
 	}
+	expect(capture.lines).toHaveLength(1);
+	expect(JSON.parse(capture.lines.at(0)!)).toMatchObject({ operation: "serve_ui", level: 50 });
+	expect(capture.lines.join("")).not.toContain("secret-canary");
 });

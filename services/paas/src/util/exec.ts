@@ -16,11 +16,11 @@ export const runCommand = (
 			const exitCode = error?.code ?? 0;
 
 			if (exitCode !== 0) {
-				logger.error({ command, exitCode }, "Executed shell command");
+				logger.error({ exitCode }, "Executed shell command");
 				return reject(error);
 			}
 
-			logger.info({ command, exitCode }, "Executed shell command");
+			logger.info({ exitCode }, "Executed shell command");
 
 			return resolve({
 				stdout,

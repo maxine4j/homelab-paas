@@ -2,12 +2,32 @@ import { expect, test } from "vitest";
 
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { DockerContainerDetails, ServiceContainer } from "../../../docker/types.ts";
+import { captureLogs } from "../../../util/test/logs.ts";
 import type { IDeploymentService } from "../../deployment/deployment-service.ts";
 import type { DeploymentRequest, DeploymentWebResource } from "../../deployment/strategy/types.ts";
 import { WebResourceReconciler } from "./web-reconciler.ts";
 
 const resource: DeploymentWebResource = { type: "web", image: "app:1", ingress: { public: true, port: 8080 } };
 const input = { serviceId: "demo", resourceId: "app", revision: "rev", resource };
+
+test("logs drift with an action and stays silent once converged", async () => {
+	const f = fixture();
+	const capture = captureLogs();
+	try {
+		await f.converge();
+		await f.reconciler.reconcile(input);
+	} finally {
+		capture.restore();
+	}
+	expect(capture.lines).toHaveLength(1);
+	expect(JSON.parse(capture.lines.at(0)!)).toMatchObject({
+		event: "resource.drift",
+		reason: "missing",
+		serviceId: "demo",
+		resourceId: "app",
+		strategy: "recreate",
+	});
+});
 
 function fixture() {
 	const requests: DeploymentRequest[] = [];
