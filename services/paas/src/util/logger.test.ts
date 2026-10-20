@@ -1,9 +1,8 @@
-import { setTimeout } from "node:timers/promises";
-
 import Koa from "koa";
 import { expect, test } from "vitest";
 
 import { createLogger, createRequestLogger, withLogContext } from "./logger.ts";
+import { sleep } from "./sleep.ts";
 import { startTestApi } from "./test/router.ts";
 
 test("raw error payloads and shell commands cannot expose secrets", () => {
@@ -21,7 +20,7 @@ test("JSON lines include timestamps, component and isolated async context, inclu
 	await Promise.all(
 		["one", "two"].map((taskId) =>
 			withLogContext({ task: "reconcile", taskId }, async () => {
-				await setTimeout(1);
+				await sleep(1);
 				child.info("Detected drift; deploying replacement");
 			}),
 		),

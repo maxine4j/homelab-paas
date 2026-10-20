@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
-import { mkdir, realpath } from "node:fs/promises";
 import { promisify } from "node:util";
+
+import { mkdir, realpath } from "../util/file.ts";
 
 /** Internal infrastructure boundary; failures are translated by GitClient. */
 export interface IGitTransport {

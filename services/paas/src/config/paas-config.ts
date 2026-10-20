@@ -1,10 +1,10 @@
 import type { ServiceDescriptor } from "@homelab-paas/shared-contracts";
 import { parseDescriptor } from "@homelab-paas/shared-contracts";
-import yaml from "yaml";
 import { z } from "zod";
 
 import type { GitFileSource } from "../git/types.ts";
 import type { FileReader } from "../util/file.ts";
+import { parseYaml } from "../util/yaml.ts";
 
 const PAAS_CONFIG_PATH = "/etc/homelab-paas/config.yaml";
 
@@ -35,7 +35,7 @@ export class PaasConfig {
 						.optional(),
 				})
 				.passthrough()
-				.parse(yaml.parse(fileContent));
+				.parse(parseYaml(fileContent, PAAS_CONFIG_PATH));
 			if (value.auth) {
 				const github = value.auth.github;
 				if (this.environment["GITHUB_CLIENT_ID"] !== undefined)
@@ -62,7 +62,7 @@ export class PaasConfig {
 
 export function decodeDescriptorYaml(content: string, serviceId: string): ServiceDescriptor {
 	try {
-		return parseDescriptor(yaml.parse(content), serviceId);
+		return parseDescriptor(parseYaml(content, `${serviceId}.sd.yaml`), serviceId);
 	} catch {
 		throw new Error("Invalid service descriptor: check service identity and resource configuration");
 	}

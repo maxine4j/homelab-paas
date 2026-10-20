@@ -70,6 +70,22 @@ const authenticatedConfig = {
 	},
 };
 
+test("rejects platform YAML warnings without exposing source", async () => {
+	await expect(
+		new PaasConfig(async () => `!private-secret ${JSON.stringify(authenticatedConfig)}`).load(),
+	).rejects.toEqual(
+		new Error(
+			"Cannot load platform configuration; check /etc/homelab-paas/config.yaml against the platform configuration contract",
+		),
+	);
+});
+
+test("rejects descriptor YAML warnings without exposing source", () => {
+	expect(() => decodeDescriptorYaml(`!private-secret ${JSON.stringify(descriptor)}`, "test-service")).toThrow(
+		new Error("Invalid service descriptor: check service identity and resource configuration"),
+	);
+});
+
 test("environment credentials override YAML before validation without mutating the environment", async () => {
 	const environment = Object.freeze({ GITHUB_CLIENT_ID: "local-id", GITHUB_CLIENT_SECRET: "local-secret" });
 	const configuration = new PaasConfig(

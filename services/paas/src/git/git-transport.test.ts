@@ -1,11 +1,11 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
 import { afterEach, expect, test } from "vitest";
 
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "../util/file.ts";
 import { GitClient } from "./git-client.ts";
 import { GitService } from "./git-service.ts";
 import { NodeGitTransport } from "./git-transport.ts";
@@ -40,7 +40,7 @@ test("Node transport creates directories, resolves symlinks and preserves Git ou
 	const directory = join(root, "parent/child");
 	await transport.createDirectory(directory);
 	await writeFile(join(directory, "file"), "created");
-	expect(await readFile(join(directory, "file"), "utf8")).toBe("created");
+	expect(await readFile(join(directory, "file"))).toBe("created");
 	await symlink(repo, join(root, "linked"));
 	expect(await transport.realPath(join(root, "linked"))).toBe(await transport.realPath(repo));
 	expect(await transport.execute(repo, ["show", "HEAD:nested/file.yaml"])).toBe("committed\n");

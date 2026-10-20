@@ -1,4 +1,4 @@
-import { LineCounter, parseDocument } from "yaml";
+import { LineCounter, parseDocument, stringify } from "yaml";
 
 export class YamlError extends Error {
 	readonly location: string;
@@ -8,6 +8,8 @@ export class YamlError extends Error {
 		this.location = line === undefined ? file : `${file}:${line}:${column}`;
 	}
 }
+
+export const stringifyYaml = (value: unknown): string => stringify(value);
 
 /** Never propagate parser errors: their messages contain source excerpts. */
 export function parseYaml(source: string, file: string): unknown {

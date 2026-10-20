@@ -12,6 +12,8 @@ Additional state uses simple YAML files under `/var/homelab-paas/_paas/`: `{serv
 
 Docker event subscriptions, configuration reload, service removal, advanced resources, and multiple replicas are deferred. The sections below describe the complete intended lifecycle. See [configuration](configuration.md#implemented-deployment-mvp) for the accepted MVP contract.
 
+Persistence adapters retain existing filenames and YAML shapes, including `{serviceId}.state.yaml`, `routes.yaml` and certificate metadata; ACME account material remains PEM. Domain stores validate decoded values and sanitize failures over injected generic key-value stores. Missing files are absent state; unreadable, malformed, warning-producing or schema-invalid files fail instead of silently becoming empty state. Legacy routes without an explicit `public` field still require the [documented repair](development.md#local-startup-troubleshooting). In-memory and persistent adapters enforce the same domain validation.
+
 ## Deployments
 
 Web and worker resources support:

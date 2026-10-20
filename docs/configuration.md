@@ -2,6 +2,8 @@
 
 Platform and service configuration contracts, including defaults and complete examples. See [architecture](architecture.md) for the host filesystem layout.
 
+All platform and descriptor YAML is parsed through the canonical backend YAML utility. Syntax errors, duplicate keys, unresolved tags and other parser warnings fail validation; failures never include source excerpts or credential values. See [development](development.md#backend-infrastructure-boundaries) for the implementation boundary.
+
 ## Implemented deployment MVP
 
 The current runtime supports exactly one `web` resource per service, one replica, and `recreate` or `surge` deployment. Descriptors use the schema below with only `version`, `metadata`, and `resources` at the top level. Runtime-supported web fields are `type`, `image`, `ingress`, optional `replicas: 1`, `rolloutStrategy` (`recreate` or `surge`), `healthcheckUrl`, `command`, literal `env` values, and `termination.timeoutSeconds` (default 30, maximum 300). Unknown fields fail descriptor validation; unsupported runtime features fail a separate capability check before changing workloads. The public TypeScript types, Zod schema, and `parseDescriptor` validator in `@homelab-paas/shared-contracts` describe the complete service descriptor contract below. Platform configuration, runtime capability checks, and deployment state stay in the backend.

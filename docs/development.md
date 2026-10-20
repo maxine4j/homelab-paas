@@ -48,6 +48,16 @@ Run checks appropriate to the change. For code changes, use `pnpm check`, releva
 
 On macOS, `./scripts/bootstrap.sh` installs the tools in `Brewfile` and the pinned workspace dependencies. Add Homebrew's `node@24/bin` directory to your shell `PATH` and start Docker Desktop before running container commands. Kubernetes and appliance packaging scripts are no longer used.
 
+## Backend infrastructure boundaries
+
+Backend filesystem operations go through `services/paas/src/util/file.ts`, including Git and Envoy transports, stores, and startup wiring. Optional text reads return absence only for `ENOENT`; permission and other I/O failures propagate to the owning adapter for sanitized error translation. Binary reads preserve bytes. Atomic writes use an exclusively created, restricted, unique sibling file and rename, cleaning up temporary files after failure. Exclusive create-if-missing preserves existing discovery files. Callers create private directories with mode `0700`; private files default to `0600`. Existing files are not rewritten merely to initialize them.
+
+YAML parsing and serialization use `util/yaml.ts`. Parsing rejects errors, duplicate keys and warnings, limits aliases, and excludes source excerpts from failures. This applies to configuration, descriptors, persisted YAML, and Envoy discovery. Tests also use these utilities; only the filesystem utility's own boundary tests use raw filesystem APIs to independently inspect bytes and permissions. Oxc enforces these import boundaries.
+
+Services receive infrastructure effects through constructor contracts. Timers use injected `ISleep` from `util/sleep.ts`, including abortable delays for cancellation and deadlines. Concrete implementations are supplied by `start.ts`. Direct global `fetch` is permitted inside clients, infrastructure transports and the `util/healthcheck.ts` HTTP probe adapter, which belong to the client layer; injection remains available for testing. These adapters own protocol details, validation and sanitized failures; a generic HTTP wrapper adds no required boundary. The canonical logger is also an intentional shared dependency. Git retains its bounded, noninteractive `execFile` transport; do not build shell commands through a general subprocess helper.
+
+Generic file key-value stores own serialization and key-to-path mapping. Domain stores own state validation and error translation, receive injected key-value stores, and keep filesystem paths out of services. The [persisted-state contract](reconciliation-and-deployments.md#implemented-deployment-mvp) remains compatible across this separation.
+
 ## Backend logging
 
 The control plane writes Pino JSON lines to stdout with ISO UTC timestamps, numeric severity, and a message. Import `logger` or use `private readonly log = createLogger(Component.name)` from `services/paas/src/util/logger.ts`; child loggers add a stable `component` field. Source file/line stack inspection is intentionally omitted; component and event fields identify operations without per-log stack capture or production source maps.

@@ -4,5 +4,38 @@
 		"typescript/no-explicit-any": "error",
 		"import/no-cycle": ["error", { "ignoreTypes": false }]
 	},
-	"ignorePatterns": ["**/dist/**"]
+	"ignorePatterns": ["**/dist/**"],
+	"overrides": [
+		{
+			"files": ["services/paas/src/**/*.ts"],
+			"excludeFiles": [
+				"services/paas/src/util/file.test.ts",
+				"services/paas/src/util/file.ts",
+				"services/paas/src/util/yaml.ts",
+				"services/paas/src/util/sleep.ts"
+			],
+			"rules": {
+				"no-restricted-imports": [
+					"error",
+					{
+						"patterns": [
+							{
+								"group": ["fs", "fs/*", "node:fs", "node:fs/*"],
+								"message": "Use the canonical util/file.ts filesystem boundary."
+							},
+							{
+								"group": ["yaml", "yaml/*"],
+								"message": "Use parseYaml/stringifyYaml from util/yaml.ts."
+							},
+							{
+								"group": ["timers", "timers/*", "node:timers", "node:timers/*"],
+								"message": "Inject ISleep from util/sleep.ts."
+							}
+						]
+					}
+				],
+				"no-restricted-globals": ["error", "setTimeout", "setInterval", "clearTimeout", "clearInterval"]
+			}
+		}
+	]
 }
