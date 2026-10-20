@@ -1,21 +1,15 @@
 import fsSync from "fs";
 import fs from "fs/promises";
 
-export const writeFile = async (name: string, data: string) => {
+export type FileWriter = (path: string, data: string) => Promise<void>;
+export const writeFile: FileWriter = async (name: string, data: string) => {
 	await fs.writeFile(name, data);
 };
 
-export const readFile = async (name: string) => {
+export type FileReader = (path: string) => Promise<string | undefined>;
+export const readFile: FileReader = async (path: string) => {
 	try {
-		return await fs.readFile(name, "utf-8");
-	} catch {
-		return undefined;
-	}
-};
-
-export const readFileSync = (name: string) => {
-	try {
-		return fsSync.readFileSync(name, { encoding: "utf-8" });
+		return await fs.readFile(path, "utf-8");
 	} catch {
 		return undefined;
 	}
