@@ -1,6 +1,6 @@
-import { lstat, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import type { lstat } from "../util/file.ts";
 import { UiUnavailableError } from "./frontend-service.ts";
 import type { UiEntry, UiFiles } from "./frontend-service.ts";
 
@@ -8,7 +8,11 @@ import type { UiEntry, UiFiles } from "./frontend-service.ts";
 export class DirectoryUiFiles implements UiFiles {
 	private readonly cache = new Map<string, Uint8Array>();
 	private readonly directory: string;
-	constructor(directory: string) {
+	constructor(
+		directory: string,
+		private readonly inspectFile: typeof lstat,
+		private readonly readFile: (path: string) => Promise<Uint8Array>,
+	) {
 		this.directory = directory;
 	}
 
@@ -21,7 +25,7 @@ export class DirectoryUiFiles implements UiFiles {
 		try {
 			for (const component of path.split("/").filter(Boolean)) {
 				current = resolve(current, component);
-				const info = await lstat(current);
+				const info = await this.inspectFile(current);
 				if (info.isSymbolicLink()) return "blocked";
 				file = info.isFile();
 			}
@@ -38,7 +42,7 @@ export class DirectoryUiFiles implements UiFiles {
 		if (cached) return cached;
 		if ((await this.inspect(path)) !== "file") throw new UiUnavailableError();
 		try {
-			const content = await readFile(resolve(this.directory, path));
+			const content = await this.readFile(resolve(this.directory, path));
 			this.cache.set(path, content);
 			return content;
 		} catch (error) {

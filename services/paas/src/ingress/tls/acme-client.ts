@@ -1,6 +1,6 @@
 import type acme from "acme-client";
 
-import type { IAcmeAccountStore } from "./certificate-store.ts";
+import type { IAcmeAccountStore } from "./acme-account-store.ts";
 import type { IDnsAcmeChallengeProvider } from "./dns-challenge/digitalocean-dns-challenge-provider.ts";
 import type { DnsChallengeRecord } from "./dns-challenge/types.ts";
 import type { Certificate, CertificateRequest } from "./types.ts";

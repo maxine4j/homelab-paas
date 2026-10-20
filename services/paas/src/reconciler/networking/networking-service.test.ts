@@ -1,7 +1,8 @@
 import { expect, test } from "vitest";
 
 import type { IEnvoyService } from "../../envoy/envoy-service.ts";
-import { InMemoryEndpointsStore } from "./endpoints-store.ts";
+import { InMemoryKeyValueStore } from "../../store/in-memory-store.ts";
+import { EndpointsStore } from "./endpoints-store.ts";
 import { NetworkingError, NetworkingService } from "./networking-service.ts";
 import type { Endpoint } from "./types.ts";
 
@@ -10,8 +11,9 @@ const replacement: Endpoint = { ...old, address: "10.0.0.2" };
 
 function fixture() {
 	const snapshots: Record<string, Endpoint>[] = [];
-	const endpoints = new InMemoryEndpointsStore();
+	const endpoints = new EndpointsStore(new InMemoryKeyValueStore<unknown>());
 	const envoy: IEnvoyService = {
+		async bootstrap() {},
 		async configureRoutes(routes) {
 			snapshots.push(routes);
 		},

@@ -1,22 +1,21 @@
 import { createPrivateKey, X509Certificate } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createSecureContext } from "node:tls";
 
-import yaml from "yaml";
-
+import type { FileReader, FileWriter } from "../../util/file.ts";
+import { stringifyYaml } from "../../util/yaml.ts";
 import type { Certificate } from "./types.ts";
-export interface IAcmeAccountStore {
-	readAccountKey(): Promise<string | undefined>;
-	writeAccountKey(key: string): Promise<void>;
-}
 export interface ICertificateStore {
 	read(): Promise<{ expiresAt: number } | undefined>;
 	/** Validates the certificate/key pair before atomic SDS publication. Failures retain the active SDS secret. */
 	publish(certificate: Certificate): Promise<void>;
 }
-export class FileCertificateStore implements ICertificateStore, IAcmeAccountStore {
-	constructor(private readonly directory: string) {}
+export class FileCertificateStore implements ICertificateStore {
+	constructor(
+		private readonly directory: string,
+		private readonly readFile: FileReader,
+		private readonly writeFile: FileWriter,
+	) {}
 	async read(): Promise<{ expiresAt: number } | undefined> {
 		try {
 			const pem = await this.readOptional("ingress.pem");
@@ -35,7 +34,7 @@ export class FileCertificateStore implements ICertificateStore, IAcmeAccountStor
 			// SDS watches this directory. One atomic PEM replacement rotates the pair together.
 			await this.atomic(
 				"sds.yaml",
-				yaml.stringify({
+				stringifyYaml({
 					resources: [
 						{
 							"@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.Secret",
@@ -54,15 +53,9 @@ export class FileCertificateStore implements ICertificateStore, IAcmeAccountStor
 			throw new Error("Cannot publish TLS certificate");
 		}
 	}
-	async readAccountKey(): Promise<string | undefined> {
-		return this.readOptional("acme-account.pem");
-	}
-	async writeAccountKey(key: string): Promise<void> {
-		await this.atomic("acme-account.pem", key);
-	}
 	private async readOptional(name: string): Promise<string | undefined> {
 		try {
-			return await readFile(join(this.directory, name), "utf8");
+			return await this.readFile(join(this.directory, name));
 		} catch (error) {
 			if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
 			throw new Error("Cannot read TLS state");
@@ -70,10 +63,7 @@ export class FileCertificateStore implements ICertificateStore, IAcmeAccountStor
 	}
 	private async atomic(name: string, value: string): Promise<void> {
 		try {
-			await mkdir(this.directory, { recursive: true, mode: 0o700 });
-			const target = join(this.directory, name);
-			await writeFile(`${target}.tmp`, value, { mode: 0o600 });
-			await rename(`${target}.tmp`, target);
+			await this.writeFile(join(this.directory, name), value, { mode: 0o600 });
 		} catch {
 			throw new Error("Cannot write TLS state");
 		}

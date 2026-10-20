@@ -1,12 +1,13 @@
 import path from "node:path/posix";
 
-import type { KeyValueStore } from "./types.ts";
+import { parseYaml, stringifyYaml } from "../util/yaml.ts";
+import type { KeyValueStore, StoreCodec } from "./types.ts";
 
 /**
- * One JSON file per key in an existing, store-owned directory.
- * Values must be JSON compatible; callers serialize concurrent mutations.
+ * One JSON or YAML file per logical key, with the matching extension.
+ * Values must be serialization compatible; callers serialize concurrent mutations.
  * Readers return undefined only for missing files and propagate other failures.
- * Writers own directory permissions and atomic replacement of files.
+ * Injected writers own directory creation, private permissions and atomic replacement.
  */
 export class FileSystemKeyValueStore<TValue> implements KeyValueStore<TValue> {
 	constructor(
@@ -14,16 +15,29 @@ export class FileSystemKeyValueStore<TValue> implements KeyValueStore<TValue> {
 		private readonly readFile: (path: string) => Promise<string | undefined>,
 		private readonly writeFile: (path: string, data: string) => Promise<void>,
 		private readonly deleteFile: (path: string) => Promise<void>,
+		private readonly format: "json" | "yaml" | StoreCodec<TValue> = "json",
 	) {}
 
 	async get(key: string): Promise<TValue | undefined> {
 		const filePath = this.filePath(key);
 		const content = await this.readFile(filePath);
-		return content === undefined ? undefined : (JSON.parse(content) as TValue);
+		if (content === undefined) return undefined;
+		return (
+			typeof this.format === "object"
+				? this.format.deserialize(content)
+				: this.format === "yaml"
+					? parseYaml(content, filePath)
+					: JSON.parse(content)
+		) as TValue;
 	}
 	async set(key: string, value: TValue): Promise<void> {
 		const filePath = this.filePath(key);
-		const content = JSON.stringify(value);
+		const content =
+			typeof this.format === "object"
+				? this.format.serialize(value)
+				: this.format === "yaml"
+					? stringifyYaml(value)
+					: JSON.stringify(value);
 		if (content === undefined) throw new Error("Value is not JSON serializable");
 		await this.writeFile(filePath, content);
 	}
@@ -42,9 +56,11 @@ export class FileSystemKeyValueStore<TValue> implements KeyValueStore<TValue> {
 	}
 
 	private filePath(key: string): string {
-		if (!key || /[./\\\0]/.test(key)) {
+		if (!/^[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$/.test(key)) {
 			throw new Error("Invalid store key");
 		}
-		return path.resolve(this.baseDirectory, key);
+		const extension = typeof this.format === "object" ? this.format.extension : this.format;
+		if (!/^[a-z0-9]+$/.test(extension)) throw new Error("Invalid store extension");
+		return path.resolve(this.baseDirectory, `${key}.${extension}`);
 	}
 }
