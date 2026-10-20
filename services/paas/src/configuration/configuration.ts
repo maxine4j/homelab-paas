@@ -22,9 +22,7 @@ export function decodeDescriptorYaml(content: string, serviceId: string): Servic
 	try {
 		return parseDescriptor(yaml.parse(content), serviceId);
 	} catch {
-		throw new Error(
-			"Invalid service descriptor: expected one public web resource matching the configured service ID",
-		);
+		throw new Error("Invalid service descriptor: check service identity and resource configuration");
 	}
 }
 

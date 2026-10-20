@@ -19,7 +19,7 @@ export interface IReconciliationStateStore {
 	write(serviceId: string, state: ReconciliationState): Promise<void>;
 }
 
-/** Rejects invalid or unsupported descriptors with a sanitized error. */
+/** Rejects invalid descriptors with a sanitized error; runtime capabilities are checked separately. */
 export interface DescriptorDecoder {
 	(content: string, serviceId: string): ServiceDescriptor;
 }

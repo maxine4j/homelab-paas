@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
 
-import type { WebResource } from "@homelab-paas/shared-contracts";
-
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { HttpProbe } from "../../../util/healthcheck.ts";
 import { logger } from "../../../util/logger.ts";
 import type { IDeploymentService } from "../../deployment/deployment-service.ts";
+import type { DeploymentWebResource } from "../../deployment/strategy/types.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
 
 export interface WebReconciliationRequest {
@@ -13,7 +12,7 @@ export interface WebReconciliationRequest {
 	resourceId: string;
 	revision: string;
 	/** Validated resource from the desired service descriptor. */
-	resource: WebResource;
+	resource: DeploymentWebResource;
 }
 
 export interface IWebResourceReconciler {
@@ -64,7 +63,7 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 		await this.deployment.deploy({ ...request, spec });
 	}
 
-	private fingerprint(resourceId: string, resource: WebResource): string {
+	private fingerprint(resourceId: string, resource: DeploymentWebResource): string {
 		const env = Object.entries(
 			Object.fromEntries((resource.env ?? []).map(({ name, value }) => [name, value])),
 		).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));

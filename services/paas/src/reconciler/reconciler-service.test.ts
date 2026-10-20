@@ -76,6 +76,26 @@ test("validates the entire descriptor before invoking a resource reconciler", as
 	expect(f.states.get("demo")).toMatchObject({ desiredRevision: "bad", phase: "failed" });
 });
 
+test.each([
+	{ ...descriptor.resources, worker: { type: "worker", image: "worker:1" } },
+	{ ...descriptor.resources, db: { type: "postgres", image: "postgres:17" } },
+	{ ...descriptor.resources, queue: { type: "rabbitmq", image: "rabbitmq:4" } },
+	{},
+	{ app: { ...descriptor.resources.app, replicas: 2 } },
+	{ app: { ...descriptor.resources.app, rolloutStrategy: "surge" } },
+	{ app: { ...descriptor.resources.app, ingress: { public: false, port: 8080 } } },
+	{ app: { ...descriptor.resources.app, env: [{ name: "TOKEN", secret: true }] } },
+	{ app: { ...descriptor.resources.app, volumes: [{ source: "data", target: "/data" }] } },
+	{ app: { ...descriptor.resources.app, limits: { cpus: 1 } } },
+	{ app: { ...descriptor.resources.app, egress: ["other"] } },
+])("rejects unsupported runtime capabilities before changing any workloads: %j", async (resources) => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({ revision: "unsupported", content: JSON.stringify({ ...descriptor, resources }) });
+	await f.service.reconcile();
+	expect(f.reconcile).not.toHaveBeenCalled();
+	expect(f.states.get("demo")).toMatchObject({ desiredRevision: "unsupported", phase: "failed" });
+});
+
 test("Git failures preserve active state, sanitize errors and do not prevent other services", async () => {
 	const f = fixture();
 	await f.service.reconcile();

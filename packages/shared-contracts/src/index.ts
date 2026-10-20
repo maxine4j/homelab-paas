@@ -1,2 +1,12 @@
-export { parseDescriptor } from "./service-descriptor.ts";
-export type { ServiceDescriptor, WebResource } from "./service-descriptor.ts";
+export { parseDescriptor, serviceDescriptorSchema } from "./service-descriptor.ts";
+export type {
+	ServiceDescriptor,
+	Resource,
+	WebResource,
+	WorkerResource,
+	PostgresResource,
+	RabbitMqResource,
+	EnvironmentVariable,
+	ResourceVolume,
+	ResourceLimits,
+} from "./service-descriptor.ts";

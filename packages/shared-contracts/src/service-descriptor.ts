@@ -1,69 +1,80 @@
 import { z } from "zod";
 
-/** Public service descriptor contract. The MVP supports one public web resource. */
-export interface ServiceDescriptor {
-	version: 1;
-	metadata: { serviceId: string; description?: string; labels?: Record<string, string> };
-	resources: Record<string, WebResource>;
-}
-
-export interface WebResource {
-	type: "web";
-	image: string;
-	replicas?: 1;
-	rolloutStrategy?: "recreate" | "surge";
-	ingress: { public: true; port: number };
-	healthcheckUrl?: string;
-	command?: string[];
-	env?: { name: string; value: string }[];
-	termination?: { timeoutSeconds: number };
-}
-
 const id = z
 	.string()
 	.regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/)
 	.max(63);
 const positive = z.number().int().positive();
-const web = z.strictObject({
-	type: z.literal("web"),
+const name = z
+	.string()
+	.regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
+	.refine((name) => !name.startsWith("PAAS_"));
+const environmentVariable = z.union([
+	z.strictObject({ name, value: z.string() }),
+	z.strictObject({ name, secret: z.literal(true) }),
+]);
+const volume = z.strictObject({
+	source: z
+		.string()
+		.min(1)
+		.refine((source) => !source.startsWith("/") && !source.split("/").includes("..")),
+	target: z.string().startsWith("/"),
+	readOnly: z.boolean().optional(),
+});
+const limits = z.strictObject({ cpus: z.number().positive().optional(), memoryMiB: positive.optional() });
+const base = {
 	image: z.string().min(1),
-	replicas: z.literal(1).default(1),
-	rolloutStrategy: z.literal("recreate").default("recreate"),
-	ingress: z.strictObject({ public: z.literal(true), port: positive.max(65535) }),
+	termination: z.strictObject({ timeoutSeconds: positive.max(300) }).optional(),
+	limits: limits.optional(),
+};
+const workload = {
+	...base,
+	replicas: positive.default(1),
+	rolloutStrategy: z.enum(["recreate", "surge"]).default("recreate"),
+	command: z.array(z.string()).min(1).optional(),
+	env: z.array(environmentVariable).optional(),
+	volumes: z.array(volume).optional(),
+	egress: z.array(id).optional(),
+};
+const web = z.strictObject({
+	...workload,
+	type: z.literal("web"),
+	ingress: z.strictObject({ public: z.boolean().default(false), port: positive.max(65535) }),
 	healthcheckUrl: z
 		.string()
 		.regex(/^\/(?!\/)[^\s]*$/)
 		.default("/healthcheck"),
-	command: z.array(z.string()).min(1).optional(),
-	env: z
-		.array(
-			z.strictObject({
-				name: z
-					.string()
-					.regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
-					.refine((name) => !name.startsWith("PAAS_")),
-				value: z.string(),
-			}),
-		)
-		.optional(),
-	termination: z.strictObject({ timeoutSeconds: positive.max(300) }).optional(),
 });
-const descriptor = z.strictObject({
+const worker = z.strictObject({ ...workload, type: z.literal("worker") });
+const postgres = z.strictObject({ ...base, type: z.literal("postgres") });
+const rabbitmq = z.strictObject({ ...base, type: z.literal("rabbitmq") });
+const resource = z.discriminatedUnion("type", [web, worker, postgres, rabbitmq]);
+export const serviceDescriptorSchema = z.strictObject({
 	version: z.literal(1),
 	metadata: z.strictObject({
 		serviceId: id,
 		description: z.string().optional(),
 		labels: z.record(z.string(), z.string()).optional(),
 	}),
-	resources: z.record(id, web).refine((resources) => Object.keys(resources).length === 1),
+	resources: z
+		.record(id, resource)
+		.refine((resources) => Object.values(resources).filter((resource) => resource.type === "web").length <= 1),
 });
 
-/** Rejects unsupported features before any Docker changes; never includes input values in errors. */
+export type ServiceDescriptor = z.input<typeof serviceDescriptorSchema>;
+export type Resource = z.input<typeof resource>;
+export type WebResource = z.input<typeof web>;
+export type WorkerResource = z.input<typeof worker>;
+export type PostgresResource = z.input<typeof postgres>;
+export type RabbitMqResource = z.input<typeof rabbitmq>;
+export type EnvironmentVariable = z.input<typeof environmentVariable>;
+export type ResourceVolume = z.input<typeof volume>;
+export type ResourceLimits = z.input<typeof limits>;
+
+/** Validates the full descriptor contract; never includes input values in errors. */
 export function parseDescriptor(value: unknown, serviceId: string): ServiceDescriptor {
-	const result = descriptor.safeParse(value);
+	const result = serviceDescriptorSchema.safeParse(value);
 	if (!result.success || result.data.metadata.serviceId !== serviceId)
-		throw new Error(
-			"Invalid service descriptor: expected one public web resource matching the configured service ID",
-		);
+		throw new Error("Invalid service descriptor: check service identity and resource configuration");
 	return result.data;
 }

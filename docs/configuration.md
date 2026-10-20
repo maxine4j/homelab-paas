@@ -4,7 +4,7 @@ Platform and service configuration contracts, including defaults and complete ex
 
 ## Implemented deployment MVP
 
-The current runtime supports exactly one public `web` resource per service, one replica, and `recreate` deployment. Descriptors use the schema below with only `version`, `metadata`, and `resources` at the top level. Web fields are `type`, `image`, `ingress`, optional `replicas: 1`, `rolloutStrategy: recreate`, `healthcheckUrl`, `command`, literal `env` values, and `termination.timeoutSeconds` (default 30, maximum 300). Unknown fields and unsupported features fail validation before changing workloads. The public TypeScript descriptor contract lives in `@homelab-paas/shared-contracts`; platform configuration and deployment state stay in the backend.
+The current runtime supports exactly one public `web` resource per service, one replica, and `recreate` deployment. Descriptors use the schema below with only `version`, `metadata`, and `resources` at the top level. Runtime-supported web fields are `type`, `image`, `ingress`, optional `replicas: 1`, `rolloutStrategy: recreate`, `healthcheckUrl`, `command`, literal `env` values, and `termination.timeoutSeconds` (default 30, maximum 300). Unknown fields fail descriptor validation; unsupported runtime features fail a separate capability check before changing workloads. The public TypeScript types, Zod schema, and `parseDescriptor` validator in `@homelab-paas/shared-contracts` describe the complete service descriptor contract below. Platform configuration, runtime capability checks, and deployment state stay in the backend.
 
 Auth, TLS, workers, managed databases/brokers, secret references, volumes, limits, egress, surge, and multiple replicas are deferred. Ingress must explicitly set `public: true`. The remaining examples describe the intended complete platform, not additional features accepted by the MVP.
 
@@ -54,6 +54,8 @@ Service and resource IDs must use lowercase kebab case:
 The descriptor’s `metadata.serviceId` must match its key in the platform configuration.
 
 Each service may contain at most one web resource.
+
+Resources are a discriminated union of `web`, `worker`, `postgres`, and `rabbitmq`. Every resource requires a nonempty `image` and may set `limits` and `termination.timeoutSeconds` (positive integer seconds, maximum 300). Web and worker resources additionally accept `command`, `env`, `volumes`, `egress`, positive integer `replicas` (default 1), and `rolloutStrategy` (`recreate` by default, or `surge`). Web resources require an ingress port (1–65535), default `ingress.public` to `false`, and default `healthcheckUrl` to `/healthcheck`. Workers have no ingress or configurable health check. Managed PostgreSQL and RabbitMQ resources accept no custom environment, credentials, volumes, replicas, or rollout strategy; see [managed resources](managed-resources.md).
 
 ## Environment variables and secrets
 

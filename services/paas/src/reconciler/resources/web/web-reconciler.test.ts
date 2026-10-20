@@ -1,13 +1,12 @@
-import type { WebResource } from "@homelab-paas/shared-contracts";
 import { expect, test } from "vitest";
 
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { DockerContainerDetails, ServiceContainer } from "../../../docker/types.ts";
 import type { IDeploymentService } from "../../deployment/deployment-service.ts";
-import type { DeploymentRequest } from "../../deployment/strategy/types.ts";
+import type { DeploymentRequest, DeploymentWebResource } from "../../deployment/strategy/types.ts";
 import { WebResourceReconciler } from "./web-reconciler.ts";
 
-const resource: WebResource = { type: "web", image: "app:1", ingress: { public: true, port: 8080 } };
+const resource: DeploymentWebResource = { type: "web", image: "app:1", ingress: { public: true, port: 8080 } };
 const input = { serviceId: "demo", resourceId: "app", revision: "rev", resource };
 
 function fixture() {
@@ -148,7 +147,7 @@ test("equivalent defaults and environment ordering produce the same desired stat
 	expect(f.requests).toEqual([]);
 });
 
-test.each<WebResource>([
+test.each<DeploymentWebResource>([
 	{ ...resource, image: "app:2" },
 	{ ...resource, command: ["node", "new.js"] },
 	{ ...resource, env: [{ name: "TOKEN", value: "secret" }] },

@@ -1,5 +1,8 @@
+import type { ServiceDescriptor } from "@homelab-paas/shared-contracts";
+
 import type { IGitService } from "../git/git-service.ts";
 import type { GitFileSource } from "../git/types.ts";
+import type { DeploymentWebResource } from "./deployment/strategy/types.ts";
 import type { IWebResourceReconciler } from "./resources/web/web-reconciler.ts";
 import type { DescriptorDecoder, IReconcilerService, IReconciliationStateStore } from "./types.ts";
 
@@ -44,13 +47,16 @@ export class ReconcilerService implements IReconcilerService {
 			desiredRevision = file.revision;
 			message = "Invalid descriptor; check service identity and supported web resource fields";
 			const descriptor = this.decode(file.content, serviceId);
+			message =
+				"Unsupported descriptor capabilities; runtime requires one public web resource, one replica and recreate deployment";
+			const resources = this.deploymentResources(descriptor);
 			await this.state.write(serviceId, {
 				desiredRevision,
 				activeRevision: previous?.activeRevision,
 				phase: "deploying",
 			});
 			message = "Cannot reconcile web resource; check Docker, image, readiness and Envoy access";
-			for (const [resourceId, resource] of Object.entries(descriptor.resources)) {
+			for (const [resourceId, resource] of resources) {
 				await this.web.reconcile({ serviceId, resourceId, revision: desiredRevision, resource });
 			}
 			await this.state.write(serviceId, { desiredRevision, activeRevision: desiredRevision, phase: "ready" });
@@ -69,5 +75,27 @@ export class ReconcilerService implements IReconcilerService {
 			});
 			this.report(serviceId, message);
 		}
+	}
+
+	private deploymentResources(descriptor: ServiceDescriptor): [string, DeploymentWebResource][] {
+		const entries = Object.entries(descriptor.resources);
+		if (entries.length !== 1) throw new Error("Runtime requires exactly one web resource");
+		return entries.map(([resourceId, resource]) => {
+			if (
+				resource.type !== "web"
+				|| resource.ingress.public !== true
+				|| (resource.replicas ?? 1) !== 1
+				|| (resource.rolloutStrategy ?? "recreate") !== "recreate"
+				|| resource.volumes !== undefined
+				|| resource.limits !== undefined
+				|| resource.egress !== undefined
+			)
+				throw new Error("Resource requires unsupported runtime capabilities");
+			const env = resource.env?.map((entry) => {
+				if (!("value" in entry)) throw new Error("Runtime does not support secret references");
+				return entry;
+			});
+			return [resourceId, { ...resource, env }];
+		});
 	}
 }
