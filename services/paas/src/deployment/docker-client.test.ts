@@ -52,6 +52,7 @@ test("creates isolated labeled networks and attaches only the control plane and 
 test("uses resolved image IDs, resource aliases and ownership labels without publishing ports", async () => {
 	const f = fixture(() => ({ status: 201, data: { Id: "container" } }));
 	expect(await f.client.create("demo", "app", "commit", "spec", resource, "sha256:image")).toBe("container");
+	expect(f.calls.at(-1)?.path).toBe("/containers/create?name=paas-local-demo-app-spec");
 	expect(f.calls.at(-1)?.body).toEqual({
 		Image: "sha256:image",
 		Env: ["FOO=bar"],
@@ -65,6 +66,11 @@ test("uses resolved image IDs, resource aliases and ownership labels without pub
 		HostConfig: { NetworkMode: "paas-local-demo", RestartPolicy: { Name: "unless-stopped" } },
 		NetworkingConfig: { EndpointsConfig: { "paas-local-demo": { Aliases: ["app"] } } },
 	});
+});
+test("container names identify the service and resource with a short deployment fingerprint", async () => {
+	const f = fixture(() => ({ status: 201, data: { Id: "container" } }));
+	await f.client.create("test-service", "app", "commit", "abcdef0123456789".repeat(4), resource, "sha256:image");
+	expect(f.calls.at(-1)?.path).toBe("/containers/create?name=paas-local-test-service-app-abcdef012345");
 });
 test("lists only owned containers and normalizes lifecycle state", async () => {
 	const f = fixture(() => ({

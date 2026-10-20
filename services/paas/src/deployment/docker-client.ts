@@ -140,9 +140,10 @@ export class DockerWorkloadClient implements WorkloadClient {
 		resource: WebResource,
 		imageId: string,
 	): Promise<string> {
+		const name = `paas-${this.clusterId}-${serviceId}-${resourceId}-${spec.slice(0, 12)}`;
 		return decode(
 			identity,
-			await this.json("POST", "/containers/create", {
+			await this.json("POST", `/containers/create?name=${encodeURIComponent(name)}`, {
 				Image: imageId,
 				Cmd: resource.command,
 				Env: resource.env?.map(({ name, value }) => `${name}=${value}`) ?? [],
