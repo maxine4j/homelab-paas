@@ -10,3 +10,4 @@ export type {
 	ResourceVolume,
 	ResourceLimits,
 } from "./service-descriptor.ts";
+export type { JsonValue, UiCluster, UiServiceSummary, UiContainer, UiResource, UiService, UiLogs } from "./types.ts";

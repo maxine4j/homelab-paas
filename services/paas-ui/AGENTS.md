@@ -1,6 +1,6 @@
-# Management UI stub
+# Management UI
 
-The management UI and its API requirements are deferred. Keep this workspace as a stub; do not expand product behaviour without explicit direction.
+The read-only management UI and its API contract are defined in [management UI](../../docs/management-ui.md). Keep behaviour within that scope unless explicitly requested.
 
 Follow the root [agent instructions](../../AGENTS.md). Read [development](../../docs/development.md) when changing tooling, dependencies, shared contracts, or verification.
 

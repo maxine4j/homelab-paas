@@ -102,5 +102,7 @@ test("secures external traffic with SDS, fail-closed authorization and isolated 
 	expect(text).toContain('"failure_mode_allow":false');
 	expect(text).toContain('"path_prefix":"/auth/check"');
 	expect(text).toContain('"allowed_upstream_headers":{"patterns":[{"exact":"cookie"},{"exact":"location"}]}');
-	expect(text).not.toContain('"prefix":"/","route":{"cluster":"paas"}');
+	expect(text).toContain('"name":"management","domains":["apps.example.com","apps.example.com:*"]');
+	expect(text).toContain('"match":{"prefix":"/"},"route":{"cluster":"paas"}');
+	expect(text).toContain('"match":{"prefix":"/auth/"},"direct_response":{"status":404}');
 });

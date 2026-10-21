@@ -26,6 +26,8 @@ export interface IDockerClient {
 	removeNetwork(id: string): Promise<void>;
 	listContainers(options?: { all?: boolean; labels?: Labels }): Promise<DockerContainer[]>;
 	inspectContainer(id: string): Promise<DockerContainerDetails | null>;
+	/** Returns the last 200 timestamped stdout/stderr lines. No streaming. */
+	readContainerLogs(id: string): Promise<string>;
 	createContainer(options: CreateContainerOptions): Promise<string>;
 	startContainer(id: string): Promise<void>;
 	stopContainer(id: string, timeoutSeconds: number): Promise<void>;
@@ -50,8 +52,8 @@ export class DockerClient implements IDockerClient {
 		path: string,
 		body: unknown,
 		statuses: number[],
-	): Promise<{ status: number; body: string }> {
-		let response: { status: number; body: string };
+	): Promise<{ status: number; body: string; bytes?: Uint8Array }> {
+		let response: { status: number; body: string; bytes?: Uint8Array };
 		try {
 			response = await this.transport.request(method, path, body);
 		} catch {
@@ -73,6 +75,36 @@ export class DockerClient implements IDockerClient {
 			[201],
 		);
 		return decode(identity, response.body).Id;
+	}
+
+	async readContainerLogs(id: string): Promise<string> {
+		const response = await this.request(
+			"GET",
+			`/containers/${encodeURIComponent(id)}/logs?stdout=true&stderr=true&timestamps=true&tail=200&follow=false`,
+			undefined,
+			[200],
+		);
+		if (!response.bytes) throw new DockerClientError("invalid-response");
+		const bytes = Buffer.from(response.bytes);
+		if (bytes.length === 0) return "";
+		// TTY containers use plain output; other containers use Docker's 8-byte framing.
+		if (bytes.at(0) !== 1 && bytes.at(0) !== 2) return bytes.toString("utf8");
+		const chunks: Buffer[] = [];
+		let offset = 0;
+		while (offset < bytes.length) {
+			if (
+				offset + 8 > bytes.length
+				|| ![1, 2].includes(bytes.at(offset) ?? 0)
+				|| bytes.subarray(offset + 1, offset + 4).some((value) => value !== 0)
+			)
+				throw new DockerClientError("invalid-response");
+			const length = bytes.readUInt32BE(offset + 4);
+			offset += 8;
+			if (offset + length > bytes.length) throw new DockerClientError("invalid-response");
+			chunks.push(bytes.subarray(offset, offset + length));
+			offset += length;
+		}
+		return Buffer.concat(chunks).toString("utf8");
 	}
 
 	async inspectNetwork(id: string): Promise<DockerNetwork | null> {
@@ -135,6 +167,16 @@ export class DockerClient implements IDockerClient {
 			imageId: data.Image,
 			running: data.State.Running,
 			labels: data.Config.Labels,
+			...(data.Config.Env
+				? {
+						env: Object.fromEntries(
+							data.Config.Env.map((entry) => {
+								const index = entry.indexOf("=");
+								return [entry.slice(0, index), entry.slice(index + 1)];
+							}),
+						),
+					}
+				: {}),
 			networks: Object.fromEntries(
 				Object.entries(data.NetworkSettings.Networks).map(([name, endpoint]) => [
 					name,
@@ -233,7 +275,7 @@ const container = z.object({
 	Id: z.string().min(1),
 	Image: z.string().min(1),
 	State: z.object({ Running: z.boolean() }),
-	Config: z.object({ Labels: labels }),
+	Config: z.object({ Labels: labels, Env: z.array(z.string().includes("=")).nullish() }),
 	NetworkSettings: z.object({
 		Networks: z.record(
 			z.string(),

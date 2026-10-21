@@ -21,6 +21,7 @@ export interface CreateResourceContainerOptions {
 export interface IDockerService {
 	listServiceContainers(serviceId: string, resourceId?: string): Promise<ServiceContainer[]>;
 	inspectServiceContainer(serviceId: string, containerId: string): Promise<DockerContainerDetails | null>;
+	readServiceContainerLogs(serviceId: string, containerId: string): Promise<string>;
 	inspectServiceNetwork(serviceId: string): Promise<DockerNetwork | null>;
 	prepareServiceNetwork(serviceId: string): Promise<void>;
 	resolveImage(reference: string): Promise<string>;
@@ -91,6 +92,17 @@ export class DockerService implements IDockerService {
 		const network = await this.client.inspectNetwork(this.networkName(serviceId));
 		if (network) this.assertOwnership(serviceId, network.labels);
 		return network;
+	}
+
+	async readServiceContainerLogs(serviceId: string, containerId: string): Promise<string> {
+		const container = await this.inspectServiceContainer(serviceId, containerId);
+		if (!container) throw new DockerServiceError("not-found");
+		let content = await this.client.readContainerLogs(containerId);
+		for (const value of Object.values(container.env ?? {})
+			.filter(Boolean)
+			.sort((a, b) => b.length - a.length))
+			content = content.replaceAll(value, "[redacted]");
+		return content;
 	}
 
 	async prepareServiceNetwork(serviceId: string): Promise<void> {

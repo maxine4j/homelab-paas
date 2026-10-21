@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
+import { fileURLToPath } from "node:url";
 
 import acme from "acme-client";
 import Koa from "koa";
@@ -12,6 +13,11 @@ import { NodeDockerTransport } from "./docker/docker-transport.ts";
 import { EnvoyClient } from "./envoy/envoy-client.ts";
 import { EnvoyService } from "./envoy/envoy-service.ts";
 import { NodeEnvoyTransport } from "./envoy/envoy-transport.ts";
+import { createFrontendRouter } from "./frontend/frontend-router.ts";
+import { FrontendService } from "./frontend/frontend-service.ts";
+import { DirectoryUiFiles } from "./frontend/frontend-store.ts";
+import { createPaasUiRouter } from "./frontend/paas-ui-router.ts";
+import { PaasUiService } from "./frontend/paas-ui-service.ts";
 import { GitClient } from "./git/git-client.ts";
 import { GitService } from "./git/git-service.ts";
 import { NodeGitTransport } from "./git/git-transport.ts";
@@ -36,7 +42,7 @@ import { ReconciliationStore } from "./reconciler/reconciliation-store.ts";
 import { WebResourceReconciler } from "./reconciler/resources/web/web-reconciler.ts";
 import { FileSystemKeyValueStore } from "./store/file-system-store.ts";
 import { PeriodicTaskRunner } from "./task/periodic.ts";
-import { atomicWriteFile, mkdir, readFile, rm, type FileWriter } from "./util/file.ts";
+import { atomicWriteFile, lstat, mkdir, readFileBytes, readFile, rm, type FileWriter } from "./util/file.ts";
 import { createHealthCheckRouter, probe } from "./util/healthcheck.ts";
 import type { Lifecycle } from "./util/lifecycle.ts";
 import { createRequestLogger, logger, withLogContext } from "./util/logger.ts";
@@ -122,6 +128,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 	app.on("error", () => logger.error("HTTP request failed"));
 	const certificates = new FileCertificateStore(STATE_DIRECTORY, readFile, secureWrite);
 	let renewal: TlsCertRenewalTask | undefined;
+	let sessions: AuthService | undefined;
 	if (config.auth && config.tls) {
 		const auth = new AuthService(
 			new GitHubOauth2Provider(config.auth.github, fetch),
@@ -131,6 +138,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 			endpoints,
 			{ baseDomain: config.ingress.baseDomain, httpsPort: config.ingress.httpsPort! },
 		);
+		sessions = auth;
 		app.use(
 			createAuthRouter(auth, {
 				baseDomain: config.ingress.baseDomain,
@@ -161,6 +169,31 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 			() => new Date(),
 		);
 	}
+	const ui = createPaasUiRouter(
+		new PaasUiService(
+			config,
+			new GitService(
+				new GitClient(new NodeGitTransport(config.git.operationTimeoutSeconds * 1000, process.env)),
+				`${STATE_DIRECTORY}/ui-git`,
+			),
+			decodeDescriptorYaml,
+			docker,
+			store,
+		),
+		sessions,
+	);
+	app.use(ui.routes()).use(ui.allowedMethods());
+	app.use(
+		createFrontendRouter(
+			new FrontendService(
+				new DirectoryUiFiles(
+					fileURLToPath(new URL("../../paas-ui/dist", import.meta.url)),
+					lstat,
+					readFileBytes,
+				),
+			),
+		).routes(),
+	);
 	const server = app.listen(8080, "0.0.0.0");
 	lifecycle.registerShutdownHandler(
 		() =>

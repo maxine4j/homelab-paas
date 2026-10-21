@@ -12,6 +12,7 @@ export const createAuthRouter = (
 ) => {
 	const authority = (host: string) => `${host}${config.httpsPort === 443 ? "" : `:${config.httpsPort}`}`;
 	const authAuthority = authority(`auth.${config.baseDomain}`);
+	const managementAuthority = authority(config.baseDomain);
 	const serviceAuthorities = new Map(config.serviceIds.map((id) => [authority(`${id}.${config.baseDomain}`), id]));
 	const cookieParts = (header: string) =>
 		header
@@ -26,7 +27,10 @@ export const createAuthRouter = (
 		if (typeof value !== "string") return undefined;
 		try {
 			const url = new URL(value);
-			return url.protocol === "https:" && !url.username && !url.password && serviceAuthorities.has(url.host)
+			return url.protocol === "https:"
+				&& !url.username
+				&& !url.password
+				&& (serviceAuthorities.has(url.host) || url.host === managementAuthority)
 				? url.href
 				: undefined;
 		} catch {
@@ -37,12 +41,18 @@ export const createAuthRouter = (
 		.all(/^\/auth\/check(?:\/.*)?$/, async (ctx) => {
 			ctx.set("Cache-Control", "no-store");
 			const serviceId = serviceAuthorities.get(ctx.get("host"));
-			if (!serviceId) {
+			const management = ctx.get("host") === managementAuthority;
+			if (!serviceId && !management) {
 				ctx.status = 403;
 				return;
 			}
 			try {
-				const decision = await auth.authorize(serviceId, cookie(ctx.get("cookie"), sessionCookie));
+				const token = cookie(ctx.get("cookie"), sessionCookie);
+				const decision = management
+					? auth.verifyAuthCookie(token)
+						? "allowed"
+						: "login"
+					: await auth.authorize(serviceId!, token);
 				if (decision === "missing") {
 					ctx.status = 403;
 					return;
@@ -60,9 +70,11 @@ export const createAuthRouter = (
 				}
 				ctx.set(
 					"cookie",
-					cookieParts(ctx.get("cookie"))
-						.filter((part) => ![sessionCookie, stateCookie].includes(part.split("=").at(0) ?? ""))
-						.join("; "),
+					management
+						? ctx.get("cookie")
+						: cookieParts(ctx.get("cookie"))
+								.filter((part) => ![sessionCookie, stateCookie].includes(part.split("=").at(0) ?? ""))
+								.join("; "),
 				);
 				ctx.status = 200;
 			} catch {

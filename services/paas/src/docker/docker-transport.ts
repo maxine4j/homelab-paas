@@ -4,7 +4,11 @@ import type { ISleep } from "../util/sleep.ts";
 
 /** Internal wire boundary. Implementations own connection settings and deadlines. */
 export interface IDockerTransport {
-	request(method: string, path: string, body?: unknown): Promise<{ status: number; body: string }>;
+	request(
+		method: string,
+		path: string,
+		body?: unknown,
+	): Promise<{ status: number; body: string; bytes?: Uint8Array }>;
 }
 
 export interface DockerTransportOptions {
@@ -20,7 +24,11 @@ export class NodeDockerTransport implements IDockerTransport {
 		private readonly sleep: ISleep,
 	) {}
 
-	request(method: string, path: string, body?: unknown): Promise<{ status: number; body: string }> {
+	request(
+		method: string,
+		path: string,
+		body?: unknown,
+	): Promise<{ status: number; body: string; bytes?: Uint8Array }> {
 		return new Promise((resolve, reject) => {
 			const payload = body === undefined ? undefined : JSON.stringify(body);
 			const req = request(
@@ -55,7 +63,8 @@ export class NodeDockerTransport implements IDockerTransport {
 							reject(new Error("Docker response is incomplete"));
 							return;
 						}
-						resolve({ status: response.statusCode, body: Buffer.concat(chunks).toString("utf8") });
+						const bytes = Buffer.concat(chunks);
+						resolve({ status: response.statusCode, body: bytes.toString("utf8"), bytes });
 					});
 				},
 			);

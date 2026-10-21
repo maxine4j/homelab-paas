@@ -12,7 +12,7 @@ The stack consists of:
 - Envoy for external ingress, inter-service routing, and load balancing.
 - A single TypeScript/Node.js control-plane container.
 
-The control plane manages Git reconciliation, Docker resources, Envoy configuration, GitHub authentication, JWT sessions, managed resource credentials, and TLS certificates.
+The control plane manages Git reconciliation, Docker resources, Envoy configuration, GitHub authentication, JWT sessions, managed resource credentials, and TLS certificates. It also serves the [read-only management UI and API](management-ui.md), whose dedicated Koa router delegates aggregation to an injected frontend service.
 
 The Docker client exposes low-level network, container, and image operations through platform-owned types. It validates Engine responses and translates failures into sanitized typed errors. Inspection returns absence explicitly; callers decide whether missing resources are acceptable. The Docker service owns platform labels, naming, image resolution, and service-scoped container and network helpers. Container queries include stopped containers and validate deployment identity labels. Lifecycle operations verify ownership; stopping or removing an absent container succeeds. Service-network preparation validates the cluster's control-plane and Envoy identities before creating or attaching resources. Reconcilers use these helpers to observe actual state and compare it with the descriptor's desired state. `ReconcilerService` fetches committed descriptors through the Git service, validates them, and delegates to resource reconcilers. `start.ts` composes these layers with deployment strategies and networking; a periodic reconciler task runs immediately and on each polling interval.
 

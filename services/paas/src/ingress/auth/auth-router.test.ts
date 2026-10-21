@@ -117,3 +117,38 @@ test("validates return targets and callback parameters, sets secure cookies and 
 		await api.close();
 	}
 });
+test("management host requires a session, retains its cookie and supports OAuth returns", async () => {
+	const auth: IAuthService = {
+		authorize: vi.fn(),
+		verifyAuthCookie: (token) => (token === "valid" ? { userId: "owner" } : undefined),
+		beginLogin: vi.fn(() => ({ url: "https://github.com/login", state: "s", nonce: "n" })),
+		completeLogin: vi.fn(),
+	};
+	const api = await startTestApi(
+		new Koa().use(
+			createAuthRouter(auth, {
+				baseDomain: "example.test",
+				httpsPort: 443,
+				ttlSeconds: 3600,
+				serviceIds: [],
+			}).routes(),
+		),
+	);
+	try {
+		const check = (cookie: string) =>
+			requestWithHost(`${api.origin}/auth/check/api/ui/cluster`, { host: "example.test", cookie });
+		expect((await check("")).status).toBe(302);
+		const allowed = await check("__Secure-paas_session=valid; app=keep");
+		expect(allowed.status).toBe(200);
+		expect(allowed.headers.get("cookie")).toBe("__Secure-paas_session=valid; app=keep");
+		expect((await check("__Secure-paas_session=valid; __Secure-paas_session=bad")).status).toBe(302);
+		const login = await requestWithHost(
+			`${api.origin}/oauth/github/login?redirect_uri=https%3A%2F%2Fexample.test%2F`,
+			{ host: "auth.example.test" },
+		);
+		expect(login.status).toBe(302);
+		expect(auth.authorize).not.toHaveBeenCalled();
+	} finally {
+		await api.close();
+	}
+});

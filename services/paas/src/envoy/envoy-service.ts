@@ -221,6 +221,17 @@ export class EnvoyService implements IEnvoyService {
 								"https",
 								[
 									authHost,
+									{
+										...virtualHost("management", this.ingress.baseDomain, "paas"),
+										routes: [
+											{ match: { prefix: "/api/ui/" }, route: { cluster: "paas" } },
+											...["/api/", "/auth/", "/oauth/", "/health"].map((prefix) => ({
+												match: { prefix },
+												direct_response: { status: 404 },
+											})),
+											{ match: { prefix: "/" }, route: { cluster: "paas" } },
+										],
+									},
 									...serviceIds.map((id) =>
 										virtualHost(id, `${id}.${this.ingress.baseDomain}`, `service-${id}`),
 									),

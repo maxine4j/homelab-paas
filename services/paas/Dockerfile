@@ -5,17 +5,20 @@ RUN corepack enable
 FROM base AS manifests
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY services/paas/package.json services/paas/package.json
+COPY services/paas-ui/package.json services/paas-ui/package.json
 COPY packages/shared-contracts/package.json packages/shared-contracts/package.json
 
 FROM manifests AS builder
 RUN --mount=type=cache,id=homelab-paas-pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter @homelab-paas/paas... --store-dir /pnpm/store
+    pnpm install --frozen-lockfile --filter @homelab-paas/paas... --filter @homelab-paas/ui... --store-dir /pnpm/store
 COPY tsconfig.json ./
 COPY packages/shared-contracts packages/shared-contracts
 COPY services/paas/tsconfig*.json services/paas/
 COPY services/paas/src services/paas/src
+COPY services/paas-ui services/paas-ui
 RUN pnpm --filter @homelab-paas/shared-contracts build \
-    && pnpm --filter @homelab-paas/paas build
+    && pnpm --filter @homelab-paas/paas build \
+    && pnpm --filter @homelab-paas/ui build
 
 FROM manifests AS installer
 RUN --mount=type=cache,id=homelab-paas-pnpm,target=/pnpm/store \
@@ -31,6 +34,7 @@ COPY --from=installer /app/packages/shared-contracts/package.json packages/share
 COPY --from=installer /app/packages/shared-contracts/node_modules packages/shared-contracts/node_modules
 COPY --from=builder /app/packages/shared-contracts/dist packages/shared-contracts/dist
 COPY --from=builder /app/services/paas/dist services/paas/dist
+COPY --from=builder /app/services/paas-ui/dist services/paas-ui/dist
 WORKDIR /app/services/paas
 EXPOSE 8080
 CMD ["node", "dist/main.js"]

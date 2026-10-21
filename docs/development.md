@@ -9,18 +9,18 @@ The existing tooling is part of the stack:
 - TypeScript with ES modules.
 - Oxc's `oxlint` and `oxfmt`, using the checked-in configuration and lint rules.
 - Vitest for tests.
-- React and Vite for the management UI stub.
+- React and Vite for the [management UI](management-ui.md).
 
 Keep versions and commands in their existing manifests and configuration files. Do not introduce a competing package manager, formatter, linter, or test runner.
 
 ## Workspace
 
-| Path                         | Purpose                                                                  |
-| ---------------------------- | ------------------------------------------------------------------------ |
-| `services/paas/`             | TypeScript/Node.js control plane                                         |
-| `services/paas-ui/`          | Management UI stub; product and management API requirements are deferred |
-| `packages/shared-contracts/` | Public contracts shared by the control plane and UI                      |
-| `scripts/`                   | Repository tooling and development scripts                               |
+| Path                         | Purpose                                                       |
+| ---------------------------- | ------------------------------------------------------------- |
+| `services/paas/`             | TypeScript/Node.js control plane                              |
+| `services/paas-ui/`          | Read-only management UI; see [its contract](management-ui.md) |
+| `packages/shared-contracts/` | Public contracts shared by the control plane and UI           |
+| `scripts/`                   | Repository tooling and development scripts                    |
 
 The [architecture](architecture.md) and linked requirements describe the intended platform. Existing implementation, packaging, and deployment scripts may need later changes to match it; their presence does not establish additional product requirements.
 
@@ -118,7 +118,7 @@ For an end-to-end deployment check, also request `/ping` on `test-service.local.
 
 ### Local startup troubleshooting
 
-Control-plane code, shared contracts and dependencies are baked into the image; rerun `pnpm dev:deploy` after changing them. A missing shared-contract export at startup can indicate an old image.
+Control-plane code, the built management UI, shared contracts and dependencies are baked into the image; rerun `pnpm dev:deploy` after changing them. A missing shared-contract export at startup can indicate an old image. Open `https://local.maxine4j.com` for the management UI and sign in through the existing GitHub flow. See [management UI](management-ui.md) for API, redaction and access semantics.
 
 Legacy `local/var/_paas/routes.yaml` entries created before ingress policies were persisted lack `public`. The state store intentionally rejects these entries. Stop the control plane, add an explicit `public` value to each affected endpoint matching that service's committed descriptor, then restart the bootstrap. The checked-in test-service descriptor uses `public: true`. Do not infer public access for other services or delete persistent state to bypass validation. Private ingress requires configured auth and TLS.
 

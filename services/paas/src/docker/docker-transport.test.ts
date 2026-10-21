@@ -79,6 +79,7 @@ test("collects streamed pull events and sends requests without bodies", async ()
 			expect(await transport.request("GET", "/test")).toEqual({
 				status: 200,
 				body: '{"status":"pulling"}\n{"status":"done"}\n',
+				bytes: Buffer.from('{"status":"pulling"}\n{"status":"done"}\n'),
 			});
 		},
 	);

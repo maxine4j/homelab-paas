@@ -42,6 +42,9 @@ function fixture() {
 		async withdraw() {},
 	};
 	const docker: IDockerService = {
+		async readServiceContainerLogs() {
+			return "";
+		},
 		async listServiceContainers(...args) {
 			queries.push(args);
 			return containers;

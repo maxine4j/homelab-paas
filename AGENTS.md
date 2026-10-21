@@ -4,7 +4,7 @@
 
 homelab-paas is a single-host platform using Docker Engine, Envoy, and one TypeScript/Node.js control-plane container. Docker Compose is used only for the local development bootstrap; see [development](docs/development.md#local-container-environment).
 
-The documents below define the intended platform. Align changes with them; existing implementation is not the source of product requirements. Keep the management UI as a stub until its requirements are defined.
+The documents below define the intended platform. Align changes with them; existing implementation is not the source of product requirements. Management UI requirements are defined in [management UI](docs/management-ui.md).
 
 ## Working rules
 
@@ -29,5 +29,6 @@ Read [architecture](docs/architecture.md) before platform changes, then the rele
 | Git, reconciliation, state, retries, images, deployments, readiness, termination, removal | [Reconciliation and deployments](docs/reconciliation-and-deployments.md) |
 | PostgreSQL, RabbitMQ, generated credentials, injected connection variables                | [Managed resources](docs/managed-resources.md)                           |
 | Workspace, tooling, scripts, dependencies, verification                                   | [Development](docs/development.md)                                       |
+| Management UI, management APIs, resource inspection                                       | [Management UI](docs/management-ui.md)                                   |
 
 Follow scoped `AGENTS.md` instructions when working in their directories. Read only the additional documents needed for the task.

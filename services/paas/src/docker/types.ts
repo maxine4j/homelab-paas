@@ -9,6 +9,8 @@ export interface DockerContainer {
 }
 
 export interface DockerContainerDetails {
+	/** Internal only; never serialize environment in status responses. */
+	env?: Record<string, string>;
 	id: string;
 	imageId: string;
 	running: boolean;

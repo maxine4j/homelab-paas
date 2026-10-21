@@ -40,6 +40,9 @@ function fixture(overrides: Partial<IDockerClient> = {}) {
 		calls.push({ operation, args });
 	}
 	const client: IDockerClient = {
+		async readContainerLogs() {
+			return "";
+		},
 		async createNetwork(options) {
 			record("createNetwork", options);
 			return "n";
@@ -378,4 +381,27 @@ test("image failures propagate and a successful pull must produce an inspectable
 			},
 		}).service.resolveImage("app:1"),
 	).rejects.toMatchObject({ kind: "not-found" });
+});
+test("log reads verify service ownership before accessing container output", async () => {
+	const calls: string[] = [];
+	const f = fixture({
+		async readContainerLogs(id) {
+			calls.push(id);
+			return "logs";
+		},
+	});
+	expect(await f.service.readServiceContainerLogs("demo", "c")).toBe("logs");
+	await expect(f.service.readServiceContainerLogs("other", "c")).rejects.toMatchObject({ kind: "ownership" });
+	expect(calls).toEqual(["c"]);
+});
+test("log output redacts values from the actual container environment", async () => {
+	const f = fixture({
+		async inspectContainer() {
+			return { ...details, env: { PASSWORD: "old-secret" } };
+		},
+		async readContainerLogs() {
+			return "PASSWORD=old-secret\n";
+		},
+	});
+	expect(await f.service.readServiceContainerLogs("demo", "c")).toBe("PASSWORD=[redacted]\n");
 });

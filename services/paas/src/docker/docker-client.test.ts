@@ -93,6 +93,7 @@ test("inspects container state and network addresses without interpreting labels
 		NetworkSettings: { Networks: { custom: { IPAddress: "10.0.0.2", Aliases: null } } },
 	});
 	expect(await f.client.inspectContainer("c/a")).toEqual({
+		env: { SECRET: "value" },
 		id: "c",
 		imageId: "sha256:a",
 		running: false,
@@ -204,3 +205,38 @@ test.each(['{"error":"SECRET"}\n', '{"errorDetail":{"message":"SECRET"}}\n', "br
 		await expect(fixture(200, undefined, raw).client.pullImage("app")).rejects.toBeInstanceOf(DockerClientError);
 	},
 );
+test("reads bounded timestamped log tails and decodes Docker multiplex frames", async () => {
+	const frame = (stream: number, content: string) => {
+		const bytes = Buffer.from(content);
+		const header = Buffer.alloc(8);
+		header[0] = stream;
+		header.writeUInt32BE(bytes.length, 4);
+		return Buffer.concat([header, bytes]);
+	};
+	const bytes = Buffer.concat([frame(1, "hello 🌍\n"), frame(2, "failure\n")]);
+	const calls: string[] = [];
+	const client = new DockerClient({
+		async request(_method, path) {
+			calls.push(path);
+			return { status: 200, body: "", bytes };
+		},
+	});
+	expect(await client.readContainerLogs("a/b")).toBe("hello 🌍\nfailure\n");
+	expect(calls).toEqual(["/containers/a%2Fb/logs?stdout=true&stderr=true&timestamps=true&tail=200&follow=false"]);
+	const malformed = new DockerClient({
+		async request() {
+			return { status: 200, body: "", bytes: bytes.subarray(0, 9) };
+		},
+	});
+	await expect(malformed.readContainerLogs("c")).rejects.toMatchObject({ kind: "invalid-response" });
+});
+test("container inspection normalizes environment values for log redaction", async () => {
+	const f = fixture(200, {
+		Id: "c",
+		Image: "image",
+		State: { Running: true },
+		Config: { Labels: {}, Env: ["PASSWORD=a=b", "EMPTY="] },
+		NetworkSettings: { Networks: {} },
+	});
+	expect((await f.client.inspectContainer("c"))?.env).toEqual({ PASSWORD: "a=b", EMPTY: "" });
+});

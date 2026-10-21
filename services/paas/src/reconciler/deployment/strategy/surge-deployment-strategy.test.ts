@@ -37,6 +37,9 @@ function fixture() {
 		state: "running",
 	};
 	const docker: IDockerService = {
+		async readServiceContainerLogs() {
+			return "";
+		},
 		async listServiceContainers(...args) {
 			record("list", ...args);
 			return [old];

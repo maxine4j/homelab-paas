@@ -2,7 +2,7 @@
 
 A single-host platform for running services with Docker Engine, Envoy, and a TypeScript/Node.js control plane. Service descriptors are managed in Git and reconciled into Docker workloads.
 
-The platform is under development. See the [architecture](docs/architecture.md) for the intended design and the [implemented deployment MVP](docs/configuration.md#implemented-deployment-mvp) for current capabilities. The management UI remains a stub.
+The platform is under development. See the [architecture](docs/architecture.md) for the intended design, the [implemented deployment MVP](docs/configuration.md#implemented-deployment-mvp) for current capabilities, and the [management UI](docs/management-ui.md) for read-only cluster and resource inspection.
 
 ## Local development
 
