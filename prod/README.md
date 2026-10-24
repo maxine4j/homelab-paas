@@ -34,9 +34,12 @@ The configuration directory is mounted read-only into both bootstrap containers.
 Run on the deployment host:
 
 ```sh
-sudo docker compose -f /etc/homelab-paas/docker-compose.yaml config --quiet
-sudo docker compose -f /etc/homelab-paas/docker-compose.yaml pull
 sudo docker compose -f /etc/homelab-paas/docker-compose.yaml up -d
+```
+
+Compose validates the configuration, pulls missing images, and starts both containers. Separate `config` and `pull` commands are unnecessary. For optional status and troubleshooting checks:
+
+```sh
 sudo docker compose -f /etc/homelab-paas/docker-compose.yaml ps
 sudo docker compose -f /etc/homelab-paas/docker-compose.yaml logs --tail=100 paas envoy
 curl --fail --head http://apps.example.com/
@@ -54,6 +57,6 @@ After editing platform configuration, restart the control plane:
 sudo docker compose -f /etc/homelab-paas/docker-compose.yaml restart paas
 ```
 
-For an image update, edit the pinned image tag, then run `pull` and `up -d` again. Compose replaces the changed bootstrap containers. Verify logs, login, TLS and routes after updates. Descriptor changes are reconciled from committed Git revisions; referenced application secret changes are reread on polling passes. See [reconciliation](../docs/reconciliation-and-deployments.md).
+For an image update, edit the pinned image tag, then run `up -d` again. Compose pulls the new image if missing and replaces the changed bootstrap containers. To refresh an image under the same tag, use `up -d --pull always`. Verify logs, login, TLS and routes after updates. Descriptor changes are reconciled from committed Git revisions; referenced application secret changes are reread on polling passes. See [reconciliation](../docs/reconciliation-and-deployments.md).
 
 Retain `/var/homelab-paas`, configuration and secret files, generated credentials, and all application bind-mount data across restarts and updates. Bootstrap container replacement does not remove Docker-managed workloads or service networks. Do not prune platform resources or delete persistent state to repair deployment failures. Backups and disaster recovery remain operator responsibilities outside the current platform scope.
