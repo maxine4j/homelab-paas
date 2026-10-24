@@ -1,6 +1,6 @@
 # Management UI
 
-The MVP is a read-only React UI served by the control plane at the cluster's base hostname. With auth/TLS configured, open `https://{baseDomain}` (including a nonstandard HTTPS port). Envoy requires the existing GitHub allowlisted session before serving the UI or its API. OAuth accepts this hostname as a return target. Platform cookies are retained only for the management upstream; workload cookie stripping is unchanged. The authentication hostname still exposes only login and callback routes. Management ingress blocks internal health/auth routes and API paths outside `/api/ui/`.
+The MVP is a read-only React UI served by the control plane at the cluster's base hostname. With auth/TLS configured, open `https://{baseDomain}` (including a nonstandard HTTPS port). Envoy requires the existing GitHub allowlisted session before serving the UI or its API; missing or invalid sessions redirect to login, including API requests. OAuth accepts this hostname as a return target. Platform cookies are retained only for the management upstream; workload cookie stripping is unchanged. The authentication hostname still exposes only login and callback routes. Management ingress blocks API paths outside `/api/ui/`.
 
 Without auth/TLS, the base hostname serves HTTP without authentication for trusted local development only. No management hostname, credentials, roles, dependencies, or configuration fields are added. Bootstrap port publication remains operator-owned.
 
@@ -19,7 +19,7 @@ The dark layout uses a sidebar on laptops and wider square foldable viewports, t
 
 ## API and layers
 
-All endpoints are `GET` (also supporting `HEAD`) under `/api/ui`. Responses use `Cache-Control: no-store`; unknown items return 404, invalid/missing configured sessions 401, and unavailable data 503. Non-read methods are rejected. Unknown API paths never fall back to the SPA.
+All endpoints are `GET` (also supporting `HEAD`) under `/api/ui`. Responses use `Cache-Control: no-store`; unknown items return 404 and unavailable data 503. The API router independently verifies configured sessions and returns 401 for missing or invalid sessions on requests that reach it directly; external requests through authenticated management ingress redirect to login first. Non-read methods are rejected. Unknown API paths never fall back to the SPA.
 
 | Endpoint                                                                  | Result                                                     |
 | ------------------------------------------------------------------------- | ---------------------------------------------------------- |
