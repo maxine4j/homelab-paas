@@ -25,37 +25,18 @@ class InstallerTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.etc = self.root / "etc"
-        self.quadlets = self.root / "quadlets"
         self.var = self.root / "var"
         self.bin = self.root / "bin"
         self.bin.mkdir()
         for name in ("bash", "install", "mkdir", "rm", "stty", "od", "tr", "sed"):
             (self.bin / name).symlink_to(shutil.which(name))
         self.executable("id", "#!/bin/sh\nprintf '0\\n'\n")
-        self.executable("podman", "#!/bin/sh\nexit 0\n")
-        self.executable("podman-system-generator", """#!/bin/sh
-printf 'generator\\n' >> "$TEST_CALLS"
-[ "$TEST_GENERATOR_RESULT" = success ] || exit 1
-for name in homelab-paas homelab-envoy; do
-    [ "$TEST_MISSING_SERVICE" != "$name" ] || continue
-    [ -f "$QUADLET_UNIT_DIRS/$name.container" ] || exit 1
-    printf '[Service]\\n' > "$1/$name.service"
-done
-""")
-        self.executable("systemctl", """#!/bin/sh
-printf '%s\\n' "$*" >> "$TEST_CALLS"
-case "$1" in
-    daemon-reload) exit 0 ;;
-    show) printf '%s\\n' "$TEST_LOAD_STATE" ;;
-    *) exit 99 ;;
-esac
-""")
         self.executable("git", """#!/bin/sh
 if [ "$1" = clone ]; then
     [ "$2" = --depth ] && [ "$3" = 1 ] && [ "$4" = --single-branch ] && [ "$5" = --branch ] && [ "$6" = main ] && [ "$7" = https://github.com/maxine4j/homelab-paas ] || exit 98
     for arg do destination=$arg; done
-    mkdir -p "$destination/prod"
-    cp -R "$TEST_PROD/etc" "$destination/prod/"
+    mkdir -p "$destination/prod/etc/homelab-paas"
+    cp "$TEST_TEMPLATES/"* "$destination/prod/etc/homelab-paas/"
 elif [ "$1" = -C ]; then
     printf '%s\\n' "$TEST_SHA"
 else
@@ -66,12 +47,8 @@ fi
         self.env = {
             **os.environ,
             "PATH": str(self.bin),
-            "TEST_PROD": str(ROOT / "prod"),
+            "TEST_TEMPLATES": str(ROOT / "prod/etc/homelab-paas"),
             "TEST_SHA": SHA,
-            "TEST_CALLS": str(self.root / "calls"),
-            "TEST_GENERATOR_RESULT": "success",
-            "TEST_MISSING_SERVICE": "",
-            "TEST_LOAD_STATE": "loaded",
         }
 
     def executable(self, name, content):
@@ -82,12 +59,7 @@ fi
     def script(self):
         return (ROOT / "prod/install.sh").read_text().replace(
             "config_dir=/etc/homelab-paas", "config_dir=" + str(self.etc)
-        ).replace("state_dir=/var/homelab-paas", "state_dir=" + str(self.var)).replace(
-            "quadlet_dir=/etc/containers/systemd", "quadlet_dir=" + str(self.quadlets)
-        ).replace(
-            "generator=/usr/lib/systemd/system-generators/podman-system-generator",
-            "generator=" + str(self.bin / "podman-system-generator"),
-        )
+        ).replace("state_dir=/var/homelab-paas", "state_dir=" + str(self.var))
 
     def run_installer(self, credentials=None, trace=False, settings=SETTINGS, token=TOKEN):
         # A controlling PTY plus a separate stdin pipe reproduces curl | bash.
@@ -154,65 +126,14 @@ fi
         signing_key = json.loads(fields["signingKey"])
         self.assertRegex(signing_key, r"^[0-9a-f]{64}$")
         self.assertNotIn(signing_key, output)
-        paas = (self.quadlets / "homelab-paas.container").read_text()
-        envoy = (self.quadlets / "homelab-envoy.container").read_text()
-        self.assertIn("Image=ghcr.io/maxine4j/homelab-paas:" + SHA, paas)
-        self.assertIn("Volume=/run/podman/podman.sock:/var/run/docker.sock", paas)
-        self.assertIn("Requires=podman.socket", paas)
-        self.assertIn("SecurityLabelDisable=true", paas)
-        self.assertIn("Notify=healthy", paas)
-        self.assertIn("After=homelab-paas.service", envoy)
-        self.assertIn("PublishPort=80:80", envoy)
-        self.assertIn("PublishPort=443:443", envoy)
-        self.assertNotIn("PublishPort=", paas)
-        for content, role in ((paas, "control-plane"), (envoy, "envoy")):
-            self.assertIn("Label=homelab-paas.cluster=prod", content)
-            self.assertIn("Label=homelab-paas.role=" + role, content)
-            self.assertIn("WantedBy=multi-user.target", content)
-            self.assertIn("Restart=always", content)
-        self.assertFalse((self.etc / "docker-compose.yaml").exists())
+        self.assertIn("ghcr.io/maxine4j/homelab-paas:" + SHA, (self.etc / "docker-compose.yaml").read_text())
         for path in (self.etc, self.etc / "env", self.var):
             self.assertEqual(path.stat().st_mode & 0o777, 0o700)
-        for name in ("config.yaml", "envoy.yaml"):
+        for name in ("config.yaml", "envoy.yaml", "docker-compose.yaml"):
             self.assertEqual((self.etc / name).stat().st_mode & 0o777, 0o600)
-        for path in self.quadlets.iterdir():
-            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
         self.assertIn("services", output)
         self.assertIn("https://auth." + SETTINGS[0] + "/auth/callback", output)
         self.assertNotIn("Set your domain", output)
-        calls = (self.root / "calls").read_text().splitlines()
-        self.assertEqual(calls[0:2], ["generator", "daemon-reload"])
-        self.assertEqual(len(calls), 4)
-        self.assertIn("No containers have been started", output)
-
-    def test_generator_failure_does_not_install_configuration(self):
-        self.env["TEST_GENERATOR_RESULT"] = "failure"
-        status, output = self.run_installer(("client", "secret"))
-        self.assertNotEqual(status, 0, output)
-        self.assertIn("Quadlet generation failed", output)
-        self.assertFalse(self.etc.exists())
-        self.assertFalse(self.quadlets.exists())
-
-    def test_missing_generated_service_does_not_install_configuration(self):
-        self.env["TEST_MISSING_SERVICE"] = "homelab-envoy"
-        status, output = self.run_installer(("client", "secret"))
-        self.assertNotEqual(status, 0, output)
-        self.assertIn("homelab-envoy.service", output)
-        self.assertFalse(self.etc.exists())
-
-    def test_missing_loaded_service_is_not_reported_as_success(self):
-        self.env["TEST_LOAD_STATE"] = "not-found"
-        status, output = self.run_installer(("client", "secret"))
-        self.assertNotEqual(status, 0, output)
-        self.assertIn("homelab-paas.service", output)
-        self.assertNotIn("✅", output)
-
-    def test_missing_generator_fails_before_prompting(self):
-        (self.bin / "podman-system-generator").unlink()
-        status, output = self.run_installer()
-        self.assertNotEqual(status, 0, output)
-        self.assertIn("generator", output)
-        self.assertFalse(self.etc.exists())
 
     def test_installs_without_python_on_path(self):
         status, output = self.run_installer(("client", "secret"))
@@ -237,18 +158,6 @@ fi
         self.assertNotEqual(status, 0, output)
         self.assertEqual(existing.read_text(), "keep-existing-secret")
         self.assertFalse(self.var.exists())
-
-    def test_existing_quadlets_are_preserved_before_creating_configuration(self):
-        self.quadlets.mkdir()
-        for name in ("homelab-paas.container", "homelab-envoy.container"):
-            with self.subTest(name=name):
-                existing = self.quadlets / name
-                existing.write_text("keep-existing-unit")
-                status, output = self.run_installer()
-                self.assertNotEqual(status, 0, output)
-                self.assertEqual(existing.read_text(), "keep-existing-unit")
-                self.assertFalse(self.etc.exists())
-                existing.unlink()
 
     def test_missing_terminal_fails_without_creating_host_files(self):
         # setsid removes any inherited controlling terminal on Linux/macOS.

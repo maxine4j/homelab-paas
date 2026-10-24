@@ -11,11 +11,9 @@ main() (
     fail() { printf '❌ %s\n' "$1" >&2; exit 1; }
 
     [[ $(id -u) == 0 ]] || fail 'Run as root: curl -fsSL https://raw.githubusercontent.com/maxine4j/homelab-paas/refs/heads/main/prod/install.sh | sudo bash'
-    for tool in git install mkdir rm stty od tr sed podman systemctl; do
+    for tool in git install mkdir rm stty od tr sed; do
         command -v "$tool" >/dev/null || fail "Required command missing: $tool"
     done
-    generator=/usr/lib/systemd/system-generators/podman-system-generator
-    [[ -x "$generator" ]] || fail "Quadlet generator missing: $generator. Install Podman with Quadlet support."
 
     # JSON double-quoted scalars are valid YAML. Keep secrets in shell memory.
     quote_yaml() {
@@ -37,12 +35,8 @@ main() (
 
     config_dir=/etc/homelab-paas
     state_dir=/var/homelab-paas
-    quadlet_dir=/etc/containers/systemd
     [[ ! -e "$config_dir" && ! -L "$config_dir" ]] || fail 'Existing /etc/homelab-paas preserved; edit it directly instead of reinstalling.'
     [[ ! -L "$state_dir" ]] || fail 'Refusing a symlink at /var/homelab-paas.'
-    for name in homelab-paas.container homelab-envoy.container; do
-        [[ ! -e "$quadlet_dir/$name" && ! -L "$quadlet_dir/$name" ]] || fail "Existing $quadlet_dir/$name preserved; edit it directly instead of reinstalling."
-    done
     { exec 3<>/dev/tty; } 2>/dev/null || fail 'An interactive terminal is required for configuration and credentials.'
     tty_settings=$(stty -g <&3)
     trap 'stty "$tty_settings" <&3' EXIT
@@ -115,41 +109,22 @@ main() (
         done
         printf '%s\n' "$line"
     done < "$templates/config.yaml" > "$checkout/config.yaml"
-    quadlets="$checkout/prod/etc/containers/systemd"
     sed "s/replace-with-release-tag-or-commit-sha/$revision/" \
-        "$quadlets/homelab-paas.container" > "$checkout/homelab-paas.container"
+        "$templates/docker-compose.yaml" > "$checkout/docker-compose.yaml"
     unset github_client_id github_client_secret signing_key digitalocean_token values REPLY line
-
-    printf '🔎 Validating Quadlets with the installed Podman generator…\n'
-    staged_quadlets="$checkout/quadlets"
-    generated_units="$checkout/generated"
-    mkdir -m 0700 "$staged_quadlets" "$generated_units"
-    install -m 0600 "$checkout/homelab-paas.container" "$staged_quadlets/homelab-paas.container"
-    install -m 0600 "$quadlets/homelab-envoy.container" "$staged_quadlets/homelab-envoy.container"
-    QUADLET_UNIT_DIRS="$staged_quadlets" "$generator" "$generated_units" || fail 'Quadlet generation failed; no host configuration was installed.'
-    for name in homelab-paas homelab-envoy; do
-        [[ -s "$generated_units/$name.service" ]] || fail "Quadlet did not generate $name.service; no host configuration was installed."
-    done
 
     printf '📁 Creating private host directories and installing configuration…\n'
     # mkdir is exclusive: a concurrent/repeated installer cannot overwrite files.
     mkdir -m 0700 "$config_dir"
     install -d -m 0700 "$config_dir/env" "$state_dir"
-    install -m 0600 "$checkout/config.yaml" "$config_dir/config.yaml"
-    install -m 0600 "$templates/envoy.yaml" "$config_dir/envoy.yaml"
-    install -d -m 0755 "$quadlet_dir"
-    install -m 0600 "$checkout/homelab-paas.container" "$quadlet_dir/homelab-paas.container"
-    install -m 0600 "$quadlets/homelab-envoy.container" "$quadlet_dir/homelab-envoy.container"
-    printf '🔄 Reloading systemd and checking generated services…\n'
-    systemctl daemon-reload
-    for name in homelab-paas homelab-envoy; do
-        [[ $(systemctl show --property=LoadState --value "$name.service") == loaded ]] || fail "Systemd did not load $name.service; inspect the Quadlet generator errors. Installed configuration has been preserved."
+    for name in config.yaml docker-compose.yaml; do
+        install -m 0600 "$checkout/$name" "$config_dir/$name"
     done
-    printf '✅ Configuration installed and both .service units loaded. No containers have been started.\n'
+    install -m 0600 "$templates/envoy.yaml" "$config_dir/envoy.yaml"
+    printf '✅ Configuration installed. No containers have been started.\n'
     printf '✏️  Edit /etc/homelab-paas/config.yaml (for example: sudo nano /etc/homelab-paas/config.yaml).\n'
     printf '   Add only your service configurations under services; platform settings are ready.\n'
     printf '🚀 Then follow https://github.com/maxine4j/homelab-paas/blob/main/prod/README.md#start-and-verify\n'
-    printf '   The pinned main image may still be publishing in CI; wait for it before pulling.\n'
 )
 
 main "$@"
