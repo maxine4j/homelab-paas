@@ -34,6 +34,7 @@ export interface IDockerClient {
 	/** Bind mounts use shared SELinux labels; Docker creates missing source directories on start. */
 	createContainer(options: CreateContainerOptions): Promise<string>;
 	startContainer(id: string): Promise<void>;
+	/** Allows the full graceful termination timeout plus five seconds for the Engine response. */
 	stopContainer(id: string, timeoutSeconds: number): Promise<void>;
 	removeContainer(id: string): Promise<void>;
 	inspectImage(reference: string): Promise<{ id: string } | null>;
@@ -59,10 +60,11 @@ export class DockerClient implements IDockerClient {
 		path: string,
 		body: unknown,
 		statuses: number[],
+		timeoutMs?: number,
 	): Promise<{ status: number; body: string; bytes?: Uint8Array }> {
 		let response: { status: number; body: string; bytes?: Uint8Array };
 		try {
-			response = await this.transport.request(method, path, body);
+			response = await this.transport.request(method, path, body, timeoutMs);
 		} catch (cause) {
 			throw new DockerClientError("unavailable", { cause });
 		}
@@ -231,6 +233,7 @@ export class DockerClient implements IDockerClient {
 			`/containers/${encodeURIComponent(id)}/stop?t=${encodeURIComponent(timeoutSeconds)}`,
 			undefined,
 			[204, 304],
+			(timeoutSeconds + 5) * 1000,
 		);
 	}
 

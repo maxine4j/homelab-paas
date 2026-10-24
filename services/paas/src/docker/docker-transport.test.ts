@@ -97,6 +97,37 @@ test("bounds the entire request even when the server never sends headers", async
 	);
 });
 
+test.each([30, 300])(
+	"allows the full %s-second stop timeout plus five seconds without changing other deadlines",
+	async (timeoutSeconds) => {
+		const delays: number[] = [];
+		await withServer(
+			(req, res) => {
+				if (req.url?.includes("/stop?")) {
+					res.writeHead(204);
+					res.end();
+				} else {
+					res.end("[]");
+				}
+			},
+			async (socketPath) => {
+				const client = new DockerClient(
+					new NodeDockerTransport(
+						{ socketPath, timeoutMs: 120000, maxResponseBytes: 1024 },
+						async (ms, signal) => {
+							delays.push(ms);
+							if (signal) await once(signal, "abort");
+						},
+					),
+				);
+				await client.stopContainer("app", timeoutSeconds);
+				await client.listContainers();
+			},
+		);
+		expect(delays).toEqual([(timeoutSeconds + 5) * 1000, 120000]);
+	},
+);
+
 test("bounds response bytes including multibyte text", async () => {
 	await withServer(
 		(_req, res) => {

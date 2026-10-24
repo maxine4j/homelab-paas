@@ -71,7 +71,7 @@ Web resources accept:
 healthcheckUrl: /healthcheck
 ```
 
-This defaults to `/healthcheck`, relative to the configured application port. HTTP `200–299` indicates readiness.
+This defaults to `/healthcheck`, relative to the configured application port. Only HTTP `200` indicates readiness, matching Envoy's health checks.
 
 Health-check timing, startup allowance, and failure thresholds are managed by the platform.
 
@@ -87,6 +87,8 @@ termination:
 ```
 
 When omitted, the platform uses its default timeout. Containers receive a graceful stop signal, followed by forced termination if the timeout expires. Applications are responsible for finishing existing requests during graceful shutdown.
+
+The control plane waits for Docker stop requests for the configured termination timeout plus five seconds for the Engine response (305 seconds for a 300-second termination timeout). Other Docker operations retain the platform's 120-second request deadline.
 
 The platform does not guarantee uninterrupted long-lived streams or connections during deployment.
 
