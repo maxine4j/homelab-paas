@@ -11,6 +11,7 @@ The documents below define the intended platform. Align changes with them; exist
 - Be terse and direct. Challenge assumptions that conflict with requirements or evidence.
 - Use `apply_patch` for file edits.
 - Use the proper tool. If it fails, diagnose it or ask the user for help; do not invent unreliable workarounds.
+- Run `nvm use` from the repository root before running any commands to select the Node.js version pinned in `.nvmrc`.
 - Preserve the existing Node.js 24, pnpm, TypeScript, Vitest, and Oxc tooling. Use repository scripts and configuration.
 - Ask the owner before adding a third-party dependency.
 - Keep requirements in one authoritative document and cross-link related topics. Update the relevant document when changing a contract.
