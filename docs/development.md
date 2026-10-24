@@ -72,7 +72,7 @@ Log detected drift and the resulting action, changed descriptor revisions, deplo
 
 The [CI workflow](../.github/workflows/ci.yml) runs on pull requests, pushes to `main`, and pushed release tags matching `vX.X.X` (nonnegative integers without leading zeroes). Prerelease and build metadata suffixes are not supported. Other branch pushes do not trigger CI independently of a pull request.
 
-Every run installs the pinned dependencies, runs `pnpm check` (formatting, linting, and typechecking), `pnpm test`, and `pnpm build`, then builds the control-plane and test-service Docker images for `linux/amd64` and validates the local and [production](../prod/README.md) Compose configurations. Publishing requires all these checks to pass.
+Every run installs the pinned dependencies, runs `pnpm check` (formatting, linting, and typechecking), `pnpm test`, the production installer tests, and `pnpm build`, then builds the control-plane and test-service Docker images for `linux/amd64` and validates the local Compose configuration. The installer tests check the installed [production Quadlets](../prod/README.md). Publishing requires all these checks to pass.
 
 Pull requests only build images. Pushes to `main` publish `ghcr.io/maxine4j/homelab-paas:<full-commit-sha>`. Release tag pushes publish the same image name with the exact Git tag, for example `ghcr.io/maxine4j/homelab-paas:v1.2.3`. The control-plane image has no `latest` tag. Both push events also publish `ghcr.io/maxine4j/homelab-paas/test-service` with `latest` and the first seven characters of the commit SHA as tags. Invalid release tags caught by the broad trigger fail before building or publishing.
 

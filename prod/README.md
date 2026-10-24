@@ -1,59 +1,86 @@
 # Production deployment
 
-This Compose bootstrap starts Envoy and the control plane on one Linux Docker host. The control plane creates workloads through Docker Engine. The platform is under development; check the [implemented runtime limits](../docs/configuration.md#implemented-deployment-mvp) before deploying applications.
+Production deployment targets **Fedora CoreOS with Podman** on a single `linux/amd64` host. Two rootful Podman Quadlets run the control plane and Envoy as systemd services. The control plane manages application workloads through Podman's Docker-compatible API. Docker Engine and Docker Compose are not required.
+
+The platform is under development; check the [implemented runtime limits](../docs/configuration.md#implemented-deployment-mvp) before deploying applications. The CoreOS deployment still needs an end-to-end runtime verification.
 
 ## Prepare the host
 
-- Install Docker Engine and the Docker Compose plugin on a `linux/amd64` host, matching the [published images](../docs/development.md#continuous-integration-and-image-publishing). Enable Docker at host boot (on a systemd host: `sudo systemctl enable --now docker`).
-- Reserve public TCP ports 80 and 443 for Envoy and allow them through the host firewall. Do not expose the Docker API, control-plane port 8080, or Envoy admin port 9901. The Compose file publishes only Envoy ingress.
-- Point the base domain and its wildcard at the host, for example `apps.example.com` and `*.apps.example.com`. Configure IPv6 records only if the host accepts IPv6 traffic. DigitalOcean must manage the DNS zone; provide an API token that can discover the zone and create/delete DNS challenge records. The host needs outbound access to Docker registries, Git, GitHub OAuth, DigitalOcean and Let's Encrypt. See [networking and TLS](../docs/networking-and-auth.md).
-- Create a GitHub OAuth application with callback `https://auth.apps.example.com/auth/callback`, substituting your root/base domain. Have the admin's GitHub username ready for the sign-in allowlist.
+- Use Fedora CoreOS with systemd and Podman 5 or newer, including Quadlet support. Check the installed version with `podman --version`.
+- Reserve public TCP ports 80 and 443 for Envoy and allow them through the host firewall. Do not expose the Podman API, control-plane port 8080, or Envoy admin port 9901.
+- Point the base domain and its wildcard at the host, for example `apps.example.com` and `*.apps.example.com`. Configure IPv6 records only if the host accepts IPv6 traffic. DigitalOcean must manage the DNS zone; provide an API token that can discover the zone and create/delete DNS challenge records. The host needs outbound access to container registries, Git, GitHub OAuth, DigitalOcean and Let's Encrypt. See [networking and TLS](../docs/networking-and-auth.md).
+- Create a GitHub OAuth application with callback `https://auth.apps.example.com/auth/callback`, substituting your base domain. Have the admin's GitHub username ready for the sign-in allowlist.
 
-Install Git, Bash, curl, and the standard `install`, `stty`, `od`, `tr`, and `sed` utilities. Run from an interactive terminal on the deployment host:
+## Install and configure
+
+Ensure Podman, systemctl, Git, Bash, curl, and the standard `install`, `stty`, `od`, `tr`, and `sed` utilities are available. The installer also requires CoreOS's Quadlet generator at `/usr/lib/systemd/system-generators/podman-system-generator`. Run from an interactive terminal on the CoreOS host:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/maxine4j/homelab-paas/refs/heads/main/prod/install.sh | sudo bash
 ```
 
-The [installer](install.sh) shallow-clones `main` into a private `/tmp/homelab-paas-{uuid}` checkout and removes it on exit. It asks for the root/base domain, admin's GitHub username, and ACME email, and shows the derived GitHub OAuth callback URL. The username becomes the initial entry in `auth.github.allowedUsers`. It reads the GitHub OAuth client ID, client secret, and DigitalOcean API token with hidden terminal input, generates a fresh 256-bit JWT signing key from `/dev/urandom` encoded as hexadecimal using `od`, and fills all platform settings into `config.yaml`. Credentials are never printed or passed as process arguments. The installer requires no Python runtime.
+The [installer](install.sh) shallow-clones `main` into a private `/tmp/homelab-paas-{uuid}` checkout and removes it on exit. It asks for the base domain, admin's GitHub username, and ACME email, and shows the derived GitHub OAuth callback URL. It reads the GitHub OAuth client ID, client secret, and DigitalOcean API token with hidden terminal input, generates a fresh 256-bit JWT signing key, and fills the settings into `config.yaml`. Credentials are never printed or passed as process arguments. No Python runtime is required.
 
-It installs the three templates under `/etc/homelab-paas`, creates `/etc/homelab-paas/env` and `/var/homelab-paas`, and uses directory mode `0700` and file mode `0600`. Existing `/etc/homelab-paas` is refused without overwriting configuration or credentials; existing persistent state is retained. The installer does not install Docker or start containers.
+The installer validates both Quadlets with the host's Podman generator before installing configuration. It installs `config.yaml` and `envoy.yaml` under `/etc/homelab-paas`, creates `/etc/homelab-paas/env` and `/var/homelab-paas`, and installs these Quadlet sources:
 
-The control-plane image tag is pinned to the full commit SHA of the cloned `main`. Wait for that commit's CI image publication before pulling; if its build fails, choose an existing published full commit SHA or `vX.X.X` release in `/etc/homelab-paas/docker-compose.yaml`. There is no `latest` tag. Authenticate to GHCR on the host if the package is private, using the same user/context as the Compose commands below.
+| Installed source                                  | Generated systemd service |
+| ------------------------------------------------- | ------------------------- |
+| `/etc/containers/systemd/homelab-paas.container`  | `homelab-paas.service`    |
+| `/etc/containers/systemd/homelab-envoy.container` | `homelab-envoy.service`   |
 
-Open `/etc/homelab-paas/config.yaml` with a privileged editor (for example, `sudo nano /etc/homelab-paas/config.yaml`) only to add your service configurations. The installer has already supplied the domain, GitHub allowlist, ACME email, all platform credentials, and session signing key. All platform credentials live in this file; this bootstrap requires no `.env` file or credential environment overrides.
+It then runs `systemctl daemon-reload` and verifies both services are loaded. A missing or invalid generated service fails the installation instead of reporting success. Configuration and state directories use mode `0700`; installed files use `0600`. Existing configuration or either Quadlet is refused without overwriting it; persistent state is retained. The installer does not install Podman or start containers.
 
-Add your services under `services`, replacing the empty mapping with service entries like the commented example. Use accessible HTTPS repositories and committed descriptors; authenticated Git remotes are deferred. See the authoritative [configuration contract](../docs/configuration.md). Keep `metadata.clusterId: prod` matched to both Compose cluster labels, and keep service names `paas` and `envoy` for internal discovery.
+Edit the `.container` sources to change container settings; use the generated `.service` names with `systemctl`. Do not rename the sources to `.service` or edit the generated units. Templates are [homelab-paas.container](etc/containers/systemd/homelab-paas.container) and [homelab-envoy.container](etc/containers/systemd/homelab-envoy.container).
 
-Provision application bind-mount sources on the Docker host before adding descriptors. For secret references, install `/etc/homelab-paas/env/{serviceId}.env` with mode `0600`; these are application secret files, separate from Compose interpolation. See [secrets](../docs/configuration.md#environment-variables-and-secrets) and [volumes](../docs/configuration.md#volumes-and-resource-limits).
+The control-plane image is pinned to the cloned `main` commit's full SHA. Wait for that commit's [CI image publication](../docs/development.md#continuous-integration-and-image-publishing) before starting. If its build fails, select an existing published full commit SHA or `vX.X.X` release in `/etc/containers/systemd/homelab-paas.container`. There is no `latest` tag. For private GHCR packages, authenticate with `sudo podman login ghcr.io --authfile /etc/homelab-paas/registry-auth.json`, keep that file mode `0600`, and add `AuthFile=/etc/homelab-paas/registry-auth.json` under `[Container]` in the control-plane Quadlet.
 
-The configuration directory is mounted read-only into both bootstrap containers. The control plane writes persistent state and TLS private material under `/var/homelab-paas`; Envoy mounts that directory read-only and runs as root to read restricted files. Keep these directories restricted to host administrators. Docker socket access grants the control plane host-level control.
+Edit `/etc/homelab-paas/config.yaml` to add your services under `services`, replacing the empty mapping with entries like the commented example. The installer supplies all platform settings and credentials. Use accessible HTTPS repositories and committed descriptors; authenticated Git remotes are deferred. See the [configuration contract](../docs/configuration.md). Keep `metadata.clusterId: prod` matched to both Quadlet cluster labels.
+
+Provision application bind-mount sources on the host before adding descriptors. Install application secrets at `/etc/homelab-paas/env/{serviceId}.env` with mode `0600`. On SELinux hosts, application bind-mount sources also need labels permitting container access. See [secrets and volumes](../docs/configuration.md#environment-variables-and-secrets).
+
+The control plane mounts `/run/podman/podman.sock` at `/var/run/docker.sock` and disables SELinux container labeling to access the API, as required by [Podman's socket documentation](https://docs.podman.io/en/stable/markdown/podman-system-service.1.html). This grants host-level control. Envoy uses shared SELinux labels (`:z`) on configuration and state mounts and runs as root to read restricted files. Configuration is read-only in both containers; only the control plane writes persistent state and TLS material.
 
 ## Start and verify
 
-Run on the deployment host:
+Run on the CoreOS host. Use `sudo` for Podman and systemd commands: these Quadlets run as root and use the system Podman socket.
 
 ```sh
-sudo docker compose -f /etc/homelab-paas/docker-compose.yaml config --quiet
-sudo docker compose -f /etc/homelab-paas/docker-compose.yaml pull
-sudo docker compose -f /etc/homelab-paas/docker-compose.yaml up -d
-sudo docker compose -f /etc/homelab-paas/docker-compose.yaml ps
-sudo docker compose -f /etc/homelab-paas/docker-compose.yaml logs --tail=100 paas envoy
+sudo systemctl enable --now podman.socket
+sudo systemctl start homelab-paas.service homelab-envoy.service
+sudo systemctl status homelab-paas.service homelab-envoy.service
+sudo podman ps
+sudo journalctl -u homelab-paas.service -u homelab-envoy.service -n 100
 curl --fail --head http://apps.example.com/
 ```
 
-Substitute your domain. HTTP should redirect to HTTPS. Open `https://apps.example.com/` to verify the [management UI](../docs/management-ui.md), GitHub login and certificate; then verify each configured application's URL. Initial TLS provisioning requires working DNS and API credentials. A healthy control-plane probe alone does not confirm certificate issuance, accepted Envoy routes, or successful application deployments; check logs and the UI for failures.
+Substitute your domain. HTTP should redirect to HTTPS. Open `https://apps.example.com/` to verify the [management UI](../docs/management-ui.md), GitHub login and certificate; then verify each application's URL. Initial TLS provisioning requires working DNS and API credentials. A healthy control-plane probe alone does not confirm certificate issuance, accepted Envoy routes, or successful application deployments.
 
-Both bootstrap containers use `restart: unless-stopped`. With Docker enabled at boot, they restart after a host reboot unless explicitly stopped. Compose is not a boot service; its dependency health ordering applies to `compose up`, while Docker restart policies handle daemon restarts. After a reboot, verify bootstrap health and application routes again.
+If a service is missing, inspect the source paths and generator errors before attempting to start it:
+
+```sh
+sudo ls -l /etc/containers/systemd/homelab-paas.container /etc/containers/systemd/homelab-envoy.container
+sudo /usr/lib/systemd/system-generators/podman-system-generator --dryrun
+```
+
+Resolve the reported error in the `.container` source, then run `sudo systemctl daemon-reload` and start the services again.
+
+The Quadlets' `WantedBy=multi-user.target` starts both services at boot; generated services do not need `systemctl enable`. Systemd restarts failed containers. Envoy starts after the control plane passes its health check. See [Quadlet documentation](https://docs.podman.io/en/stable/markdown/podman-systemd.unit.5.html).
 
 ## Configuration and updates
 
-After editing platform configuration, restart the control plane:
+After editing platform configuration:
 
 ```sh
-sudo docker compose -f /etc/homelab-paas/docker-compose.yaml restart paas
+sudo systemctl restart homelab-paas.service
 ```
 
-For an image update, edit the pinned image tag, then run `pull` and `up -d` again. Compose replaces the changed bootstrap containers. Verify logs, login, TLS and routes after updates. Descriptor changes are reconciled from committed Git revisions; referenced application secret changes are reread on polling passes. See [reconciliation](../docs/reconciliation-and-deployments.md).
+For an image update, edit `Image=` in `/etc/containers/systemd/homelab-paas.container`, then run:
 
-Retain `/var/homelab-paas`, configuration and secret files, generated credentials, and all application bind-mount data across restarts and updates. Bootstrap container replacement does not remove Docker-managed workloads or service networks. Do not prune platform resources or delete persistent state to repair deployment failures. Backups and disaster recovery remain operator responsibilities outside the current platform scope.
+```sh
+sudo systemctl daemon-reload
+sudo systemctl restart homelab-paas.service
+```
+
+Restart `homelab-envoy.service` after changing its image or bootstrap configuration. Verify logs, login, TLS and application routes after updates and host reboots. Descriptor changes are reconciled from Git; application secret changes are reread on polling passes. See [reconciliation](../docs/reconciliation-and-deployments.md).
+
+Retain `/var/homelab-paas`, configuration, credentials, and application bind-mount data across restarts and updates. Do not prune platform resources or delete persistent state to repair deployment failures. Backups and disaster recovery remain operator responsibilities outside the current platform scope.
