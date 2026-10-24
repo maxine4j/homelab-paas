@@ -19,14 +19,14 @@ async function withServer(listener: RequestListener, run: (port: number) => Prom
 	}
 }
 
-test.each([200, 204, 299, 300, 404, 503])("probe accepts only HTTP 2xx: %s", async (status) => {
+test.each([200, 201, 204, 299, 300, 404, 503])("probe accepts only HTTP 200: %s", async (status) => {
 	await withServer(
 		(_req, res) => {
 			res.writeHead(status);
 			res.end();
 		},
 		async (port) => {
-			expect(await probe("127.0.0.1", port, "/health")).toBe(status >= 200 && status < 300);
+			expect(await probe("127.0.0.1", port, "/health")).toBe(status === 200);
 		},
 	);
 });
