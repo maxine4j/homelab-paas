@@ -3,8 +3,11 @@ import { type Middleware } from "koa";
 import { logger } from "./logger.ts";
 
 export class ValidationError extends Error {
-	constructor(public errors: Array<string>) {
-		super("ValidationError");
+	constructor(
+		public errors: Array<string>,
+		options?: ErrorOptions,
+	) {
+		super("ValidationError", options);
 	}
 }
 
@@ -22,7 +25,7 @@ export class ContextualError extends Error {
 export class DomainError extends ContextualError {
 	override name = "DomainErrors";
 	constructor(message: string, context: Record<string, unknown> = {}, cause?: Error | unknown) {
-		super(message, context, { cause });
+		super(message, context, cause);
 	}
 }
 
@@ -36,7 +39,7 @@ export const errorMiddleware: Middleware = async (ctx, next) => {
 				message: error.message,
 				validationErrors: error.errors,
 			};
-			logger.error("Validation Error");
+			logger.error({ err: error }, "Validation Error");
 			return;
 		}
 
@@ -45,7 +48,7 @@ export const errorMiddleware: Middleware = async (ctx, next) => {
 			ctx.body = {
 				message: error.message,
 			};
-			logger.error("Domain Error");
+			logger.error({ err: error }, "Domain Error");
 			return;
 		}
 
@@ -53,6 +56,6 @@ export const errorMiddleware: Middleware = async (ctx, next) => {
 		ctx.body = {
 			message: "Internal server error",
 		};
-		logger.error("Internal Server Error");
+		logger.error({ err: error }, "Internal Server Error");
 	}
 };

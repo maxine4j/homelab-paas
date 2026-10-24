@@ -11,8 +11,8 @@ export interface EnvoyConfiguration {
 }
 
 export class EnvoyClientError extends Error {
-	constructor() {
-		super("Cannot publish or confirm Envoy configuration");
+	constructor(options?: ErrorOptions) {
+		super("Cannot publish or confirm Envoy configuration", options);
 		this.name = "EnvoyClientError";
 	}
 }

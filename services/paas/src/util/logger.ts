@@ -4,11 +4,14 @@ import type { Middleware } from "koa";
 import pino, { type DestinationStream, type Logger, type LoggerOptions } from "pino";
 
 const context = new AsyncLocalStorage<{ task: string; taskId: string }>();
+const serializeError = (error: unknown): unknown =>
+	error instanceof Error
+		? { ...pino.stdSerializers.errWithCause(error), stack: pino.stdSerializers.err(error).stack }
+		: error;
 const options: LoggerOptions = {
 	timestamp: pino.stdTimeFunctions.isoTime,
 	mixin: () => ({ ...context.getStore() }),
-	// Infrastructure errors and commands can embed credentials. Log safe summaries instead.
-	redact: { paths: ["error", "err", "command"], remove: true },
+	serializers: { err: serializeError, error: serializeError, failure: serializeError },
 };
 
 /** All application loggers share automatic async task context. */
@@ -21,15 +24,17 @@ export const createLogger = (component: string, destination?: DestinationStream)
 export const withLogContext = <T>(fields: { task: string; taskId: string }, run: () => T): T =>
 	context.run(fields, run);
 
-/** Allowlist request metadata so OAuth codes, cookies and tokens cannot be serialized. */
+/** Log request outcomes and failures; keep successful health checks silent. */
 export const createRequestLogger =
 	(log: Logger = createLogger("http")): Middleware =>
 	async (ctx, next) => {
 		const started = performance.now();
 		let failureStatus: number | undefined;
+		let failure: unknown;
 		try {
 			await next();
 		} catch (error) {
+			failure = error;
 			failureStatus =
 				error instanceof Error
 				&& "status" in error
@@ -44,7 +49,13 @@ export const createRequestLogger =
 			const status = failureStatus ?? ctx.status;
 			if (ctx.path !== "/health" || status >= 400) {
 				log[status >= 500 ? "error" : status >= 400 ? "warn" : "info"](
-					{ method: ctx.method, path: ctx.path, status, durationMs: Math.round(performance.now() - started) },
+					{
+						err: failure,
+						method: ctx.method,
+						path: ctx.path,
+						status,
+						durationMs: Math.round(performance.now() - started),
+					},
 					"Request completed",
 				);
 			}

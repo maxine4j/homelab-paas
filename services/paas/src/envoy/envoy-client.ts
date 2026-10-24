@@ -36,8 +36,8 @@ export class EnvoyClient implements IEnvoyClient {
 		try {
 			await this.publish("cds", configuration.clusters);
 			await this.publish("lds", configuration.listeners);
-		} catch {
-			throw new EnvoyClientError();
+		} catch (cause) {
+			throw new EnvoyClientError({ cause });
 		}
 	}
 
@@ -46,8 +46,8 @@ export class EnvoyClient implements IEnvoyClient {
 			const content = stringifyYaml({ version_info: "bootstrap", resources: [] });
 			await this.transport.createDiscoveryFile("cds.yaml", content);
 			await this.transport.createDiscoveryFile("lds.yaml", content);
-		} catch {
-			throw new EnvoyClientError();
+		} catch (cause) {
+			throw new EnvoyClientError({ cause });
 		}
 	}
 
@@ -55,11 +55,17 @@ export class EnvoyClient implements IEnvoyClient {
 		const version = createHash("sha256").update(JSON.stringify(resources)).digest("hex");
 		await this.transport.writeDiscoveryFile(`${kind}.yaml`, stringifyYaml({ version_info: version, resources }));
 		const names = resources.map(({ name }) => name).sort();
+		let lastFailure: unknown;
 		for (let attempt = 0; attempt < this.polling.attempts; attempt++) {
 			// The bootstrap starts Envoy only after the control-plane health server is up.
-			const response = await this.transport.readConfigDump().catch(() => undefined);
+			const response = await this.transport.readConfigDump().catch((error: unknown) => {
+				lastFailure = error;
+				return undefined;
+			});
 			if (response) {
-				if (response.status !== 200) throw new EnvoyClientError();
+				lastFailure = undefined;
+				if (response.status !== 200)
+					throw new Error(`Envoy config dump failed: HTTP ${response.status}: ${response.body}`);
 				const dump = dumpSchema.parse(JSON.parse(response.body));
 				const type = kind === "cds" ? "ClustersConfigDump" : "ListenersConfigDump";
 				const config = dump.configs.find(
@@ -69,7 +75,7 @@ export class EnvoyClient implements IEnvoyClient {
 			}
 			if (attempt + 1 < this.polling.attempts) await this.sleep(this.polling.intervalMs);
 		}
-		throw new EnvoyClientError();
+		throw new EnvoyClientError({ cause: lastFailure });
 	}
 
 	private accepted(kind: "cds" | "lds", value: unknown, version: string, names: string[]): boolean {

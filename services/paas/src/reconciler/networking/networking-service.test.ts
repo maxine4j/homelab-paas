@@ -64,10 +64,11 @@ test("does not resolve or publish a concurrent snapshot before acceptance", asyn
 
 test("preserves desired endpoints after uncertain publication and retries after failure", async () => {
 	const f = fixture();
+	const cause = new Error("sensitive infrastructure detail");
 	f.envoy.configureRoutes = async () => {
-		throw new Error("sensitive infrastructure detail");
+		throw cause;
 	};
-	await expect(f.service.routeTo("demo", replacement)).rejects.toThrow(NetworkingError);
+	await expect(f.service.routeTo("demo", replacement)).rejects.toMatchObject({ cause });
 	expect(await f.endpoints.getAll()).toEqual({ demo: replacement });
 	f.envoy.configureRoutes = async (routes) => {
 		f.snapshots.push(routes);

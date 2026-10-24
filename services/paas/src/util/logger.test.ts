@@ -5,12 +5,20 @@ import { createLogger, createRequestLogger, withLogContext } from "./logger.ts";
 import { sleep } from "./sleep.ts";
 import { startTestApi } from "./test/router.ts";
 
-test("raw error payloads and shell commands cannot expose secrets", () => {
+test("error fields and commands retain original details and nested cause stacks", () => {
 	const lines: string[] = [];
 	const log = createLogger("test", { write: (line: string) => lines.push(line) });
-	log.error({ error: new Error("SECRET"), err: new Error("SECRET"), command: "echo SECRET" }, "Operation failed");
-	expect(lines.join("")).not.toContain("SECRET");
-	expect(JSON.parse(lines.at(0)!)).toMatchObject({ msg: "Operation failed", level: 50 });
+	const cause = Object.assign(new Error("original details"), { code: "EACCES" });
+	const error = new Error("Operation failed", { cause: new Error("Adapter failed", { cause }) });
+	log.error({ error, err: error, command: "echo SECRET" }, "Operation failed");
+	const record = JSON.parse(lines.at(0)!);
+	expect(record).toMatchObject({ msg: "Operation failed", level: 50, command: "echo SECRET" });
+	for (const field of ["error", "err"]) {
+		expect(record[field].stack).toContain("Operation failed");
+		expect(record[field].stack).toContain("caused by: Error: Adapter failed");
+		expect(record[field].stack).toContain("caused by: Error: original details");
+		expect(record[field].cause.cause.code).toBe("EACCES");
+	}
 });
 
 test("JSON lines include timestamps, component and isolated async context, including children", async () => {
@@ -37,7 +45,7 @@ test("JSON lines include timestamps, component and isolated async context, inclu
 	expect(lines.every((line) => line.endsWith("\n"))).toBe(true);
 });
 
-test("request logs use the shared logger, omit secrets and quiet successful health checks", async () => {
+test("request logs include failures and quiet successful health checks", async () => {
 	const lines: string[] = [];
 	const log = createLogger("http", { write: (line: string) => lines.push(line) });
 	const app = new Koa().use(createRequestLogger(log)).use((ctx) => {
@@ -59,13 +67,12 @@ test("request logs use the shared logger, omit secrets and quiet successful heal
 		await api.close();
 	}
 	expect(lines).toHaveLength(3);
-	expect(lines.join("")).not.toContain("SECRET");
 	expect(JSON.parse(lines.at(0)!)).toMatchObject({
 		method: "GET",
 		path: "/auth/callback",
 		status: 200,
 		durationMs: expect.any(Number),
 	});
-	expect(JSON.parse(lines.at(1)!)).toMatchObject({ status: 500, level: 50 });
+	expect(JSON.parse(lines.at(1)!)).toMatchObject({ status: 500, level: 50, err: { message: "SECRET" } });
 	expect(JSON.parse(lines.at(2)!)).toMatchObject({ status: 401, level: 40 });
 });

@@ -27,9 +27,10 @@ export class EnvironmentResolver implements IEnvironmentResolver {
 				if (value === undefined) throw new Error();
 				return { name: entry.name, value };
 			});
-		} catch {
+		} catch (cause) {
 			throw new Error(
 				"Cannot resolve application secrets; check the service env file and required variable names",
+				{ cause },
 			);
 		}
 	}

@@ -55,8 +55,8 @@ export class QueueTaskRunner<TTask> implements TaskRunner {
 			await withLogContext({ task: this.deps.taskName, taskId }, async () => {
 				try {
 					await this.deps.task.run({ ...taskEnvelope, taskId });
-				} catch {
-					logger.error("Queued task failed");
+				} catch (err) {
+					logger.error({ err }, "Queued task failed");
 				}
 			});
 		}

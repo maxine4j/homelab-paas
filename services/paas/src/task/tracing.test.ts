@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 
 import { createLogger } from "../util/logger.ts";
+import { captureLogs } from "../util/test/logs.ts";
 import { PeriodicTaskRunner } from "./periodic.ts";
 import { InMemoryTaskQueue, QueueTaskRunner } from "./queue.ts";
 import { StartupTaskRunner } from "./startup.ts";
@@ -78,4 +79,47 @@ test("all task runners scope each execution and failure report, without logging 
 	]);
 	expect(lines.join("")).not.toContain("SECRET");
 	expect(records.at(4).envelopeId).toBe("run-4");
+});
+
+test("startup and queue runners log original failures inside their task context", async () => {
+	const capture = captureLogs();
+	const cause = new Error("root failure");
+	const err = new Error("task failure", { cause });
+	try {
+		await new StartupTaskRunner(
+			{
+				run: async () => {
+					throw err;
+				},
+			},
+			"startup",
+			() => "startup-id",
+		).start();
+		let open = true;
+		const queue = new InMemoryTaskQueue<string>(() => "envelope-id");
+		await queue.enqueue("payload");
+		await new QueueTaskRunner({
+			lifecycle: { isOpen: () => open, registerShutdownHandler() {}, async shutdown() {} },
+			queue,
+			idleDelayMs: 1,
+			taskName: "queue",
+			generateTaskId: () => "queue-id",
+			pause: async () => {},
+			task: {
+				run: async () => {
+					open = false;
+					throw err;
+				},
+			},
+		}).start();
+	} finally {
+		capture.restore();
+	}
+	const records = capture.lines.map((line) => JSON.parse(line));
+	expect(records).toHaveLength(2);
+	for (const record of records) {
+		expect(record.err.cause.message).toBe("root failure");
+		expect(record.err.stack).toContain("caused by: Error: root failure");
+		expect(record.taskId).toBe(`${record.task}-id`);
+	}
 });

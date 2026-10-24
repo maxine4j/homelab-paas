@@ -11,6 +11,7 @@ import type {
 import type { PlatformConfig } from "../config/paas-config.ts";
 import type { IGitService } from "../git/git-service.ts";
 import type { DescriptorDecoder, IReconciliationStateStore } from "../reconciler/types.ts";
+import { createLogger } from "../util/logger.ts";
 import type { UiDocker } from "./types.ts";
 
 export interface IPaasUiService {
@@ -24,12 +25,19 @@ export interface IPaasUiService {
 }
 
 export class PaasUiError extends Error {
-	constructor(public readonly kind: "not-found" | "unavailable") {
-		super(kind === "not-found" ? "Requested item was not found" : "Cluster data is unavailable; retry shortly");
+	constructor(
+		public readonly kind: "not-found" | "unavailable",
+		options?: ErrorOptions,
+	) {
+		super(
+			kind === "not-found" ? "Requested item was not found" : "Cluster data is unavailable; retry shortly",
+			options,
+		);
 	}
 }
 
 export class PaasUiService implements IPaasUiService {
+	private readonly log = createLogger(PaasUiService.name);
 	// The UI has its own Git cache; serialize its fetches to protect FETCH_HEAD.
 	private pending: Promise<unknown> = Promise.resolve();
 	constructor(
@@ -61,8 +69,8 @@ export class PaasUiService implements IPaasUiService {
 						};
 					}),
 			);
-		} catch {
-			throw new PaasUiError("unavailable");
+		} catch (cause) {
+			throw new PaasUiError("unavailable", { cause });
 		}
 	}
 
@@ -106,7 +114,7 @@ export class PaasUiService implements IPaasUiService {
 			};
 		} catch (error) {
 			if (error instanceof PaasUiError) throw error;
-			throw new PaasUiError("unavailable");
+			throw new PaasUiError("unavailable", { cause: error });
 		}
 	}
 
@@ -130,8 +138,8 @@ export class PaasUiService implements IPaasUiService {
 					}),
 				),
 			};
-		} catch {
-			throw new PaasUiError("unavailable");
+		} catch (cause) {
+			throw new PaasUiError("unavailable", { cause });
 		}
 	}
 
@@ -150,7 +158,7 @@ export class PaasUiService implements IPaasUiService {
 			return { containerId, content, tail: 200 };
 		} catch (error) {
 			if (error instanceof PaasUiError) throw error;
-			throw new PaasUiError("unavailable");
+			throw new PaasUiError("unavailable", { cause: error });
 		}
 	}
 
@@ -163,7 +171,8 @@ export class PaasUiService implements IPaasUiService {
 			try {
 				const file = await this.git.fetchFile(serviceId, this.config.services[serviceId]!);
 				return { revision: file.revision, descriptor: this.decode(file.content, serviceId) };
-			} catch {
+			} catch (err) {
+				this.log.error({ err, serviceId }, "Cannot load management UI descriptor");
 				return undefined;
 			}
 		});

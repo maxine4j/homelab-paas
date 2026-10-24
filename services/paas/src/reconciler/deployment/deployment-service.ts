@@ -38,7 +38,7 @@ export class DeploymentService implements IDeploymentService {
 			);
 		} catch (error) {
 			this.log.error(
-				{ ...fields, event: "deployment.failed" },
+				{ ...fields, event: "deployment.failed", err: error },
 				"Deployment failed; reconciliation will retry from observed state",
 			);
 			throw error;

@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import { captureLogs } from "../../util/test/logs.ts";
 import { DeploymentService } from "./deployment-service.ts";
 
-test("records deployment action, completion and safe failure with resource identities", async () => {
+test("records deployment action, completion and full failure with resource identities", async () => {
 	const capture = captureLogs();
 	let fail = false;
 	const deployment = new DeploymentService([
@@ -43,5 +43,5 @@ test("records deployment action, completion and safe failure with resource ident
 			strategy: "recreate",
 			revision: "rev",
 		});
-	expect(capture.lines.join("")).not.toContain("SECRET");
+	expect(records.at(-1).err).toMatchObject({ message: "SECRET", stack: expect.stringContaining("SECRET") });
 });

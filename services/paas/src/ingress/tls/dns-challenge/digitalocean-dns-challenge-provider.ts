@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { DnsChallengeRecord } from "./types.ts";
 export interface IDnsAcmeChallengeProvider {
-	/** Creates only the challenge TXT record; failures are sanitized. */
+	/** Creates only the challenge TXT record; failures retain their underlying cause. */
 	createChallenge(identifier: string, value: string): Promise<DnsChallengeRecord>;
 	/** Removes only the record returned by createChallenge. */
 	removeChallenge(record: DnsChallengeRecord): Promise<void>;
@@ -24,16 +24,19 @@ export class DigitalOceanDnsAcmeChallengeProvider implements IDnsAcmeChallengePr
 					labels.shift();
 					continue;
 				}
+				if (!response.ok)
+					throw new Error(
+						`DigitalOcean zone lookup failed: HTTP ${response.status}: ${await response.text()}`,
+					);
 				if (
-					!response.ok
-					|| z.object({ domain: z.object({ name: z.string() }) }).parse(await response.json()).domain.name
-						!== candidate
+					z.object({ domain: z.object({ name: z.string() }) }).parse(await response.json()).domain.name
+					!== candidate
 				)
-					throw new Error();
+					throw new Error(`DigitalOcean returned a different zone for ${candidate}`);
 				zone = candidate;
 				break;
 			}
-			if (!zone) throw new Error();
+			if (!zone) throw new Error(`No DigitalOcean DNS zone found for ${this.config.baseDomain}`);
 			const prefix =
 				this.config.baseDomain === zone ? "" : `.${this.config.baseDomain.slice(0, -(zone.length + 1))}`;
 			const response = await this.send(`/domains/${zone}/records`, "POST", {
@@ -42,21 +45,23 @@ export class DigitalOceanDnsAcmeChallengeProvider implements IDnsAcmeChallengePr
 				data: value,
 				ttl: 300,
 			});
-			if (!response.ok) throw new Error();
+			if (!response.ok)
+				throw new Error(`DigitalOcean TXT creation failed: HTTP ${response.status}: ${await response.text()}`);
 			const payload = z
 				.object({ domain_record: z.object({ id: z.number().int().positive() }) })
 				.parse(await response.json());
 			return { zone, id: payload.domain_record.id };
-		} catch {
-			throw new Error("DNS challenge failed");
+		} catch (cause) {
+			throw new Error("DNS challenge failed", { cause });
 		}
 	}
 	async removeChallenge(record: DnsChallengeRecord): Promise<void> {
 		try {
 			const response = await this.send(`/domains/${record.zone}/records/${record.id}`, "DELETE");
-			if (!response.ok && response.status !== 404) throw new Error();
-		} catch {
-			throw new Error("DNS challenge failed");
+			if (!response.ok && response.status !== 404)
+				throw new Error(`DigitalOcean TXT removal failed: HTTP ${response.status}: ${await response.text()}`);
+		} catch (cause) {
+			throw new Error("DNS challenge failed", { cause });
 		}
 	}
 	private send(path: string, method: string, body?: Record<string, string | number>): Promise<Response> {

@@ -1,6 +1,7 @@
 import Koa from "koa";
 import { expect, test, vi } from "vitest";
 
+import { captureLogs } from "../util/test/logs.ts";
 import { startTestApi } from "../util/test/router.ts";
 import { createPaasUiRouter } from "./paas-ui-router.ts";
 import { PaasUiError, type IPaasUiService } from "./paas-ui-service.ts";
@@ -35,6 +36,7 @@ const fixture = async (authenticated = true) => {
 
 test("UI routes map requests, mark snapshots private and translate domain failures", async () => {
 	const f = await fixture();
+	const capture = captureLogs();
 	try {
 		for (const path of [
 			"/cluster",
@@ -64,7 +66,12 @@ test("UI routes map requests, mark snapshots private and translate domain failur
 		await post.body?.cancel();
 	} finally {
 		await f.close();
+		capture.restore();
 	}
+	expect(capture.lines.map((line) => JSON.parse(line).err.message)).toEqual([
+		"Requested item was not found",
+		"Cluster data is unavailable; retry shortly",
+	]);
 });
 
 test("UI authentication fails closed before reading cluster data", async () => {

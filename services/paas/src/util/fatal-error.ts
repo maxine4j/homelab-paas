@@ -1,4 +1,4 @@
-import pino, { type Logger } from "pino";
+import type { Logger } from "pino";
 
 import { logger } from "./logger.ts";
 
@@ -7,8 +7,5 @@ export const logFatalError = (
 	reason: unknown,
 	log: Logger = logger,
 ): void => {
-	log.error(
-		{ operation: "fatal", failure: reason instanceof Error ? pino.stdSerializers.errWithCause(reason) : reason },
-		`Fatal process failure: ${event}`,
-	);
+	log.error({ operation: "fatal", failure: reason }, `Fatal process failure: ${event}`);
 };

@@ -15,7 +15,7 @@ The documents below define the intended platform. Align changes with them; exist
 - Preserve the existing Node.js 24, pnpm, TypeScript, Vitest, and Oxc tooling. Use repository scripts and configuration.
 - Ask the owner before adding a third-party dependency.
 - Keep requirements in one authoritative document and cross-link related topics. Update the relevant document when changing a contract.
-- Never expose secrets in logs or status responses. Preserve persistent data and generated credentials when removing resources.
+- Follow the [backend logging contract](docs/development.md#backend-logging); keep secrets out of status responses. Preserve persistent data and generated credentials when removing resources.
 - Backend filesystem operations use `src/util/file.ts`; YAML parsing and serialization use `src/util/yaml.ts`; timers use injected `ISleep` from `src/util/sleep.ts`. Only the filesystem utility's boundary tests use raw filesystem APIs to independently verify persisted bytes and permissions. See [development](docs/development.md#backend-infrastructure-boundaries) for adapter exceptions.
 - `main.ts` and `start.ts` are exempt from unit-test and unit-test TDD requirements for process setup, composition, and startup/shutdown wiring. Validate them with typechecking, builds, and appropriate startup smoke checks. Keep business logic in separately tested modules.
 

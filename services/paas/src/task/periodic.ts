@@ -15,7 +15,7 @@ export class PeriodicTaskRunner implements TaskRunner {
 			generateTaskId: () => string;
 			task: PeriodicTask;
 			pause: (ms: number) => Promise<void>;
-			report: () => void;
+			report: (error: unknown) => void;
 		},
 	) {}
 
@@ -24,8 +24,8 @@ export class PeriodicTaskRunner implements TaskRunner {
 			await withLogContext({ task: this.deps.taskName, taskId: this.deps.generateTaskId() }, async () => {
 				try {
 					await this.deps.task.run();
-				} catch {
-					this.deps.report();
+				} catch (error) {
+					this.deps.report(error);
 				}
 			});
 			if (this.deps.lifecycle.isOpen()) await this.deps.pause(this.deps.periodMs);

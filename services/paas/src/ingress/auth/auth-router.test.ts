@@ -3,6 +3,7 @@ import { request as httpRequest } from "node:http";
 import Koa from "koa";
 import { expect, test, vi } from "vitest";
 
+import { captureLogs } from "../../util/test/logs.ts";
 import { startTestApi } from "../../util/test/router.ts";
 import { createAuthRouter } from "./auth-router.ts";
 import type { IAuthService } from "./auth-service.ts";
@@ -26,6 +27,7 @@ const requestWithHost = (url: string, headers: Record<string, string>): Promise<
 	});
 
 test("maps Envoy checks, strips platform cookies, redirects private requests and fails closed", async () => {
+	const capture = captureLogs();
 	const authorize = vi.fn(async (id: string, token: string | undefined) =>
 		id === "public" || token === "valid" ? ("allowed" as const) : ("login" as const),
 	);
@@ -64,7 +66,9 @@ test("maps Envoy checks, strips platform cookies, redirects private requests and
 		expect(await failed.text()).not.toContain("SECRET");
 	} finally {
 		await api.close();
+		capture.restore();
 	}
+	expect(JSON.parse(capture.lines.at(0)!).err.message).toBe("SECRET");
 });
 
 test("validates return targets and callback parameters, sets secure cookies and clears OAuth state", async () => {

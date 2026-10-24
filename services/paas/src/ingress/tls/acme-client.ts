@@ -5,7 +5,7 @@ import type { IDnsAcmeChallengeProvider } from "./dns-challenge/digitalocean-dns
 import type { DnsChallengeRecord } from "./dns-challenge/types.ts";
 import type { Certificate, CertificateRequest } from "./types.ts";
 export interface IAcmeClient {
-	/** Provisions through production ACME DNS-01. Rejects with a sanitized provisioning failure. */
+	/** Provisions through production ACME DNS-01. Failures retain the underlying cause. */
 	provision(request: CertificateRequest): Promise<Certificate>;
 }
 export class AcmeClient implements IAcmeClient {
@@ -44,8 +44,8 @@ export class AcmeClient implements IAcmeClient {
 				},
 			});
 			return { key: key.toString(), cert };
-		} catch {
-			throw new Error("Certificate provisioning failed");
+		} catch (cause) {
+			throw new Error("Certificate provisioning failed", { cause });
 		}
 	}
 }

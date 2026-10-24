@@ -254,7 +254,7 @@ test("logs changed revisions, retry schedules and recovery without logging uncha
 		"reconciliation.recovered",
 	]);
 	expect(records.at(1)).toMatchObject({ serviceId: "demo", failures: 1, retryAt: 1000 });
-	expect(capture.lines.join("")).not.toContain("SECRET");
+	expect(records.at(1).err).toMatchObject({ message: "SECRET", stack: expect.stringContaining("SECRET") });
 });
 
 test("persists deploying before mutation and applies bounded exponential retries across restarts", async () => {

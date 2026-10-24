@@ -36,8 +36,8 @@ export class AuthService implements IAuthService {
 			const user = await this.provider.fetchUserDetails(accessToken);
 			if (!this.isAllowed(user.userId)) throw new Error();
 			return { session: this.tokens.issue({ userId: user.userId }, "session"), redirectUri: claims.redirectUri };
-		} catch {
-			throw new AuthenticationError();
+		} catch (cause) {
+			throw new AuthenticationError({ cause });
 		}
 	}
 	verifyAuthCookie(token: string | undefined): AuthedUserDetails | undefined {
@@ -54,8 +54,8 @@ export class AuthService implements IAuthService {
 }
 
 export class AuthenticationError extends Error {
-	constructor() {
-		super("Authentication failed");
+	constructor(options?: ErrorOptions) {
+		super("Authentication failed", options);
 		this.name = "AuthenticationError";
 	}
 }

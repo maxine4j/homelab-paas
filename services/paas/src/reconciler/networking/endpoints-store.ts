@@ -16,8 +16,8 @@ export class EndpointsStore implements IEndpointsStore {
 		try {
 			const value = await this.store.get("routes");
 			return routesSchema.parse(value === undefined ? {} : value);
-		} catch {
-			throw new Error("Cannot read reconciliation data; check platform state files and permissions");
+		} catch (cause) {
+			throw new Error("Cannot read reconciliation data; check platform state files and permissions", { cause });
 		}
 	}
 
@@ -28,8 +28,8 @@ export class EndpointsStore implements IEndpointsStore {
 		else delete routes[serviceId];
 		try {
 			await this.store.set("routes", routesSchema.parse(routes));
-		} catch {
-			throw new Error("Cannot write reconciliation data; check platform state directory permissions");
+		} catch (cause) {
+			throw new Error("Cannot write reconciliation data; check platform state directory permissions", { cause });
 		}
 	}
 }

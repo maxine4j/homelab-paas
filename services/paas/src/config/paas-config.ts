@@ -52,9 +52,10 @@ export class PaasConfig {
 					value.tls.dns.credentials["apiToken"] = this.environment["DIGITALOCEAN_API_TOKEN"];
 			}
 			return parseConfig(value);
-		} catch {
+		} catch (cause) {
 			throw new Error(
 				"Cannot load platform configuration; check /etc/homelab-paas/config.yaml against the platform configuration contract",
+				{ cause },
 			);
 		}
 	}
@@ -63,8 +64,8 @@ export class PaasConfig {
 export function decodeDescriptorYaml(content: string, serviceId: string): ServiceDescriptor {
 	try {
 		return parseDescriptor(parseYaml(content, `${serviceId}.sd.yaml`), serviceId);
-	} catch {
-		throw new Error("Invalid service descriptor: check service identity and resource configuration");
+	} catch (cause) {
+		throw new Error("Invalid service descriptor: check service identity and resource configuration", { cause });
 	}
 }
 
@@ -130,7 +131,7 @@ export interface PlatformConfig {
 
 export function parseConfig(value: unknown): PlatformConfig {
 	const result = config.safeParse(value);
-	if (!result.success) throw new Error("Invalid platform configuration");
+	if (!result.success) throw new Error("Invalid platform configuration", { cause: result.error });
 	const { data } = result;
 	if (Boolean(data.auth) !== Boolean(data.tls) || (!data.tls && data.ingress.httpsPort !== undefined))
 		throw new Error("Invalid platform configuration: auth and TLS must be configured together");

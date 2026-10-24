@@ -3,8 +3,8 @@ import type { IEndpointsStore } from "./endpoints-store.ts";
 import type { Endpoint } from "./types.ts";
 
 export class NetworkingError extends Error {
-	constructor() {
-		super("Cannot update service traffic routing");
+	constructor(options?: ErrorOptions) {
+		super("Cannot update service traffic routing", options);
 		this.name = "NetworkingError";
 	}
 }
@@ -42,8 +42,8 @@ export class NetworkingService implements INetworkingService {
 			try {
 				await this.endpoints.set(serviceId, endpoint);
 				await this.envoy.configureRoutes(await this.endpoints.getAll());
-			} catch {
-				throw new NetworkingError();
+			} catch (cause) {
+				throw new NetworkingError({ cause });
 			}
 		});
 		this.pending = operation.catch(() => {});

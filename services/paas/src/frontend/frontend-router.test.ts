@@ -77,5 +77,5 @@ test("UI router decodes paths and sanitizes failures without handling API reques
 	}
 	expect(capture.lines).toHaveLength(1);
 	expect(JSON.parse(capture.lines.at(0)!)).toMatchObject({ operation: "serve_ui", level: 50 });
-	expect(capture.lines.join("")).not.toContain("secret-canary");
+	expect(JSON.parse(capture.lines.at(0)!).err.cause.message).toBe("secret-canary");
 });

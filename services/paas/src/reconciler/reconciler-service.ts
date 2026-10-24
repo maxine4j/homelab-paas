@@ -29,9 +29,9 @@ export class ReconcilerService implements IReconcilerService {
 			for (const [serviceId, source] of Object.entries(this.services)) {
 				try {
 					await this.reconcileService(serviceId, source);
-				} catch {
+				} catch (error) {
 					this.log.error(
-						{ event: "reconciliation.state-failed", serviceId },
+						{ event: "reconciliation.state-failed", serviceId, err: error },
 						"Cannot persist reconciliation state; check platform state directory access",
 					);
 				}
@@ -80,7 +80,7 @@ export class ReconcilerService implements IReconcilerService {
 					{ event: "reconciliation.recovered", serviceId, revision: desiredRevision },
 					"Service recovered; clearing retry backoff",
 				);
-		} catch {
+		} catch (error) {
 			const failures = Math.min((previous?.failures ?? 0) + 1, 1024);
 			const delay =
 				Math.min(this.retry.maxRetryBackoffSeconds, this.retry.retryBackoffSeconds * 2 ** (failures - 1))
@@ -95,7 +95,7 @@ export class ReconcilerService implements IReconcilerService {
 				retryAt,
 			});
 			this.log.error(
-				{ event: "reconciliation.failed", serviceId, failures, retryAt },
+				{ event: "reconciliation.failed", serviceId, failures, retryAt, err: error },
 				`${message}; retry scheduled`,
 			);
 		}

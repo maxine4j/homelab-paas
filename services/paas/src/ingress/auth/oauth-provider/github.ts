@@ -29,12 +29,13 @@ export class GitHubOauth2Provider implements Oauth2Provider {
 				}),
 				signal: AbortSignal.timeout(10_000),
 			});
-			if (!response.ok) throw new Error();
+			if (!response.ok)
+				throw new Error(`GitHub token exchange failed: HTTP ${response.status}: ${await response.text()}`);
 			return z
 				.object({ access_token: z.string().min(1), token_type: z.literal("bearer") })
 				.parse(await response.json()).access_token;
-		} catch {
-			throw new Error("GitHub authentication unavailable");
+		} catch (cause) {
+			throw new Error("GitHub authentication unavailable", { cause });
 		}
 	}
 	async fetchUserDetails(token: string): Promise<AuthedUserDetails> {
@@ -48,10 +49,11 @@ export class GitHubOauth2Provider implements Oauth2Provider {
 				},
 				signal: AbortSignal.timeout(10_000),
 			});
-			if (!response.ok) throw new Error();
+			if (!response.ok)
+				throw new Error(`GitHub profile lookup failed: HTTP ${response.status}: ${await response.text()}`);
 			return { userId: z.object({ login: z.string().min(1) }).parse(await response.json()).login };
-		} catch {
-			throw new Error("GitHub authentication unavailable");
+		} catch (cause) {
+			throw new Error("GitHub authentication unavailable", { cause });
 		}
 	}
 }

@@ -65,8 +65,8 @@ export class GitClient implements IGitClient {
 	private async operation<T>(run: () => Promise<T>): Promise<T> {
 		try {
 			return await run();
-		} catch {
-			throw new GitClientError();
+		} catch (cause) {
+			throw new GitClientError({ cause });
 		}
 	}
 }

@@ -10,16 +10,16 @@ export class ReconciliationStore implements IReconciliationStateStore {
 		try {
 			const value = await this.store.get(key);
 			return value === undefined ? undefined : stateSchema.parse(value);
-		} catch {
-			throw new Error("Cannot read reconciliation data; check platform state files and permissions");
+		} catch (cause) {
+			throw new Error("Cannot read reconciliation data; check platform state files and permissions", { cause });
 		}
 	}
 	async write(serviceId: string, state: ReconciliationState): Promise<void> {
 		const key = `${this.identity(serviceId)}.state`;
 		try {
 			await this.store.set(key, stateSchema.parse(state));
-		} catch {
-			throw new Error("Cannot write reconciliation data; check platform state directory permissions");
+		} catch (cause) {
+			throw new Error("Cannot write reconciliation data; check platform state directory permissions", { cause });
 		}
 	}
 

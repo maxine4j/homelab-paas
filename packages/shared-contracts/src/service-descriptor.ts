@@ -85,10 +85,12 @@ export type EnvironmentVariable = z.input<typeof environmentVariable>;
 export type ResourceVolume = z.input<typeof volume>;
 export type ResourceLimits = z.input<typeof limits>;
 
-/** Validates the full descriptor contract; never includes input values in errors. */
+/** Validates the full descriptor contract; schema failures retain their cause for diagnostics. */
 export function parseDescriptor(value: unknown, serviceId: string): ServiceDescriptor {
 	const result = serviceDescriptorSchema.safeParse(value);
 	if (!result.success || result.data.metadata.serviceId !== serviceId)
-		throw new Error("Invalid service descriptor: check service identity and resource configuration");
+		throw new Error("Invalid service descriptor: check service identity and resource configuration", {
+			cause: result.success ? undefined : result.error,
+		});
 	return result.data;
 }

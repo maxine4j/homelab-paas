@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 
 import { parseConfig, decodeDescriptorYaml } from "../config/paas-config.ts";
+import { captureLogs } from "../util/test/logs.ts";
 import { PaasUiService } from "./paas-ui-service.ts";
 
 const descriptor = {
@@ -66,6 +67,30 @@ const fixture = () => {
 	);
 	return { service, config, fetchFile, listServiceContainers, readServiceContainerLogs };
 };
+
+test("management operations preserve causes for internal diagnostics", async () => {
+	const f = fixture();
+	const cause = new Error("Docker failure");
+	f.listServiceContainers.mockRejectedValue(cause);
+	await expect(f.service.getService("demo")).rejects.toMatchObject({ cause });
+	f.listServiceContainers.mockResolvedValue([
+		{ id: "c", resourceId: "app", imageId: "sha256:a", revision: "old", spec: "s", state: "running" },
+	]);
+	f.readServiceContainerLogs.mockRejectedValue(cause);
+	await expect(f.service.getLogs("demo", "app", "c")).rejects.toMatchObject({ cause });
+});
+
+test("descriptor fallback logs the original Git failure", async () => {
+	const f = fixture();
+	f.fetchFile.mockRejectedValue(new Error("Git failure"));
+	const capture = captureLogs();
+	try {
+		await f.service.getService("demo");
+	} finally {
+		capture.restore();
+	}
+	expect(JSON.parse(capture.lines.at(0)!).err.message).toBe("Git failure");
+});
 
 test("cluster config is allowlisted and configured services remain visible without fetching Git", async () => {
 	const f = fixture();

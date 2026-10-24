@@ -21,8 +21,8 @@ export class FileCertificateStore implements ICertificateStore {
 			const pem = await this.readOptional("ingress.pem");
 			if (!pem) return undefined;
 			return { expiresAt: new Date(new X509Certificate(pem).validTo).getTime() };
-		} catch {
-			throw new Error("Cannot read TLS certificate");
+		} catch (cause) {
+			throw new Error("Cannot read TLS certificate", { cause });
 		}
 	}
 	async publish(certificate: Certificate): Promise<void> {
@@ -49,8 +49,8 @@ export class FileCertificateStore implements ICertificateStore {
 				}),
 			);
 			await this.atomic("ingress.pem", `${certificate.cert.trim()}\n${certificate.key.trim()}\n`);
-		} catch {
-			throw new Error("Cannot publish TLS certificate");
+		} catch (cause) {
+			throw new Error("Cannot publish TLS certificate", { cause });
 		}
 	}
 	private async readOptional(name: string): Promise<string | undefined> {
@@ -58,14 +58,14 @@ export class FileCertificateStore implements ICertificateStore {
 			return await this.readFile(join(this.directory, name));
 		} catch (error) {
 			if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
-			throw new Error("Cannot read TLS state");
+			throw new Error("Cannot read TLS state", { cause: error });
 		}
 	}
 	private async atomic(name: string, value: string): Promise<void> {
 		try {
 			await this.writeFile(join(this.directory, name), value, { mode: 0o600 });
-		} catch {
-			throw new Error("Cannot write TLS state");
+		} catch (cause) {
+			throw new Error("Cannot write TLS state", { cause });
 		}
 	}
 }

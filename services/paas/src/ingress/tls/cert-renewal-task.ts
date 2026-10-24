@@ -19,8 +19,8 @@ export class TlsCertRenewalTask implements PeriodicTask {
 			);
 			await this.store.publish(await this.provisioner.provisionCert());
 			this.log.info({ event: "certificate.renewed" }, "Certificate published; Envoy will reload TLS material");
-		} catch {
-			throw new Error("Certificate renewal failed; current certificate retained");
+		} catch (cause) {
+			throw new Error("Certificate renewal failed; current certificate retained", { cause });
 		}
 	}
 }

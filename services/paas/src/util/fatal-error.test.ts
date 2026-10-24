@@ -20,7 +20,7 @@ test.each(["unhandledRejection", "uncaughtException"] as const)("%s logs the com
 		failure: {
 			type: "TypeError",
 			message: failure.message,
-			stack: failure.stack,
+			stack: expect.stringContaining("caused by: Error: Connection refused"),
 			detail: "diagnostic context",
 			cause: { type: "Error", message: cause.message, stack: cause.stack, code: "ECONNREFUSED", address: "db" },
 		},

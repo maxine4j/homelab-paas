@@ -1,6 +1,7 @@
 import Router from "@koa/router";
 
 import type { AuthedUserDetails } from "../ingress/auth/types.ts";
+import { logger } from "../util/logger.ts";
 import { PaasUiError, type IPaasUiService } from "./paas-ui-service.ts";
 
 export interface UiSessionVerifier {
@@ -26,6 +27,7 @@ export const createPaasUiRouter = (service: IPaasUiService, sessions?: UiSession
 			}
 			await next();
 		} catch (error) {
+			logger.error({ err: error }, "Management API request failed");
 			context.status = error instanceof PaasUiError && error.kind === "not-found" ? 404 : 503;
 			context.body = {
 				message: error instanceof PaasUiError ? error.message : "Cluster data is unavailable; retry shortly",

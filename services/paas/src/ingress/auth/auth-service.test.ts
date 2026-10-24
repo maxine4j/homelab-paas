@@ -86,8 +86,12 @@ test("denies users outside the allowlist and sanitizes provider failures", async
 	const login = f.service.beginLogin("https://demo.example.test/");
 	f.provider.fetchUserDetails.mockResolvedValue({ userId: "mallory" });
 	await expect(f.service.completeLogin("code", login.state, "random-nonce")).rejects.toThrow("Authentication failed");
-	f.provider.fetchAccessToken.mockRejectedValue(new Error("SECRET"));
-	await expect(f.service.completeLogin("code", login.state, "random-nonce")).rejects.toThrow("Authentication failed");
+	const cause = new Error("SECRET");
+	f.provider.fetchAccessToken.mockRejectedValue(cause);
+	await expect(f.service.completeLogin("code", login.state, "random-nonce")).rejects.toMatchObject({
+		message: "Authentication failed",
+		cause,
+	});
 });
 
 test("authorizes public and private routed services locally, and denies unknown routes", async () => {

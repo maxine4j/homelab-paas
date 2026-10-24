@@ -41,8 +41,11 @@ export interface IDockerClient {
 
 export class DockerClientError extends Error {
 	override readonly name = "DockerClientError";
-	constructor(public readonly kind: "not-found" | "conflict" | "unavailable" | "invalid-response") {
-		super(`Docker operation failed (${kind})`);
+	constructor(
+		public readonly kind: "not-found" | "conflict" | "unavailable" | "invalid-response",
+		options?: ErrorOptions,
+	) {
+		super(`Docker operation failed (${kind})`, options);
 	}
 }
 
@@ -59,12 +62,13 @@ export class DockerClient implements IDockerClient {
 		let response: { status: number; body: string; bytes?: Uint8Array };
 		try {
 			response = await this.transport.request(method, path, body);
-		} catch {
-			throw new DockerClientError("unavailable");
+		} catch (cause) {
+			throw new DockerClientError("unavailable", { cause });
 		}
 		if (!statuses.includes(response.status)) {
 			throw new DockerClientError(
 				response.status === 404 ? "not-found" : response.status === 409 ? "conflict" : "unavailable",
+				{ cause: new Error(`Docker ${method} ${path} failed: HTTP ${response.status}: ${response.body}`) },
 			);
 		}
 		return response;
@@ -256,7 +260,7 @@ export class DockerClient implements IDockerClient {
 		for (const line of response.body.split("\n").filter((value) => value.trim())) {
 			const event = decode(pullEvent, line);
 			if (event.error !== undefined || event.errorDetail !== undefined)
-				throw new DockerClientError("unavailable");
+				throw new DockerClientError("unavailable", { cause: new Error(`Docker image pull failed: ${line}`) });
 		}
 	}
 }
@@ -302,7 +306,7 @@ const pullEvent = z.object({ error: z.string().optional(), errorDetail: z.object
 function decode<T>(schema: z.ZodType<T>, body: string): T {
 	try {
 		return schema.parse(JSON.parse(body));
-	} catch {
-		throw new DockerClientError("invalid-response");
+	} catch (cause) {
+		throw new DockerClientError("invalid-response", { cause });
 	}
 }

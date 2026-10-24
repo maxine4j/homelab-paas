@@ -8,6 +8,12 @@ const descriptor = {
 	resources: { app: { type: "web", image: "test-service:local", ingress: { public: true, port: 8080 } } },
 };
 
+test("descriptor schema failures retain field-level validation details as a cause", () => {
+	expect(() => parseDescriptor({ version: "invalid" }, "demo")).toThrow(
+		expect.objectContaining({ cause: expect.any(Error) }),
+	);
+});
+
 test("validates a web descriptor and applies documented defaults", () => {
 	expect(parseDescriptor(descriptor, "test-service").resources["app"]).toMatchObject({
 		replicas: 1,

@@ -16,8 +16,8 @@ export class StartupTaskRunner implements TaskRunner {
 		await withLogContext({ task: this.taskName, taskId: this.generateTaskId() }, async () => {
 			try {
 				await this.task.run();
-			} catch {
-				logger.error("Startup task failed");
+			} catch (err) {
+				logger.error({ err }, "Startup task failed");
 			}
 		});
 	}

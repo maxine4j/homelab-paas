@@ -55,6 +55,6 @@ The control-plane container mounts the Docker socket and the required configurat
 
 Application volumes may bind arbitrary absolute Docker host paths using `hostPath` and `mountPath`; they are not confined to the platform-managed storage directory. See [configuration](configuration.md#volumes-and-resource-limits) for mount semantics and operator responsibilities.
 
-Configuration and credential files must have restricted permissions. Secrets must not appear in logs or status responses.
+Configuration and credential files must have restricted permissions. Secrets must not appear in status responses. Operator logs retain full failure diagnostics under the [backend logging contract](development.md#backend-logging).
 
 See [configuration](configuration.md) for input formats, [networking and authentication](networking-and-auth.md) for traffic and identity, [reconciliation and deployments](reconciliation-and-deployments.md) for lifecycle behaviour, and [managed resources](managed-resources.md) for database and broker presets.

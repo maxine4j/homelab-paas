@@ -11,8 +11,8 @@ export interface GitFileSource {
 
 export class GitClientError extends Error {
 	override readonly name = "GitClientError";
-	constructor() {
-		super("Git operation failed; check repository, branch and committed file path");
+	constructor(options?: ErrorOptions) {
+		super("Git operation failed; check repository, branch and committed file path", options);
 	}
 }
 

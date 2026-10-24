@@ -12,16 +12,16 @@ export class AcmeAccountStore implements IAcmeAccountStore {
 			const key = await this.store.get("acme-account");
 			if (key !== undefined && typeof key !== "string") throw new Error();
 			return key;
-		} catch {
-			throw new Error("Cannot read TLS state");
+		} catch (cause) {
+			throw new Error("Cannot read TLS state", { cause });
 		}
 	}
 	async writeAccountKey(key: string): Promise<void> {
 		try {
 			if (typeof key !== "string") throw new Error();
 			await this.store.set("acme-account", key);
-		} catch {
-			throw new Error("Cannot write TLS state");
+		} catch (cause) {
+			throw new Error("Cannot write TLS state", { cause });
 		}
 	}
 }

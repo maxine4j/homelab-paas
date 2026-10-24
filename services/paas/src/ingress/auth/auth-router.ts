@@ -1,5 +1,6 @@
 import Router from "@koa/router";
 
+import { logger } from "../../util/logger.ts";
 import type { IAuthService } from "./auth-service.ts";
 import { AuthenticationError } from "./auth-service.ts";
 
@@ -77,7 +78,8 @@ export const createAuthRouter = (
 								.join("; "),
 				);
 				ctx.status = 200;
-			} catch {
+			} catch (err) {
+				logger.error({ err }, "Authorization check failed");
 				ctx.status = 503;
 			}
 		})
@@ -123,6 +125,7 @@ export const createAuthRouter = (
 				);
 				ctx.redirect(target);
 			} catch (error) {
+				logger.error({ err: error }, "OAuth callback failed");
 				ctx.status = error instanceof AuthenticationError ? 403 : 503;
 			}
 		});

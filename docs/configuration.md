@@ -99,7 +99,7 @@ The file uses a strict single-line dotenv format: `NAME=value`, with optional wh
 
 Missing, unreadable or invalid files and missing required names fail deployment before any workload or route changes. An existing working revision remains active. Failures use sanitized messages and the normal reconciliation retry backoff. Keep these operator-managed files restricted and update them atomically.
 
-Secret files are read again on every eligible polling pass, even when Git has not changed. The resource specification fingerprint includes resolved environment values; changes to referenced values replace containers using the selected rollout strategy. Unchanged resolved values and changes to unused entries do not replace containers. Raw values are never written to deployment state, labels, logs or UI snapshots; labels contain only the specification hash.
+Secret files are read again on every eligible polling pass, even when Git has not changed. The resource specification fingerprint includes resolved environment values; changes to referenced values replace containers using the selected rollout strategy. Unchanged resolved values and changes to unused entries do not replace containers. Raw values are never written to deployment state, labels or UI snapshots; labels contain only the specification hash. Operator failure logs follow the [backend logging contract](development.md#backend-logging).
 
 Platform-generated environment-variable names are reserved. Conflicting user declarations fail validation.
 

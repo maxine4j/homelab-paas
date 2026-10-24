@@ -23,7 +23,7 @@ export function createFrontendRouter(frontend: Frontend) {
 			context.status = 200;
 			if (path.startsWith("/assets/")) context.set("cache-control", "public, max-age=31536000, immutable");
 		} catch (error) {
-			logger.error({ operation: "serve_ui" }, "UI content is unavailable");
+			logger.error({ operation: "serve_ui", err: error }, "UI content is unavailable");
 			context.status = 500;
 			context.body = {
 				statusCode: 500,

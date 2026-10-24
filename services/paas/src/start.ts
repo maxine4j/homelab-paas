@@ -124,10 +124,10 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 		generateTaskId: nanoid,
 		task: new ReconcilerTask(reconciler),
 		pause,
-		report: () => logger.error("Reconciliation task failed; check persistent state and Docker access"),
+		report: (err) => logger.error({ err }, "Reconciliation task failed; check persistent state and Docker access"),
 	});
 	const app = new Koa().use(createRequestLogger()).use(createHealthCheckRouter().routes());
-	app.on("error", () => logger.error("HTTP request failed"));
+	app.on("error", (err) => logger.error({ err }, "HTTP request failed"));
 	const certificates = new FileCertificateStore(STATE_DIRECTORY, readFile, secureWrite);
 	let renewal: TlsCertRenewalTask | undefined;
 	let sessions: AuthService | undefined;
@@ -210,14 +210,14 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 				try {
 					await renewal!.run();
 				} catch (error) {
-					logger.error("Certificate renewal failed; retaining the current certificate");
+					logger.error({ err: error }, "Certificate renewal failed; retaining the current certificate");
 					throw error;
 				}
 			});
-		} catch {
+		} catch (cause) {
 			const current = await certificates.read();
 			if (!current || current.expiresAt <= Date.now())
-				throw new Error("No usable ingress certificate; check ACME and DigitalOcean configuration");
+				throw new Error("No usable ingress certificate; check ACME and DigitalOcean configuration", { cause });
 		}
 	}
 	if (!lifecycle.isOpen()) return;
@@ -233,7 +233,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 				generateTaskId: nanoid,
 				task: renewal,
 				pause,
-				report: () => logger.error("Certificate renewal failed; retaining the current certificate"),
+				report: (err) => logger.error({ err }, "Certificate renewal failed; retaining the current certificate"),
 			}),
 		);
 	const running = Promise.all(runners.map((task) => task.start()));
