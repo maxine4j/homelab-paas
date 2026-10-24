@@ -4,7 +4,7 @@ metadata:
 resources:
     app:
         type: web
-        image: test-service:local
+        image: ghcr.io/maxine4j/homelab-paas/test-service:latest
         ingress:
             public: false
             port: 8080

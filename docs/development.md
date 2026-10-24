@@ -42,7 +42,7 @@ Run from the repository root:
 | `pnpm test`                      | Build shared contracts and run workspace tests                                  |
 | `pnpm build`                     | Build workspace packages                                                        |
 | `pnpm image`                     | Build the control-plane Docker image tagged `homelab-paas/paas:dev`             |
-| `pnpm dev:deploy`                | Build the fixture image and start the local Compose bootstrap                   |
+| `pnpm dev:deploy`                | Build the control plane and start the local Compose bootstrap                   |
 
 Run checks appropriate to the change. For code changes, use `pnpm check`, relevant tests, and `pnpm build` when build output or packaging is affected. For documentation-only changes, check formatting and relative links; application tests are unnecessary.
 
@@ -72,22 +72,23 @@ Log detected drift and the resulting action, changed descriptor revisions, deplo
 
 The [CI workflow](../.github/workflows/ci.yml) runs on pull requests, pushes to `main`, and pushed release tags matching `vX.X.X` (nonnegative integers without leading zeroes). Prerelease and build metadata suffixes are not supported. Other branch pushes do not trigger CI independently of a pull request.
 
-Every run installs the pinned dependencies, runs `pnpm check` (formatting, linting, and typechecking), `pnpm test`, and `pnpm build`, then builds the control-plane and test-service Docker images for `linux/amd64` and validates the local and [production](../prod/README.md) Compose configurations. Publishing requires all these checks to pass; the fixture image is never published.
+Every run installs the pinned dependencies, runs `pnpm check` (formatting, linting, and typechecking), `pnpm test`, and `pnpm build`, then builds the control-plane and test-service Docker images for `linux/amd64` and validates the local and [production](../prod/README.md) Compose configurations. Publishing requires all these checks to pass.
 
-Pull requests only build images. Pushes to `main` publish `ghcr.io/maxine4j/homelab-paas:<full-commit-sha>`. Release tag pushes publish the same image name with the exact Git tag, for example `ghcr.io/maxine4j/homelab-paas:v1.2.3`. No `latest` tag is published. Invalid release tags caught by the broad trigger fail before building or publishing.
+Pull requests only build images. Pushes to `main` publish `ghcr.io/maxine4j/homelab-paas:<full-commit-sha>`. Release tag pushes publish the same image name with the exact Git tag, for example `ghcr.io/maxine4j/homelab-paas:v1.2.3`. The control-plane image has no `latest` tag. Both push events also publish `ghcr.io/maxine4j/homelab-paas/test-service` with `latest` and the first seven characters of the commit SHA as tags. Invalid release tags caught by the broad trigger fail before building or publishing.
 
 Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no registry secret is required. The repository must be allowed to publish the GHCR package. Package visibility and deployment credentials for pulling private images are managed separately in GitHub. See [GitHub's container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
 ## Local container environment
 
-Run `pnpm dev:deploy` from the repository root to build the fixture image and start the bootstrap. It runs:
+Run `pnpm dev:deploy` from the repository root to build the control plane and start the bootstrap. It runs:
 
 ```sh
-docker build -f services/test-service/Dockerfile -t test-service:local .
 docker compose -f local/docker-compose.yaml up --build -d
 ```
 
 Compose starts only Envoy and the control plane. The control plane deploys test-service itself through Docker Engine using its committed descriptor. Only Envoy publishes ports, on loopback ports 80 and 443.
+
+The test-service descriptor uses `ghcr.io/maxine4j/homelab-paas/test-service:latest`, published by CI. The Docker host needs pull access to that package. Changes to content behind `latest` do not automatically redeploy an existing workload; see [image reconciliation](reconciliation-and-deployments.md#container-updates-and-images).
 
 `services/paas/Dockerfile` uses Node 24 Alpine with separate build, production dependency installation, and runtime stages. Compose runs the same runtime image and default `node dist/main.js` command used in production, with compiled JavaScript and production dependencies. Source is not mounted into the application directory. Rerun `pnpm dev:deploy` to rebuild and replace the control plane after code or dependency changes.
 
@@ -116,7 +117,7 @@ curl --fail --resolve test-service.local.maxine4j.com:443:127.0.0.1 https://test
 
 Both checks return `{"status":"up"}` once the workload is ready. Envoy reads generated `cds.yaml` and `lds.yaml` from `local/var/_paas/`; deployment checkpoints and routes are YAML files beside them. No database is used. Stop or remove the managed workload to exercise recovery on the next poll. Restarting the control plane preserves the workload and routing state.
 
-For an end-to-end deployment check, also request `/ping` on `test-service.local.maxine4j.com` and expect `{"message":"pong"}`. Private ingress requires a browser login first. Record the workload ID and image with `docker inspect`, remove only that test-service container, and wait for reconciliation. Verify a new container ID uses the built `test-service:local` image, has no published ports, and serves both `/health` and `/ping` through Envoy. Check `local/var/_paas/test-service.state.yaml` reports `phase: ready` and the expected committed revision. Restart the control plane and repeat the requests; the replacement workload ID should remain unchanged.
+For an end-to-end deployment check, also request `/ping` on `test-service.local.maxine4j.com` and expect `{"message":"pong"}`. Private ingress requires a browser login first. Record the workload ID and image with `docker inspect`, remove only that test-service container, and wait for reconciliation. Verify a new container ID uses the published test-service image, has no published ports, and serves both `/health` and `/ping` through Envoy. Check `local/var/_paas/test-service.state.yaml` reports `phase: ready` and the expected committed revision. Restart the control plane and repeat the requests; the replacement workload ID should remain unchanged.
 
 ### Local startup troubleshooting
 

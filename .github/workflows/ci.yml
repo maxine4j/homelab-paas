@@ -50,6 +50,8 @@ jobs:
                       tag="$GITHUB_REF_NAME"
                   fi
                   echo "ref=$image:$tag" >> "$GITHUB_OUTPUT"
+                  echo "test-service-image=$image/test-service" >> "$GITHUB_OUTPUT"
+                  echo "short-sha=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
             - name: Build control-plane image
               env:
                   IMAGE_REF: ${{ steps.image.outputs.ref }}
@@ -58,7 +60,15 @@ jobs:
                   --file services/paas/Dockerfile --tag "$IMAGE_REF"
                   --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY"
                   --label "org.opencontainers.image.revision=$GITHUB_SHA" --load .
-            - run: docker buildx build --builder homelab-paas-build --platform linux/amd64 --file services/test-service/Dockerfile --tag test-service:local --load .
+            - name: Build test-service image
+              env:
+                  IMAGE: ${{ steps.image.outputs.test-service-image }}
+                  SHORT_SHA: ${{ steps.image.outputs.short-sha }}
+              run: >-
+                  docker buildx build --builder homelab-paas-build --platform linux/amd64
+                  --file services/test-service/Dockerfile --tag "$IMAGE:latest" --tag "$IMAGE:$SHORT_SHA"
+                  --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY"
+                  --label "org.opencontainers.image.revision=$GITHUB_SHA" --load .
             - run: docker compose -f local/docker-compose.yaml config --quiet
             - run: docker compose -f prod/etc/homelab-paas/docker-compose.yaml config --quiet
             - name: Log in to GHCR
@@ -71,3 +81,11 @@ jobs:
               env:
                   IMAGE_REF: ${{ steps.image.outputs.ref }}
               run: docker push "$IMAGE_REF"
+            - name: Publish test-service image
+              if: github.event_name == 'push'
+              env:
+                  IMAGE: ${{ steps.image.outputs.test-service-image }}
+                  SHORT_SHA: ${{ steps.image.outputs.short-sha }}
+              run: |
+                  docker push "$IMAGE:$SHORT_SHA"
+                  docker push "$IMAGE:latest"

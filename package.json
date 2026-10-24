@@ -13,7 +13,7 @@
 		"check": "pnpm format:check && pnpm lint && pnpm typecheck",
 		"dev": "pnpm --filter @homelab-paas/shared-contracts build && pnpm --parallel --filter @homelab-paas/paas --filter @homelab-paas/ui dev",
 		"image": "docker build -f services/paas/Dockerfile -t homelab-paas/paas:dev .",
-		"dev:deploy": "docker build -f services/test-service/Dockerfile -t test-service:local . && docker compose -f local/docker-compose.yaml up --build -d"
+		"dev:deploy": "docker compose -f local/docker-compose.yaml up --build -d"
 	},
 	"devDependencies": {
 		"@types/node": "24.19.2",
