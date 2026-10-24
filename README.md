@@ -32,6 +32,7 @@ pnpm build
 
 ## Documentation
 
+- [Production deployment](prod/README.md)
 - [Architecture](docs/architecture.md)
 - [Configuration and service descriptors](docs/configuration.md)
 - [Networking and authentication](docs/networking-and-auth.md)

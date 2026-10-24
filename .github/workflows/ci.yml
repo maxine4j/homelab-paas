@@ -59,6 +59,7 @@ jobs:
                   --label "org.opencontainers.image.revision=$GITHUB_SHA" --load .
             - run: docker buildx build --builder homelab-paas-build --platform linux/amd64 --file services/test-service/Dockerfile --tag test-service:local --load .
             - run: docker compose -f local/docker-compose.yaml config --quiet
+            - run: docker compose -f prod/etc/homelab-paas/docker-compose.yaml config --quiet
             - name: Log in to GHCR
               if: github.event_name == 'push'
               env:

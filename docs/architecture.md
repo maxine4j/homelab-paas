@@ -16,7 +16,7 @@ The control plane manages Git reconciliation, Docker resources, Envoy configurat
 
 The Docker client exposes low-level network, container, and image operations through platform-owned types. It validates Engine responses and translates failures into sanitized typed errors. Inspection returns absence explicitly; callers decide whether missing resources are acceptable. The Docker service owns platform labels, naming, image resolution, and service-scoped container and network helpers. Container queries include stopped containers and validate deployment identity labels. Lifecycle operations verify ownership; stopping or removing an absent container succeeds. Service-network preparation validates the cluster's control-plane and Envoy identities before creating or attaching resources. Reconcilers use these helpers to observe actual state and compare it with the descriptor's desired state. `ReconcilerService` fetches committed descriptors through the Git service, validates them, and delegates to resource reconcilers. `start.ts` composes these layers with deployment strategies and networking; a periodic reconciler task runs immediately and on each polling interval.
 
-Docker Compose is not used by the platform. The [local development bootstrap](development.md#local-container-environment) uses Compose to start its containers before reconciliation is implemented.
+Docker Compose bootstraps Envoy and the control plane for [local development](development.md#local-container-environment) and [production deployment](../prod/README.md). The platform manages application workloads directly through Docker Engine.
 
 ## Initial scope
 

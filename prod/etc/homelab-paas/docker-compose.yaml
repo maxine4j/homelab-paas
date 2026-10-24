@@ -1,0 +1,46 @@
+name: homelab-paas-prod
+services:
+    paas:
+        image: ghcr.io/maxine4j/homelab-paas:replace-with-release-tag-or-commit-sha
+        init: true
+        restart: unless-stopped
+        labels:
+            homelab-paas.cluster: prod
+            homelab-paas.role: control-plane
+        volumes:
+            - /etc/homelab-paas:/etc/homelab-paas:ro
+            - /var/homelab-paas:/var/homelab-paas
+            - /var/run/docker.sock:/var/run/docker.sock
+        healthcheck:
+            test:
+                [
+                    CMD,
+                    node,
+                    -e,
+                    "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+                ]
+            interval: 5s
+            timeout: 3s
+            retries: 10
+        networks: [platform]
+    envoy:
+        image: envoyproxy/envoy:v1.37.0
+        command: [-c, /etc/homelab-paas/envoy.yaml]
+        restart: unless-stopped
+        environment:
+            ENVOY_UID: "0"
+        labels:
+            homelab-paas.cluster: prod
+            homelab-paas.role: envoy
+        ports:
+            - "80:80"
+            - "443:443"
+        volumes:
+            - /etc/homelab-paas:/etc/homelab-paas:ro
+            - /var/homelab-paas:/var/homelab-paas:ro
+        depends_on:
+            paas:
+                condition: service_healthy
+        networks: [platform]
+networks:
+    platform: {}

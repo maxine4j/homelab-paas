@@ -1,0 +1,60 @@
+# Production deployment
+
+This Compose bootstrap starts Envoy and the control plane on one Linux Docker host. The control plane creates workloads through Docker Engine. The platform is under development; check the [implemented runtime limits](../docs/configuration.md#implemented-deployment-mvp) before deploying applications.
+
+## Prepare the host
+
+- Install Docker Engine and the Docker Compose plugin on a `linux/amd64` host, matching the [published images](../docs/development.md#continuous-integration-and-image-publishing). Enable Docker at host boot (on a systemd host: `sudo systemctl enable --now docker`).
+- Reserve public TCP ports 80 and 443 for Envoy and allow them through the host firewall. Do not expose the Docker API, control-plane port 8080, or Envoy admin port 9901. The Compose file publishes only Envoy ingress.
+- Point the base domain and its wildcard at the host, for example `apps.example.com` and `*.apps.example.com`. Configure IPv6 records only if the host accepts IPv6 traffic. DigitalOcean must manage the DNS zone; provide an API token that can discover the zone and create/delete DNS challenge records. The host needs outbound access to Docker registries, Git, GitHub OAuth, DigitalOcean and Let's Encrypt. See [networking and TLS](../docs/networking-and-auth.md).
+- Create a GitHub OAuth application with callback `https://auth.apps.example.com/auth/callback`, substituting your base domain. Choose the GitHub usernames allowed to sign in.
+
+From the repository root, copy the three templates to their final host paths:
+
+```sh
+sudo install -d -m 0700 /etc/homelab-paas /etc/homelab-paas/env /var/homelab-paas
+sudo install -m 0600 prod/etc/homelab-paas/docker-compose.yaml /etc/homelab-paas/docker-compose.yaml
+sudo install -m 0600 prod/etc/homelab-paas/config.yaml /etc/homelab-paas/config.yaml
+sudo install -m 0600 prod/etc/homelab-paas/envoy.yaml /etc/homelab-paas/envoy.yaml
+```
+
+For a remote host, transfer the templates there first, then install them at these same absolute paths. Keep real credentials out of the checkout.
+
+Edit `/etc/homelab-paas/docker-compose.yaml` to replace the control-plane image tag with an existing published `vX.X.X` release or full commit SHA. There is no `latest` tag. Authenticate to GHCR on the host if the package is private, using the same user/context as the Compose commands below.
+
+Edit `/etc/homelab-paas/config.yaml`: replace the example domain, ACME email, GitHub client ID/secret, allowlist, DigitalOcean token, and session signing key. Generate a fresh signing key with at least 32 characters (for example `openssl rand -hex 32`). All platform credentials live in this file; this bootstrap requires no `.env` file or credential environment overrides. Do not leave placeholder secrets in use.
+
+Add your services under `services`, replacing the empty mapping with service entries like the commented example. Use accessible HTTPS repositories and committed descriptors; authenticated Git remotes are deferred. See the authoritative [configuration contract](../docs/configuration.md). Keep `metadata.clusterId: prod` matched to both Compose cluster labels, and keep service names `paas` and `envoy` for internal discovery.
+
+Provision application bind-mount sources on the Docker host before adding descriptors. For secret references, install `/etc/homelab-paas/env/{serviceId}.env` with mode `0600`; these are application secret files, separate from Compose interpolation. See [secrets](../docs/configuration.md#environment-variables-and-secrets) and [volumes](../docs/configuration.md#volumes-and-resource-limits).
+
+The configuration directory is mounted read-only into both bootstrap containers. The control plane writes persistent state and TLS private material under `/var/homelab-paas`; Envoy mounts that directory read-only and runs as root to read restricted files. Keep these directories restricted to host administrators. Docker socket access grants the control plane host-level control.
+
+## Start and verify
+
+Run on the deployment host:
+
+```sh
+sudo docker compose -f /etc/homelab-paas/docker-compose.yaml config --quiet
+sudo docker compose -f /etc/homelab-paas/docker-compose.yaml pull
+sudo docker compose -f /etc/homelab-paas/docker-compose.yaml up -d
+sudo docker compose -f /etc/homelab-paas/docker-compose.yaml ps
+sudo docker compose -f /etc/homelab-paas/docker-compose.yaml logs --tail=100 paas envoy
+curl --fail --head http://apps.example.com/
+```
+
+Substitute your domain. HTTP should redirect to HTTPS. Open `https://apps.example.com/` to verify the [management UI](../docs/management-ui.md), GitHub login and certificate; then verify each configured application's URL. Initial TLS provisioning requires working DNS and API credentials. A healthy control-plane probe alone does not confirm certificate issuance, accepted Envoy routes, or successful application deployments; check logs and the UI for failures.
+
+Both bootstrap containers use `restart: unless-stopped`. With Docker enabled at boot, they restart after a host reboot unless explicitly stopped. Compose is not a boot service; its dependency health ordering applies to `compose up`, while Docker restart policies handle daemon restarts. After a reboot, verify bootstrap health and application routes again.
+
+## Configuration and updates
+
+After editing platform configuration, restart the control plane:
+
+```sh
+sudo docker compose -f /etc/homelab-paas/docker-compose.yaml restart paas
+```
+
+For an image update, edit the pinned image tag, then run `pull` and `up -d` again. Compose replaces the changed bootstrap containers. Verify logs, login, TLS and routes after updates. Descriptor changes are reconciled from committed Git revisions; referenced application secret changes are reread on polling passes. See [reconciliation](../docs/reconciliation-and-deployments.md).
+
+Retain `/var/homelab-paas`, configuration and secret files, generated credentials, and all application bind-mount data across restarts and updates. Bootstrap container replacement does not remove Docker-managed workloads or service networks. Do not prune platform resources or delete persistent state to repair deployment failures. Backups and disaster recovery remain operator responsibilities outside the current platform scope.

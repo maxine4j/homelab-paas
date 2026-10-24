@@ -1,0 +1,37 @@
+version: 1
+metadata:
+    clusterId: prod
+ingress:
+    baseDomain: apps.example.com
+    httpPort: 80
+    httpsPort: 443
+auth:
+    github:
+        clientId: replace-with-github-client-id
+        clientSecret: replace-with-github-client-secret
+        allowedUsers:
+            - replace-with-github-username
+    session:
+        issuer: homelab-paas-prod
+        audience: homelab-paas-prod
+        signingKey: replace-with-a-random-secret-of-at-least-32-characters
+        ttlSeconds: 43200
+tls:
+    acme:
+        email: admin@example.com
+    dns:
+        provider: digitalocean
+        credentials:
+            apiToken: replace-with-digitalocean-api-token
+git:
+    pollIntervalSeconds: 120
+    operationTimeoutSeconds: 60
+reconciliation:
+    retryBackoffSeconds: 10
+    maxRetryBackoffSeconds: 300
+# Add services using accessible HTTPS Git remotes; Git credentials are deferred.
+# example:
+#     remote: https://github.com/replace-owner/replace-repository.git
+#     branch: main
+#     descriptorPath: example.sd.yaml
+services: {}
