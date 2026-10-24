@@ -1,4 +1,5 @@
 import { start } from "./start.ts";
+import { logFatalError } from "./util/fatal-error.ts";
 import { createLifecycle } from "./util/lifecycle.ts";
 import { logger } from "./util/logger.ts";
 
@@ -15,13 +16,13 @@ process
 		await lifecycle.shutdown();
 		process.exit(0);
 	})
-	.on("uncaughtException", async () => {
-		logger.error({ operation: "fatal" }, "Fatal process failure: uncaughtException");
+	.on("uncaughtException", async (error) => {
+		logFatalError("uncaughtException", error);
 		await lifecycle.shutdown();
 		process.exit(1);
 	})
-	.on("unhandledRejection", async () => {
-		logger.error({ operation: "fatal" }, "Fatal process failure: unhandledRejection");
+	.on("unhandledRejection", async (reason) => {
+		logFatalError("unhandledRejection", reason);
 		await lifecycle.shutdown();
 		process.exit(1);
 	});
