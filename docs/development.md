@@ -68,7 +68,7 @@ Task runners establish AsyncLocalStorage context for each execution. Every neste
 
 Log detected drift and the resulting action, changed descriptor revisions, deployment outcomes, retry schedules/recovery, and certificate renewal. Successful unchanged polling passes and certificate checks stay silent. Koa logs method, path without query, status, and elapsed milliseconds; successful `/health` checks stay silent. Headers, bodies and raw request/response objects are excluded. Never log descriptors, environment values, credential material or raw infrastructure failures. Root `error`, `err`, and `command` fields are removed as a defensive measure; use fixed actionable summaries and safe identifiers.
 
-Fatal process failures include a `failure` diagnostic: built-in error type, allowlisted OS error code when present, source basenames with line/column coordinates in `frames`, and up to five errors in the `cause` chain. Cycles and deeper chains are marked `truncated`; non-Error rejections report only their value type. Frames omit messages, function names and directory/URL data; raw error messages and arbitrary properties remain excluded because they can contain credentials. Use the logged coordinates against the deployed image's compiled JavaScript to locate the failing operation. Fatal failures still shut down the process with exit code 1.
+Fatal process failures are an explicit exception to error sanitization: `failure` contains the full error serialized by Pino, including its type, message, stack, causes and enumerable properties. Non-Error rejections retain their original value. These logs may contain credentials from the original failure. Fatal failures still shut down the process with exit code 1.
 
 ## Continuous integration and image publishing
 
