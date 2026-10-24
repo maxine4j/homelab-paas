@@ -1,3 +1,4 @@
+import type { ResourceLimits, ResourceVolume } from "@homelab-paas/shared-contracts";
 import { z } from "zod";
 
 import type { IDockerTransport } from "./docker-transport.ts";
@@ -8,6 +9,8 @@ export interface CreateContainerOptions {
 	image: string;
 	command?: string[];
 	env?: Record<string, string>;
+	volumes?: ResourceVolume[];
+	limits?: ResourceLimits;
 	labels?: Labels;
 	network?: string;
 	aliases?: string[];
@@ -196,6 +199,14 @@ export class DockerClient implements IDockerClient {
 				Env: options.env ? Object.entries(options.env).map(([key, value]) => `${key}=${value}`) : undefined,
 				Labels: options.labels,
 				HostConfig: {
+					Mounts: options.volumes?.map(({ hostPath, mountPath, readOnly }) => ({
+						Type: "bind",
+						Source: hostPath,
+						Target: mountPath,
+						ReadOnly: readOnly ?? false,
+					})),
+					NanoCpus: options.limits?.cpus === undefined ? undefined : Math.round(options.limits.cpus * 1e9),
+					Memory: options.limits?.memoryMiB === undefined ? undefined : options.limits.memoryMiB * 1048576,
 					NetworkMode: options.network,
 					RestartPolicy: options.restartPolicy ? { Name: options.restartPolicy } : undefined,
 				},

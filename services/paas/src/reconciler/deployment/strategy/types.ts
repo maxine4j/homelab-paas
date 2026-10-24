@@ -1,6 +1,6 @@
 import type { WebResource } from "@homelab-paas/shared-contracts";
 
-/** Current deployment adapters accept literal environment values only. */
+/** Environment references must be resolved and validated before invoking deployment adapters. */
 export type DeploymentWebResource = Omit<WebResource, "env"> & {
 	env?: { name: string; value: string }[];
 };

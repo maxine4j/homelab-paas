@@ -1,9 +1,10 @@
-import type { ServiceDescriptor } from "@homelab-paas/shared-contracts";
+import type { ServiceDescriptor, WebResource } from "@homelab-paas/shared-contracts";
 
 import type { IGitService } from "../git/git-service.ts";
 import type { GitFileSource } from "../git/types.ts";
 import { createLogger } from "../util/logger.ts";
 import type { DeploymentWebResource } from "./deployment/strategy/types.ts";
+import type { IEnvironmentResolver } from "./environment-resolver.ts";
 import type { IWebResourceReconciler } from "./resources/web/web-reconciler.ts";
 import type { DescriptorDecoder, IReconcilerService, IReconciliationStateStore } from "./types.ts";
 
@@ -19,6 +20,7 @@ export class ReconcilerService implements IReconcilerService {
 		private readonly web: IWebResourceReconciler,
 		private readonly state: IReconciliationStateStore,
 		private readonly now: () => number,
+		private readonly environment: IEnvironmentResolver,
 		private readonly privateIngressEnabled = false,
 	) {}
 
@@ -51,7 +53,13 @@ export class ReconcilerService implements IReconcilerService {
 			const descriptor = this.decode(file.content, serviceId);
 			message =
 				"Unsupported descriptor capabilities; runtime requires one web resource, one replica, recreate or surge deployment and configured auth/TLS for private ingress";
-			const resources = this.deploymentResources(descriptor);
+			const desired = this.deploymentResources(descriptor);
+			message = "Cannot resolve application secrets; check the service env file and required variable names";
+			const resources: [string, DeploymentWebResource][] = [];
+			for (const [resourceId, resource] of desired) {
+				const env = await this.environment.resolve(serviceId, resource.env ?? []);
+				resources.push([resourceId, { ...resource, env }]);
+			}
 			if (previous?.desiredRevision !== desiredRevision)
 				this.log.info(
 					{ event: "reconciliation.revision", serviceId, revision: desiredRevision },
@@ -93,7 +101,7 @@ export class ReconcilerService implements IReconcilerService {
 		}
 	}
 
-	private deploymentResources(descriptor: ServiceDescriptor): [string, DeploymentWebResource][] {
+	private deploymentResources(descriptor: ServiceDescriptor): [string, WebResource][] {
 		const entries = Object.entries(descriptor.resources);
 		if (entries.length !== 1) throw new Error("Runtime requires exactly one web resource");
 		return entries.map(([resourceId, resource]) => {
@@ -101,16 +109,10 @@ export class ReconcilerService implements IReconcilerService {
 				resource.type !== "web"
 				|| (!this.privateIngressEnabled && resource.ingress.public !== true)
 				|| (resource.replicas ?? 1) !== 1
-				|| resource.volumes !== undefined
-				|| resource.limits !== undefined
 				|| resource.egress !== undefined
 			)
 				throw new Error("Resource requires unsupported runtime capabilities");
-			const env = resource.env?.map((entry) => {
-				if (!("value" in entry)) throw new Error("Runtime does not support secret references");
-				return entry;
-			});
-			return [resourceId, { ...resource, env }];
+			return [resourceId, resource];
 		});
 	}
 }

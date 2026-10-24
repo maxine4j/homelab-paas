@@ -34,6 +34,7 @@ import { DigitalOceanDnsAcmeChallengeProvider } from "./ingress/tls/dns-challeng
 import { DeploymentService } from "./reconciler/deployment/deployment-service.ts";
 import { RecreateDeploymentStrategy } from "./reconciler/deployment/strategy/recreate-deployment-strategy.ts";
 import { SurgeDeploymentStrategy } from "./reconciler/deployment/strategy/surge-deployment-strategy.ts";
+import { EnvironmentResolver } from "./reconciler/environment-resolver.ts";
 import { EndpointsStore } from "./reconciler/networking/endpoints-store.ts";
 import { NetworkingService } from "./reconciler/networking/networking-service.ts";
 import { ReconcilerService } from "./reconciler/reconciler-service.ts";
@@ -105,6 +106,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 		new WebResourceReconciler(docker, deployment, networking, probe),
 		store,
 		Date.now,
+		new EnvironmentResolver("/etc/homelab-paas/env", readFile),
 		Boolean(config.auth),
 	);
 	const abort = new AbortController();

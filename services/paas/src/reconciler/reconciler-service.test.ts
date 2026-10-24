@@ -3,6 +3,7 @@ import { expect, test, vi } from "vitest";
 import { decodeDescriptorYaml } from "../config/paas-config.ts";
 import type { GitFile } from "../git/types.ts";
 import { captureLogs } from "../util/test/logs.ts";
+import { EnvironmentResolver } from "./environment-resolver.ts";
 import { ReconcilerService } from "./reconciler-service.ts";
 import type { ReconciliationState } from "./types.ts";
 
@@ -17,6 +18,7 @@ function fixture() {
 	const states = new Map<string, ReconciliationState>();
 	const fetchFile = vi.fn(async (): Promise<GitFile> => ({ revision: "rev", content: JSON.stringify(descriptor) }));
 	const reconcile = vi.fn(async () => {});
+	const readSecrets = vi.fn(async (): Promise<string | undefined> => undefined);
 	const deps = {
 		services: { demo: { remote: "local", descriptorPath: "/repo/demo.sd.yaml" } },
 		retry: { retryBackoffSeconds: 1, maxRetryBackoffSeconds: 4 },
@@ -42,6 +44,7 @@ function fixture() {
 			deps.web,
 			deps.state,
 			deps.now,
+			new EnvironmentResolver("/etc/homelab-paas/env", readSecrets),
 			privateIngressEnabled,
 		);
 	return {
@@ -49,6 +52,7 @@ function fixture() {
 		states,
 		fetchFile,
 		reconcile,
+		readSecrets,
 		createService,
 		service: createService(),
 		advance(ms: number) {
@@ -88,6 +92,93 @@ test("accepts surge and passes it to the web reconciler", async () => {
 	expect(f.states.get("demo")).toEqual({ desiredRevision: "surge", activeRevision: "surge", phase: "ready" });
 });
 
+test("resolves secrets again on unchanged Git polls and passes mounts and limits", async () => {
+	const f = fixture();
+	const volumes = [{ hostPath: "/mnt/media", mountPath: "/data", readOnly: true }];
+	const limits = { cpus: 0.5, memoryMiB: 256 };
+	f.fetchFile.mockResolvedValue({
+		revision: "rev",
+		content: JSON.stringify({
+			...descriptor,
+			resources: {
+				app: {
+					...descriptor.resources.app,
+					volumes,
+					limits,
+					env: [
+						{ name: "TOKEN", secret: true },
+						{ name: "PLAIN", value: "literal" },
+					],
+				},
+			},
+		}),
+	});
+	f.readSecrets.mockResolvedValue("TOKEN=first-secret\nUNUSED=ignored");
+	await f.service.reconcile();
+	f.readSecrets.mockResolvedValue("TOKEN=second-secret");
+	await f.service.reconcile();
+	expect(f.readSecrets).toHaveBeenCalledTimes(2);
+	expect(f.reconcile.mock.calls).toEqual([
+		[
+			expect.objectContaining({
+				resource: expect.objectContaining({
+					volumes,
+					limits,
+					env: [
+						{ name: "TOKEN", value: "first-secret" },
+						{ name: "PLAIN", value: "literal" },
+					],
+				}),
+			}),
+		],
+		[
+			expect.objectContaining({
+				resource: expect.objectContaining({
+					volumes,
+					limits,
+					env: [
+						{ name: "TOKEN", value: "second-secret" },
+						{ name: "PLAIN", value: "literal" },
+					],
+				}),
+			}),
+		],
+	]);
+	expect(f.states.get("demo")).toEqual({ desiredRevision: "rev", activeRevision: "rev", phase: "ready" });
+});
+
+test.each([undefined, "OTHER=secret", "TOKEN='secret", "TOKEN=secret\nTOKEN=another"])(
+	"secret failure preserves active deployment before invoking rollout: %j",
+	async (content) => {
+		const f = fixture();
+		await f.service.reconcile();
+		f.reconcile.mockClear();
+		f.fetchFile.mockResolvedValue({
+			revision: "changed",
+			content: JSON.stringify({
+				...descriptor,
+				resources: { app: { ...descriptor.resources.app, env: [{ name: "TOKEN", secret: true }] } },
+			}),
+		});
+		f.readSecrets.mockResolvedValue(content);
+		const capture = captureLogs();
+		try {
+			await f.service.reconcile();
+		} finally {
+			capture.restore();
+		}
+		expect(f.reconcile).not.toHaveBeenCalled();
+		expect(f.states.get("demo")).toMatchObject({
+			desiredRevision: "changed",
+			activeRevision: "rev",
+			phase: "failed",
+			error: "Cannot resolve application secrets; check the service env file and required variable names",
+		});
+		expect(JSON.stringify([...f.states])).not.toContain("TOKEN");
+		expect(capture.lines.join("")).not.toContain("TOKEN");
+	},
+);
+
 test("accepts private ingress when platform authentication and TLS are enabled", async () => {
 	const f = fixture();
 	f.fetchFile.mockResolvedValue({
@@ -121,9 +212,6 @@ test.each([
 	{},
 	{ app: { ...descriptor.resources.app, replicas: 2 } },
 	{ app: { ...descriptor.resources.app, ingress: { public: false, port: 8080 } } },
-	{ app: { ...descriptor.resources.app, env: [{ name: "TOKEN", secret: true }] } },
-	{ app: { ...descriptor.resources.app, volumes: [{ source: "data", target: "/data" }] } },
-	{ app: { ...descriptor.resources.app, limits: { cpus: 1 } } },
 	{ app: { ...descriptor.resources.app, egress: ["other"] } },
 ])("rejects unsupported runtime capabilities before changing any workloads: %j", async (resources) => {
 	const f = fixture();

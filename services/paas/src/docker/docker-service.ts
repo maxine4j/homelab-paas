@@ -1,3 +1,5 @@
+import type { ResourceLimits, ResourceVolume } from "@homelab-paas/shared-contracts";
+
 import { DockerClientError } from "./docker-client.ts";
 import type { IDockerClient } from "./docker-client.ts";
 import type { DockerContainerDetails, DockerNetwork, Labels, ServiceContainer } from "./types.ts";
@@ -12,6 +14,8 @@ export interface CreateResourceContainerOptions {
 	imageId: string;
 	command?: string[];
 	env?: Record<string, string>;
+	volumes?: ResourceVolume[];
+	limits?: ResourceLimits;
 }
 
 /** Client failures propagate as DockerClientError. Ownership, identity and
@@ -153,6 +157,8 @@ export class DockerService implements IDockerService {
 			image: options.imageId,
 			command: options.command,
 			env: options.env,
+			volumes: options.volumes,
+			limits: options.limits,
 			labels: {
 				...this.labels(options.serviceId),
 				"homelab-paas.resource": options.resourceId,

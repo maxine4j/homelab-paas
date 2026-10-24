@@ -6,9 +6,9 @@ All platform and descriptor YAML is parsed through the canonical backend YAML ut
 
 ## Implemented deployment MVP
 
-The current runtime supports exactly one `web` resource per service, one replica, and `recreate` or `surge` deployment. Descriptors use the schema below with only `version`, `metadata`, and `resources` at the top level. Runtime-supported web fields are `type`, `image`, `ingress`, optional `replicas: 1`, `rolloutStrategy` (`recreate` or `surge`), `healthcheckUrl`, `command`, literal `env` values, and `termination.timeoutSeconds` (default 30, maximum 300). Unknown fields fail descriptor validation; unsupported runtime features fail a separate capability check before changing workloads. The public TypeScript types, Zod schema, and `parseDescriptor` validator in `@homelab-paas/shared-contracts` describe the complete service descriptor contract below. Platform configuration, runtime capability checks, and deployment state stay in the backend.
+The current runtime supports exactly one `web` resource per service, one replica, and `recreate` or `surge` deployment. Descriptors use the schema below with only `version`, `metadata`, and `resources` at the top level. Runtime-supported web fields are `type`, `image`, `ingress`, optional `replicas: 1`, `rolloutStrategy` (`recreate` or `surge`), `healthcheckUrl`, `command`, literal or secret-reference `env` values, `volumes`, `limits`, and `termination.timeoutSeconds` (default 30, maximum 300). Unknown fields fail descriptor validation; unsupported runtime features fail a separate capability check before changing workloads. The public TypeScript types, Zod schema, and `parseDescriptor` validator in `@homelab-paas/shared-contracts` describe the complete service descriptor contract below. Platform configuration, runtime capability checks, and deployment state stay in the backend.
 
-Workers, managed databases/brokers, secret references, volumes, limits, egress, and multiple replicas are deferred. Private ingress (including the default `public: false`) requires platform auth and TLS. Without them, ingress must explicitly set `public: true`. The remaining service examples include capabilities beyond the deployed runtime.
+Workers, managed databases/brokers, egress, and multiple replicas are deferred. Private ingress (including the default `public: false`) requires platform auth and TLS. Without them, ingress must explicitly set `public: true`. The remaining service examples include capabilities beyond the deployed runtime.
 
 At startup, supplied environment variables override the corresponding YAML fields before validation:
 
@@ -85,7 +85,7 @@ env:
       secret: true
 ```
 
-Literal values must be strings.
+Literal values must be strings without NUL bytes. Environment names must be unique within a resource.
 
 Secret references resolve by variable name from:
 
@@ -93,9 +93,13 @@ Secret references resolve by variable name from:
 /etc/homelab-paas/env/{serviceId}.env
 ```
 
-Missing required secrets fail deployment without disrupting an existing working revision.
+For example, service `example-service-id` reads `/etc/homelab-paas/env/example-service-id.env`. This path must be readable inside the control-plane container; mount the configuration directory there. Service IDs follow the lowercase kebab-case identity rule above.
 
-Secret-file changes are reconciled even when Git has not changed. Containers are replaced when necessary to apply changed environment variables.
+The file uses a strict single-line dotenv format: `NAME=value`, with optional whitespace around the name, equals sign and value. Blank lines and `#` comments are accepted. Single or double quotes preserve spaces and `#` within a value; values are literal, with no interpolation, escape processing, shell evaluation, `export` prefix, or multiline quoted strings. An empty assignment is a valid empty secret. Duplicate names, malformed assignments, unmatched quotes and NUL bytes fail resolution. Only variables explicitly declared by the descriptor are injected; unused file entries are ignored after syntax validation. Literal-only workloads do not require a secret file.
+
+Missing, unreadable or invalid files and missing required names fail deployment before any workload or route changes. An existing working revision remains active. Failures use sanitized messages and the normal reconciliation retry backoff. Keep these operator-managed files restricted and update them atomically.
+
+Secret files are read again on every eligible polling pass, even when Git has not changed. The resource specification fingerprint includes resolved environment values; changes to referenced values replace containers using the selected rollout strategy. Unchanged resolved values and changes to unused entries do not replace containers. Raw values are never written to deployment state, labels, logs or UI snapshots; labels contain only the specification hash.
 
 Platform-generated environment-variable names are reserved. Conflicting user declarations fail validation.
 
@@ -105,12 +109,14 @@ Web and worker resources may declare persistent volumes:
 
 ```yaml
 volumes:
-    - source: app/uploads
-      target: /app/uploads
+    - hostPath: /srv/example/uploads
+      mountPath: /app/uploads
       readOnly: false
 ```
 
-`source` is relative to `/var/homelab-paas/{serviceId}/`. Absolute source paths and path traversal are rejected. Volume data is retained after resource removal.
+`hostPath` is an arbitrary absolute path on the **Docker host**, including paths outside `/var/homelab-paas/`. Workloads and descriptor authors are trusted to choose host files or directories. `mountPath` is an absolute path inside the workload container, other than `/`; mount destinations must be unique and neither path may contain NUL bytes. `readOnly` defaults to `false`. The old `source` and `target` fields are rejected.
+
+Docker bind mounts use these paths directly. The control plane does not create, inspect or translate host paths using its own container filesystem; provision the source on the Docker host before deployment. A missing or unusable source fails Docker container creation. Data belongs to the host and is retained when containers or resources are removed. Mount and access-mode changes trigger replacement. With `surge`, both revisions access the same host data concurrently; use `recreate` for applications that require exclusive access.
 
 Resources may declare CPU and memory limits:
 
@@ -120,7 +126,7 @@ limits:
     memoryMiB: 512
 ```
 
-These limits are applied through Docker Engine.
+Both fields are optional. `cpus` is a positive CPU count (fractional values allowed), mapped to Docker `HostConfig.NanoCpus` by rounding `cpus × 1,000,000,000`. It must be at least one nanocpu and fit a safe integer after conversion. `memoryMiB` is a positive integer mapped to Docker `HostConfig.Memory` in bytes (`memoryMiB × 1,048,576`), also bounded to safe integer conversion. Omitted fields leave Docker's defaults in effect. Docker enforces additional host-specific minimums and capacity restrictions; invalid settings fail deployment. Limit changes replace containers through either rollout strategy.
 
 ## Example platform configuration
 
@@ -217,8 +223,8 @@ resources:
               secret: true
 
         volumes:
-            - source: app/uploads
-              target: /app/uploads
+            - hostPath: /srv/example/uploads
+              mountPath: /app/uploads
               readOnly: false
 
         limits:

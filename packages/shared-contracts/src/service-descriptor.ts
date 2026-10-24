@@ -10,18 +10,26 @@ const name = z
 	.regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
 	.refine((name) => !name.startsWith("PAAS_"));
 const environmentVariable = z.union([
-	z.strictObject({ name, value: z.string() }),
+	z.strictObject({ name, value: z.string().refine((value) => !value.includes("\0")) }),
 	z.strictObject({ name, secret: z.literal(true) }),
 ]);
+const absolutePath = z
+	.string()
+	.startsWith("/")
+	.refine((path) => !path.includes("\0"));
 const volume = z.strictObject({
-	source: z
-		.string()
-		.min(1)
-		.refine((source) => !source.startsWith("/") && !source.split("/").includes("..")),
-	target: z.string().startsWith("/"),
+	hostPath: absolutePath,
+	mountPath: absolutePath.refine((path) => path !== "/"),
 	readOnly: z.boolean().optional(),
 });
-const limits = z.strictObject({ cpus: z.number().positive().optional(), memoryMiB: positive.optional() });
+const limits = z.strictObject({
+	cpus: z
+		.number()
+		.min(1e-9)
+		.max(Number.MAX_SAFE_INTEGER / 1e9)
+		.optional(),
+	memoryMiB: positive.max(Math.floor(Number.MAX_SAFE_INTEGER / 1048576)).optional(),
+});
 const base = {
 	image: z.string().min(1),
 	termination: z.strictObject({ timeoutSeconds: positive.max(300) }).optional(),
@@ -32,8 +40,14 @@ const workload = {
 	replicas: positive.default(1),
 	rolloutStrategy: z.enum(["recreate", "surge"]).default("recreate"),
 	command: z.array(z.string()).min(1).optional(),
-	env: z.array(environmentVariable).optional(),
-	volumes: z.array(volume).optional(),
+	env: z
+		.array(environmentVariable)
+		.refine((env) => new Set(env.map(({ name }) => name)).size === env.length)
+		.optional(),
+	volumes: z
+		.array(volume)
+		.refine((volumes) => new Set(volumes.map(({ mountPath }) => mountPath)).size === volumes.length)
+		.optional(),
 	egress: z.array(id).optional(),
 };
 const web = z.strictObject({

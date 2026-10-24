@@ -37,6 +37,8 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 			imageId,
 			command: resource.command,
 			env: Object.fromEntries((resource.env ?? []).map(({ name, value }) => [name, value])),
+			volumes: resource.volumes,
+			limits: resource.limits,
 		});
 		let endpoint: Endpoint;
 		try {

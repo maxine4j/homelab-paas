@@ -6,6 +6,24 @@ import { DockerService, DockerServiceError } from "./docker-service.ts";
 import type { DockerContainer, DockerContainerDetails, DockerNetwork } from "./types.ts";
 
 const ownership = { "homelab-paas.cluster": "local", "homelab-paas.service": "demo" };
+
+test("preserves descriptor mounts and resource limits for the Docker adapter", async () => {
+	const f = fixture();
+	const volumes = [{ hostPath: "/mnt/external drive", mountPath: "/data", readOnly: true }];
+	const limits = { cpus: 0.5, memoryMiB: 512 };
+	await f.service.createResourceContainer({
+		serviceId: "demo",
+		resourceId: "app",
+		revision: "rev",
+		spec: "spec",
+		imageId: "image",
+		volumes,
+		limits,
+	});
+	expect(f.calls.find(({ operation }) => operation === "createContainer")?.args).toEqual([
+		expect.objectContaining({ volumes, limits }),
+	]);
+});
 const identity = {
 	...ownership,
 	"homelab-paas.resource": "app",
@@ -394,14 +412,17 @@ test("log reads verify service ownership before accessing container output", asy
 	await expect(f.service.readServiceContainerLogs("other", "c")).rejects.toMatchObject({ kind: "ownership" });
 	expect(calls).toEqual(["c"]);
 });
-test("log output redacts values from the actual container environment", async () => {
-	const f = fixture({
-		async inspectContainer() {
-			return { ...details, env: { PASSWORD: "old-secret" } };
-		},
-		async readContainerLogs() {
-			return "PASSWORD=old-secret\n";
-		},
-	});
-	expect(await f.service.readServiceContainerLogs("demo", "c")).toBe("PASSWORD=[redacted]\n");
-});
+test.each(["old-secret", "rotated-secret"])(
+	"log output redacts actual container secret values across rotation: %s",
+	async (secret) => {
+		const f = fixture({
+			async inspectContainer() {
+				return { ...details, env: { PASSWORD: secret } };
+			},
+			async readContainerLogs() {
+				return `PASSWORD=${secret}\n`;
+			},
+		});
+		expect(await f.service.readServiceContainerLogs("demo", "c")).toBe("PASSWORD=[redacted]\n");
+	},
+);

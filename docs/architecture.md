@@ -46,12 +46,14 @@ Host paths:
 | ------------------------------------------------------------ | ---------------------------------------- |
 | `/etc/homelab-paas/config.yaml`                              | Platform configuration and credentials   |
 | `/etc/homelab-paas/env/{serviceId}.env`                      | User-managed service secrets             |
-| `/var/homelab-paas/{serviceId}/{resourceId}/`                | Persistent resource storage              |
+| `/var/homelab-paas/{serviceId}/{resourceId}/`                | Platform-managed resource storage        |
 | `/var/homelab-paas/{serviceId}/{resourceId}/credentials.env` | Platform-generated resource credentials  |
 | `/var/homelab-paas/_paas/`                                   | Platform state and ACME account material |
 | `/var/homelab-paas/_paas/ingress.pem`                        | TLS certificate chain and private key    |
 
 The control-plane container mounts the Docker socket and the required configuration and state directories. Paths supplied to Docker for bind mounts refer to the **host filesystem**.
+
+Application volumes may bind arbitrary absolute Docker host paths using `hostPath` and `mountPath`; they are not confined to the platform-managed storage directory. See [configuration](configuration.md#volumes-and-resource-limits) for mount semantics and operator responsibilities.
 
 Configuration and credential files must have restricted permissions. Secrets must not appear in logs or status responses.
 

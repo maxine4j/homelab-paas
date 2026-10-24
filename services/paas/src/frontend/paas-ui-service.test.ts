@@ -44,6 +44,7 @@ const fixture = () => {
 					imageId: "sha256:a",
 					running: true,
 					labels: {},
+					env: { TOKEN: "actual-secret-canary" },
 					networks: { demo: { address: "172.1.0.2", aliases: ["app"] } },
 				};
 			},
@@ -112,6 +113,31 @@ test("unknown service, resource and container never read unrelated logs", async 
 	await expect(f.service.getResource("demo", "missing")).rejects.toMatchObject({ kind: "not-found" });
 	await expect(f.service.getLogs("demo", "db", "c")).rejects.toMatchObject({ kind: "not-found" });
 	expect(f.readServiceContainerLogs).not.toHaveBeenCalled();
+});
+
+test("secret-reference snapshots never expose resolved Docker environment values", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "new",
+		content: JSON.stringify({
+			...descriptor,
+			resources: {
+				app: {
+					...descriptor.resources.app,
+					env: [{ name: "TOKEN", secret: true }],
+					volumes: [{ hostPath: "/srv/data", mountPath: "/data" }],
+					limits: { cpus: 0.5, memoryMiB: 64 },
+				},
+			},
+		}),
+	});
+	const resource = await f.service.getResource("demo", "app");
+	expect(JSON.stringify(resource)).not.toContain("actual-secret-canary");
+	expect(resource.config).toMatchObject({
+		env: [{ name: "TOKEN", secret: "[redacted]" }],
+		volumes: [{ hostPath: "/srv/data", mountPath: "/data" }],
+		limits: { cpus: 0.5, memoryMiB: 64 },
+	});
 });
 
 test("Git failures preserve live resource visibility and disable logs when redaction inputs cannot be loaded", async () => {

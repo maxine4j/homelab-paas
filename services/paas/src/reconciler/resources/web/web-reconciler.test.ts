@@ -174,6 +174,9 @@ test.each<DeploymentWebResource>([
 	{ ...resource, image: "app:2" },
 	{ ...resource, command: ["node", "new.js"] },
 	{ ...resource, env: [{ name: "TOKEN", value: "secret" }] },
+	{ ...resource, volumes: [{ hostPath: "/srv/data", mountPath: "/data" }] },
+	{ ...resource, limits: { cpus: 0.5 } },
+	{ ...resource, limits: { memoryMiB: 256 } },
 	{ ...resource, ingress: { public: true, port: 9000 } },
 	{ ...resource, healthcheckUrl: "/ready" },
 	{ ...resource, termination: { timeoutSeconds: 60 } },
@@ -181,6 +184,50 @@ test.each<DeploymentWebResource>([
 	const f = fixture();
 	await f.converge();
 	await f.reconciler.reconcile({ ...input, resource: changed });
+	expect(f.requests).toHaveLength(1);
+});
+
+test("changed resolved secret values change the specification without exposing them in labels or logs", async () => {
+	const f = fixture();
+	const capture = captureLogs();
+	try {
+		await f.reconciler.reconcile({
+			...input,
+			resource: { ...resource, env: [{ name: "TOKEN", value: "first-secret" }] },
+		});
+		const spec = f.requests.at(-1)!.spec;
+		f.setContainers([{ id: "c", imageId: "image", resourceId: "app", revision: "rev", spec, state: "running" }]);
+		f.requests.length = 0;
+		await f.reconciler.reconcile({
+			...input,
+			resource: { ...resource, env: [{ name: "TOKEN", value: "second-secret" }] },
+		});
+		expect(f.requests).toHaveLength(1);
+		expect(f.requests.at(0)?.spec).not.toBe(spec);
+		expect(capture.lines.join("")).not.toMatch(/first-secret|second-secret/);
+	} finally {
+		capture.restore();
+	}
+});
+
+test.each([
+	{ volumes: [{ hostPath: "/srv/other", mountPath: "/data" }] },
+	{ volumes: [{ hostPath: "/srv/data", mountPath: "/other" }] },
+	{ volumes: [{ hostPath: "/srv/data", mountPath: "/data", readOnly: true }] },
+	{ limits: { cpus: 1, memoryMiB: 256 } },
+	{ limits: { cpus: 0.5, memoryMiB: 512 } },
+])("changed mount or limit settings trigger replacement: %j", async (changed) => {
+	const f = fixture();
+	const configured = {
+		...resource,
+		volumes: [{ hostPath: "/srv/data", mountPath: "/data" }],
+		limits: { cpus: 0.5, memoryMiB: 256 },
+	};
+	await f.reconciler.reconcile({ ...input, resource: configured });
+	const spec = f.requests.at(-1)!.spec;
+	f.setContainers([{ id: "c", imageId: "image", resourceId: "app", revision: "rev", spec, state: "running" }]);
+	f.requests.length = 0;
+	await f.reconciler.reconcile({ ...input, resource: { ...configured, ...changed } });
 	expect(f.requests).toHaveLength(1);
 });
 

@@ -3,6 +3,38 @@ import { expect, test } from "vitest";
 import { DockerClient, DockerClientError } from "./docker-client.ts";
 import type { IDockerTransport } from "./docker-transport.ts";
 
+test("creates bind mounts with explicit access and converts CPU/memory limits to Docker units", async () => {
+	const f = fixture(201, { Id: "c" });
+	await f.client.createContainer({
+		name: "app",
+		image: "image",
+		volumes: [
+			{ hostPath: "/srv/media", mountPath: "/media", readOnly: true },
+			{ hostPath: "/mnt/disk/data", mountPath: "/data" },
+		],
+		limits: { cpus: 0.5, memoryMiB: 512 },
+	});
+	expect(f.calls.at(0)?.body).toMatchObject({
+		HostConfig: {
+			Mounts: [
+				{ Type: "bind", Source: "/srv/media", Target: "/media", ReadOnly: true },
+				{ Type: "bind", Source: "/mnt/disk/data", Target: "/data", ReadOnly: false },
+			],
+			NanoCpus: 500000000,
+			Memory: 536870912,
+		},
+	});
+});
+
+test.each([{ cpus: 1 }, { memoryMiB: 64 }])("applies independently optional CPU/memory limits: %j", async (limits) => {
+	const f = fixture(201, { Id: "c" });
+	await f.client.createContainer({ name: "app", image: "image", limits });
+	expect(JSON.parse(JSON.stringify(f.calls.at(0)?.body))).toEqual({
+		Image: "image",
+		HostConfig: "cpus" in limits ? { NanoCpus: 1000000000 } : { Memory: 67108864 },
+	});
+});
+
 function fixture(status = 200, data: unknown = {}, raw?: string) {
 	const calls: { method: string; path: string; body?: unknown }[] = [];
 	const transport: IDockerTransport = {

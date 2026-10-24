@@ -92,6 +92,13 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 						image: resource.image,
 						command: resource.command ?? null,
 						env,
+						volumes:
+							resource.volumes?.map(({ hostPath, mountPath, readOnly }) => ({
+								hostPath,
+								mountPath,
+								readOnly: readOnly ?? false,
+							})) ?? [],
+						limits: { cpus: resource.limits?.cpus, memoryMiB: resource.limits?.memoryMiB },
 						replicas: resource.replicas ?? 1,
 						rolloutStrategy: resource.rolloutStrategy ?? "recreate",
 						ingress: { public: resource.ingress.public, port: resource.ingress.port },

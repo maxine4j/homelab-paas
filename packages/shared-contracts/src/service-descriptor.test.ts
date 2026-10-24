@@ -26,7 +26,7 @@ test("accepts every resource type and its documented fields", () => {
 			{ name: "FOO", value: "123" },
 			{ name: "TOKEN", secret: true },
 		],
-		volumes: [{ source: "app/uploads", target: "/app/uploads", readOnly: false }],
+		volumes: [{ hostPath: "/srv/app/uploads", mountPath: "/app/uploads", readOnly: false }],
 		egress: ["another-service"],
 		termination: { timeoutSeconds: 60 },
 		limits: { cpus: 0.5, memoryMiB: 256 },
@@ -64,6 +64,51 @@ test("allows services without web resources and defaults workloads and private i
 			"test-service",
 		).resources,
 	).toEqual({ store: { type: "postgres", image: "postgres:17" } });
+});
+
+test.each(["/srv/media", "/mnt/other disk/data", "/etc/application.conf"])(
+	"accepts arbitrary absolute Docker host paths: %s",
+	(hostPath) => {
+		expect(
+			parseDescriptor(
+				{
+					...descriptor,
+					resources: { app: { ...descriptor.resources.app, volumes: [{ hostPath, mountPath: "/data" }] } },
+				},
+				"test-service",
+			).resources["app"],
+		).toMatchObject({ volumes: [{ hostPath, mountPath: "/data" }] });
+	},
+);
+
+test.each([
+	{ volumes: [{ hostPath: "relative", mountPath: "/data" }] },
+	{ volumes: [{ hostPath: "/data", mountPath: "relative" }] },
+	{ volumes: [{ hostPath: "/bad\0path", mountPath: "/data" }] },
+	{ volumes: [{ hostPath: "/data", mountPath: "/bad\0path" }] },
+	{ volumes: [{ hostPath: "/data", mountPath: "/" }] },
+	{
+		volumes: [
+			{ hostPath: "/a", mountPath: "/data" },
+			{ hostPath: "/b", mountPath: "/data" },
+		],
+	},
+	{
+		env: [
+			{ name: "TOKEN", value: "one" },
+			{ name: "TOKEN", secret: true },
+		],
+	},
+	{ env: [{ name: "TOKEN", value: "bad\0value" }] },
+	{ limits: { cpus: 0.0000000001 } },
+	{ limits: { memoryMiB: Number.MAX_SAFE_INTEGER } },
+])("rejects ambiguous or unrepresentable workload settings: %j", (fields) => {
+	expect(() =>
+		parseDescriptor(
+			{ ...descriptor, resources: { app: { ...descriptor.resources.app, ...fields } } },
+			"test-service",
+		),
+	).toThrow("Invalid service descriptor");
 });
 
 test("rejects invalid identities, resource fields and multiple web resources", () => {
