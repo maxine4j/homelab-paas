@@ -10,17 +10,28 @@ main() (
 
     fail() { printf '❌ %s\n' "$1" >&2; exit 1; }
 
-    [[ $(id -u) == 0 ]] || fail 'Run as root: curl -fsSL https://raw.githubusercontent.com/maxine4j/homelab-paas/main/prod/install.sh | sudo bash'
-    for tool in git install mkdir rm stty; do
+    [[ $(id -u) == 0 ]] || fail 'Run as root: curl -fsSL https://raw.githubusercontent.com/maxine4j/homelab-paas/refs/heads/main/prod/install.sh | sudo bash'
+    for tool in git install mkdir rm stty od tr sed; do
         command -v "$tool" >/dev/null || fail "Required command missing: $tool"
     done
-    if command -v python3 >/dev/null; then
-        python=python3
-    elif command -v python >/dev/null; then
-        python=python
-    else
-        fail 'Install Python (python3 or python) and retry.'
-    fi
+
+    # JSON double-quoted scalars are valid YAML. Keep secrets in shell memory.
+    quote_yaml() {
+        local value=$1 character escaped result='"' index
+        for ((index = 0; index < ${#value}; index++)); do
+            character=${value:index:1}
+            case "$character" in
+                '\') result+='\\' ;;
+                '"') result+='\"' ;;
+                [[:cntrl:]])
+                    printf -v escaped '\\u%04x' "'$character"
+                    result+=$escaped
+                    ;;
+                *) result+=$character ;;
+            esac
+        done
+        REPLY=$result'"'
+    }
 
     config_dir=/etc/homelab-paas
     state_dir=/var/homelab-paas
@@ -62,7 +73,12 @@ main() (
     trap - EXIT
     exec 3>&-
 
-    uuid=$("$python" -c 'import uuid; print(uuid.uuid4())')
+    random_hex=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+    [[ "$random_hex" =~ ^[0-9a-f]{32}$ ]] || fail 'Could not generate a checkout UUID.'
+    # UUID v4: reserve the version and variant bits in 16 random bytes.
+    printf -v uuid '%s-%s-4%s-%x%s-%s' "${random_hex:0:8}" "${random_hex:8:4}" \
+        "${random_hex:13:3}" "$(( (16#${random_hex:16:1} & 3) | 8 ))" \
+        "${random_hex:17:3}" "${random_hex:20:12}"
     checkout=/tmp/homelab-paas-${uuid}
     mkdir -m 0700 "$checkout"
     trap 'rm -rf -- "$checkout"' EXIT
@@ -73,44 +89,38 @@ main() (
     templates="$checkout/prod/etc/homelab-paas"
 
     printf '🔑 Generating the JWT session signing key…\n'
-    signing_key=$("$python" -c 'import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')
+    signing_key=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
+    [[ "$signing_key" =~ ^[0-9a-f]{64}$ ]] || fail 'Could not generate a session signing key.'
     printf '📝 Preparing configuration and pinning image to %s…\n' "$revision"
-    # Credentials travel through stdin, never process arguments or exported env.
-    # JSON string scalars are also valid YAML and preserve quotes/backslashes.
-    printf '%s\n' "$github_client_id" "$github_client_secret" "$signing_key" "$root_domain" "$admin_username" "$acme_email" "$digitalocean_token" | "$python" -c '
-import io, json, os, re, sys
-directory, revision = sys.argv[1:]
-values = [line.rstrip("\n") for line in sys.stdin]
-replacements = {
-    "replace-with-github-client-id": json.dumps(values[0]),
-    "replace-with-github-client-secret": json.dumps(values[1]),
-    "replace-with-a-random-secret-of-at-least-32-characters": json.dumps(values[2]),
-    "apps.example.com": json.dumps(values[3]),
-    "replace-with-github-username": json.dumps(values[4]),
-    "admin@example.com": json.dumps(values[5]),
-    "replace-with-digitalocean-api-token": json.dumps(values[6]),
-}
-for name in ("config.yaml", "docker-compose.yaml"):
-    path = os.path.join(directory, name)
-    with io.open(path, encoding="utf-8") as source:
-        text = source.read()
-    if name == "config.yaml":
-        pattern = "|".join(re.escape(key) for key in replacements)
-        text = re.sub(pattern, lambda match: replacements[match.group(0)], text)
-    else:
-        text = text.replace("replace-with-release-tag-or-commit-sha", revision)
-    with io.open(path, "w", encoding="utf-8") as destination:
-        destination.write(text)
-' "$templates" "$revision"
-    unset github_client_id github_client_secret signing_key digitalocean_token
+    placeholders=(replace-with-github-client-id replace-with-github-client-secret
+        replace-with-a-random-secret-of-at-least-32-characters apps.example.com
+        replace-with-github-username admin@example.com replace-with-digitalocean-api-token)
+    values=("$github_client_id" "$github_client_secret" "$signing_key" "$root_domain"
+        "$admin_username" "$acme_email" "$digitalocean_token")
+    # Match each original template line once; never replace inside inserted values.
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        for index in "${!placeholders[@]}"; do
+            placeholder=${placeholders[index]}
+            if [[ "$line" == *"$placeholder"* ]]; then
+                quote_yaml "${values[index]}"
+                printf -v line '%s%s%s' "${line%%"$placeholder"*}" "$REPLY" "${line#*"$placeholder"}"
+                break
+            fi
+        done
+        printf '%s\n' "$line"
+    done < "$templates/config.yaml" > "$checkout/config.yaml"
+    sed "s/replace-with-release-tag-or-commit-sha/$revision/" \
+        "$templates/docker-compose.yaml" > "$checkout/docker-compose.yaml"
+    unset github_client_id github_client_secret signing_key digitalocean_token values REPLY line
 
     printf '📁 Creating private host directories and installing configuration…\n'
     # mkdir is exclusive: a concurrent/repeated installer cannot overwrite files.
     mkdir -m 0700 "$config_dir"
     install -d -m 0700 "$config_dir/env" "$state_dir"
-    for name in config.yaml docker-compose.yaml envoy.yaml; do
-        install -m 0600 "$templates/$name" "$config_dir/$name"
+    for name in config.yaml docker-compose.yaml; do
+        install -m 0600 "$checkout/$name" "$config_dir/$name"
     done
+    install -m 0600 "$templates/envoy.yaml" "$config_dir/envoy.yaml"
     printf '✅ Configuration installed. No containers have been started.\n'
     printf '✏️  Edit /etc/homelab-paas/config.yaml (for example: sudo nano /etc/homelab-paas/config.yaml).\n'
     printf '   Add only your service configurations under services; platform settings are ready.\n'

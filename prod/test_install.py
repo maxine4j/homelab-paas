@@ -8,7 +8,6 @@ import pty
 import select
 import shutil
 import subprocess
-import sys
 import tempfile
 import time
 import unittest
@@ -29,9 +28,8 @@ class InstallerTest(unittest.TestCase):
         self.var = self.root / "var"
         self.bin = self.root / "bin"
         self.bin.mkdir()
-        for name in ("bash", "install", "mkdir", "rm", "stty"):
+        for name in ("bash", "install", "mkdir", "rm", "stty", "od", "tr", "sed"):
             (self.bin / name).symlink_to(shutil.which(name))
-        (self.bin / "python3").symlink_to(sys.executable)
         self.executable("id", "#!/bin/sh\nprintf '0\\n'\n")
         self.executable("git", """#!/bin/sh
 if [ "$1" = clone ]; then
@@ -126,7 +124,7 @@ fi
         for placeholder in ("apps.example.com", "admin@example.com", "replace-with-"):
             self.assertNotIn(placeholder, config.split("# Add services")[0])
         signing_key = json.loads(fields["signingKey"])
-        self.assertEqual(len(signing_key), 44)
+        self.assertRegex(signing_key, r"^[0-9a-f]{64}$")
         self.assertNotIn(signing_key, output)
         self.assertIn("ghcr.io/maxine4j/homelab-paas:" + SHA, (self.etc / "docker-compose.yaml").read_text())
         for path in (self.etc, self.etc / "env", self.var):
@@ -137,8 +135,7 @@ fi
         self.assertIn("https://auth." + SETTINGS[0] + "/auth/callback", output)
         self.assertNotIn("Set your domain", output)
 
-    def test_python_fallback(self):
-        (self.bin / "python3").rename(self.bin / "python")
+    def test_installs_without_python_on_path(self):
         status, output = self.run_installer(("client", "secret"))
         self.assertEqual(status, 0, output)
 

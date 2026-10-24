@@ -3,7 +3,7 @@
 Install on your Linux Docker host:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/maxine4j/homelab-paas/main/prod/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/maxine4j/homelab-paas/refs/heads/main/prod/install.sh | sudo bash
 ```
 
 The installer asks for your root domain, admin's GitHub username, ACME email, GitHub OAuth credentials, and DigitalOcean token. Credential input is hidden. Then edit `/etc/homelab-paas/config.yaml` only to add your service configurations. Follow [production deployment](prod/README.md) for prerequisites and startup.
