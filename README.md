@@ -6,7 +6,7 @@ Install on your Linux Docker host:
 curl -fsSL https://raw.githubusercontent.com/maxine4j/homelab-paas/main/prod/install.sh | sudo bash
 ```
 
-The installer securely prompts for GitHub OAuth credentials and prepares host configuration. Then edit `/etc/homelab-paas/config.yaml` to add your services and remaining settings. Follow [production deployment](prod/README.md) for prerequisites and startup.
+The installer asks for your root domain, admin's GitHub username, ACME email, GitHub OAuth credentials, and DigitalOcean token. Credential input is hidden. Then edit `/etc/homelab-paas/config.yaml` only to add your service configurations. Follow [production deployment](prod/README.md) for prerequisites and startup.
 
 A single-host platform for running services with Docker Engine, Envoy, and a TypeScript/Node.js control plane. Service descriptors are managed in Git and reconciled into Docker workloads.
 

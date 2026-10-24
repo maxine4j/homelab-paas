@@ -16,6 +16,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SHA = "a" * 40
+SETTINGS = ("platform.example.net", "platform-admin", "admin@example.net")
+TOKEN = 'do-token: "quoted" \\ value'
 
 
 class InstallerTest(unittest.TestCase):
@@ -61,7 +63,7 @@ fi
             "config_dir=/etc/homelab-paas", "config_dir=" + str(self.etc)
         ).replace("state_dir=/var/homelab-paas", "state_dir=" + str(self.var))
 
-    def run_installer(self, credentials=None, trace=False):
+    def run_installer(self, credentials=None, trace=False, settings=SETTINGS, token=TOKEN):
         # A controlling PTY plus a separate stdin pipe reproduces curl | bash.
         script = self.script().encode()
         pid, terminal = pty.fork()
@@ -76,6 +78,11 @@ fi
                 os._exit(99)
         output = b""
         sent = 0
+        prompts = (
+            b"Root domain", b"Admin's GitHub username:", b"ACME email:",
+            b"GitHub client ID:", b"GitHub client secret:", b"DigitalOcean API token:",
+        )
+        answers = (*settings, *credentials, token) if credentials else ()
         deadline = time.monotonic() + 10
         try:
             while time.monotonic() < deadline:
@@ -89,10 +96,10 @@ fi
                     if not data:
                         break
                     output += data
-                    if credentials and sent < 2:
-                        prompt = (b"GitHub client ID:", b"GitHub client secret:")[sent]
+                    if answers and sent < len(prompts):
+                        prompt = prompts[sent]
                         if prompt in output:
-                            os.write(terminal, credentials[sent].encode() + b"\n")
+                            os.write(terminal, answers[sent].encode() + b"\n")
                             sent += 1
             else:
                 os.kill(pid, 9)
@@ -106,12 +113,18 @@ fi
         credentials = ('client: "quoted" \\ value', "secret' # $literal")
         status, output = self.run_installer(credentials, trace=True)
         self.assertEqual(status, 0, output)
-        for credential in credentials:
+        for credential in (*credentials, TOKEN):
             self.assertNotIn(credential, output)
         config = (self.etc / "config.yaml").read_text()
         fields = dict(line.strip().split(": ", 1) for line in config.splitlines() if ": " in line)
         self.assertEqual(json.loads(fields["clientId"]), credentials[0])
         self.assertEqual(json.loads(fields["clientSecret"]), credentials[1])
+        self.assertEqual(json.loads(fields["baseDomain"]), SETTINGS[0])
+        self.assertIn("            - " + json.dumps(SETTINGS[1]), config)
+        self.assertEqual(json.loads(fields["email"]), SETTINGS[2])
+        self.assertEqual(json.loads(fields["apiToken"]), TOKEN)
+        for placeholder in ("apps.example.com", "admin@example.com", "replace-with-"):
+            self.assertNotIn(placeholder, config.split("# Add services")[0])
         signing_key = json.loads(fields["signingKey"])
         self.assertEqual(len(signing_key), 44)
         self.assertNotIn(signing_key, output)
@@ -121,6 +134,8 @@ fi
         for name in ("config.yaml", "envoy.yaml", "docker-compose.yaml"):
             self.assertEqual((self.etc / name).stat().st_mode & 0o777, 0o600)
         self.assertIn("services", output)
+        self.assertIn("https://auth." + SETTINGS[0] + "/auth/callback", output)
+        self.assertNotIn("Set your domain", output)
 
     def test_python_fallback(self):
         (self.bin / "python3").rename(self.bin / "python")
@@ -128,13 +143,15 @@ fi
         self.assertEqual(status, 0, output)
 
     def test_credentials_containing_template_tokens_are_preserved(self):
-        credentials = ("replace-with-github-client-secret", "replace-with-a-random-secret-of-at-least-32-characters")
-        status, output = self.run_installer(credentials)
+        credentials = ("replace-with-digitalocean-api-token", "replace-with-a-random-secret-of-at-least-32-characters")
+        token = "replace-with-github-client-id admin@example.com apps.example.com"
+        status, output = self.run_installer(credentials, token=token)
         self.assertEqual(status, 0, output)
         config = (self.etc / "config.yaml").read_text()
         fields = dict(line.strip().split(": ", 1) for line in config.splitlines() if ": " in line)
         self.assertEqual(json.loads(fields["clientId"]), credentials[0])
         self.assertEqual(json.loads(fields["clientSecret"]), credentials[1])
+        self.assertEqual(json.loads(fields["apiToken"]), token)
 
     def test_existing_installation_is_preserved(self):
         self.etc.mkdir()
@@ -166,6 +183,20 @@ fi
         status, output = self.run_installer(("", "secret"))
         self.assertNotEqual(status, 0, output)
         self.assertFalse(self.etc.exists())
+
+    def test_empty_settings_and_token_fail_without_writing(self):
+        for index, message in enumerate(("Root domain", "Admin's GitHub username", "ACME email", "DigitalOcean API token")):
+            with self.subTest(field=message):
+                settings = list(SETTINGS)
+                token = TOKEN
+                if index < 3:
+                    settings[index] = ""
+                else:
+                    token = ""
+                status, output = self.run_installer(("client", "secret"), settings=settings, token=token)
+                self.assertNotEqual(status, 0, output)
+                self.assertIn(message + " must not be empty.", output)
+                self.assertFalse(self.etc.exists())
 
 
 if __name__ == "__main__":

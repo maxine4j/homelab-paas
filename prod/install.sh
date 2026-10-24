@@ -26,14 +26,26 @@ main() (
     state_dir=/var/homelab-paas
     [[ ! -e "$config_dir" && ! -L "$config_dir" ]] || fail 'Existing /etc/homelab-paas preserved; edit it directly instead of reinstalling.'
     [[ ! -L "$state_dir" ]] || fail 'Refusing a symlink at /var/homelab-paas.'
-    { exec 3<>/dev/tty; } 2>/dev/null || fail 'An interactive terminal is required for GitHub credentials.'
+    { exec 3<>/dev/tty; } 2>/dev/null || fail 'An interactive terminal is required for configuration and credentials.'
     tty_settings=$(stty -g <&3)
     trap 'stty "$tty_settings" <&3' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
-    stty -echo <&3
 
-    printf '🔐 Enter your GitHub OAuth credentials (input is hidden).\n'
+    printf '🌐 Configure your platform…\n'
+    printf 'Root domain (for example apps.example.com, without scheme or path): ' >&3
+    IFS= read -r root_domain <&3 || fail 'Could not read root domain.'
+    [[ -n "$root_domain" ]] || fail 'Root domain must not be empty.'
+    printf "Admin's GitHub username: " >&3
+    IFS= read -r admin_username <&3 || fail "Could not read admin's GitHub username."
+    [[ -n "$admin_username" ]] || fail "Admin's GitHub username must not be empty."
+    printf 'ACME email: ' >&3
+    IFS= read -r acme_email <&3 || fail 'Could not read ACME email.'
+    [[ -n "$acme_email" ]] || fail 'ACME email must not be empty.'
+    printf '🔗 Register this GitHub OAuth callback: https://auth.%s/auth/callback\n' "$root_domain"
+
+    stty -echo <&3
+    printf '🔐 Enter your GitHub OAuth credentials and DigitalOcean token (input is hidden).\n'
     printf 'GitHub client ID: ' >&3
     IFS= read -r -s github_client_id <&3 || fail 'Could not read GitHub client ID.'
     printf '\n' >&3
@@ -42,6 +54,10 @@ main() (
     IFS= read -r -s github_client_secret <&3 || fail 'Could not read GitHub client secret.'
     printf '\n' >&3
     [[ -n "$github_client_secret" ]] || fail 'GitHub client secret must not be empty.'
+    printf 'DigitalOcean API token: ' >&3
+    IFS= read -r -s digitalocean_token <&3 || fail 'Could not read DigitalOcean API token.'
+    printf '\n' >&3
+    [[ -n "$digitalocean_token" ]] || fail 'DigitalOcean API token must not be empty.'
     stty "$tty_settings" <&3
     trap - EXIT
     exec 3>&-
@@ -61,7 +77,7 @@ main() (
     printf '📝 Preparing configuration and pinning image to %s…\n' "$revision"
     # Credentials travel through stdin, never process arguments or exported env.
     # JSON string scalars are also valid YAML and preserve quotes/backslashes.
-    printf '%s\n' "$github_client_id" "$github_client_secret" "$signing_key" | "$python" -c '
+    printf '%s\n' "$github_client_id" "$github_client_secret" "$signing_key" "$root_domain" "$admin_username" "$acme_email" "$digitalocean_token" | "$python" -c '
 import io, json, os, re, sys
 directory, revision = sys.argv[1:]
 values = [line.rstrip("\n") for line in sys.stdin]
@@ -69,6 +85,10 @@ replacements = {
     "replace-with-github-client-id": json.dumps(values[0]),
     "replace-with-github-client-secret": json.dumps(values[1]),
     "replace-with-a-random-secret-of-at-least-32-characters": json.dumps(values[2]),
+    "apps.example.com": json.dumps(values[3]),
+    "replace-with-github-username": json.dumps(values[4]),
+    "admin@example.com": json.dumps(values[5]),
+    "replace-with-digitalocean-api-token": json.dumps(values[6]),
 }
 for name in ("config.yaml", "docker-compose.yaml"):
     path = os.path.join(directory, name)
@@ -82,7 +102,7 @@ for name in ("config.yaml", "docker-compose.yaml"):
     with io.open(path, "w", encoding="utf-8") as destination:
         destination.write(text)
 ' "$templates" "$revision"
-    unset github_client_id github_client_secret signing_key
+    unset github_client_id github_client_secret signing_key digitalocean_token
 
     printf '📁 Creating private host directories and installing configuration…\n'
     # mkdir is exclusive: a concurrent/repeated installer cannot overwrite files.
@@ -93,7 +113,7 @@ for name in ("config.yaml", "docker-compose.yaml"):
     done
     printf '✅ Configuration installed. No containers have been started.\n'
     printf '✏️  Edit /etc/homelab-paas/config.yaml (for example: sudo nano /etc/homelab-paas/config.yaml).\n'
-    printf '   Set your domain, GitHub allowlist, ACME email, DigitalOcean token, and services.\n'
+    printf '   Add only your service configurations under services; platform settings are ready.\n'
     printf '🚀 Then follow https://github.com/maxine4j/homelab-paas/blob/main/prod/README.md#start-and-verify\n'
     printf '   The pinned main image may still be publishing in CI; wait for it before pulling.\n'
 )
