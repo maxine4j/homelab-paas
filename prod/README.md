@@ -29,6 +29,10 @@ Provision application bind-mount sources on the Docker host before adding descri
 
 The configuration directory is mounted read-only into both bootstrap containers. The control plane writes persistent state and TLS private material under `/var/homelab-paas`; Envoy mounts that directory read-only and runs as root to read restricted files. Keep these directories restricted to host administrators. Docker socket access grants the control plane host-level control.
 
+On SELinux-enforcing hosts such as Fedora CoreOS, the Compose mounts use the shared `z` label for the platform configuration and state directories so both containers can access them. Docker relabels these dedicated directories when creating the containers. The certificate chain and private key remain together at `/var/homelab-paas/_paas/ingress.pem` with mode `0600`; see [TLS storage](../docs/networking-and-auth.md#tls). A permission-denied error reading that file can indicate an incorrect SELinux label even when the container runs as root.
+
+For an existing installation, add `z` to the four configuration/state mounts in `/etc/homelab-paas/docker-compose.yaml` to match the [template](etc/homelab-paas/docker-compose.yaml), then run the `up -d` command below to recreate the containers and relabel the mounts. Keep the read-only `ro` option on both configuration mounts and Envoy's state mount. Leave the Docker socket mount unchanged and preserve existing certificate and account files.
+
 ## Start and verify
 
 Run on the deployment host:
