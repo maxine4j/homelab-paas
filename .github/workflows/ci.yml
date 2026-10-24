@@ -27,7 +27,7 @@ jobs:
             - run: pnpm install --frozen-lockfile
             - run: pnpm check
             - run: pnpm test
-            - run: bash -n prod/install.sh && python3 -m unittest discover -s prod -p 'test_*.py'
+            - run: bash -n prod/install.sh && bash -n prod/upgrade-paas.sh && python3 -m unittest discover -s prod -p 'test_*.py'
             - run: pnpm build
     package:
         runs-on: ubuntu-24.04

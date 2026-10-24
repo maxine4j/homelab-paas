@@ -46,7 +46,7 @@ Run from the repository root:
 
 Run checks appropriate to the change. For code changes, use `pnpm check`, relevant tests, and `pnpm build` when build output or packaging is affected. For documentation-only changes, check formatting and relative links; application tests are unnecessary.
 
-For the production installer, run `bash -n prod/install.sh` and `python3 -m unittest discover -s prod -p 'test_*.py'`. These standard-library tests use isolated temporary host paths, stub Git, and a pseudo-terminal to verify piped execution and hidden credential input; they require no network or root privileges. CI runs them alongside the workspace checks.
+For the production installer and [upgrade helper](../prod/upgrade.md), run `bash -n prod/install.sh && bash -n prod/upgrade-paas.sh` and `python3 -m unittest discover -s prod -p 'test_*.py'`. These standard-library tests use isolated temporary host paths, stub Git and Docker, and a pseudo-terminal to verify piped installation and hidden credential input; they require no network or root privileges. CI runs them alongside the workspace checks.
 
 On macOS, `./scripts/bootstrap.sh` installs the tools in `Brewfile` and the pinned workspace dependencies. Add Homebrew's `node@24/bin` directory to your shell `PATH` and start Docker Desktop before running container commands. Kubernetes and appliance packaging scripts are no longer used.
 
