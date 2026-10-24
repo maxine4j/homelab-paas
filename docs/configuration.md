@@ -114,9 +114,11 @@ volumes:
       readOnly: false
 ```
 
-`hostPath` is an arbitrary absolute path on the **Docker host**, including paths outside `/var/homelab-paas/`. Workloads and descriptor authors are trusted to choose host files or directories. `mountPath` is an absolute path inside the workload container, other than `/`; mount destinations must be unique and neither path may contain NUL bytes. `readOnly` defaults to `false`. The old `source` and `target` fields are rejected.
+`hostPath` is an arbitrary absolute path on the **Docker host**, including paths outside `/var/homelab-paas/`. Workloads and descriptor authors are trusted to choose host files or directories. `mountPath` is an absolute path inside the workload container, other than `/`; mount destinations must be unique and neither path may contain NUL bytes or colons (Docker's bind-string separator). `readOnly` defaults to `false`. The old `source` and `target` fields are rejected.
 
-Docker bind mounts use these paths directly. The control plane does not create, inspect or translate host paths using its own container filesystem; provision the source on the Docker host before deployment. A missing or unusable source fails Docker container creation. Data belongs to the host and is retained when containers or resources are removed. Mount and access-mode changes trigger replacement. With `surge`, both revisions access the same host data concurrently; use `recreate` for applications that require exclusive access.
+Docker bind mounts use these paths directly through the Engine API's `HostConfig.Binds`, with explicit `ro` or `rw` access and the shared SELinux `z` option. Docker relabels the source for access by multiple confined containers, including overlapping surge revisions. This changes host SELinux labels recursively, even for read-only mounts; choose dedicated application paths rather than system directories or paths requiring a different host policy. Unix ownership and permissions still apply.
+
+The control plane does not create, inspect or translate host paths using its own container filesystem. Docker creates missing source directories when starting a container; provision file sources and any required application ownership or permissions on the host before deployment. Unusable sources fail container creation or startup. Data belongs to the host and is retained when containers or resources are removed. Mount and access-mode changes trigger replacement. With `surge`, both revisions access the same host data concurrently; use `recreate` for applications that require exclusive access.
 
 Resources may declare CPU and memory limits:
 

@@ -31,6 +31,7 @@ export interface IDockerClient {
 	inspectContainer(id: string): Promise<DockerContainerDetails | null>;
 	/** Returns the last 200 timestamped stdout/stderr lines. No streaming. */
 	readContainerLogs(id: string): Promise<string>;
+	/** Bind mounts use shared SELinux labels; Docker creates missing source directories on start. */
 	createContainer(options: CreateContainerOptions): Promise<string>;
 	startContainer(id: string): Promise<void>;
 	stopContainer(id: string, timeoutSeconds: number): Promise<void>;
@@ -203,12 +204,9 @@ export class DockerClient implements IDockerClient {
 				Env: options.env ? Object.entries(options.env).map(([key, value]) => `${key}=${value}`) : undefined,
 				Labels: options.labels,
 				HostConfig: {
-					Mounts: options.volumes?.map(({ hostPath, mountPath, readOnly }) => ({
-						Type: "bind",
-						Source: hostPath,
-						Target: mountPath,
-						ReadOnly: readOnly ?? false,
-					})),
+					Binds: options.volumes?.map(
+						({ hostPath, mountPath, readOnly }) => `${hostPath}:${mountPath}:${readOnly ? "ro" : "rw"},z`,
+					),
 					NanoCpus: options.limits?.cpus === undefined ? undefined : Math.round(options.limits.cpus * 1e9),
 					Memory: options.limits?.memoryMiB === undefined ? undefined : options.limits.memoryMiB * 1048576,
 					NetworkMode: options.network,

@@ -4,6 +4,9 @@ services:
         image: ghcr.io/maxine4j/homelab-paas:replace-with-release-tag-or-commit-sha
         init: true
         restart: unless-stopped
+        # Docker socket access requires opting this trusted controller out of SELinux confinement.
+        security_opt:
+            - label=disable
         labels:
             homelab-paas.cluster: prod
             homelab-paas.role: control-plane

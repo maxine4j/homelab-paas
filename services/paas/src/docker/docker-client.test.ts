@@ -3,27 +3,26 @@ import { expect, test } from "vitest";
 import { DockerClient, DockerClientError } from "./docker-client.ts";
 import type { IDockerTransport } from "./docker-transport.ts";
 
-test("creates bind mounts with explicit access and converts CPU/memory limits to Docker units", async () => {
+test("creates shared SELinux binds with explicit access and converts CPU/memory limits to Docker units", async () => {
 	const f = fixture(201, { Id: "c" });
 	await f.client.createContainer({
 		name: "app",
 		image: "image",
 		volumes: [
 			{ hostPath: "/srv/media", mountPath: "/media", readOnly: true },
-			{ hostPath: "/mnt/disk/data", mountPath: "/data" },
+			{ hostPath: "/mnt/other disk/data", mountPath: "/data" },
+			{ hostPath: "/srv/writable", mountPath: "/writable", readOnly: false },
 		],
 		limits: { cpus: 0.5, memoryMiB: 512 },
 	});
 	expect(f.calls.at(0)?.body).toMatchObject({
 		HostConfig: {
-			Mounts: [
-				{ Type: "bind", Source: "/srv/media", Target: "/media", ReadOnly: true },
-				{ Type: "bind", Source: "/mnt/disk/data", Target: "/data", ReadOnly: false },
-			],
+			Binds: ["/srv/media:/media:ro,z", "/mnt/other disk/data:/data:rw,z", "/srv/writable:/writable:rw,z"],
 			NanoCpus: 500000000,
 			Memory: 536870912,
 		},
 	});
+	expect(f.calls.at(0)?.body).not.toHaveProperty("HostConfig.Mounts");
 });
 
 test.each([{ cpus: 1 }, { memoryMiB: 64 }])("applies independently optional CPU/memory limits: %j", async (limits) => {

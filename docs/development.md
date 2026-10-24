@@ -92,6 +92,8 @@ docker compose -f local/docker-compose.yaml up --build -d
 
 Compose starts only Envoy and the control plane. The control plane deploys test-service itself through Docker Engine using its committed descriptor. Only Envoy publishes ports, on loopback ports 80 and 443.
 
+The local bootstrap targets Docker Desktop on macOS and uses its default security options. The production bootstrap configures SELinux access for the Docker socket and shared state; see [production deployment](../prod/README.md#prepare-the-host).
+
 The test-service descriptor uses `ghcr.io/maxine4j/homelab-paas/test-service:latest`, published by CI. The Docker host needs pull access to that package. Changes to content behind `latest` do not automatically redeploy an existing workload; see [image reconciliation](reconciliation-and-deployments.md#container-updates-and-images).
 
 `services/paas/Dockerfile` uses Node 24 Alpine with separate build, production dependency installation, and runtime stages. Compose runs the same runtime image and default `node dist/main.js` command used in production, with compiled JavaScript and production dependencies. Source is not mounted into the application directory. Rerun `pnpm dev:deploy` to rebuild and replace the control plane after code or dependency changes.

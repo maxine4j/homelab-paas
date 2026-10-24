@@ -97,6 +97,7 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 								hostPath,
 								mountPath,
 								readOnly: readOnly ?? false,
+								selinux: "z",
 							})) ?? [],
 						limits: { cpus: resource.limits?.cpus, memoryMiB: resource.limits?.memoryMiB },
 						replicas: resource.replicas ?? 1,

@@ -137,6 +137,33 @@ test("an unchanged running resource does not redeploy when only source revision 
 	expect(f.requests).toEqual([]);
 });
 
+test("replaces a legacy bind-mounted workload once to apply shared SELinux labels", async () => {
+	const f = fixture();
+	// Persisted fingerprint produced before shared SELinux bind labels were introduced.
+	const legacySpec = "4271e06ed751e6741fdf3e8c5fb7697fd37772397d59c1c18dfcce572ab0aa68";
+	f.setContainers([
+		{ id: "c", imageId: "image", resourceId: "app", revision: "rev", spec: legacySpec, state: "running" },
+	]);
+	const mounted = { ...input, resource: { ...resource, volumes: [{ hostPath: "/srv/data", mountPath: "/data" }] } };
+	await f.reconciler.reconcile(mounted);
+	expect(f.requests).toHaveLength(1);
+	const desired = f.requests.at(0)!;
+	expect(desired.spec).not.toBe(legacySpec);
+	f.setContainers([
+		{
+			id: "replacement",
+			imageId: "image",
+			resourceId: "app",
+			revision: "rev",
+			spec: desired.spec,
+			state: "running",
+		},
+	]);
+	f.requests.length = 0;
+	await f.reconciler.reconcile(mounted);
+	expect(f.requests).toEqual([]);
+});
+
 test("equivalent defaults and environment ordering produce the same desired state", async () => {
 	const f = fixture();
 	await f.reconciler.reconcile({

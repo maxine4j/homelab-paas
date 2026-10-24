@@ -16,7 +16,7 @@ const environmentVariable = z.union([
 const absolutePath = z
 	.string()
 	.startsWith("/")
-	.refine((path) => !path.includes("\0"));
+	.refine((path) => !path.includes("\0") && !path.includes(":"));
 const volume = z.strictObject({
 	hostPath: absolutePath,
 	mountPath: absolutePath.refine((path) => path !== "/"),

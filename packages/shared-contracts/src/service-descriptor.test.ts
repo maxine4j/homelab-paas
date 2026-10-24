@@ -92,6 +92,8 @@ test.each([
 	{ volumes: [{ hostPath: "/data", mountPath: "relative" }] },
 	{ volumes: [{ hostPath: "/bad\0path", mountPath: "/data" }] },
 	{ volumes: [{ hostPath: "/data", mountPath: "/bad\0path" }] },
+	{ volumes: [{ hostPath: "/srv/data:ro", mountPath: "/data" }] },
+	{ volumes: [{ hostPath: "/data", mountPath: "/data:ro" }] },
 	{ volumes: [{ hostPath: "/data", mountPath: "/" }] },
 	{
 		volumes: [
