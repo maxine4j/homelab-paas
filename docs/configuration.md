@@ -10,7 +10,7 @@ The current runtime supports exactly one `web` resource per service, one replica
 
 Workers, managed databases/brokers, egress, and multiple replicas are deferred. Private ingress (including the default `public: false`) requires platform auth and TLS. Without them, ingress must explicitly set `public: true`. The remaining service examples include capabilities beyond the deployed runtime.
 
-At startup, supplied environment variables override the corresponding YAML fields before validation:
+At startup and on reload, supplied environment variables override the corresponding YAML fields before validation:
 
 | Environment variable     | YAML field                     |
 | ------------------------ | ------------------------------ |
@@ -22,7 +22,7 @@ At startup, supplied environment variables override the corresponding YAML field
 
 Unset variables preserve YAML values; empty overrides fail validation when their section is configured. Environment credentials alone do not enable authentication or TLS. The YAML must still contain the corresponding sections, GitHub allowlist and session settings. Keep local credentials in the ignored Compose `.env` file; see [development](development.md#local-container-environment).
 
-Platform configuration contains `version: 1`, `metadata.clusterId`, `ingress.baseDomain`, optional `ingress.httpPort` (default 80), `git`, `reconciliation`, and `services`. The `auth` and `tls` sections shown below are optional together; supplying only one fails startup. With both enabled, `ingress.httpsPort` defaults to 443 and HTTP redirects to HTTPS. HTTP and HTTPS ports must differ. Without auth/TLS, `httpsPort` is rejected and public HTTP remains available for local development. Git credentials remain deferred. Polling, operation timeout, and retry bounds are required positive integer seconds. Restart the control plane to apply platform configuration changes.
+Platform configuration contains `version: 1`, `metadata.clusterId`, `ingress.baseDomain`, optional `ingress.httpPort` (default 80), `git`, `reconciliation`, and `services`. The `auth` and `tls` sections shown below are optional together; supplying only one fails startup. With both enabled, `ingress.httpsPort` defaults to 443 and HTTP redirects to HTTPS. HTTP and HTTPS ports must differ. Without auth/TLS, `httpsPort` is rejected and public HTTP remains available for local development. Git credentials remain deferred. Polling, operation timeout, and retry bounds are required positive integer seconds.
 
 GitHub client ID, client secret, and a nonempty username allowlist are required when authentication is enabled. Username matching is case-insensitive. `AuthService` derives the callback as `https://auth.{baseDomain}/auth/callback`, including `:{httpsPort}` for a nonstandard HTTPS port; `callbackUrl` is not a configurable field. Register this derived URL in the GitHub OAuth application. The service ID `auth` is reserved in this mode. Session issuer, audience, signing key (at least 32 characters), and positive integer lifetime in seconds are required. TLS requires an ACME email and DigitalOcean API token; provider selection is fixed to `digitalocean`. Certificate paths, production ACME directory, and renewal timing are platform-owned; see [TLS](networking-and-auth.md#tls).
 
@@ -48,6 +48,16 @@ services:
         remote: local
         descriptorPath: /mnt/repo/services/test-service/test-service.sd.yaml
 ```
+
+## Platform configuration reload
+
+`PaasConfig` owns the effective configuration. Control-plane components read it through typed getters, including `getTlsConfig`, rather than retaining startup copies. After startup, a serial background task rereads `/etc/homelab-paas/config.yaml` every 60 seconds through the canonical file reader. It needs only the existing read access and no filesystem notification subscription, including on SELinux-enforcing CoreOS. Keep the mounted configuration directory readable under the production SELinux policy; update the file atomically within that directory.
+
+Each read reapplies the process environment overrides, parses YAML, validates the complete candidate and publishes it atomically. Missing files, read/parse/validation failures and restart-required changes retain the entire last valid configuration and log an error with its cause. Startup still fails if the initial configuration cannot load. Getters return independent values so callers cannot mutate the stored configuration.
+
+Service sources, Git polling/operation timing, retry bounds, auth credentials, allowlists, session settings and TLS credentials/email take effect on subsequent operations. An already scheduled reconciliation wait or in-flight operation may finish using previous settings. Signing-key changes invalidate existing sessions and OAuth state; allowlist changes apply on the next session check. TLS settings apply on the next required certificate issuance/renewal, without replacing a healthy certificate solely for a credential change. Environment overrides remain fixed until the process restarts.
+
+Cluster identity, ingress domain/ports and enabling or disabling auth/TLS require a control-plane restart; reload rejects the whole candidate when these differ. Update external DNS, OAuth registrations and bootstrap port mappings as appropriate before restarting. Adding a service makes it eligible for the next reconciliation pass. Removing a service stops its reconciliation and removes it from the management UI and accepted OAuth targets; workload, route, persistent data and credential cleanup remain deferred under the [removal contract](reconciliation-and-deployments.md#removal).
 
 ## Service descriptors
 

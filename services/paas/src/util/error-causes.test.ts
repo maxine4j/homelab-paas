@@ -8,6 +8,7 @@ import { GitHubOauth2Provider } from "../ingress/auth/oauth-provider/github.ts";
 import { EnvironmentResolver } from "../reconciler/environment-resolver.ts";
 import { EndpointsStore } from "../reconciler/networking/endpoints-store.ts";
 import { ReconciliationStore } from "../reconciler/reconciliation-store.ts";
+import { testConfig } from "../util/test/config.ts";
 import { DomainError } from "./error.ts";
 import { parseYaml } from "./yaml.ts";
 
@@ -21,7 +22,15 @@ const envoy = new EnvoyClient(
 	async () => {},
 	{ attempts: 1, intervalMs: 0 },
 );
-const github = new GitHubOauth2Provider({ clientId: "id", clientSecret: "secret" }, fail);
+const github = new GitHubOauth2Provider(
+	testConfig({
+		auth: {
+			...testConfig().getAuthConfig()!,
+			github: { ...testConfig().getAuthConfig()!.github, ...{ clientId: "id", clientSecret: "secret" } },
+		},
+	}),
+	fail,
+);
 
 test.each([
 	["configuration", () => new PaasConfig(fail).load()],
@@ -94,7 +103,12 @@ test("Envoy polling exhaustion retains the last connection failure", async () =>
 
 test.each(["token", "profile"])("GitHub %s failures retain HTTP response diagnostics", async (operation) => {
 	const provider = new GitHubOauth2Provider(
-		{ clientId: "id", clientSecret: "secret" },
+		testConfig({
+			auth: {
+				...testConfig().getAuthConfig()!,
+				github: { ...testConfig().getAuthConfig()!.github, ...{ clientId: "id", clientSecret: "secret" } },
+			},
+		}),
 		async () => new Response("GitHub failure details", { status: 500 }),
 	);
 	await expect(

@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 
+import { captureLogs } from "../util/test/logs.ts";
 import { PaasConfig, decodeDescriptorYaml, parseConfig } from "./paas-config.ts";
 
 const descriptor = {
@@ -69,6 +70,101 @@ const authenticatedConfig = {
 		dns: { provider: "digitalocean", credentials: { apiToken: "token" } },
 	},
 };
+
+test("reload publishes validated settings atomically and getters return independent values", async () => {
+	let content = JSON.stringify(authenticatedConfig);
+	const configuration = new PaasConfig(async () => content);
+	await configuration.load();
+	expect(configuration.getTlsConfig()?.acme.email).toBe("admin@example.com");
+	content = JSON.stringify({ ...authenticatedConfig, services: { demo: { remote: "https://example.com/demo" } } });
+	await configuration.reload();
+	expect(configuration.getServices()["demo"]?.branch).toBe("main");
+	const services = configuration.getServices();
+	delete services["demo"];
+	expect(configuration.getServices()["demo"]).toBeDefined();
+});
+
+test.each(["missing", "unreadable", "syntax", "schema"])(
+	"failed %s reload retains settings, logs the cause and recovers",
+	async (failure) => {
+		let content: string | undefined = JSON.stringify(authenticatedConfig);
+		let unreadable = false;
+		const configuration = new PaasConfig(async () => {
+			if (unreadable) throw new Error("permission denied");
+			return content;
+		});
+		await configuration.load();
+		content = failure === "missing" ? undefined : failure === "syntax" ? "invalid: [" : "version: 9";
+		unreadable = failure === "unreadable";
+		const capture = captureLogs();
+		try {
+			await configuration.reload();
+		} finally {
+			capture.restore();
+		}
+		expect(configuration.getTlsConfig()?.acme.email).toBe("admin@example.com");
+		expect(capture.lines.map((line) => JSON.parse(line))).toEqual(
+			expect.arrayContaining([expect.objectContaining({ level: 50, err: expect.anything() })]),
+		);
+		unreadable = false;
+		content = JSON.stringify({
+			...authenticatedConfig,
+			tls: { ...authenticatedConfig.tls, acme: { email: "new@example.com" } },
+		});
+		await configuration.reload();
+		expect(configuration.getTlsConfig()?.acme.email).toBe("new@example.com");
+	},
+);
+
+test("reload reapplies environment overrides and rejects changes requiring a restart", async () => {
+	let value = authenticatedConfig;
+	const configuration = new PaasConfig(async () => JSON.stringify(value), { ACME_EMAIL: "override@example.com" });
+	await configuration.load();
+	value = { ...value, tls: { ...value.tls, acme: { email: "disk@example.com" } } };
+	await configuration.reload();
+	expect(configuration.getTlsConfig()?.acme.email).toBe("override@example.com");
+	value = { ...value, metadata: { clusterId: "other" } };
+	await configuration.reload();
+	expect(configuration.getClusterId()).toBe("prod");
+});
+
+test.each([
+	{ ingress: { baseDomain: "other.example.com" } },
+	{ ingress: { baseDomain: "apps.example.com", httpPort: 8080 } },
+	{ ingress: { baseDomain: "apps.example.com", httpsPort: 8443 } },
+	{ auth: undefined, tls: undefined },
+])("rejects startup topology changes while preserving every previous setting: %j", async (change) => {
+	let content = JSON.stringify(authenticatedConfig);
+	const configuration = new PaasConfig(async () => content);
+	await configuration.load();
+	const before = configuration.getConfig();
+	content = JSON.stringify({
+		...authenticatedConfig,
+		...change,
+		git: { pollIntervalSeconds: 99, operationTimeoutSeconds: 99 },
+	});
+	const capture = captureLogs();
+	try {
+		await configuration.reload();
+	} finally {
+		capture.restore();
+	}
+	expect(configuration.getConfig()).toEqual(before);
+	expect(capture.lines.join("")).toContain("restart");
+});
+
+test("all getters reject access before initialization and protect nested configuration from mutation", async () => {
+	const configuration = new PaasConfig(async () => JSON.stringify(authenticatedConfig));
+	expect(() => configuration.getConfig()).toThrow("has not been loaded");
+	const snapshot = await configuration.load();
+	snapshot.metadata.clusterId = "changed";
+	configuration.getAuthConfig()!.github.allowedUsers.push("mallory");
+	configuration.getTlsConfig()!.dns.credentials.apiToken = "changed";
+	configuration.getGitConfig().operationTimeoutSeconds = 999;
+	configuration.getReconciliationConfig().retryBackoffSeconds = 999;
+	configuration.getIngressConfig().baseDomain = "changed";
+	expect(configuration.getConfig()).toEqual(parseConfig(authenticatedConfig));
+});
 
 test("rejects platform YAML warnings without exposing source", async () => {
 	await expect(

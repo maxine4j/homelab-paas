@@ -1,3 +1,4 @@
+import type { IPaasConfig } from "../../config/paas-config.ts";
 import type { IEndpointsStore } from "../../reconciler/networking/endpoints-store.ts";
 import type { IJwtClient } from "./jwt-client.ts";
 import type { Oauth2Provider } from "./oauth-provider/types.ts";
@@ -13,10 +14,9 @@ export class AuthService implements IAuthService {
 	constructor(
 		private readonly provider: Oauth2Provider,
 		private readonly tokens: IJwtClient,
-		private readonly allowedUsers: string[],
+		private readonly config: IPaasConfig,
 		private readonly generateNonce: () => string,
 		private readonly endpoints: IEndpointsStore,
-		private readonly ingress: { baseDomain: string; httpsPort: number },
 	) {}
 	async authorize(serviceId: string, token: string | undefined): Promise<"allowed" | "login" | "missing"> {
 		const endpoint = (await this.endpoints.getAll())[serviceId];
@@ -45,11 +45,14 @@ export class AuthService implements IAuthService {
 		return userId && this.isAllowed(userId) ? { userId } : undefined;
 	}
 	private isAllowed(userId: string): boolean {
-		return this.allowedUsers.some((allowed) => allowed.toLowerCase() === userId.toLowerCase());
+		return this.config
+			.getAuthConfig()!
+			.github.allowedUsers.some((allowed) => allowed.toLowerCase() === userId.toLowerCase());
 	}
 	private callbackUrl(): string {
-		const port = this.ingress.httpsPort === 443 ? "" : `:${this.ingress.httpsPort}`;
-		return `https://auth.${this.ingress.baseDomain}${port}/auth/callback`;
+		const { baseDomain, httpsPort } = this.config.getIngressConfig();
+		const port = httpsPort === 443 ? "" : `:${httpsPort}`;
+		return `https://auth.${baseDomain}${port}/auth/callback`;
 	}
 }
 

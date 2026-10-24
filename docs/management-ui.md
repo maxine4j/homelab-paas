@@ -6,7 +6,7 @@ Without auth/TLS, the base hostname serves HTTP without authentication for trust
 
 ## Views
 
-- Cluster configuration: effective validated startup configuration, including defaults and environment overrides, with credentials redacted. Restart the control plane to change it.
+- Cluster configuration: current effective validated configuration, including defaults and environment overrides, with credentials redacted. See [platform configuration reload](configuration.md#platform-configuration-reload) for live settings and restart requirements.
 - Services: every configured service, its persisted phase and active/desired revisions. Service detail also shows the next retry time. Unobserved services use `unknown`; API summaries additionally include the retry count.
 - Service detail: source configuration and the union of resources in the latest valid committed descriptor and observed Docker containers. Resources with no containers remain visible; containers belonging to resources absent from the descriptor remain inspectable with type `unknown`.
 - Resource inspection: redacted desired configuration, live container snapshots (including stopped containers, image identity, revision, running flag and networks), and a selectable container's last 200 timestamped stdout/stderr log lines. Docker multiplexed and plain TTY output are supported. There is no log streaming or history pagination.
@@ -31,4 +31,4 @@ All endpoints are `GET` (also supporting `HEAD`) under `/api/ui`. Responses use 
 
 `frontend/paas-ui-router.ts` owns HTTP adaptation and session verification. `PaasUiService` aggregates injected Git, Docker and reconciliation-state interfaces. It serializes UI Git reads in a separate `_paas/ui-git/` cache, avoiding interference with deployment reconciliation. Docker services enforce cluster/service ownership before reading logs; the UI service additionally verifies resource membership. Shared response types live in `@homelab-paas/shared-contracts`.
 
-Frontend `pages/` compose reusable `components/`; `hooks/` own navigation and fetching. The Docker image builds and includes the Vite output; the existing static frontend service serves it. This MVP introduces no mutations, cluster configuration reload, deployment controls, or expansion of the [runtime's supported resource capabilities](configuration.md#implemented-deployment-mvp).
+Frontend `pages/` compose reusable `components/`; `hooks/` own navigation and fetching. The Docker image builds and includes the Vite output; the existing static frontend service serves it. This MVP introduces no UI mutations, deployment controls, or expansion of the [runtime's supported resource capabilities](configuration.md#implemented-deployment-mvp).

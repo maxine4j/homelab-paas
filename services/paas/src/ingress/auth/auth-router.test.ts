@@ -3,6 +3,7 @@ import { request as httpRequest } from "node:http";
 import Koa from "koa";
 import { expect, test, vi } from "vitest";
 
+import { testConfig } from "../../util/test/config.ts";
 import { captureLogs } from "../../util/test/logs.ts";
 import { startTestApi } from "../../util/test/router.ts";
 import { createAuthRouter } from "./auth-router.ts";
@@ -26,6 +27,30 @@ const requestWithHost = (url: string, headers: Record<string, string>): Promise<
 		req.end();
 	});
 
+test("OAuth targets follow added and removed services without rebuilding the router", async () => {
+	const config = testConfig();
+	const auth: IAuthService = {
+		authorize: vi.fn(),
+		completeLogin: vi.fn(),
+		verifyAuthCookie: vi.fn(),
+		beginLogin: () => ({ url: "https://github.com/login", state: "state", nonce: "nonce" }),
+	};
+	const api = await startTestApi(new Koa().use(createAuthRouter(auth, config).routes()));
+	try {
+		const login = () =>
+			requestWithHost(`${api.origin}/oauth/github/login?redirect_uri=https%3A%2F%2Fdemo.example.test%2F`, {
+				host: "auth.example.test",
+			});
+		expect((await login()).status).toBe(400);
+		config.getConfig().services["demo"] = { remote: "local", descriptorPath: "/repo/demo.yaml" };
+		expect((await login()).status).toBe(302);
+		delete config.getConfig().services["demo"];
+		expect((await login()).status).toBe(400);
+	} finally {
+		await api.close();
+	}
+});
+
 test("maps Envoy checks, strips platform cookies, redirects private requests and fails closed", async () => {
 	const capture = captureLogs();
 	const authorize = vi.fn(async (id: string, token: string | undefined) =>
@@ -34,12 +59,19 @@ test("maps Envoy checks, strips platform cookies, redirects private requests and
 	const auth: IAuthService = { authorize, beginLogin: vi.fn(), completeLogin: vi.fn(), verifyAuthCookie: vi.fn() };
 	const api = await startTestApi(
 		new Koa().use(
-			createAuthRouter(auth, {
-				baseDomain: "example.test",
-				httpsPort: 443,
-				ttlSeconds: 3600,
-				serviceIds: ["private", "public"],
-			}).routes(),
+			createAuthRouter(
+				auth,
+				testConfig({
+					ingress: { httpPort: 80, baseDomain: "example.test", httpsPort: 443 },
+					services: Object.fromEntries(
+						["private", "public"].map((id) => [id, { remote: "local", descriptorPath: "/repo/demo.yaml" }]),
+					),
+					auth: {
+						...testConfig().getAuthConfig()!,
+						session: { ...testConfig().getAuthConfig()!.session, ttlSeconds: 3600 },
+					},
+				}),
+			).routes(),
 		),
 	);
 	try {
@@ -81,12 +113,19 @@ test("validates return targets and callback parameters, sets secure cookies and 
 	};
 	const api = await startTestApi(
 		new Koa().use(
-			createAuthRouter(auth, {
-				baseDomain: "example.test",
-				httpsPort: 443,
-				ttlSeconds: 3600,
-				serviceIds: ["private"],
-			}).routes(),
+			createAuthRouter(
+				auth,
+				testConfig({
+					ingress: { httpPort: 80, baseDomain: "example.test", httpsPort: 443 },
+					services: Object.fromEntries(
+						["private"].map((id) => [id, { remote: "local", descriptorPath: "/repo/demo.yaml" }]),
+					),
+					auth: {
+						...testConfig().getAuthConfig()!,
+						session: { ...testConfig().getAuthConfig()!.session, ttlSeconds: 3600 },
+					},
+				}),
+			).routes(),
 		),
 	);
 	try {
@@ -130,12 +169,19 @@ test("management host requires a session, retains its cookie and supports OAuth 
 	};
 	const api = await startTestApi(
 		new Koa().use(
-			createAuthRouter(auth, {
-				baseDomain: "example.test",
-				httpsPort: 443,
-				ttlSeconds: 3600,
-				serviceIds: [],
-			}).routes(),
+			createAuthRouter(
+				auth,
+				testConfig({
+					ingress: { httpPort: 80, baseDomain: "example.test", httpsPort: 443 },
+					services: Object.fromEntries(
+						[].map((id) => [id, { remote: "local", descriptorPath: "/repo/demo.yaml" }]),
+					),
+					auth: {
+						...testConfig().getAuthConfig()!,
+						session: { ...testConfig().getAuthConfig()!.session, ttlSeconds: 3600 },
+					},
+				}),
+			).routes(),
 		),
 	);
 	try {

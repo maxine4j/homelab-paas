@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 
+import { testConfig } from "../../../util/test/config.ts";
 import { GitHubOauth2Provider } from "./github.ts";
 
 test("uses the service-supplied callback, encodes state and validates GitHub responses", async () => {
@@ -8,7 +9,15 @@ test("uses the service-supplied callback, encodes state and validates GitHub res
 		.fn<typeof fetch>()
 		.mockResolvedValueOnce(Response.json({ access_token: "token", token_type: "bearer" }))
 		.mockResolvedValueOnce(Response.json({ login: "alice" }));
-	const provider = new GitHubOauth2Provider({ clientId: "id", clientSecret: "SECRET" }, request);
+	const provider = new GitHubOauth2Provider(
+		testConfig({
+			auth: {
+				...testConfig().getAuthConfig()!,
+				github: { ...testConfig().getAuthConfig()!.github, ...{ clientId: "id", clientSecret: "SECRET" } },
+			},
+		}),
+		request,
+	);
 	const url = new URL(provider.getLoginUrl("a&b=c", callback));
 	expect(url.searchParams.get("state")).toBe("a&b=c");
 	expect(url.searchParams.get("redirect_uri")).toBe(callback);

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import type { IPaasConfig } from "../config/paas-config.ts";
 import { mkdir, realpath } from "../util/file.ts";
 
 /** Internal infrastructure boundary; failures are translated by GitClient. */
@@ -14,16 +15,13 @@ const execute = promisify(execFile);
 
 /** Node adapter with bounded, noninteractive Git subprocesses. */
 export class NodeGitTransport implements IGitTransport {
-	constructor(
-		private readonly timeoutMs: number,
-		private readonly environment: Readonly<Record<string, string | undefined>>,
-	) {}
+	constructor(private readonly config: IPaasConfig) {}
 	async execute(directory: string, args: string[]): Promise<string> {
 		return (
 			await execute("git", ["-c", "safe.directory=*", "-C", directory, ...args], {
-				timeout: this.timeoutMs,
+				timeout: this.config.getGitConfig().operationTimeoutSeconds * 1000,
 				maxBuffer: 1024 * 1024,
-				env: { ...this.environment, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1" },
+				env: { ...this.config.getGitEnvironment(), GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1" },
 			})
 		).stdout;
 	}

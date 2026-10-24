@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
 
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "../util/file.ts";
+import { testConfig } from "../util/test/config.ts";
 import { GitClient } from "./git-client.ts";
 import { GitService } from "./git-service.ts";
 import { NodeGitTransport } from "./git-transport.ts";
@@ -30,7 +31,9 @@ async function fixture() {
 	await writeFile(join(repo, "nested/file.yaml"), "committed\n");
 	await git("add", ".");
 	await git("commit", "-m", "initial");
-	const transport = new NodeGitTransport(5000, process.env);
+	const transport = new NodeGitTransport(
+		testConfig({ git: { pollIntervalSeconds: 5, operationTimeoutSeconds: 5000 / 1000 } }, process.env),
+	);
 	const client = new GitClient(transport);
 	return { root, repo, git, transport, client, service: new GitService(client, join(root, "cache")) };
 }
@@ -98,14 +101,20 @@ test("Node transport uses the injected environment without mutating it and disab
 		GIT_TERMINAL_PROMPT: "1",
 		GIT_CONFIG_NOSYSTEM: "0",
 		GIT_CONFIG_SYSTEM: systemConfig,
+		PAAS_TEST_MARKER: "forwarded",
 	};
-	const transport = new NodeGitTransport(5000, environment);
+	const transport = new NodeGitTransport(
+		testConfig({ git: { pollIntervalSeconds: 5, operationTimeoutSeconds: 5000 / 1000 } }, environment),
+	);
 	const output = await transport.execute(repo, [
 		"-c",
 		"alias.environment=!printenv GIT_TERMINAL_PROMPT",
 		"environment",
 	]);
 	expect(output).toBe("0\n");
+	expect(await transport.execute(repo, ["-c", "alias.marker=!printenv PAAS_TEST_MARKER", "marker"])).toBe(
+		"forwarded\n",
+	);
 	await expect(transport.execute(repo, ["config", "--get", "paas.marker"])).rejects.toThrow();
 	expect(environment.GIT_TERMINAL_PROMPT).toBe("1");
 	expect(environment.GIT_CONFIG_NOSYSTEM).toBe("0");
@@ -113,14 +122,18 @@ test("Node transport uses the injected environment without mutating it and disab
 
 test("Node transport bounds command duration and output; client sanitizes those failures", async () => {
 	const { repo, git, service } = await fixture();
-	const transport = new NodeGitTransport(20, process.env);
+	const transport = new NodeGitTransport(
+		testConfig({ git: { pollIntervalSeconds: 5, operationTimeoutSeconds: 20 / 1000 } }, process.env),
+	);
 	await expect(transport.execute(repo, ["-c", "alias.wait=!sleep 1", "wait"])).rejects.toMatchObject({
 		killed: true,
 	});
 	await writeFile(join(repo, "nested/file.yaml"), "x".repeat(1024 * 1024 + 1));
 	await git("commit", "-am", "oversized");
 	await expect(
-		new NodeGitTransport(5000, process.env).execute(repo, ["show", "HEAD:nested/file.yaml"]),
+		new NodeGitTransport(
+			testConfig({ git: { pollIntervalSeconds: 5, operationTimeoutSeconds: 5000 / 1000 } }, process.env),
+		).execute(repo, ["show", "HEAD:nested/file.yaml"]),
 	).rejects.toMatchObject({ code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" });
 	await expect(
 		service.fetchFile("demo", { remote: "local", descriptorPath: join(repo, "nested/file.yaml") }),

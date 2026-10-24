@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 
 import { parseConfig, decodeDescriptorYaml } from "../config/paas-config.ts";
+import { testConfig } from "../util/test/config.ts";
 import { captureLogs } from "../util/test/logs.ts";
 import { PaasUiService } from "./paas-ui-service.ts";
 
@@ -34,7 +35,7 @@ const fixture = () => {
 	]);
 	const readServiceContainerLogs = vi.fn(async () => "hello env-canary\n");
 	const service = new PaasUiService(
-		config,
+		testConfig(config),
 		{ fetchFile },
 		decodeDescriptorYaml,
 		{

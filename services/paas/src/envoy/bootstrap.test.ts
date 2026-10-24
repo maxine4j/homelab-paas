@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import { mkdtemp, readFile, rm, stat, writeFile } from "../util/file.ts";
+import { testConfig } from "../util/test/config.ts";
 import { parseYaml } from "../util/yaml.ts";
 import { EnvoyClient } from "./envoy-client.ts";
 import { EnvoyService } from "./envoy-service.ts";
@@ -17,7 +18,7 @@ const bootstrap = (directory: string): Promise<void> =>
 			async () => {},
 			{ attempts: 1, intervalMs: 0 },
 		),
-		{ baseDomain: "example.test", httpPort: 80 },
+		testConfig({ ingress: { baseDomain: "example.test", httpPort: 80 } }),
 	).bootstrap();
 
 test("first startup creates restricted state storage and empty Envoy discovery files", async () => {

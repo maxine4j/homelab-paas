@@ -1,13 +1,17 @@
 import { expect, test, vi } from "vitest";
 
 import type { Endpoint } from "../../reconciler/networking/types.ts";
+import { testConfig } from "../../util/test/config.ts";
 import { AuthService } from "./auth-service.ts";
 import { JwtClient } from "./jwt-client.ts";
 
 const session = { issuer: "paas", audience: "paas", signingKey: "a".repeat(32), ttlSeconds: 3600 };
 const fixture = (httpsPort = 443, baseDomain = "example.test") => {
 	let now = 1_800_000_000_000;
-	const tokens = new JwtClient(session, () => now);
+	const tokens = new JwtClient(
+		testConfig({ auth: { ...testConfig().getAuthConfig()!, session: session } }),
+		() => now,
+	);
 	const provider = {
 		getLoginUrl: vi.fn((state: string) => `https://github.com/login?state=${state}`),
 		fetchAccessToken: vi.fn(async () => "access"),
@@ -21,10 +25,15 @@ const fixture = (httpsPort = 443, baseDomain = "example.test") => {
 		service: new AuthService(
 			provider,
 			tokens,
-			["Alice"],
+			testConfig({
+				auth: {
+					...testConfig().getAuthConfig()!,
+					github: { ...testConfig().getAuthConfig()!.github, allowedUsers: ["Alice"] },
+				},
+				ingress: { httpPort: 80, ...{ baseDomain, httpsPort } },
+			}),
 			() => "random-nonce",
 			{ getAll, set: vi.fn() },
-			{ baseDomain, httpsPort },
 		),
 		provider,
 		getAll,

@@ -1,5 +1,6 @@
 import type { ServiceDescriptor, WebResource } from "@homelab-paas/shared-contracts";
 
+import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IGitService } from "../git/git-service.ts";
 import type { GitFileSource } from "../git/types.ts";
 import { createLogger } from "../util/logger.ts";
@@ -13,20 +14,18 @@ export class ReconcilerService implements IReconcilerService {
 	private pending: Promise<void> = Promise.resolve();
 
 	constructor(
-		private readonly services: Readonly<Record<string, GitFileSource>>,
-		private readonly retry: { retryBackoffSeconds: number; maxRetryBackoffSeconds: number },
+		private readonly config: IPaasConfig,
 		private readonly git: IGitService,
 		private readonly decode: DescriptorDecoder,
 		private readonly web: IWebResourceReconciler,
 		private readonly state: IReconciliationStateStore,
 		private readonly now: () => number,
 		private readonly environment: IEnvironmentResolver,
-		private readonly privateIngressEnabled = false,
 	) {}
 
 	reconcile(): Promise<void> {
 		const operation = this.pending.then(async () => {
-			for (const [serviceId, source] of Object.entries(this.services)) {
+			for (const [serviceId, source] of Object.entries(this.config.getServices())) {
 				try {
 					await this.reconcileService(serviceId, source);
 				} catch (error) {
@@ -81,10 +80,13 @@ export class ReconcilerService implements IReconcilerService {
 					"Service recovered; clearing retry backoff",
 				);
 		} catch (error) {
+			const retry = this.config.getReconciliationConfig();
 			const failures = Math.min((previous?.failures ?? 0) + 1, 1024);
 			const delay =
-				Math.min(this.retry.maxRetryBackoffSeconds, this.retry.retryBackoffSeconds * 2 ** (failures - 1))
-				* 1000;
+				Math.min(
+					retry.maxRetryBackoffSeconds,
+					this.config.getReconciliationConfig().retryBackoffSeconds * 2 ** (failures - 1),
+				) * 1000;
 			const retryAt = this.now() + delay;
 			await this.state.write(serviceId, {
 				desiredRevision,
@@ -107,7 +109,7 @@ export class ReconcilerService implements IReconcilerService {
 		return entries.map(([resourceId, resource]) => {
 			if (
 				resource.type !== "web"
-				|| (!this.privateIngressEnabled && resource.ingress.public !== true)
+				|| (!this.config.getAuthConfig() && resource.ingress.public !== true)
 				|| (resource.replicas ?? 1) !== 1
 				|| resource.egress !== undefined
 			)

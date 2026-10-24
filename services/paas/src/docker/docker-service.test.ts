@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 
+import { testConfig } from "../util/test/config.ts";
 import { DockerClientError } from "./docker-client.ts";
 import type { IDockerClient } from "./docker-client.ts";
 import { DockerService, DockerServiceError } from "./docker-service.ts";
@@ -108,7 +109,7 @@ function fixture(overrides: Partial<IDockerClient> = {}) {
 		},
 		...overrides,
 	};
-	return { service: new DockerService(client, "local"), calls };
+	return { service: new DockerService(client, testConfig({ metadata: { clusterId: "local" } })), calls };
 }
 
 test("queries all containers by cluster and service, optionally narrowing to a resource", async () => {

@@ -2,6 +2,7 @@ import acme from "acme-client";
 import { expect, test } from "vitest";
 
 import { createLogger } from "../../util/logger.ts";
+import { testConfig } from "../../util/test/config.ts";
 import { AcmeAccountStore } from "./acme-account-store.ts";
 import { AcmeClient } from "./acme-client.ts";
 import { TlsCertProvisionService } from "./cert-provision-service.ts";
@@ -21,7 +22,10 @@ test("renewal diagnostics retain the complete account-storage cause chain", asyn
 	});
 	const task = new TlsCertRenewalTask(
 		new TlsCertProvisionService(
-			{ baseDomain: "example.com", email: "admin@example.com" },
+			testConfig({
+				ingress: { ...testConfig().getIngressConfig(), baseDomain: "example.com" },
+				tls: { ...testConfig().getTlsConfig()!, acme: { email: "admin@example.com" } },
+			}),
 			new AcmeClient(
 				{ createChallenge: async () => ({ zone: "example.com", id: 1 }), removeChallenge: async () => {} },
 				account,
@@ -75,7 +79,13 @@ test("certificate reads and invalid publication preserve their causes", async ()
 test.each(["create", "remove"])("DNS challenge %s preserves network failures", async (operation) => {
 	const cause = new Error("connection refused");
 	const provider = new DigitalOceanDnsAcmeChallengeProvider(
-		{ baseDomain: "example.com", apiToken: "token" },
+		testConfig({
+			ingress: { ...testConfig().getIngressConfig(), baseDomain: "example.com" },
+			tls: {
+				...testConfig().getTlsConfig()!,
+				dns: { provider: "digitalocean", credentials: { apiToken: "token" } },
+			},
+		}),
 		async () => {
 			throw cause;
 		},
@@ -89,7 +99,13 @@ test.each(["create", "remove"])("DNS challenge %s preserves network failures", a
 
 test.each([401, 403, 429, 500])("DNS diagnostics retain HTTP status %s", async (status) => {
 	const provider = new DigitalOceanDnsAcmeChallengeProvider(
-		{ baseDomain: "example.com", apiToken: "token" },
+		testConfig({
+			ingress: { ...testConfig().getIngressConfig(), baseDomain: "example.com" },
+			tls: {
+				...testConfig().getTlsConfig()!,
+				dns: { provider: "digitalocean", credentials: { apiToken: "token" } },
+			},
+		}),
 		async () => new Response("provider failure details", { status }),
 	);
 	await expect(provider.createChallenge("example.com", "value")).rejects.toMatchObject({

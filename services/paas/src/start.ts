@@ -52,7 +52,8 @@ import { sleep } from "./util/sleep.ts";
 const STATE_DIRECTORY = "/var/homelab-paas/_paas";
 
 export async function start(lifecycle: Lifecycle): Promise<void> {
-	const config = await new PaasConfig(readFile, process.env).load();
+	const config = new PaasConfig(readFile, process.env);
+	await config.load();
 	const secureWrite: FileWriter = async (path, content) => {
 		await mkdir(STATE_DIRECTORY, { recursive: true, mode: 0o700 });
 		await atomicWriteFile(path, content, { mode: 0o600 });
@@ -74,7 +75,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 				sleep,
 			),
 		),
-		config.metadata.clusterId,
+		config,
 	);
 	const envoy = new EnvoyService(
 		new EnvoyClient(
@@ -87,7 +88,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 			sleep,
 			{ attempts: 30, intervalMs: 1000 },
 		),
-		config.ingress,
+		config,
 	);
 	await envoy.bootstrap();
 	const networking = new NetworkingService(endpoints, envoy);
@@ -96,18 +97,13 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 		new SurgeDeploymentStrategy(docker, networking, probe, sleep, () => nanoid(10)),
 	]);
 	const reconciler = new ReconcilerService(
-		config.services,
-		config.reconciliation,
-		new GitService(
-			new GitClient(new NodeGitTransport(config.git.operationTimeoutSeconds * 1000, process.env)),
-			`${STATE_DIRECTORY}/git`,
-		),
+		config,
+		new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/git`),
 		decodeDescriptorYaml,
 		new WebResourceReconciler(docker, deployment, networking, probe),
 		store,
 		Date.now,
 		new EnvironmentResolver("/etc/homelab-paas/env", readFile),
-		Boolean(config.auth),
 	);
 	const abort = new AbortController();
 	const pause = async (ms: number): Promise<void> => {
@@ -119,7 +115,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 	};
 	const runner = new PeriodicTaskRunner({
 		lifecycle,
-		periodMs: config.git.pollIntervalSeconds * 1000,
+		periodMs: () => config.getGitConfig().pollIntervalSeconds * 1000,
 		taskName: "reconciliation",
 		generateTaskId: nanoid,
 		task: new ReconcilerTask(reconciler),
@@ -131,32 +127,21 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 	const certificates = new FileCertificateStore(STATE_DIRECTORY, readFile, secureWrite);
 	let renewal: TlsCertRenewalTask | undefined;
 	let sessions: AuthService | undefined;
-	if (config.auth && config.tls) {
+	if (config.getAuthConfig() && config.getTlsConfig()) {
 		const auth = new AuthService(
-			new GitHubOauth2Provider(config.auth.github, fetch),
-			new JwtClient(config.auth.session, Date.now),
-			config.auth.github.allowedUsers,
+			new GitHubOauth2Provider(config, fetch),
+			new JwtClient(config, Date.now),
+			config,
 			() => randomBytes(32).toString("base64url"),
 			endpoints,
-			{ baseDomain: config.ingress.baseDomain, httpsPort: config.ingress.httpsPort! },
 		);
 		sessions = auth;
-		app.use(
-			createAuthRouter(auth, {
-				baseDomain: config.ingress.baseDomain,
-				httpsPort: config.ingress.httpsPort!,
-				ttlSeconds: config.auth.session.ttlSeconds,
-				serviceIds: Object.keys(config.services),
-			}).routes(),
-		);
+		app.use(createAuthRouter(auth, config).routes());
 		renewal = new TlsCertRenewalTask(
 			new TlsCertProvisionService(
-				{ baseDomain: config.ingress.baseDomain, email: config.tls.acme.email },
+				config,
 				new AcmeClient(
-					new DigitalOceanDnsAcmeChallengeProvider(
-						{ baseDomain: config.ingress.baseDomain, apiToken: config.tls.dns.credentials.apiToken },
-						fetch,
-					),
+					new DigitalOceanDnsAcmeChallengeProvider(config, fetch),
 					new AcmeAccountStore(
 						new FileSystemKeyValueStore<string>(STATE_DIRECTORY, readFile, secureWrite, remove, {
 							extension: "pem",
@@ -174,10 +159,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 	const ui = createPaasUiRouter(
 		new PaasUiService(
 			config,
-			new GitService(
-				new GitClient(new NodeGitTransport(config.git.operationTimeoutSeconds * 1000, process.env)),
-				`${STATE_DIRECTORY}/ui-git`,
-			),
+			new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/ui-git`),
 			decodeDescriptorYaml,
 			docker,
 			store,
@@ -223,7 +205,19 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 	if (!lifecycle.isOpen()) return;
 	await envoy.configureRoutes(await endpoints.getAll());
 	if (!lifecycle.isOpen()) return;
-	const runners = [runner];
+	const runners = [
+		runner,
+		new PeriodicTaskRunner({
+			lifecycle,
+			periodMs: 60_000,
+			taskName: "config-reload",
+			generateTaskId: nanoid,
+			task: { run: () => config.reload() },
+			pause,
+			report: (err) =>
+				logger.error({ err }, "Configuration reload task failed; retaining previous configuration"),
+		}),
+	];
 	if (renewal)
 		runners.push(
 			new PeriodicTaskRunner({

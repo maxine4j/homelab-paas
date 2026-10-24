@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { IPaasConfig } from "../../../config/paas-config.ts";
 import type { DnsChallengeRecord } from "./types.ts";
 export interface IDnsAcmeChallengeProvider {
 	/** Creates only the challenge TXT record; failures retain their underlying cause. */
@@ -9,13 +10,14 @@ export interface IDnsAcmeChallengeProvider {
 }
 export class DigitalOceanDnsAcmeChallengeProvider implements IDnsAcmeChallengeProvider {
 	constructor(
-		private readonly config: { baseDomain: string; apiToken: string },
+		private readonly config: IPaasConfig,
 		private readonly request: typeof fetch,
 	) {}
 	async createChallenge(identifier: string, value: string): Promise<DnsChallengeRecord> {
 		try {
-			if (![this.config.baseDomain, `*.${this.config.baseDomain}`].includes(identifier)) throw new Error();
-			const labels = this.config.baseDomain.split(".");
+			const { baseDomain } = this.config.getIngressConfig();
+			if (![baseDomain, `*.${baseDomain}`].includes(identifier)) throw new Error();
+			const labels = baseDomain.split(".");
 			let zone: string | undefined;
 			while (labels.length >= 2) {
 				const candidate = labels.join(".");
@@ -36,9 +38,8 @@ export class DigitalOceanDnsAcmeChallengeProvider implements IDnsAcmeChallengePr
 				zone = candidate;
 				break;
 			}
-			if (!zone) throw new Error(`No DigitalOcean DNS zone found for ${this.config.baseDomain}`);
-			const prefix =
-				this.config.baseDomain === zone ? "" : `.${this.config.baseDomain.slice(0, -(zone.length + 1))}`;
+			if (!zone) throw new Error(`No DigitalOcean DNS zone found for ${baseDomain}`);
+			const prefix = baseDomain === zone ? "" : `.${baseDomain.slice(0, -(zone.length + 1))}`;
 			const response = await this.send(`/domains/${zone}/records`, "POST", {
 				type: "TXT",
 				name: `_acme-challenge${prefix}`,
@@ -67,7 +68,10 @@ export class DigitalOceanDnsAcmeChallengeProvider implements IDnsAcmeChallengePr
 	private send(path: string, method: string, body?: Record<string, string | number>): Promise<Response> {
 		return this.request(`https://api.digitalocean.com/v2${path}`, {
 			method,
-			headers: { Authorization: `Bearer ${this.config.apiToken}`, "Content-Type": "application/json" },
+			headers: {
+				Authorization: `Bearer ${this.config.getTlsConfig()!.dns.credentials.apiToken}`,
+				"Content-Type": "application/json",
+			},
 			body: body ? JSON.stringify(body) : undefined,
 			signal: AbortSignal.timeout(10_000),
 		});

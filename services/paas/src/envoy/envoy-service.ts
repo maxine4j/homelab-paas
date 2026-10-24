@@ -1,5 +1,6 @@
 import { isIP } from "node:net";
 
+import type { IPaasConfig } from "../config/paas-config.ts";
 import type { Endpoint } from "../reconciler/networking/types.ts";
 import type { IEnvoyClient } from "./envoy-client.ts";
 import { EnvoyClientError } from "./types.ts";
@@ -15,7 +16,7 @@ export interface IEnvoyService {
 export class EnvoyService implements IEnvoyService {
 	constructor(
 		private readonly client: IEnvoyClient,
-		private readonly ingress: { baseDomain: string; httpPort: number; httpsPort?: number },
+		private readonly config: IPaasConfig,
 	) {}
 
 	async bootstrap(): Promise<void> {
@@ -23,6 +24,7 @@ export class EnvoyService implements IEnvoyService {
 	}
 
 	async configureRoutes(endpoints: Record<string, Endpoint>): Promise<void> {
+		const ingress = this.config.getIngressConfig();
 		const entries = Object.entries(endpoints).sort(([a], [b]) => a.localeCompare(b));
 		for (const [, endpoint] of entries) {
 			if (
@@ -60,7 +62,7 @@ export class EnvoyService implements IEnvoyService {
 				],
 			})),
 		];
-		if (this.ingress.httpsPort) {
+		if (ingress.httpsPort) {
 			await this.client.apply({ clusters, listeners: this.secureListeners(entries.map(([id]) => id)) });
 			return;
 		}
@@ -71,7 +73,7 @@ export class EnvoyService implements IEnvoyService {
 				{
 					"@type": "type.googleapis.com/envoy.config.listener.v3.Listener",
 					name: "http",
-					address: socket("0.0.0.0", this.ingress.httpPort),
+					address: socket("0.0.0.0", ingress.httpPort),
 					filter_chains: [
 						{
 							filters: [
@@ -84,13 +86,9 @@ export class EnvoyService implements IEnvoyService {
 										route_config: {
 											name: "services",
 											virtual_hosts: [
-												virtualHost("paas", this.ingress.baseDomain, "paas"),
+												virtualHost("paas", ingress.baseDomain, "paas"),
 												...entries.map(([id]) =>
-													virtualHost(
-														id,
-														`${id}.${this.ingress.baseDomain}`,
-														`service-${id}`,
-													),
+													virtualHost(id, `${id}.${ingress.baseDomain}`, `service-${id}`),
 												),
 											],
 										},
@@ -114,6 +112,7 @@ export class EnvoyService implements IEnvoyService {
 	}
 
 	private secureListeners(serviceIds: string[]) {
+		const ingress = this.config.getIngressConfig();
 		const disabled = {
 			"envoy.filters.http.ext_authz": {
 				"@type": "type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute",
@@ -122,7 +121,7 @@ export class EnvoyService implements IEnvoyService {
 		};
 		const authHost = {
 			name: "auth",
-			domains: [`auth.${this.ingress.baseDomain}`, `auth.${this.ingress.baseDomain}:*`],
+			domains: [`auth.${ingress.baseDomain}`, `auth.${ingress.baseDomain}:*`],
 			routes: ["/oauth/github/login", "/auth/callback"].map((path) => ({
 				match: { path },
 				route: { cluster: "paas" },
@@ -166,7 +165,7 @@ export class EnvoyService implements IEnvoyService {
 			{
 				"@type": "type.googleapis.com/envoy.config.listener.v3.Listener",
 				name: "http",
-				address: socket("0.0.0.0", this.ingress.httpPort),
+				address: socket("0.0.0.0", ingress.httpPort),
 				filter_chains: [
 					{
 						filters: [
@@ -181,7 +180,7 @@ export class EnvoyService implements IEnvoyService {
 												match: { prefix: "/" },
 												redirect: {
 													https_redirect: true,
-													port_redirect: this.ingress.httpsPort,
+													port_redirect: ingress.httpsPort,
 												},
 											},
 										],
@@ -196,7 +195,7 @@ export class EnvoyService implements IEnvoyService {
 			{
 				"@type": "type.googleapis.com/envoy.config.listener.v3.Listener",
 				name: "https",
-				address: socket("0.0.0.0", this.ingress.httpsPort!),
+				address: socket("0.0.0.0", ingress.httpsPort!),
 				filter_chains: [
 					{
 						transport_socket: {
@@ -222,7 +221,7 @@ export class EnvoyService implements IEnvoyService {
 								[
 									authHost,
 									{
-										...virtualHost("management", this.ingress.baseDomain, "paas"),
+										...virtualHost("management", ingress.baseDomain, "paas"),
 										routes: [
 											{ match: { prefix: "/api/ui/" }, route: { cluster: "paas" } },
 											...["/api/", "/auth/", "/oauth/", "/health"].map((prefix) => ({
@@ -233,7 +232,7 @@ export class EnvoyService implements IEnvoyService {
 										],
 									},
 									...serviceIds.map((id) =>
-										virtualHost(id, `${id}.${this.ingress.baseDomain}`, `service-${id}`),
+										virtualHost(id, `${id}.${ingress.baseDomain}`, `service-${id}`),
 									),
 								],
 								httpFilters,

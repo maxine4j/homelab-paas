@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 
+import { testConfig } from "../util/test/config.ts";
 import { EnvoyService } from "./envoy-service.ts";
 import { EnvoyClientError, type EnvoyConfiguration } from "./types.ts";
 
@@ -12,7 +13,7 @@ test("bootstrap delegates discovery initialization to the client", async () => {
 			},
 			async apply() {},
 		},
-		{ baseDomain: "example.test", httpPort: 80 },
+		testConfig({ ingress: { baseDomain: "example.test", httpPort: 80 } }),
 	);
 	await service.bootstrap();
 	expect(initialized).toBe(true);
@@ -27,10 +28,12 @@ test("formats service destinations, health checks, stable hostnames, and withdra
 				configurations.push(config);
 			},
 		},
-		{
-			baseDomain: "example.test",
-			httpPort: 80,
-		},
+		testConfig({
+			ingress: {
+				baseDomain: "example.test",
+				httpPort: 80,
+			},
+		}),
 	);
 	await service.configureRoutes({
 		demo: { address: "10.0.0.2", port: 3000, healthcheckPath: "/ready", public: true },
@@ -72,7 +75,7 @@ test.each([
 				calls++;
 			},
 		},
-		{ baseDomain: "example.test", httpPort: 80 },
+		testConfig({ ingress: { baseDomain: "example.test", httpPort: 80 } }),
 	);
 	await expect(service.configureRoutes({ demo: endpoint })).rejects.toThrow(EnvoyClientError);
 	expect(calls).toBe(0);
@@ -87,7 +90,7 @@ test("secures external traffic with SDS, fail-closed authorization and isolated 
 				configurations.push(config);
 			},
 		},
-		{ baseDomain: "apps.example.com", httpPort: 80, httpsPort: 443 },
+		testConfig({ ingress: { baseDomain: "apps.example.com", httpPort: 80, httpsPort: 443 } }),
 	);
 	await service.configureRoutes({
 		demo: { address: "10.0.0.2", port: 3000, healthcheckPath: "/health", public: false },

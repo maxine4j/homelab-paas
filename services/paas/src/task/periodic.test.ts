@@ -41,3 +41,24 @@ test("runs at startup and serially each period, reports failures and stops with 
 	expect(failures).toBe(1);
 	expect(reported).toBe(failure);
 });
+
+test("reads a changed polling interval before each wait", async () => {
+	let open = true;
+	let period = 5000;
+	const waits: number[] = [];
+	const runner = new PeriodicTaskRunner({
+		lifecycle: { isOpen: () => open, registerShutdownHandler() {}, async shutdown() {} },
+		periodMs: () => period,
+		taskName: "reloadable",
+		generateTaskId: () => "id",
+		task: { async run() {} },
+		pause: async (ms) => {
+			waits.push(ms);
+			period = 1000;
+			if (waits.length === 2) open = false;
+		},
+		report: () => {},
+	});
+	await runner.start();
+	expect(waits).toEqual([5000, 1000]);
+});

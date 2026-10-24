@@ -10,7 +10,7 @@ export class PeriodicTaskRunner implements TaskRunner {
 	constructor(
 		private readonly deps: {
 			lifecycle: Lifecycle;
-			periodMs: number;
+			periodMs: number | (() => number);
 			taskName: string;
 			generateTaskId: () => string;
 			task: PeriodicTask;
@@ -28,7 +28,10 @@ export class PeriodicTaskRunner implements TaskRunner {
 					this.deps.report(error);
 				}
 			});
-			if (this.deps.lifecycle.isOpen()) await this.deps.pause(this.deps.periodMs);
+			if (this.deps.lifecycle.isOpen())
+				await this.deps.pause(
+					typeof this.deps.periodMs === "function" ? this.deps.periodMs() : this.deps.periodMs,
+				);
 		}
 	}
 }

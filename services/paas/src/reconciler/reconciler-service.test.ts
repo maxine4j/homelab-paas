@@ -2,6 +2,7 @@ import { expect, test, vi } from "vitest";
 
 import { decodeDescriptorYaml } from "../config/paas-config.ts";
 import type { GitFile } from "../git/types.ts";
+import { testConfig } from "../util/test/config.ts";
 import { captureLogs } from "../util/test/logs.ts";
 import { EnvironmentResolver } from "./environment-resolver.ts";
 import { ReconcilerService } from "./reconciler-service.ts";
@@ -37,15 +38,17 @@ function fixture() {
 	};
 	const createService = (services = deps.services, privateIngressEnabled = false) =>
 		new ReconcilerService(
-			services,
-			deps.retry,
+			testConfig({
+				services: services,
+				reconciliation: deps.retry,
+				auth: privateIngressEnabled ? testConfig().getAuthConfig() : undefined,
+			}),
 			deps.git,
 			deps.decode,
 			deps.web,
 			deps.state,
 			deps.now,
 			new EnvironmentResolver("/etc/homelab-paas/env", readSecrets),
-			privateIngressEnabled,
 		);
 	return {
 		deps,

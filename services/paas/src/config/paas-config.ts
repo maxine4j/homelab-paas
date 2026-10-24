@@ -4,16 +4,92 @@ import { z } from "zod";
 
 import type { GitFileSource } from "../git/types.ts";
 import type { FileReader } from "../util/file.ts";
+import { createLogger } from "../util/logger.ts";
 import { parseYaml } from "../util/yaml.ts";
+import type { PlatformConfig } from "./types.ts";
 
 const PAAS_CONFIG_PATH = "/etc/homelab-paas/config.yaml";
 
-export class PaasConfig {
+export interface IPaasConfig {
+	getClusterId(): string;
+	getIngressConfig(): PlatformConfig["ingress"];
+	getAuthConfig(): PlatformConfig["auth"];
+	getTlsConfig(): PlatformConfig["tls"];
+	getGitConfig(): PlatformConfig["git"];
+	getGitEnvironment(): Readonly<Record<string, string | undefined>>;
+	getReconciliationConfig(): PlatformConfig["reconciliation"];
+	getServices(): PlatformConfig["services"];
+	/** Independent snapshot for management inspection. */
+	getConfig(): PlatformConfig;
+}
+
+export class PaasConfig implements IPaasConfig {
+	private readonly log = createLogger(PaasConfig.name);
+	private current: PlatformConfig | undefined;
+
 	constructor(
 		private readonly readFile: FileReader,
 		private readonly environment: Readonly<Record<string, string | undefined>> = {},
 	) {}
 	async load(): Promise<PlatformConfig> {
+		const next = await this.readConfig();
+		if (
+			this.current
+			&& (next.metadata.clusterId !== this.current.metadata.clusterId
+				|| JSON.stringify(next.ingress) !== JSON.stringify(this.current.ingress)
+				|| Boolean(next.auth) !== Boolean(this.current.auth))
+		)
+			throw new Error("Platform identity, ingress and auth/TLS mode changes require a control-plane restart");
+		this.current = next;
+		return this.getConfig();
+	}
+
+	/** Failed reloads retain the last validated configuration and report the cause. */
+	async reload(): Promise<void> {
+		try {
+			await this.load();
+		} catch (err) {
+			this.log.error(
+				{ err },
+				"Cannot reload platform configuration; retaining previous configuration; check config.yaml and restart-required settings",
+			);
+		}
+	}
+
+	getClusterId(): string {
+		return this.requireConfig().metadata.clusterId;
+	}
+	getIngressConfig(): PlatformConfig["ingress"] {
+		return structuredClone(this.requireConfig().ingress);
+	}
+	getAuthConfig(): PlatformConfig["auth"] {
+		return structuredClone(this.requireConfig().auth);
+	}
+	getTlsConfig(): PlatformConfig["tls"] {
+		return structuredClone(this.requireConfig().tls);
+	}
+	getGitConfig(): PlatformConfig["git"] {
+		return structuredClone(this.requireConfig().git);
+	}
+	getGitEnvironment(): Readonly<Record<string, string | undefined>> {
+		return { ...this.environment };
+	}
+	getReconciliationConfig(): PlatformConfig["reconciliation"] {
+		return structuredClone(this.requireConfig().reconciliation);
+	}
+	getServices(): PlatformConfig["services"] {
+		return structuredClone(this.requireConfig().services);
+	}
+	getConfig(): PlatformConfig {
+		return structuredClone(this.requireConfig());
+	}
+
+	private requireConfig(): PlatformConfig {
+		if (!this.current) throw new Error("Platform configuration has not been loaded");
+		return this.current;
+	}
+
+	private async readConfig(): Promise<PlatformConfig> {
 		try {
 			const fileContent = await this.readFile(PAAS_CONFIG_PATH);
 			if (!fileContent) throw Error();
@@ -118,17 +194,6 @@ const config = z.strictObject({
 	reconciliation: z.strictObject({ retryBackoffSeconds: positive, maxRetryBackoffSeconds: positive }),
 	services: z.record(id, source),
 });
-export interface PlatformConfig {
-	version: 1;
-	metadata: { clusterId: string };
-	ingress: { baseDomain: string; httpPort: number; httpsPort?: number };
-	auth?: z.infer<typeof auth>;
-	tls?: z.infer<typeof tls>;
-	git: { pollIntervalSeconds: number; operationTimeoutSeconds: number };
-	reconciliation: { retryBackoffSeconds: number; maxRetryBackoffSeconds: number };
-	services: Record<string, GitFileSource>;
-}
-
 export function parseConfig(value: unknown): PlatformConfig {
 	const result = config.safeParse(value);
 	if (!result.success) throw new Error("Invalid platform configuration", { cause: result.error });

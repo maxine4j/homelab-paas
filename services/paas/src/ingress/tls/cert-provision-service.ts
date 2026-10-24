@@ -1,3 +1,4 @@
+import type { IPaasConfig } from "../../config/paas-config.ts";
 import type { IAcmeClient } from "./acme-client.ts";
 import type { Certificate } from "./types.ts";
 
@@ -8,13 +9,14 @@ export interface ITlsCertProvisionService {
 
 export class TlsCertProvisionService implements ITlsCertProvisionService {
 	constructor(
-		private readonly config: { baseDomain: string; email: string },
+		private readonly config: IPaasConfig,
 		private readonly client: IAcmeClient,
 	) {}
 	async provisionCert(): Promise<Certificate> {
+		const { baseDomain } = this.config.getIngressConfig();
 		return this.client.provision({
-			domains: [this.config.baseDomain, `*.${this.config.baseDomain}`],
-			email: this.config.email,
+			domains: [baseDomain, `*.${baseDomain}`],
+			email: this.config.getTlsConfig()!.acme.email,
 		});
 	}
 }

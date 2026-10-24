@@ -1,16 +1,17 @@
 import { z } from "zod";
 
+import type { IPaasConfig } from "../../../config/paas-config.ts";
 import type { AuthedUserDetails } from "../types.ts";
 import type { Oauth2Provider } from "./types.ts";
 export class GitHubOauth2Provider implements Oauth2Provider {
 	constructor(
-		private readonly config: { clientId: string; clientSecret: string },
+		private readonly config: IPaasConfig,
 		private readonly request: typeof fetch,
 	) {}
 	getLoginUrl(state: string, callbackUrl: string): string {
 		const url = new URL("https://github.com/login/oauth/authorize");
 		url.search = new URLSearchParams({
-			client_id: this.config.clientId,
+			client_id: this.config.getAuthConfig()!.github.clientId,
 			redirect_uri: callbackUrl,
 			state,
 		}).toString();
@@ -22,8 +23,8 @@ export class GitHubOauth2Provider implements Oauth2Provider {
 				method: "POST",
 				headers: { "Content-Type": "application/json", Accept: "application/json" },
 				body: JSON.stringify({
-					client_id: this.config.clientId,
-					client_secret: this.config.clientSecret,
+					client_id: this.config.getAuthConfig()!.github.clientId,
+					client_secret: this.config.getAuthConfig()!.github.clientSecret,
 					redirect_uri: callbackUrl,
 					code,
 				}),

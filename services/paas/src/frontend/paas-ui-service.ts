@@ -8,7 +8,7 @@ import type {
 	UiServiceSummary,
 } from "@homelab-paas/shared-contracts";
 
-import type { PlatformConfig } from "../config/paas-config.ts";
+import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IGitService } from "../git/git-service.ts";
 import type { DescriptorDecoder, IReconciliationStateStore } from "../reconciler/types.ts";
 import { createLogger } from "../util/logger.ts";
@@ -41,7 +41,7 @@ export class PaasUiService implements IPaasUiService {
 	// The UI has its own Git cache; serialize its fetches to protect FETCH_HEAD.
 	private pending: Promise<unknown> = Promise.resolve();
 	constructor(
-		private readonly config: PlatformConfig,
+		private readonly config: IPaasConfig,
 		private readonly git: IGitService,
 		private readonly decode: DescriptorDecoder,
 		private readonly docker: UiDocker,
@@ -49,13 +49,16 @@ export class PaasUiService implements IPaasUiService {
 	) {}
 
 	async getCluster(): Promise<UiCluster> {
-		return { clusterId: this.config.metadata.clusterId, config: this.sanitize(this.config, this.secrets()) };
+		return {
+			clusterId: this.config.getClusterId(),
+			config: this.sanitize(this.config.getConfig(), this.secrets()),
+		};
 	}
 
 	async listServices(): Promise<UiServiceSummary[]> {
 		try {
 			return await Promise.all(
-				Object.keys(this.config.services)
+				Object.keys(this.config.getServices())
 					.sort()
 					.map(async (serviceId) => {
 						const state = await this.state.read(serviceId);
@@ -94,7 +97,7 @@ export class PaasUiService implements IPaasUiService {
 				activeRevision: state?.activeRevision,
 				failures: state?.failures,
 				retryAt: state?.retryAt,
-				source: this.sanitize(this.config.services[serviceId], secrets),
+				source: this.sanitize(this.config.getServices()[serviceId], secrets),
 				descriptorRevision: file?.revision,
 				descriptorStatus: file ? "available" : "unavailable",
 				resources: ids.map((resourceId) => ({
@@ -163,13 +166,13 @@ export class PaasUiService implements IPaasUiService {
 	}
 
 	private assertService(serviceId: string): void {
-		if (!Object.hasOwn(this.config.services, serviceId)) throw new PaasUiError("not-found");
+		if (!Object.hasOwn(this.config.getServices(), serviceId)) throw new PaasUiError("not-found");
 	}
 
 	private descriptor(serviceId: string): Promise<{ revision: string; descriptor: ServiceDescriptor } | undefined> {
 		const result = this.pending.then(async () => {
 			try {
-				const file = await this.git.fetchFile(serviceId, this.config.services[serviceId]!);
+				const file = await this.git.fetchFile(serviceId, this.config.getServices()[serviceId]!);
 				return { revision: file.revision, descriptor: this.decode(file.content, serviceId) };
 			} catch (err) {
 				this.log.error({ err, serviceId }, "Cannot load management UI descriptor");
@@ -181,10 +184,11 @@ export class PaasUiService implements IPaasUiService {
 	}
 
 	private secrets(descriptor?: ServiceDescriptor): string[] {
+		const auth = this.config.getAuthConfig();
 		const secrets = [
-			this.config.auth?.github.clientSecret,
-			this.config.auth?.session.signingKey,
-			this.config.tls?.dns.credentials.apiToken,
+			auth?.github.clientSecret,
+			auth?.session.signingKey,
+			this.config.getTlsConfig()?.dns.credentials.apiToken,
 		];
 		for (const resource of Object.values(descriptor?.resources ?? {})) {
 			if ("env" in resource)

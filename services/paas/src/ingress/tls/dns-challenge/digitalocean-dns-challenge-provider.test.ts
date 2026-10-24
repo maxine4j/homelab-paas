@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 
+import { testConfig } from "../../../util/test/config.ts";
 import { DigitalOceanDnsAcmeChallengeProvider } from "./digitalocean-dns-challenge-provider.ts";
 
 test("discovers the managed zone, creates the correct TXT record and deletes only its own ID", async () => {
@@ -10,7 +11,13 @@ test("discovers the managed zone, creates the correct TXT record and deletes onl
 		.mockResolvedValueOnce(Response.json({ domain_record: { id: 123 } }))
 		.mockResolvedValueOnce(new Response(null, { status: 204 }));
 	const provider = new DigitalOceanDnsAcmeChallengeProvider(
-		{ baseDomain: "apps.example.com", apiToken: "SECRET" },
+		testConfig({
+			ingress: { ...testConfig().getIngressConfig(), baseDomain: "apps.example.com" },
+			tls: {
+				...testConfig().getTlsConfig()!,
+				dns: { provider: "digitalocean", credentials: { apiToken: "SECRET" } },
+			},
+		}),
 		request,
 	);
 	const record = await provider.createChallenge("apps.example.com", "value");
@@ -33,7 +40,13 @@ test("handles a base-domain zone and rejects malformed responses or unrelated id
 		.mockResolvedValueOnce(Response.json({ domain: { name: "example.com" } }))
 		.mockResolvedValueOnce(Response.json({ domain_record: { id: 456 } }));
 	const provider = new DigitalOceanDnsAcmeChallengeProvider(
-		{ baseDomain: "example.com", apiToken: "SECRET" },
+		testConfig({
+			ingress: { ...testConfig().getIngressConfig(), baseDomain: "example.com" },
+			tls: {
+				...testConfig().getTlsConfig()!,
+				dns: { provider: "digitalocean", credentials: { apiToken: "SECRET" } },
+			},
+		}),
 		request,
 	);
 	await provider.createChallenge("*.example.com", "value");

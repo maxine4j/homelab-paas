@@ -1,31 +1,34 @@
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 
-import type { SessionConfig, TokenClaims } from "./types.ts";
+import type { IPaasConfig } from "../../config/paas-config.ts";
+import type { TokenClaims } from "./types.ts";
 export interface IJwtClient {
 	issue(claims: TokenClaims, purpose: "session" | "state"): string;
 	verify(token: string | undefined, purpose: "session" | "state"): TokenClaims | undefined;
 }
 export class JwtClient implements IJwtClient {
 	constructor(
-		private readonly config: SessionConfig,
+		private readonly config: IPaasConfig,
 		private readonly now: () => number,
 	) {}
 	issue(claims: TokenClaims, purpose: "session" | "state"): string {
-		return jwt.sign({ ...claims, purpose, iat: Math.floor(this.now() / 1000) }, this.config.signingKey, {
+		const session = this.config.getAuthConfig()!.session;
+		return jwt.sign({ ...claims, purpose, iat: Math.floor(this.now() / 1000) }, session.signingKey, {
 			algorithm: "HS256",
-			issuer: this.config.issuer,
-			audience: this.config.audience,
-			expiresIn: purpose === "session" ? this.config.ttlSeconds : 600,
+			issuer: session.issuer,
+			audience: session.audience,
+			expiresIn: purpose === "session" ? session.ttlSeconds : 600,
 		});
 	}
 	verify(token: string | undefined, purpose: "session" | "state"): TokenClaims | undefined {
 		if (!token) return undefined;
 		try {
-			const payload = jwt.verify(token, this.config.signingKey, {
+			const session = this.config.getAuthConfig()!.session;
+			const payload = jwt.verify(token, session.signingKey, {
 				algorithms: ["HS256"],
-				issuer: this.config.issuer,
-				audience: this.config.audience,
+				issuer: session.issuer,
+				audience: session.audience,
 				clockTimestamp: Math.floor(this.now() / 1000),
 			});
 			const common = z.object({ purpose: z.literal(purpose), exp: z.number().finite() });

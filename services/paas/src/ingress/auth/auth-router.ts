@@ -1,5 +1,6 @@
 import Router from "@koa/router";
 
+import type { IPaasConfig } from "../../config/paas-config.ts";
 import { logger } from "../../util/logger.ts";
 import type { IAuthService } from "./auth-service.ts";
 import { AuthenticationError } from "./auth-service.ts";
@@ -7,14 +8,18 @@ import { AuthenticationError } from "./auth-service.ts";
 const sessionCookie = "__Secure-paas_session";
 const stateCookie = "__Host-paas_oauth";
 
-export const createAuthRouter = (
-	auth: IAuthService,
-	config: { baseDomain: string; httpsPort: number; ttlSeconds: number; serviceIds: string[] },
-) => {
-	const authority = (host: string) => `${host}${config.httpsPort === 443 ? "" : `:${config.httpsPort}`}`;
-	const authAuthority = authority(`auth.${config.baseDomain}`);
-	const managementAuthority = authority(config.baseDomain);
-	const serviceAuthorities = new Map(config.serviceIds.map((id) => [authority(`${id}.${config.baseDomain}`), id]));
+export const createAuthRouter = (auth: IAuthService, config: IPaasConfig) => {
+	const routing = () => {
+		const { baseDomain, httpsPort } = config.getIngressConfig();
+		const authority = (host: string) => `${host}${httpsPort === 443 ? "" : `:${httpsPort}`}`;
+		return {
+			authAuthority: authority(`auth.${baseDomain}`),
+			managementAuthority: authority(baseDomain),
+			serviceAuthorities: new Map(
+				Object.keys(config.getServices()).map((id) => [authority(`${id}.${baseDomain}`), id]),
+			),
+		};
+	};
 	const cookieParts = (header: string) =>
 		header
 			.split(";")
@@ -25,6 +30,8 @@ export const createAuthRouter = (
 		return matches.length === 1 ? matches.at(0)?.slice(name.length + 1) : undefined;
 	};
 	const validTarget = (value: unknown): string | undefined => {
+		const { managementAuthority, serviceAuthorities } = routing();
+
 		if (typeof value !== "string") return undefined;
 		try {
 			const url = new URL(value);
@@ -40,6 +47,8 @@ export const createAuthRouter = (
 	};
 	return new Router()
 		.all(/^\/auth\/check(?:\/.*)?$/, async (ctx) => {
+			const { authAuthority, managementAuthority, serviceAuthorities } = routing();
+
 			ctx.set("Cache-Control", "no-store");
 			const serviceId = serviceAuthorities.get(ctx.get("host"));
 			const management = ctx.get("host") === managementAuthority;
@@ -84,6 +93,8 @@ export const createAuthRouter = (
 			}
 		})
 		.get("/oauth/github/login", (ctx) => {
+			const { authAuthority } = routing();
+
 			ctx.set("Cache-Control", "no-store");
 			if (ctx.get("host") !== authAuthority) {
 				ctx.status = 404;
@@ -100,6 +111,8 @@ export const createAuthRouter = (
 			ctx.redirect(login.url);
 		})
 		.get("/auth/callback", async (ctx) => {
+			const { authAuthority } = routing();
+
 			ctx.set("Cache-Control", "no-store");
 			ctx.set("Referrer-Policy", "no-referrer");
 			if (ctx.get("host") !== authAuthority) {
@@ -121,7 +134,7 @@ export const createAuthRouter = (
 				}
 				ctx.append(
 					"Set-Cookie",
-					`${sessionCookie}=${result.session}; Domain=${config.baseDomain}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${config.ttlSeconds}`,
+					`${sessionCookie}=${result.session}; Domain=${config.getIngressConfig().baseDomain}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${config.getAuthConfig()!.session.ttlSeconds}`,
 				);
 				ctx.redirect(target);
 			} catch (error) {

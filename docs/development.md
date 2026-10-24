@@ -110,7 +110,7 @@ Local ingress uses `local.maxine4j.com` with HTTPS on port 443. Register `https:
 - Envoy's admin listener uses container port 9901 for configuration acceptance checks. It has no host port publication. Restart Envoy after changing its bootstrap configuration.
 - Envoy retains UID 0 via `ENVOY_UID` to read the control plane's root-owned, restricted state and certificate files.
 
-The control plane reads platform configuration at startup, serves `/health` internally on port 8080, and runs the [deployment MVP](configuration.md#implemented-deployment-mvp). Polling defaults in the checked-in local configuration are five seconds. The fixture descriptor already matches the MVP schema and explicitly uses `/health`. Local configuration enables GitHub auth and DigitalOcean TLS; advanced resources are omitted.
+The control plane reads platform configuration at startup and [reloads it every minute](configuration.md#platform-configuration-reload), serves `/health` internally on port 8080, and runs the [deployment MVP](configuration.md#implemented-deployment-mvp). Polling defaults in the checked-in local configuration are five seconds. The fixture descriptor already matches the MVP schema and explicitly uses `/health`. Local configuration enables GitHub auth and DigitalOcean TLS; advanced resources are omitted.
 
 Check the control plane inside its container and the public deployed service through Envoy:
 

@@ -1,5 +1,6 @@
 import type { ResourceLimits, ResourceVolume } from "@homelab-paas/shared-contracts";
 
+import type { IPaasConfig } from "../config/paas-config.ts";
 import { DockerClientError } from "./docker-client.ts";
 import type { IDockerClient } from "./docker-client.ts";
 import type { DockerContainerDetails, DockerNetwork, Labels, ServiceContainer } from "./types.ts";
@@ -46,15 +47,15 @@ export class DockerServiceError extends Error {
 export class DockerService implements IDockerService {
 	constructor(
 		private readonly client: IDockerClient,
-		private readonly clusterId: string,
+		private readonly config: IPaasConfig,
 	) {}
 
 	private labels(serviceId: string): Labels {
-		return { "homelab-paas.cluster": this.clusterId, "homelab-paas.service": serviceId };
+		return { "homelab-paas.cluster": this.config.getClusterId(), "homelab-paas.service": serviceId };
 	}
 
 	private networkName(serviceId: string): string {
-		return `paas-${this.clusterId}-${serviceId}`;
+		return `paas-${this.config.getClusterId()}-${serviceId}`;
 	}
 
 	private assertOwnership(serviceId: string, labels: Labels): void {
@@ -115,13 +116,13 @@ export class DockerService implements IDockerService {
 		for (const role of ["control-plane", "envoy"]) {
 			const containers = await this.client.listContainers({
 				all: true,
-				labels: { "homelab-paas.cluster": this.clusterId, "homelab-paas.role": role },
+				labels: { "homelab-paas.cluster": this.config.getClusterId(), "homelab-paas.role": role },
 			});
 			const peer = containers.at(0);
 			if (
 				containers.length !== 1
 				|| !peer
-				|| peer.labels["homelab-paas.cluster"] !== this.clusterId
+				|| peer.labels["homelab-paas.cluster"] !== this.config.getClusterId()
 				|| peer.labels["homelab-paas.role"] !== role
 			) {
 				throw new DockerServiceError("infrastructure");
@@ -153,7 +154,7 @@ export class DockerService implements IDockerService {
 
 	createResourceContainer(options: CreateResourceContainerOptions): Promise<string> {
 		return this.client.createContainer({
-			name: `paas-${this.clusterId}-${options.serviceId}-${options.resourceId}-${options.spec.slice(0, 12)}${options.instanceId ? `-${options.instanceId}` : ""}`,
+			name: `paas-${this.config.getClusterId()}-${options.serviceId}-${options.resourceId}-${options.spec.slice(0, 12)}${options.instanceId ? `-${options.instanceId}` : ""}`,
 			image: options.imageId,
 			command: options.command,
 			env: options.env,
