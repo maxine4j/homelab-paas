@@ -39,7 +39,7 @@ test("accepts every resource type and its documented fields", () => {
 	};
 	const resources = {
 		app: { ...workload, type: "web", ingress: { public: false, port: 3000 } },
-		worker: { ...workload, type: "worker" },
+		worker: { ...workload, type: "worker", healthcheckPort: 8081 },
 		store: { type: "postgres", image: "postgres:17", limits: { cpus: 1, memoryMiB: 1024 } },
 		queue: { type: "rabbitmq", image: "rabbitmq:4", termination: { timeoutSeconds: 60 } },
 	};
@@ -52,7 +52,7 @@ test("allows services without web resources and defaults workloads and private i
 			...descriptor,
 			resources: {
 				app: { ...descriptor.resources.app, ingress: { port: 8080 } },
-				worker: { type: "worker", image: "worker:1" },
+				worker: { type: "worker", image: "worker:1", healthcheckPort: 8081 },
 			},
 		},
 		"test-service",
@@ -61,6 +61,8 @@ test("allows services without web resources and defaults workloads and private i
 	expect(parsed.resources["worker"]).toEqual({
 		type: "worker",
 		image: "worker:1",
+		healthcheckPort: 8081,
+		healthcheckUrl: "/healthcheck",
 		replicas: 1,
 		rolloutStrategy: "recreate",
 	});
@@ -70,6 +72,30 @@ test("allows services without web resources and defaults workloads and private i
 			"test-service",
 		).resources,
 	).toEqual({ store: { type: "postgres", image: "postgres:17" } });
+});
+
+test("workers accept a private health check with a custom path", () => {
+	const worker = { type: "worker", image: "app:1", healthcheckPort: 9000, healthcheckUrl: "/ready" };
+	expect(parseDescriptor({ ...descriptor, resources: { worker } }, "test-service").resources["worker"]).toMatchObject(
+		worker,
+	);
+});
+
+test.each([
+	{},
+	{ healthcheckPort: 0 },
+	{ healthcheckPort: 65536 },
+	{ healthcheckPort: 1.5 },
+	{ healthcheckPort: 8081, healthcheckUrl: "http://example.com/health" },
+	{ healthcheckPort: 8081, healthcheckUrl: "//example.com/health" },
+	{ healthcheckPort: 8081, ingress: { port: 8081 } },
+])("rejects invalid worker health checks: %j", (healthcheck) => {
+	expect(() =>
+		parseDescriptor(
+			{ ...descriptor, resources: { worker: { type: "worker", image: "app:1", ...healthcheck } } },
+			"test-service",
+		),
+	).toThrow("Invalid service descriptor");
 });
 
 test.each(["/srv/media", "/mnt/other disk/data", "/etc/application.conf"])(
