@@ -6,7 +6,7 @@ All platform and descriptor YAML is parsed through the canonical backend YAML ut
 
 ## Implemented deployment MVP
 
-The current runtime supports one or more workload resources per service: at most one `web` resource with one replica, and any number of `worker` resources with positive integer replica counts. Worker-only services are supported without auth/TLS. Both workload types support `recreate` or `surge` deployment. Descriptors use the schema below with only `version`, `metadata`, and `resources` at the top level. Runtime-supported web fields are `type`, `image`, `ingress`, optional `replicas: 1`, `rolloutStrategy` (`recreate` or `surge`), `healthcheckUrl`, `command`, literal or secret-reference `env` values, `volumes`, `limits`, and `termination.timeoutSeconds` (default 30, maximum 300). Workers support the same application settings, with `healthcheckPort` instead of `ingress` and multiple replicas. Unknown fields fail descriptor validation; unsupported runtime features fail a separate capability check before changing workloads. The public TypeScript types, Zod schema, and `parseDescriptor` validator in `@homelab-paas/shared-contracts` describe the complete service descriptor contract below. Platform configuration, runtime capability checks, and deployment state stay in the backend.
+The current runtime supports one or more workload resources per service: any number of `web` resources with one replica each, and any number of `worker` resources with positive integer replica counts. Worker-only services are supported without auth/TLS. Both workload types support `recreate` or `surge` deployment. Descriptors use the schema below with only `version`, `metadata`, and `resources` at the top level. Runtime-supported web fields are `type`, `image`, `ingress`, `primary`, optional `replicas: 1`, `rolloutStrategy` (`recreate` or `surge`), `healthcheckUrl`, `command`, literal or secret-reference `env` values, `volumes`, `limits`, and `termination.timeoutSeconds` (default 30, maximum 300). Workers support the same application settings, with `healthcheckPort` instead of `ingress` and multiple replicas. Unknown fields fail descriptor validation; unsupported runtime features fail a separate capability check before changing workloads. The public TypeScript types, Zod schema, and `parseDescriptor` validator in `@homelab-paas/shared-contracts` describe the complete service descriptor contract below. Platform configuration, runtime capability checks, and deployment state stay in the backend.
 
 Managed databases/brokers, egress, web replicas beyond one, and resource/service removal are deferred. Private ingress (including the default `public: false`) requires platform auth and TLS. Without them, ingress must explicitly set `public: true`. The remaining service examples include capabilities beyond the deployed runtime.
 
@@ -79,7 +79,20 @@ Service and resource IDs must use lowercase kebab case:
 
 The descriptor’s `metadata.serviceId` must match its key in the platform configuration.
 
-Each service may contain at most one web resource.
+Each service may contain multiple web resources. With more than one, exactly one must explicitly set `primary: true`; omitted or `false` values select secondary resources. A sole web resource is implicitly primary, including when `primary` is omitted or explicitly `false`. Worker-only services need no primary. Each web resource has its own [external hostname](networking-and-auth.md#external-ingress-and-authentication); the primary also receives the service hostname. Primary selection changes routing without replacing otherwise unchanged containers.
+
+```yaml
+resources:
+    app:
+        type: web
+        primary: true
+        image: app:1
+        ingress: { port: 3000, public: true }
+    admin:
+        type: web
+        image: admin:1
+        ingress: { port: 8080, public: false }
+```
 
 Resources are a discriminated union of `web`, `worker`, `postgres`, and `rabbitmq`. Every resource requires a nonempty `image` and may set `limits` and `termination.timeoutSeconds` (positive integer seconds, maximum 300). Web and worker resources additionally accept `command`, `env`, `volumes`, `egress`, positive integer `replicas` (default 1), and `rolloutStrategy` (`recreate` by default, or `surge`). Web resources require an ingress port (1–65535) and default `ingress.public` to `false`. Workers require `healthcheckPort` (integer 1–65535) and reject `ingress`. Both default `healthcheckUrl` to `/healthcheck`, accepting only a relative HTTP path beginning with a single `/`. Worker health endpoints are private: PaaS probes the container's service-network address; no host port, public route, or Envoy health check is created. Workers must listen on that container interface, rather than only loopback. See [health checks](reconciliation-and-deployments.md#health-checks-and-termination) for readiness and polling behavior. Managed PostgreSQL and RabbitMQ resources accept no custom environment, credentials, volumes, replicas, or rollout strategy; see [managed resources](managed-resources.md).
 

@@ -3,6 +3,24 @@ import { expect, test, vi } from "vitest";
 import { testConfig } from "../../../util/test/config.ts";
 import { DigitalOceanDnsAcmeChallengeProvider } from "./digitalocean-dns-challenge-provider.ts";
 
+test.each(["demo.example.test", "*.demo.example.test"])(
+	"creates nested service wildcard challenge at the correct DNS name: %s",
+	async (identifier) => {
+		const request = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(new Response("", { status: 404 }))
+			.mockResolvedValueOnce(Response.json({ domain: { name: "example.test" } }))
+			.mockResolvedValueOnce(Response.json({ domain_record: { id: 42 } }));
+		const provider = new DigitalOceanDnsAcmeChallengeProvider(
+			testConfig({ services: { demo: { remote: "local", descriptorPath: "/repo/demo.yaml" } } }),
+			request,
+		);
+		expect(await provider.createChallenge(identifier, "proof")).toEqual({ zone: "example.test", id: 42 });
+		const [, options] = request.mock.calls.at(-1)!;
+		expect(JSON.parse(String(options?.body)).name).toBe("_acme-challenge.demo");
+	},
+);
+
 test("uses an explicit API origin for zone lookup and record creation", async () => {
 	const request = vi
 		.fn<typeof fetch>()

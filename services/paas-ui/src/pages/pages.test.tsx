@@ -7,6 +7,24 @@ import { ResourcePage } from "./resource-page.tsx";
 import { ServicePage } from "./service-page.tsx";
 import { ServicesPage } from "./services-page.tsx";
 
+test("web inspection links to the resource host and primary service alias", () => {
+	const html = renderToStaticMarkup(
+		<ResourcePage
+			serviceId='demo'
+			tab='config'
+			resource={{
+				resourceId: "app",
+				type: "web",
+				containers: [],
+				url: "https://app.demo.example.test",
+				primaryUrl: "https://demo.example.test",
+			}}
+		/>,
+	);
+	expect(html).toContain('href="https://app.demo.example.test"');
+	expect(html).toContain('href="https://demo.example.test"');
+});
+
 test("cluster and service pages expose configuration, deployment status and resource navigation", () => {
 	expect(renderToStaticMarkup(<ClusterPage cluster={{ clusterId: "local", config: { version: 1 } }} />)).toContain(
 		"Cluster configuration",

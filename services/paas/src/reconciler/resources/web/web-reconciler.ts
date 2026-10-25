@@ -53,10 +53,11 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 					port: resource.ingress.port,
 					healthcheckPath: resource.healthcheckUrl ?? "/healthcheck",
 					public: resource.ingress.public ?? false,
+					primary: resource.primary ?? true,
 				};
 				if (!(await this.probe(endpoint.address, endpoint.port, endpoint.healthcheckPath)))
 					throw new Error("Container readiness failed; check healthcheckUrl");
-				await this.networking.routeTo(serviceId, endpoint);
+				await this.networking.routeTo(`${resourceId}.${serviceId}`, endpoint);
 				return;
 			}
 		}

@@ -29,6 +29,17 @@ export const ResourcePage = ({
 					<p className='eyebrow'>{resource.type} resource</p>
 					<h1>{resource.resourceId}</h1>
 					<p>{resource.containers.length} observed containers · snapshots refresh every 5 seconds</p>
+					{resource.url && (
+						<p>
+							<a href={resource.url}>Open resource</a>
+							{resource.primaryUrl && (
+								<>
+									{" "}
+									· <a href={resource.primaryUrl}>Open primary service URL</a>
+								</>
+							)}
+						</p>
+					)}
 				</div>
 			</div>
 			<nav className='tabs' aria-label='Resource inspection'>

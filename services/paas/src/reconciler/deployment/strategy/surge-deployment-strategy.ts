@@ -59,7 +59,7 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 		}
 		// A rejected publication can have an uncertain outcome. Keep both revisions
 		// alive rather than deleting a replacement that may already receive traffic.
-		await this.networking.routeTo(serviceId, endpoint);
+		await this.networking.routeTo(`${resourceId}.${serviceId}`, endpoint);
 		if (current.length === 0) return;
 		const timeoutSeconds = resource.termination?.timeoutSeconds ?? 30;
 		const results = await Promise.allSettled(
@@ -83,6 +83,7 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 					port: resource.ingress.port,
 					healthcheckPath: resource.healthcheckUrl ?? "/healthcheck",
 					public: resource.ingress.public ?? false,
+					primary: resource.primary ?? true,
 				};
 				if (await this.probe(address, endpoint.port, endpoint.healthcheckPath)) return endpoint;
 			}

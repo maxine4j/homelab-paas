@@ -6,6 +6,17 @@ import { AuthService } from "./auth-service.ts";
 import { JwtClient } from "./jwt-client.ts";
 
 const session = { issuer: "paas", audience: "paas", signingKey: "a".repeat(32), ttlSeconds: 3600 };
+
+test("uses each resource's policy and the primary policy for the service alias", async () => {
+	const f = fixture();
+	f.getAll.mockResolvedValue({
+		"app.demo": { address: "10.0.0.1", port: 80, healthcheckPath: "/", public: false, primary: true },
+		"admin.demo": { address: "10.0.0.2", port: 80, healthcheckPath: "/", public: true, primary: false },
+	});
+	expect(await f.service.authorize("demo", undefined)).toBe("login");
+	expect(await f.service.authorize("app.demo", undefined)).toBe("login");
+	expect(await f.service.authorize("admin.demo", undefined)).toBe("allowed");
+});
 const fixture = (httpsPort = 443, baseDomain = "example.test") => {
 	let now = 1_800_000_000_000;
 	const tokens = new JwtClient(

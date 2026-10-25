@@ -94,7 +94,7 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 		expect(journal.indexOf("POST /containers/create")).toBeLessThan(
 			journal.indexOf(`POST /containers/${original.Id}/stop`),
 		);
-		expect(journal.findIndex((entry) => entry.includes("envoy:paas,service-demo"))).toBeLessThan(
+		expect(journal.findIndex((entry) => entry.includes("envoy:paas,service-app.demo"))).toBeLessThan(
 			journal.indexOf(`POST /containers/${original.Id}/stop`),
 		);
 		expect(docker.containers.has(original.Id)).toBe(false);

@@ -54,7 +54,7 @@ export class ReconcilerService implements IReconcilerService {
 			message = "Invalid descriptor; check service identity and supported resource fields";
 			const descriptor = this.decode(file.content, serviceId);
 			message =
-				"Unsupported descriptor capabilities; runtime supports workers and at most one single-replica web resource, without egress; private ingress requires auth/TLS";
+				"Unsupported descriptor capabilities; runtime supports workers and single-replica web resources, without egress; private ingress requires auth/TLS";
 			const desired = this.deploymentResources(descriptor);
 			message = "Cannot resolve application secrets; check the service env file and required variable names";
 			const resources: [string, DeploymentWebResource | DeploymentWorkerResource][] = [];
@@ -113,6 +113,7 @@ export class ReconcilerService implements IReconcilerService {
 
 	private deploymentResources(descriptor: ServiceDescriptor): [string, WebResource | WorkerResource][] {
 		const entries = Object.entries(descriptor.resources);
+		const webCount = entries.filter(([, resource]) => resource.type === "web").length;
 		if (entries.length === 0) throw new Error("Runtime requires at least one workload resource");
 		return entries.map(([resourceId, resource]) => {
 			if (
@@ -123,7 +124,12 @@ export class ReconcilerService implements IReconcilerService {
 				|| resource.egress !== undefined
 			)
 				throw new Error("Resource requires unsupported runtime capabilities");
-			return [resourceId, resource];
+			return [
+				resourceId,
+				resource.type === "web"
+					? { ...resource, primary: webCount === 1 || resource.primary === true }
+					: resource,
+			];
 		});
 	}
 }

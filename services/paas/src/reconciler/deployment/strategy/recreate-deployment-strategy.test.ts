@@ -22,6 +22,15 @@ const request: DeploymentRequest = {
 	},
 };
 
+test("withdraws and publishes only the selected resource and its primary policy", async () => {
+	const f = fixture();
+	await f.strategy.deploy({ ...request, resourceId: "admin", resource: { ...request.resource, primary: false } });
+	expect(f.calls.filter(({ action }) => action === "route").map(({ args }) => args)).toEqual([
+		["admin.demo", undefined],
+		["admin.demo", expect.objectContaining({ primary: false })],
+	]);
+});
+
 function fixture() {
 	const calls: { action: string; args: unknown[] }[] = [];
 	const record = (action: string, ...args: unknown[]) => {
@@ -135,8 +144,8 @@ test("recreate resolves first, withdraws routing, replaces scoped containers and
 	]);
 	expect(f.calls.find((c) => c.action === "probe")?.args).toEqual(["10.0.0.2", 8080, "/ready"]);
 	expect(f.calls.filter((c) => c.action === "route").map((c) => c.args)).toEqual([
-		["demo", undefined],
-		["demo", { address: "10.0.0.2", port: 8080, healthcheckPath: "/ready", public: true }],
+		["app.demo", undefined],
+		["app.demo", { address: "10.0.0.2", port: 8080, healthcheckPath: "/ready", public: true, primary: true }],
 	]);
 });
 
@@ -148,8 +157,8 @@ test("uses descriptor defaults for termination and health checks", async () => {
 	});
 	expect(f.calls.find((c) => c.action === "stop")?.args).toEqual(["demo", "old", 30]);
 	expect(f.calls.at(-1)?.args).toEqual([
-		"demo",
-		{ address: "10.0.0.2", port: 8080, healthcheckPath: "/healthcheck", public: true },
+		"app.demo",
+		{ address: "10.0.0.2", port: 8080, healthcheckPath: "/healthcheck", public: true, primary: true },
 	]);
 });
 
@@ -180,7 +189,7 @@ test.each([false, undefined])("publishes private policy when public is %s", asyn
 		...request,
 		resource: { ...request.resource, ingress: { port: 8080, public: publicPolicy } },
 	});
-	expect(f.calls.at(-1)?.args).toEqual(["demo", expect.objectContaining({ public: false })]);
+	expect(f.calls.at(-1)?.args).toEqual(["app.demo", expect.objectContaining({ public: false })]);
 });
 
 test.each(["resolveImage", "prepareServiceNetwork", "inspectServiceNetwork"] as const)(
@@ -226,7 +235,7 @@ test.each([
 			? "Container retirement failed"
 			: "deployment failed",
 	);
-	expect(f.calls.filter((c) => c.action === "route").map((c) => c.args)).toEqual([["demo", undefined]]);
+	expect(f.calls.filter((c) => c.action === "route").map((c) => c.args)).toEqual([["app.demo", undefined]]);
 });
 
 test("readiness retries transient absence and never probes stopped containers or the wrong network", async () => {
@@ -268,7 +277,7 @@ test("readiness exhaustion is bounded and never publishes an unready endpoint", 
 	await expect(strategy.deploy(request)).rejects.toThrow("Container readiness failed");
 	expect(probes).toBe(30);
 	expect(f.calls.filter((c) => c.action === "pause")).toHaveLength(29);
-	expect(f.calls.filter((c) => c.action === "route").map((c) => c.args)).toEqual([["demo", undefined]]);
+	expect(f.calls.filter((c) => c.action === "route").map((c) => c.args)).toEqual([["app.demo", undefined]]);
 	expect(f.calls.slice(-2)).toEqual([
 		{ action: "stop", args: ["demo", "new", 45] },
 		{ action: "remove", args: ["demo", "new"] },

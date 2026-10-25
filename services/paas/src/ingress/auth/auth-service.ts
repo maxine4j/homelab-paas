@@ -19,7 +19,11 @@ export class AuthService implements IAuthService {
 		private readonly endpoints: IEndpointsStore,
 	) {}
 	async authorize(serviceId: string, token: string | undefined): Promise<"allowed" | "login" | "missing"> {
-		const endpoint = (await this.endpoints.getAll())[serviceId];
+		const endpoints = await this.endpoints.getAll();
+		const [, primary] =
+			Object.entries(endpoints).find(([id, endpoint]) => id.split(".").at(1) === serviceId && endpoint.primary)
+			?? [];
+		const endpoint = endpoints[serviceId] ?? primary;
 		if (!endpoint) return "missing";
 		return endpoint.public === true || this.verifyAuthCookie(token) ? "allowed" : "login";
 	}

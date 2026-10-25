@@ -13,10 +13,20 @@ export class TlsCertProvisionService implements ITlsCertProvisionService {
 		private readonly client: IAcmeClient,
 	) {}
 	async provisionCert(): Promise<Certificate> {
-		const { baseDomain } = this.config.getIngressConfig();
 		return this.client.provision({
-			domains: [baseDomain, `*.${baseDomain}`],
+			domains: this.requiredDomains(),
 			email: this.config.getTlsConfig()!.acme.email,
 		});
+	}
+	/** Coverage required by the current effective platform configuration. */
+	requiredDomains(): string[] {
+		const { baseDomain } = this.config.getIngressConfig();
+		return [
+			baseDomain,
+			`*.${baseDomain}`,
+			...Object.keys(this.config.getServices())
+				.sort()
+				.map((id) => `*.${id}.${baseDomain}`),
+		];
 	}
 }

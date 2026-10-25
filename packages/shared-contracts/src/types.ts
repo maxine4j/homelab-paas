@@ -27,6 +27,9 @@ export interface UiContainer {
 export interface UiResource {
 	resourceId: string;
 	type: string;
+	/** Desired web ingress URLs; presence does not imply readiness. */
+	url?: string;
+	primaryUrl?: string;
 	config?: JsonValue;
 	containers: UiContainer[];
 }

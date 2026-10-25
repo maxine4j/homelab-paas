@@ -23,6 +23,15 @@ const request: DeploymentRequest = {
 	},
 };
 
+test("publishes the selected resource with its primary policy", async () => {
+	const f = fixture();
+	await f.strategy.deploy({ ...request, resourceId: "admin", resource: { ...request.resource, primary: false } });
+	expect(f.calls.find(({ action }) => action === "route")?.args).toEqual([
+		"admin.demo",
+		expect.objectContaining({ primary: false }),
+	]);
+});
+
 test("propagates resolved secrets, arbitrary host mounts and CPU/memory limits to the surge replacement", async () => {
 	const f = fixture();
 	const volumes = [{ hostPath: "/srv/media", mountPath: "/media", readOnly: true }];
@@ -150,8 +159,8 @@ test("starts alongside the old revision, switches only after readiness, then gra
 	]);
 	expect(f.calls.find((c) => c.action === "probe")?.args).toEqual(["10.0.0.2", 8080, "/ready"]);
 	expect(f.calls.find((c) => c.action === "route")?.args).toEqual([
-		"demo",
-		{ address: "10.0.0.2", port: 8080, healthcheckPath: "/ready", public: true },
+		"app.demo",
+		{ address: "10.0.0.2", port: 8080, healthcheckPath: "/ready", public: true, primary: true },
 	]);
 	expect(f.calls.find((c) => c.action === "stop")?.args).toEqual(["demo", "old", 45]);
 });
@@ -174,7 +183,7 @@ test.each([false, undefined])("publishes private policy when public is %s", asyn
 		resource: { ...request.resource, ingress: { port: 8080, public: publicPolicy } },
 	});
 	expect(f.calls.find((call) => call.action === "route")?.args).toEqual([
-		"demo",
+		"app.demo",
 		expect.objectContaining({ public: false }),
 	]);
 });

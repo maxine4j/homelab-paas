@@ -4,6 +4,36 @@ import { testConfig } from "../util/test/config.ts";
 import { EnvoyService } from "./envoy-service.ts";
 import { EnvoyClientError, type EnvoyConfiguration } from "./types.ts";
 
+test.each([undefined, 443])(
+	"routes independent resource hosts with one primary alias, HTTPS port %s",
+	async (httpsPort) => {
+		let configuration: EnvoyConfiguration | undefined;
+		const service = new EnvoyService(
+			{
+				async bootstrap() {},
+				async apply(value) {
+					configuration = value;
+				},
+			},
+			testConfig({ ingress: { baseDomain: "example.test", httpPort: 80, httpsPort } }),
+		);
+		await service.configureRoutes({
+			"app.demo": { address: "10.0.0.1", port: 80, healthcheckPath: "/ready", public: true, primary: true },
+			"admin.demo": { address: "10.0.0.2", port: 8080, healthcheckPath: "/health", public: true, primary: false },
+		});
+		const text = JSON.stringify(configuration?.listeners);
+		expect(text).toContain(
+			'"domains":["app.demo.example.test","app.demo.example.test:*","demo.example.test","demo.example.test:*"]',
+		);
+		expect(text).toContain('"domains":["admin.demo.example.test","admin.demo.example.test:*"]');
+		expect(configuration?.clusters.map(({ name }) => name)).toEqual([
+			"paas",
+			"service-admin.demo",
+			"service-app.demo",
+		]);
+	},
+);
+
 test("bootstrap delegates discovery initialization to the client", async () => {
 	let initialized = false;
 	const service = new EnvoyService(

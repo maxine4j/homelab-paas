@@ -69,6 +69,32 @@ const fixture = () => {
 	return { service, config, fetchFile, listServiceContainers, readServiceContainerLogs };
 };
 
+test("web inspection exposes resource URLs and only the primary service alias", async () => {
+	const f = fixture();
+	expect(await f.service.getResource("demo", "app")).toMatchObject({
+		url: "http://app.demo.example.com",
+		primaryUrl: "http://demo.example.com",
+	});
+	f.fetchFile.mockResolvedValue({
+		revision: "multi",
+		content: JSON.stringify({
+			...descriptor,
+			resources: {
+				...descriptor.resources,
+				app: { ...descriptor.resources.app, primary: false },
+				admin: { ...descriptor.resources.app, primary: true },
+			},
+		}),
+	});
+	expect(await f.service.getResource("demo", "app")).toMatchObject({ url: "http://app.demo.example.com" });
+	expect((await f.service.getResource("demo", "app")).primaryUrl).toBeUndefined();
+	expect(await f.service.getResource("demo", "admin")).toMatchObject({
+		url: "http://admin.demo.example.com",
+		primaryUrl: "http://demo.example.com",
+	});
+	expect((await f.service.getResource("demo", "db")).url).toBeUndefined();
+});
+
 test("management operations preserve causes for internal diagnostics", async () => {
 	const f = fixture();
 	const cause = new Error("Docker failure");

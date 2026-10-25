@@ -63,7 +63,7 @@ export class EnvoyService implements IEnvoyService {
 			})),
 		];
 		if (ingress.httpsPort) {
-			await this.client.apply({ clusters, listeners: this.secureListeners(entries.map(([id]) => id)) });
+			await this.client.apply({ clusters, listeners: this.secureListeners(entries) });
 			return;
 		}
 		if (entries.some(([, endpoint]) => endpoint.public === false)) throw new EnvoyClientError();
@@ -87,9 +87,7 @@ export class EnvoyService implements IEnvoyService {
 											name: "services",
 											virtual_hosts: [
 												virtualHost("paas", ingress.baseDomain, "paas"),
-												...entries.map(([id]) =>
-													virtualHost(id, `${id}.${ingress.baseDomain}`, `service-${id}`),
-												),
+												...entries.map(([id, endpoint]) => this.resourceHost(id, endpoint)),
 											],
 										},
 										http_filters: [
@@ -111,7 +109,17 @@ export class EnvoyService implements IEnvoyService {
 		});
 	}
 
-	private secureListeners(serviceIds: string[]) {
+	private resourceHost(id: string, endpoint: Endpoint) {
+		const host = virtualHost(id, `${id}.${this.config.getIngressConfig().baseDomain}`, `service-${id}`);
+		const serviceId = id.split(".").at(1);
+		if (serviceId && endpoint.primary) {
+			const alias = `${serviceId}.${this.config.getIngressConfig().baseDomain}`;
+			host.domains.push(alias, `${alias}:*`);
+		}
+		return host;
+	}
+
+	private secureListeners(entries: [string, Endpoint][]) {
 		const ingress = this.config.getIngressConfig();
 		const disabled = {
 			"envoy.filters.http.ext_authz": {
@@ -231,9 +239,7 @@ export class EnvoyService implements IEnvoyService {
 											{ match: { prefix: "/" }, route: { cluster: "paas" } },
 										],
 									},
-									...serviceIds.map((id) =>
-										virtualHost(id, `${id}.${ingress.baseDomain}`, `service-${id}`),
-									),
+									...entries.map(([id, endpoint]) => this.resourceHost(id, endpoint)),
 								],
 								httpFilters,
 							),

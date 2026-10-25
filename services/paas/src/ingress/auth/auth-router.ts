@@ -15,10 +15,16 @@ export const createAuthRouter = (auth: IAuthService, config: IPaasConfig) => {
 		return {
 			authAuthority: authority(`auth.${baseDomain}`),
 			managementAuthority: authority(baseDomain),
-			serviceAuthorities: new Map(
-				Object.keys(config.getServices()).map((id) => [authority(`${id}.${baseDomain}`), id]),
-			),
 		};
+	};
+	const routeIdentity = (host: string): string | undefined => {
+		const { baseDomain, httpsPort } = config.getIngressConfig();
+		const suffix = `.${baseDomain}${httpsPort === 443 ? "" : `:${httpsPort}`}`;
+		if (!host.endsWith(suffix)) return undefined;
+		const identity = host.slice(0, -suffix.length);
+		const parts = identity.split(".");
+		if (parts.length > 2 || !parts.every((part) => /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(part))) return undefined;
+		return Object.hasOwn(config.getServices(), parts.at(-1)!) ? identity : undefined;
 	};
 	const cookieParts = (header: string) =>
 		header
@@ -30,7 +36,7 @@ export const createAuthRouter = (auth: IAuthService, config: IPaasConfig) => {
 		return matches.length === 1 ? matches.at(0)?.slice(name.length + 1) : undefined;
 	};
 	const validTarget = (value: unknown): string | undefined => {
-		const { managementAuthority, serviceAuthorities } = routing();
+		const { managementAuthority } = routing();
 
 		if (typeof value !== "string") return undefined;
 		try {
@@ -38,7 +44,7 @@ export const createAuthRouter = (auth: IAuthService, config: IPaasConfig) => {
 			return url.protocol === "https:"
 				&& !url.username
 				&& !url.password
-				&& (serviceAuthorities.has(url.host) || url.host === managementAuthority)
+				&& (routeIdentity(url.host) !== undefined || url.host === managementAuthority)
 				? url.href
 				: undefined;
 		} catch {
@@ -47,10 +53,10 @@ export const createAuthRouter = (auth: IAuthService, config: IPaasConfig) => {
 	};
 	return new Router()
 		.all(/^\/auth\/check(?:\/.*)?$/, async (ctx) => {
-			const { authAuthority, managementAuthority, serviceAuthorities } = routing();
+			const { authAuthority, managementAuthority } = routing();
 
 			ctx.set("Cache-Control", "no-store");
-			const serviceId = serviceAuthorities.get(ctx.get("host"));
+			const serviceId = routeIdentity(ctx.get("host"));
 			const management = ctx.get("host") === managementAuthority;
 			if (!serviceId && !management) {
 				ctx.status = 403;

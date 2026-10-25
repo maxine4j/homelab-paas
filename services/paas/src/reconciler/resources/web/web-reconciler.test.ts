@@ -137,6 +137,14 @@ test("an unchanged running resource does not redeploy when only source revision 
 	expect(f.requests).toEqual([]);
 });
 
+test("primary selection changes routing without replacing the workload", async () => {
+	const f = fixture();
+	await f.converge();
+	await f.reconciler.reconcile({ ...input, resource: { ...resource, primary: false } });
+	expect(f.requests).toEqual([]);
+	expect(f.routes.at(-1)).toEqual(["app.demo", expect.objectContaining({ primary: false })]);
+});
+
 test("replaces a legacy bind-mounted workload once to apply shared SELinux labels", async () => {
 	const f = fixture();
 	// Persisted fingerprint produced before shared SELinux bind labels were introduced.
@@ -334,7 +342,7 @@ test("repairs network attachment and republishes ready unchanged endpoints witho
 	expect(f.requests).toEqual([]);
 	expect(f.queries).toContain("prepare-network");
 	expect(f.routes).toEqual([
-		["demo", { address: "10.0.0.2", port: 8080, healthcheckPath: "/healthcheck", public: true }],
+		["app.demo", { address: "10.0.0.2", port: 8080, healthcheckPath: "/healthcheck", public: true, primary: true }],
 	]);
 });
 

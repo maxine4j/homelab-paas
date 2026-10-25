@@ -41,7 +41,10 @@ test("persists account material and atomically publishes a validated PEM pair fo
 			"authorization",
 		);
 		await store.publish({ key: key.toString(), cert: cert.toString() });
-		expect(await store.read()).toEqual({ expiresAt: new Date(new X509Certificate(cert).validTo).getTime() });
+		expect(await store.read()).toEqual({
+			expiresAt: new Date(new X509Certificate(cert).validTo).getTime(),
+			domains: ["example.test"],
+		});
 		const pem = await readFile(join(directory, "ingress.pem"));
 		expect(pem).toContain(key.toString().trim());
 		expect(pem).toContain(cert.toString().trim());

@@ -69,7 +69,11 @@ export class ContainerEnvironment {
 		await writeFile(`${this.directory}/etc/envoy.yaml`, (await readFile(join(fixtures, "envoy.yaml")))!, {
 			mode: 0o600,
 		});
-		const tls = await createTls(`${this.directory}/tls`, this.config.ingress.baseDomain);
+		const tls = await createTls(
+			`${this.directory}/tls`,
+			this.config.ingress.baseDomain,
+			Object.keys(this.config.services),
+		);
 		this.ca = tls.ca;
 		this.caPath = tls.caPath;
 		await seedTls(`${this.directory}/var/_paas`, tls, "/var/homelab-paas/_paas");

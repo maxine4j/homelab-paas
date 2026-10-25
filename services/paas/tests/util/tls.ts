@@ -8,7 +8,7 @@ import { atomicWriteFile, mkdir, readFile, writeFile } from "../../src/util/file
 const execute = promisify(execFile);
 
 /** Private test CA, plus a base-domain/wildcard leaf. No TLS verification bypass. */
-export const createTls = async (directory: string, baseDomain: string) => {
+export const createTls = async (directory: string, baseDomain: string, services: string[] = []) => {
 	await mkdir(directory, { recursive: true, mode: 0o700 });
 	const path = (name: string) => join(directory, name);
 	await writeFile(
@@ -18,7 +18,7 @@ export const createTls = async (directory: string, baseDomain: string) => {
 	);
 	await writeFile(
 		path("leaf.cnf"),
-		`basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:${baseDomain},DNS:*.${baseDomain}\n`,
+		`basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=${[baseDomain, `*.${baseDomain}`, ...services.map((id) => `*.${id}.${baseDomain}`)].map((domain) => `DNS:${domain}`).join(",")}\n`,
 		{ mode: 0o600 },
 	);
 	const openssl = async (args: string[]) => execute("openssl", args, { cwd: directory, timeout: 15_000 });

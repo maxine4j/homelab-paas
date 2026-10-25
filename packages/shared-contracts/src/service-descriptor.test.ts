@@ -22,6 +22,20 @@ test("validates a web descriptor and applies documented defaults", () => {
 	});
 });
 
+test("multiple web resources require exactly one explicit primary", () => {
+	const app = descriptor.resources.app;
+	const resources = { app: { ...app, primary: true }, admin: { ...app, primary: false } };
+	expect(parseDescriptor({ ...descriptor, resources }, "test-service").resources).toMatchObject(resources);
+	for (const primary of [undefined, false, true]) {
+		expect(() =>
+			parseDescriptor(
+				{ ...descriptor, resources: { app: { ...app, primary }, admin: { ...app, primary } } },
+				"test-service",
+			),
+		).toThrow("Invalid service descriptor");
+	}
+});
+
 test("accepts every resource type and its documented fields", () => {
 	const workload = {
 		image: "app:1",

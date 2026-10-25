@@ -27,7 +27,7 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 		await this.docker.prepareServiceNetwork(serviceId);
 		const network = await this.docker.inspectServiceNetwork(serviceId);
 		if (!network) throw new Error("Service network is unavailable");
-		await this.networking.withdraw(serviceId);
+		await this.networking.withdraw(`${resourceId}.${serviceId}`);
 		const retirements = await Promise.allSettled(
 			current.map(async (container) => {
 				await this.docker.stopServiceContainer(
@@ -71,7 +71,7 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 			throw error;
 		}
 		// Publication may succeed before confirmation fails. Keep the ready container.
-		await this.networking.routeTo(serviceId, endpoint);
+		await this.networking.routeTo(`${resourceId}.${serviceId}`, endpoint);
 	}
 
 	private async waitReady(request: DeploymentRequest, containerId: string, networkName: string): Promise<Endpoint> {
@@ -85,6 +85,7 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 					port: resource.ingress.port,
 					healthcheckPath: resource.healthcheckUrl ?? DEFAULT_HEALTHCHECK_URL,
 					public: resource.ingress.public ?? false,
+					primary: resource.primary ?? true,
 				};
 				if (await this.probe(endpoint.address, endpoint.port, endpoint.healthcheckPath)) return endpoint;
 			}

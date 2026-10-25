@@ -145,23 +145,25 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		);
 		sessions = auth;
 		app.use(createAuthRouter(auth, config).routes());
-		renewal = new TlsCertRenewalTask(
-			new TlsCertProvisionService(
-				config,
-				new AcmeClient(
-					new DigitalOceanDnsAcmeChallengeProvider(config, fetch),
-					new AcmeAccountStore(
-						new FileSystemKeyValueStore<string>(STATE_DIRECTORY, readFile, secureWrite, remove, {
-							extension: "pem",
-							serialize: (value) => value,
-							deserialize: (value) => value,
-						}),
-					),
-					acme,
+		const provisioner = new TlsCertProvisionService(
+			config,
+			new AcmeClient(
+				new DigitalOceanDnsAcmeChallengeProvider(config, fetch),
+				new AcmeAccountStore(
+					new FileSystemKeyValueStore<string>(STATE_DIRECTORY, readFile, secureWrite, remove, {
+						extension: "pem",
+						serialize: (value) => value,
+						deserialize: (value) => value,
+					}),
 				),
+				acme,
 			),
+		);
+		renewal = new TlsCertRenewalTask(
+			provisioner,
 			certificates,
 			() => new Date(),
+			() => provisioner.requiredDomains(),
 		);
 	}
 	const ui = createPaasUiRouter(
@@ -230,7 +232,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		runners.push(
 			new PeriodicTaskRunner({
 				lifecycle,
-				periodMs: 12 * 60 * 60 * 1000,
+				periodMs: 60_000,
 				taskName: "certificate-renewal",
 				generateTaskId: nanoid,
 				task: renewal,

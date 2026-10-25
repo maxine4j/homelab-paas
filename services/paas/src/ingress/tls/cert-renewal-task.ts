@@ -8,13 +8,15 @@ export class TlsCertRenewalTask implements PeriodicTask {
 		private readonly provisioner: ITlsCertProvisionService,
 		private readonly store: ICertificateStore,
 		private readonly now: () => Date,
+		private readonly requiredDomains: () => string[] = () => [],
 	) {}
 	async run(): Promise<void> {
 		try {
 			const current = await this.store.read();
-			if (current && current.expiresAt - this.now().getTime() >= 30 * 86400_000) return;
+			const covered = this.requiredDomains().every((domain) => current?.domains?.includes(domain));
+			if (current && covered && current.expiresAt - this.now().getTime() >= 30 * 86400_000) return;
 			this.log.info(
-				{ event: "certificate.renewing", reason: current ? "expiring" : "missing" },
+				{ event: "certificate.renewing", reason: !current ? "missing" : !covered ? "coverage" : "expiring" },
 				"Certificate requires renewal; provisioning through ACME DNS-01",
 			);
 			await this.store.publish(await this.provisioner.provisionCert());

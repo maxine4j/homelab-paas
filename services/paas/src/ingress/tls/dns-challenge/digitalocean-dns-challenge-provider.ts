@@ -17,8 +17,13 @@ export class DigitalOceanDnsAcmeChallengeProvider implements IDnsAcmeChallengePr
 	async createChallenge(identifier: string, value: string): Promise<DnsChallengeRecord> {
 		try {
 			const { baseDomain } = this.config.getIngressConfig();
-			if (![baseDomain, `*.${baseDomain}`].includes(identifier)) throw new Error();
-			const labels = baseDomain.split(".");
+			const domain = identifier.replace(/^\*\./, "");
+			if (
+				domain !== baseDomain
+				&& !Object.keys(this.config.getServices()).some((id) => domain === `${id}.${baseDomain}`)
+			)
+				throw new Error();
+			const labels = domain.split(".");
 			let zone: string | undefined;
 			while (labels.length >= 2) {
 				const candidate = labels.join(".");
@@ -40,7 +45,7 @@ export class DigitalOceanDnsAcmeChallengeProvider implements IDnsAcmeChallengePr
 				break;
 			}
 			if (!zone) throw new Error(`No DigitalOcean DNS zone found for ${baseDomain}`);
-			const prefix = baseDomain === zone ? "" : `.${baseDomain.slice(0, -(zone.length + 1))}`;
+			const prefix = domain === zone ? "" : `.${domain.slice(0, -(zone.length + 1))}`;
 			const response = await this.send(`/domains/${zone}/records`, "POST", {
 				type: "TXT",
 				name: `_acme-challenge${prefix}`,

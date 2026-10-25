@@ -6,7 +6,7 @@ import type { FileReader, FileWriter } from "../../util/file.ts";
 import { stringifyYaml } from "../../util/yaml.ts";
 import type { Certificate } from "./types.ts";
 export interface ICertificateStore {
-	read(): Promise<{ expiresAt: number } | undefined>;
+	read(): Promise<{ expiresAt: number; domains?: string[] } | undefined>;
 	/** Validates the certificate/key pair before atomic SDS publication. Failures retain the active SDS secret. */
 	publish(certificate: Certificate): Promise<void>;
 }
@@ -16,11 +16,18 @@ export class FileCertificateStore implements ICertificateStore {
 		private readonly readFile: FileReader,
 		private readonly writeFile: FileWriter,
 	) {}
-	async read(): Promise<{ expiresAt: number } | undefined> {
+	async read(): Promise<{ expiresAt: number; domains: string[] } | undefined> {
 		try {
 			const pem = await this.readOptional("ingress.pem");
 			if (!pem) return undefined;
-			return { expiresAt: new Date(new X509Certificate(pem).validTo).getTime() };
+			const certificate = new X509Certificate(pem);
+			return {
+				expiresAt: new Date(certificate.validTo).getTime(),
+				domains: (certificate.subjectAltName ?? "")
+					.split(", ")
+					.filter((name) => name.startsWith("DNS:"))
+					.map((name) => name.slice(4)),
+			};
 		} catch (cause) {
 			throw new Error("Cannot read TLS certificate", { cause });
 		}

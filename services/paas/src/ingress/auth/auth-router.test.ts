@@ -27,6 +27,43 @@ const requestWithHost = (url: string, headers: Record<string, string>): Promise<
 		req.end();
 	});
 
+test("accepts nested resource OAuth targets and checks their own routing identity", async () => {
+	const authorize = vi.fn(async () => "allowed" as const);
+	const auth: IAuthService = {
+		authorize,
+		completeLogin: vi.fn(),
+		verifyAuthCookie: vi.fn(),
+		beginLogin: () => ({ url: "https://github.com/login", state: "state", nonce: "nonce" }),
+	};
+	const api = await startTestApi(
+		new Koa().use(
+			createAuthRouter(
+				auth,
+				testConfig({ services: { demo: { remote: "local", descriptorPath: "/repo/demo.yaml" } } }),
+			).routes(),
+		),
+	);
+	try {
+		expect(
+			(
+				await requestWithHost(
+					`${api.origin}/oauth/github/login?redirect_uri=${encodeURIComponent("https://app.demo.example.test/path")}`,
+					{ host: "auth.example.test" },
+				)
+			).status,
+		).toBe(302);
+		expect((await requestWithHost(`${api.origin}/auth/check/path`, { host: "app.demo.example.test" })).status).toBe(
+			200,
+		);
+		expect(authorize).toHaveBeenCalledWith("app.demo", undefined);
+		expect(
+			(await requestWithHost(`${api.origin}/auth/check/path`, { host: "app.absent.example.test" })).status,
+		).toBe(403);
+	} finally {
+		await api.close();
+	}
+});
+
 test("OAuth targets follow added and removed services without rebuilding the router", async () => {
 	const config = testConfig();
 	const auth: IAuthService = {

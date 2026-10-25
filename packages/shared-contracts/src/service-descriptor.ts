@@ -53,6 +53,7 @@ const workload = {
 const web = z.strictObject({
 	...workload,
 	type: z.literal("web"),
+	primary: z.boolean().optional(),
 	ingress: z.strictObject({ public: z.boolean().default(false), port: positive.max(65535) }),
 	healthcheckUrl: z
 		.string()
@@ -75,9 +76,10 @@ export const serviceDescriptorSchema = z.strictObject({
 		description: z.string().optional(),
 		labels: z.record(z.string(), z.string()).optional(),
 	}),
-	resources: z
-		.record(id, resource)
-		.refine((resources) => Object.values(resources).filter((resource) => resource.type === "web").length <= 1),
+	resources: z.record(id, resource).refine((resources) => {
+		const webs = Object.values(resources).filter((resource) => resource.type === "web");
+		return webs.length <= 1 || webs.filter((resource) => resource.primary === true).length === 1;
+	}),
 });
 
 export type ServiceDescriptor = z.input<typeof serviceDescriptorSchema>;

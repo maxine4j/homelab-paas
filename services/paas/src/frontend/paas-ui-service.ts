@@ -86,6 +86,7 @@ export class PaasUiService implements IPaasUiService {
 				this.descriptor(serviceId),
 			]);
 			const resources = file?.descriptor.resources ?? {};
+			const webCount = Object.values(resources).filter((resource) => resource.type === "web").length;
 			const secrets = this.secrets(file?.descriptor);
 			const ids = [
 				...new Set([...Object.keys(resources), ...containers.map((container) => container.resourceId)]),
@@ -102,6 +103,15 @@ export class PaasUiService implements IPaasUiService {
 				descriptorStatus: file ? "available" : "unavailable",
 				resources: ids.map((resourceId) => ({
 					resourceId,
+					url:
+						resources[resourceId]?.type === "web"
+							? this.ingressUrl(`${resourceId}.${serviceId}`)
+							: undefined,
+					primaryUrl:
+						resources[resourceId]?.type === "web"
+						&& (webCount === 1 || resources[resourceId].primary === true)
+							? this.ingressUrl(serviceId)
+							: undefined,
 					type: resources[resourceId]?.type ?? "unknown",
 					config: resources[resourceId] ? this.sanitize(resources[resourceId], secrets) : undefined,
 					containers: containers
@@ -167,6 +177,13 @@ export class PaasUiService implements IPaasUiService {
 
 	private assertService(serviceId: string): void {
 		if (!Object.hasOwn(this.config.getServices(), serviceId)) throw new PaasUiError("not-found");
+	}
+
+	private ingressUrl(identity: string): string {
+		const { baseDomain, httpPort, httpsPort } = this.config.getIngressConfig();
+		const secure = httpsPort !== undefined;
+		const port = httpsPort ?? httpPort;
+		return `${secure ? "https" : "http"}://${identity}.${baseDomain}${port === (secure ? 443 : 80) ? "" : `:${port}`}`;
 	}
 
 	private descriptor(serviceId: string): Promise<{ revision: string; descriptor: ServiceDescriptor } | undefined> {

@@ -32,6 +32,35 @@ test("switches containers and withdraws a service while preserving other service
 	expect(await f.endpoints.getAll()).toEqual({ other: old });
 });
 
+test("resource routes coexist, migrate legacy primary routes and withdraw independently", async () => {
+	const f = fixture();
+	await f.service.routeTo("demo", old);
+	await f.service.routeTo("admin.demo", { ...replacement, primary: false });
+	expect(await f.endpoints.getAll()).toHaveProperty("demo");
+	await f.service.routeTo("app.demo", { ...old, primary: true });
+	expect(await f.endpoints.getAll()).toEqual({
+		"app.demo": { ...old, primary: true },
+		"admin.demo": { ...replacement, primary: false },
+	});
+	await f.service.routeTo("admin.demo", { ...replacement, primary: true });
+	expect((await f.endpoints.getAll())["app.demo"]?.primary).toBe(false);
+	await f.service.withdraw("admin.demo");
+	expect(await f.endpoints.getAll()).toEqual({ "app.demo": { ...old, primary: false } });
+});
+
+test("recreate withdrawal removes an unowned legacy alias even when its old web becomes secondary", async () => {
+	const f = fixture();
+	await f.service.routeTo("demo", old);
+	await f.service.routeTo("admin.demo", { ...replacement, primary: false });
+	await f.service.withdraw("admin.demo");
+	expect(await f.endpoints.getAll()).toEqual({});
+	expect(f.snapshots.at(-1)).toEqual({});
+	await f.service.routeTo("app.demo", { ...old, primary: true });
+	await f.service.routeTo("admin.demo", { ...replacement, primary: false });
+	await f.service.withdraw("admin.demo");
+	expect(await f.endpoints.getAll()).toEqual({ "app.demo": { ...old, primary: true } });
+});
+
 test("does not resolve or publish a concurrent snapshot before acceptance", async () => {
 	const f = fixture();
 	let release: () => void = () => {};

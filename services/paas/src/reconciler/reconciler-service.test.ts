@@ -98,6 +98,29 @@ test("accepts surge and passes it to the web reconciler", async () => {
 	expect(f.states.get("demo")).toEqual({ desiredRevision: "surge", activeRevision: "surge", phase: "ready" });
 });
 
+test("normalizes single-web implicit primary and passes independent multiple web resources", async () => {
+	const f = fixture();
+	await f.service.reconcile();
+	expect(f.reconcile).toHaveBeenLastCalledWith(
+		expect.objectContaining({ resource: expect.objectContaining({ primary: true }) }),
+	);
+	f.fetchFile.mockResolvedValue({
+		revision: "multi",
+		content: JSON.stringify({
+			...descriptor,
+			resources: {
+				app: { ...descriptor.resources.app, primary: false },
+				admin: { ...descriptor.resources.app, primary: true },
+			},
+		}),
+	});
+	await f.service.reconcile();
+	expect(f.reconcile).toHaveBeenLastCalledWith(
+		expect.objectContaining({ resourceId: "admin", resource: expect.objectContaining({ primary: true }) }),
+	);
+	expect(f.reconcile.mock.calls).toHaveLength(3);
+});
+
 test("resolves secrets again on unchanged Git polls and passes mounts and limits", async () => {
 	const f = fixture();
 	const volumes = [{ hostPath: "/mnt/media", mountPath: "/data", readOnly: true }];

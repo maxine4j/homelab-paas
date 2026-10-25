@@ -3,6 +3,20 @@ import { expect, test, vi } from "vitest";
 import { captureLogs } from "../../util/test/logs.ts";
 import { TlsCertRenewalTask } from "./cert-renewal-task.ts";
 
+test("renews a healthy certificate when a configured service lacks nested-host coverage", async () => {
+	const provisionCert = vi.fn(async () => ({ cert: "new", key: "new" }));
+	const publish = vi.fn(async () => {});
+	const task = new TlsCertRenewalTask(
+		{ provisionCert },
+		{ read: async () => ({ expiresAt: 90 * 86400_000, domains: ["example.test", "*.example.test"] }), publish },
+		() => new Date(0),
+		() => ["example.test", "*.example.test", "*.demo.example.test"],
+	);
+	await task.run();
+	expect(provisionCert).toHaveBeenCalledTimes(1);
+	expect(publish).toHaveBeenCalledWith({ cert: "new", key: "new" });
+});
+
 test("logs certificate changes without material and keeps an unneeded renewal silent", async () => {
 	const capture = captureLogs();
 	let expiresAt: number | undefined;
