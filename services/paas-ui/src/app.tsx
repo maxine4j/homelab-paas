@@ -47,7 +47,7 @@ export const App = () => {
 				<p className='sidebar-note'>
 					Single host. One place.
 					<br />
-					Read-only management
+					Cluster management
 				</p>
 			</aside>
 			<div className='workspace'>
@@ -95,7 +95,7 @@ export const App = () => {
 					)}
 				</main>
 				<footer>
-					Homelab PaaS <span>Read only · Auto-refresh 5s</span>
+					Homelab PaaS <span>Auto-refresh 5s</span>
 				</footer>
 			</div>
 		</div>

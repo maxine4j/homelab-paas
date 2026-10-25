@@ -135,7 +135,7 @@ Copy `local/.env.example` to `local/.env` and supply `GITHUB_CLIENT_ID`, `GITHUB
 
 Local ingress uses `local.maxine4j.com` with HTTPS on port 443. Register `https://auth.local.maxine4j.com/auth/callback` in the GitHub OAuth application. Point the base domain and wildcard hostnames at `127.0.0.1` using DNS or local resolver configuration. The DigitalOcean token must manage the domain's DNS zone for certificate issuance.
 
-- `etc/` maps to `/etc/homelab-paas` and holds `config.yaml` and the Envoy bootstrap `envoy.yaml`.
+- `etc/` maps to `/etc/homelab-paas` and holds `config.yaml` and the Envoy bootstrap `envoy.yaml`. The control plane mounts this directory writable for [management edits](configuration.md#management-edits); Envoy retains read-only access. Recreate existing bootstrap containers to apply the changed mount permissions.
 - `var/` maps to `/var/homelab-paas` and is ignored by Git. `docker compose down` retains it.
 - The Docker socket is mounted for Engine integration.
 - The repository is mounted read-only at `/mnt/repo`. The magic `remote: local` reads `/mnt/repo/services/test-service/test-service.sd.yaml` through Git at the checkout's `HEAD`. Commit descriptor edits before reconciliation can see them.

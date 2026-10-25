@@ -1,6 +1,32 @@
 import { expect, test, vi } from "vitest";
 
-import { fetchUi, pollUi } from "./api.ts";
+import { fetchUi, pollUi, saveConfig } from "./api.ts";
+
+test("configuration saves send only edits and distinguish conflicts from validation failures", async () => {
+	const update = { revision: "r1", changes: [{ path: "git.pollIntervalSeconds", value: 9 }] };
+	const snapshot = { config: {}, revision: "r2", fields: [] };
+	const request = vi.fn(async () => Response.json(snapshot));
+	expect(await saveConfig(update, new AbortController().signal, request)).toEqual(snapshot);
+	expect(request).toHaveBeenCalledWith(
+		"/api/ui/cluster/config",
+		expect.objectContaining({
+			method: "PUT",
+			credentials: "same-origin",
+			headers: { "content-type": "application/json", "x-paas-config": "1" },
+			body: JSON.stringify(update),
+		}),
+	);
+	for (const [status, message] of [
+		[409, "Configuration changed"],
+		[400, "Invalid configuration"],
+		[401, "A platform session is required"],
+		[503, "Cannot save configuration"],
+	] as const) {
+		await expect(
+			saveConfig(update, new AbortController().signal, async () => new Response("private-secret", { status })),
+		).rejects.toThrow(message);
+	}
+});
 
 test("fetches private snapshots with cancellation and preserves auth errors", async () => {
 	const request = vi.fn(async () => new Response(JSON.stringify({ clusterId: "local" })));

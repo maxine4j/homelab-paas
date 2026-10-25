@@ -79,9 +79,9 @@ test("OAuth targets follow added and removed services without rebuilding the rou
 				host: "auth.example.test",
 			});
 		expect((await login()).status).toBe(400);
-		config.getConfig().services["demo"] = { remote: "local", descriptorPath: "/repo/demo.yaml" };
+		config.getServices()["demo"] = { remote: "local", descriptorPath: "/repo/demo.yaml" };
 		expect((await login()).status).toBe(302);
-		delete config.getConfig().services["demo"];
+		delete config.getServices()["demo"];
 		expect((await login()).status).toBe(400);
 	} finally {
 		await api.close();

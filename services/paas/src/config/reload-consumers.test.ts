@@ -9,12 +9,12 @@ import { DigitalOceanDnsAcmeChallengeProvider } from "../ingress/tls/dns-challen
 import { ReconcilerService } from "../reconciler/reconciler-service.ts";
 import type { ReconciliationState } from "../reconciler/types.ts";
 import { PeriodicTaskRunner } from "../task/periodic.ts";
-import { testConfig } from "../util/test/config.ts";
-import { PaasConfig, decodeDescriptorYaml } from "./paas-config.ts";
+import { TestPaasConfig as PaasConfig, testConfigValue } from "../util/test/config.ts";
+import { decodeDescriptorYaml } from "./paas-config.ts";
 import type { PlatformConfig } from "./types.ts";
 
 const fixture = async () => {
-	let value = testConfig().getConfig();
+	let value = testConfigValue();
 	const config = new PaasConfig(async () => JSON.stringify(value));
 	await config.load();
 	return {
@@ -151,7 +151,7 @@ test("existing reconciler and UI discover reloaded service sources and retry bou
 
 test("periodic reload reads disk again after each one-minute wait and stops with its lifecycle", async () => {
 	let open = true;
-	let value = testConfig().getConfig();
+	let value = testConfigValue();
 	const read = vi.fn(async () => JSON.stringify(value));
 	const config = new PaasConfig(read);
 	await config.load();

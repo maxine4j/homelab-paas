@@ -1,8 +1,27 @@
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
-export interface UiCluster {
-	clusterId: string;
+export interface UiConfigField {
+	path: string;
+	kind: "text" | "number" | "list" | "json" | "secret";
+	value?: JsonValue;
+	configured?: boolean;
+	readOnly: boolean;
+	managedByEnvironment: boolean;
+}
+
+export interface UiEditableConfig {
 	config: JsonValue;
+	revision: string;
+	fields: UiConfigField[];
+}
+
+export interface UiConfigUpdate {
+	revision: string;
+	changes: { path: string; value: JsonValue }[];
+}
+
+export interface UiCluster extends UiEditableConfig {
+	clusterId: string;
 }
 
 export interface UiServiceSummary {

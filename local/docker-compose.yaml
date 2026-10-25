@@ -15,7 +15,7 @@ services:
             homelab-paas.cluster: local
             homelab-paas.role: control-plane
         volumes:
-            - ./etc:/etc/homelab-paas:ro
+            - ./etc:/etc/homelab-paas
             - ./var:/var/homelab-paas
             - /var/run/docker.sock:/var/run/docker.sock
             - ..:/mnt/repo:ro

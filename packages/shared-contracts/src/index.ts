@@ -12,4 +12,15 @@ export type {
 	ResourceLimits,
 	ResourceHostPort,
 } from "./service-descriptor.ts";
-export type { JsonValue, UiCluster, UiServiceSummary, UiContainer, UiResource, UiService, UiLogs } from "./types.ts";
+export type {
+	JsonValue,
+	UiCluster,
+	UiServiceSummary,
+	UiContainer,
+	UiResource,
+	UiService,
+	UiLogs,
+	UiEditableConfig,
+	UiConfigField,
+	UiConfigUpdate,
+} from "./types.ts";

@@ -1,6 +1,6 @@
 import type { UiCluster } from "@homelab-paas/shared-contracts";
 
-import { ConfigView } from "../components/config-view.tsx";
+import { ConfigEditor } from "../components/config-editor.tsx";
 
 export const ClusterPage = ({ cluster }: { cluster: UiCluster }) => (
 	<>
@@ -8,10 +8,9 @@ export const ClusterPage = ({ cluster }: { cluster: UiCluster }) => (
 			<div>
 				<p className='eyebrow'>{cluster.clusterId}</p>
 				<h1>Cluster configuration</h1>
-				<p>Effective startup configuration. Credentials are redacted.</p>
+				<p>Save live settings to the host configuration. Credentials remain private.</p>
 			</div>
-			<span className='pill'>Read only</span>
 		</div>
-		<ConfigView value={cluster.config} label='Cluster configuration' />
+		<ConfigEditor snapshot={cluster} />
 	</>
 );

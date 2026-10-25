@@ -141,6 +141,24 @@ test("cluster config is allowlisted and configured services remain visible witho
 	expect(f.fetchFile).not.toHaveBeenCalled();
 });
 
+test("cluster inspection and edits delegate configuration policy to the config service", async () => {
+	const configuration = testConfig();
+	const snapshot = { config: { safe: true }, revision: "r1", fields: [] };
+	configuration.getEditableConfig = vi.fn(() => snapshot);
+	configuration.updateConfig = vi.fn(async () => snapshot);
+	const service = new PaasUiService(
+		configuration,
+		{ fetchFile: vi.fn() },
+		decodeDescriptorYaml,
+		{ listServiceContainers: vi.fn(), inspectServiceContainer: vi.fn(), readServiceContainerLogs: vi.fn() },
+		{ read: vi.fn(), write: vi.fn() },
+	);
+	expect(await service.getCluster()).toEqual({ clusterId: "local", ...snapshot });
+	const update = { revision: "r1", changes: [{ path: "git.pollIntervalSeconds", value: 9 }] };
+	expect(await service.updateConfig(update)).toEqual(snapshot);
+	expect(configuration.updateConfig).toHaveBeenCalledWith(update);
+});
+
 test("joins every desired resource with live containers, retaining resources absent from the descriptor", async () => {
 	const { service } = fixture();
 	const detail = await service.getService("demo");

@@ -1,11 +1,12 @@
 import type {
-	JsonValue,
 	ServiceDescriptor,
 	UiCluster,
 	UiLogs,
 	UiResource,
 	UiService,
 	UiServiceSummary,
+	UiEditableConfig,
+	UiConfigUpdate,
 } from "@homelab-paas/shared-contracts";
 
 import type { IPaasConfig } from "../config/paas-config.ts";
@@ -17,6 +18,8 @@ import type { UiDocker } from "./types.ts";
 export interface IPaasUiService {
 	/** Read-only snapshots. Throws PaasUiError; configuration and known secrets are redacted. */
 	getCluster(): Promise<UiCluster>;
+	/** Delegates validation, persistence and safe response generation to the configuration service. */
+	updateConfig(update: UiConfigUpdate): Promise<UiEditableConfig>;
 	listServices(): Promise<UiServiceSummary[]>;
 	getService(serviceId: string): Promise<UiService>;
 	getResource(serviceId: string, resourceId: string): Promise<UiResource>;
@@ -51,8 +54,12 @@ export class PaasUiService implements IPaasUiService {
 	async getCluster(): Promise<UiCluster> {
 		return {
 			clusterId: this.config.getClusterId(),
-			config: this.sanitize(this.config.getConfig(), this.secrets()),
+			...this.config.getEditableConfig(),
 		};
+	}
+
+	async updateConfig(update: UiConfigUpdate): Promise<UiEditableConfig> {
+		return this.config.updateConfig(update);
 	}
 
 	async listServices(): Promise<UiServiceSummary[]> {
@@ -98,7 +105,7 @@ export class PaasUiService implements IPaasUiService {
 				activeRevision: state?.activeRevision,
 				failures: state?.failures,
 				retryAt: state?.retryAt,
-				source: this.sanitize(this.config.getServices()[serviceId], secrets),
+				source: this.config.sanitize(this.config.getServices()[serviceId], secrets),
 				descriptorRevision: file?.revision,
 				descriptorStatus: file ? "available" : "unavailable",
 				resources: ids.map((resourceId) => ({
@@ -113,7 +120,7 @@ export class PaasUiService implements IPaasUiService {
 							? this.ingressUrl(serviceId)
 							: undefined,
 					type: resources[resourceId]?.type ?? "unknown",
-					config: resources[resourceId] ? this.sanitize(resources[resourceId], secrets) : undefined,
+					config: resources[resourceId] ? this.config.sanitize(resources[resourceId], secrets) : undefined,
 					containers: containers
 						.filter((container) => container.resourceId === resourceId)
 						.map((container) => ({
@@ -164,7 +171,7 @@ export class PaasUiService implements IPaasUiService {
 				throw new PaasUiError("not-found");
 			const file = await this.descriptor(serviceId);
 			if (!file) throw new PaasUiError("unavailable");
-			const content = this.redact(
+			const content = this.config.redact(
 				await this.docker.readServiceContainerLogs(serviceId, containerId),
 				this.secrets(file.descriptor),
 			);
@@ -201,36 +208,11 @@ export class PaasUiService implements IPaasUiService {
 	}
 
 	private secrets(descriptor?: ServiceDescriptor): string[] {
-		const auth = this.config.getAuthConfig();
-		const secrets = [
-			auth?.github.clientSecret,
-			auth?.session.signingKey,
-			this.config.getTlsConfig()?.dns.credentials.apiToken,
-		];
+		const secrets: string[] = [];
 		for (const resource of Object.values(descriptor?.resources ?? {})) {
 			if ("env" in resource)
 				for (const entry of resource.env ?? []) if ("value" in entry) secrets.push(entry.value);
 		}
 		return secrets.filter((value): value is string => Boolean(value)).sort((a, b) => b.length - a.length);
-	}
-
-	private redact(value: string, secrets: string[]): string {
-		let text = value;
-		for (const secret of secrets) text = text.replaceAll(secret, "[redacted]");
-		return text.replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/g, "$1[redacted]@");
-	}
-
-	private sanitize(value: unknown, secrets: string[], key = ""): JsonValue {
-		if (/secret|password|token|signingkey|command|credentials/i.test(key)) return "[redacted]";
-		if (typeof value === "string") return this.redact(value, secrets);
-		if (typeof value === "number" || typeof value === "boolean" || value === null) return value;
-		if (Array.isArray(value)) return value.map((entry) => this.sanitize(entry, secrets));
-		if (typeof value === "object")
-			return Object.fromEntries(
-				Object.entries(value)
-					.filter(([, entry]) => entry !== undefined)
-					.map(([name, entry]) => [name, this.sanitize(entry, secrets, name)]),
-			);
-		return null;
 	}
 }

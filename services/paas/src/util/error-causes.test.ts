@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { PaasConfig, decodeDescriptorYaml, parseConfig } from "../config/paas-config.ts";
+import { decodeDescriptorYaml, parseConfig } from "../config/paas-config.ts";
 import { DockerClient } from "../docker/docker-client.ts";
 import { EnvoyClient } from "../envoy/envoy-client.ts";
 import { GitClient } from "../git/git-client.ts";
@@ -10,6 +10,7 @@ import { EndpointsStore } from "../reconciler/networking/endpoints-store.ts";
 import { ReconciliationStore } from "../reconciler/reconciliation-store.ts";
 import { testConfig } from "../util/test/config.ts";
 import { DomainError } from "./error.ts";
+import { TestPaasConfig as PaasConfig } from "./test/config.ts";
 import { parseYaml } from "./yaml.ts";
 
 const cause = Object.assign(new Error("original infrastructure failure"), { code: "EACCES" });

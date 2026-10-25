@@ -1,3 +1,31 @@
+import type { UiConfigUpdate, UiEditableConfig } from "@homelab-paas/shared-contracts";
+
+export async function saveConfig(
+	update: UiConfigUpdate,
+	signal: AbortSignal,
+	request: typeof fetch = fetch,
+): Promise<UiEditableConfig> {
+	const response = await request("/api/ui/cluster/config", {
+		method: "PUT",
+		cache: "no-store",
+		credentials: "same-origin",
+		headers: { "content-type": "application/json", "x-paas-config": "1" },
+		body: JSON.stringify(update),
+		signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
+	});
+	if (!response.ok)
+		throw new Error(
+			response.status === 401
+				? "A platform session is required. Sign in again."
+				: response.status === 409
+					? "Configuration changed. Reload configuration and reapply your edits."
+					: response.status === 400
+						? "Invalid configuration. Check values and read-only fields."
+						: "Cannot save configuration. Check host file access and retry.",
+		);
+	return response.json();
+}
+
 export async function fetchUi<T>(path: string, signal: AbortSignal, request: typeof fetch = fetch): Promise<T> {
 	const response = await request(`/api/ui${path}`, {
 		cache: "no-store",

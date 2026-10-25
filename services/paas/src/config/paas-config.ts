@@ -1,14 +1,27 @@
-import type { ServiceDescriptor } from "@homelab-paas/shared-contracts";
+import type {
+	JsonValue,
+	ServiceDescriptor,
+	UiConfigField,
+	UiConfigUpdate,
+	UiEditableConfig,
+} from "@homelab-paas/shared-contracts";
 import { parseDescriptor } from "@homelab-paas/shared-contracts";
 import { z } from "zod";
 
 import type { GitFileSource } from "../git/types.ts";
-import type { FileReader } from "../util/file.ts";
 import { createLogger } from "../util/logger.ts";
 import { parseYaml } from "../util/yaml.ts";
-import type { PlatformConfig } from "./types.ts";
+import type { IConfigStore } from "./config-store.ts";
+import type { ConfigDocument, PlatformConfig } from "./types.ts";
 
-const PAAS_CONFIG_PATH = "/etc/homelab-paas/config.yaml";
+const environmentFields: Record<string, string> = {
+	"auth.github.clientId": "GITHUB_CLIENT_ID",
+	"auth.github.clientSecret": "GITHUB_CLIENT_SECRET",
+	"auth.session.signingKey": "SESSION_SIGNING_KEY",
+	"tls.dns.credentials.apiToken": "DIGITALOCEAN_API_TOKEN",
+	"tls.acme.email": "ACME_EMAIL",
+};
+const secretFields = new Set(["auth.github.clientSecret", "auth.session.signingKey", "tls.dns.credentials.apiToken"]);
 
 export interface IPaasConfig {
 	getClusterId(): string;
@@ -19,29 +32,50 @@ export interface IPaasConfig {
 	getGitEnvironment(): Readonly<Record<string, string | undefined>>;
 	getReconciliationConfig(): PlatformConfig["reconciliation"];
 	getServices(): PlatformConfig["services"];
-	/** Independent snapshot for management inspection. */
-	getConfig(): PlatformConfig;
+	/** Independent public snapshot. Secret values are never included. */
+	getEditableConfig(): UiEditableConfig;
+	/** Validates, persists, then publishes. Throws ConfigEditError; omitted fields retain their disk values. */
+	updateConfig(update: UiConfigUpdate): Promise<UiEditableConfig>;
+	/** Redacts known platform secrets and additional caller-supplied secrets. */
+	redact(value: string, additionalSecrets?: string[]): string;
+	sanitize(value: unknown, additionalSecrets?: string[]): JsonValue;
+}
+
+export class ConfigEditError extends Error {
+	constructor(
+		public readonly kind: "invalid" | "conflict" | "unavailable",
+		options?: ErrorOptions,
+	) {
+		super(
+			kind === "invalid"
+				? "Invalid configuration edit; check values and read-only fields"
+				: kind === "conflict"
+					? "Configuration changed; reload before saving"
+					: "Cannot save configuration; check host file access and retry",
+			options,
+		);
+	}
 }
 
 export class PaasConfig implements IPaasConfig {
 	private readonly log = createLogger(PaasConfig.name);
 	private current: PlatformConfig | undefined;
+	private document: ConfigDocument | undefined;
+	private pending: Promise<unknown> = Promise.resolve();
 
 	constructor(
-		private readonly readFile: FileReader,
+		private readonly store: IConfigStore,
 		private readonly environment: Readonly<Record<string, string | undefined>> = {},
 	) {}
 	async load(): Promise<PlatformConfig> {
-		const next = await this.readConfig();
-		if (
-			this.current
-			&& (next.metadata.clusterId !== this.current.metadata.clusterId
-				|| JSON.stringify(next.ingress) !== JSON.stringify(this.current.ingress)
-				|| Boolean(next.auth) !== Boolean(this.current.auth))
-		)
-			throw new Error("Platform identity, ingress and auth/TLS mode changes require a control-plane restart");
-		this.current = next;
-		return this.getConfig();
+		return this.serial(async () => {
+			const document = await this.store.read();
+			const next = this.parseDocument(document.value);
+			this.assertCompatible(next);
+			this.current = next;
+			this.document = document;
+			return structuredClone(next);
+		});
 	}
 
 	/** Failed reloads retain the last validated configuration and report the cause. */
@@ -80,8 +114,123 @@ export class PaasConfig implements IPaasConfig {
 	getServices(): PlatformConfig["services"] {
 		return structuredClone(this.requireConfig().services);
 	}
-	getConfig(): PlatformConfig {
-		return structuredClone(this.requireConfig());
+	getEditableConfig(): UiEditableConfig {
+		const current = this.requireConfig();
+		const fields: UiConfigField[] = [];
+		const visit = (value: unknown, path: string): void => {
+			if (value === undefined) return;
+			if (path !== "services" && typeof value === "object" && value !== null && !Array.isArray(value)) {
+				for (const [key, child] of Object.entries(value)) visit(child, path ? `${path}.${key}` : key);
+				return;
+			}
+			const secret = secretFields.has(path);
+			const managedByEnvironment = this.environment[environmentFields[path] ?? ""] !== undefined;
+			const safe = this.sanitize(value);
+			fields.push({
+				path,
+				kind: secret
+					? "secret"
+					: path === "services"
+						? "json"
+						: Array.isArray(value)
+							? "list"
+							: typeof value === "number"
+								? "number"
+								: "text",
+				...(secret ? { configured: Boolean(value) } : { value: safe }),
+				managedByEnvironment,
+				readOnly:
+					managedByEnvironment
+					|| path === "version"
+					|| path.startsWith("metadata.")
+					|| path.startsWith("ingress.")
+					|| (!secret && JSON.stringify(safe) !== JSON.stringify(value)),
+			});
+		};
+		visit(current, "");
+		return { config: this.sanitize(current), revision: this.document!.revision, fields };
+	}
+
+	async updateConfig(update: UiConfigUpdate): Promise<UiEditableConfig> {
+		return this.serial(async () => {
+			try {
+				if (!update.changes.length || update.changes.length > 128) throw new ConfigEditError("invalid");
+				const snapshot = this.getEditableConfig();
+				const document = await this.store.read();
+				if (update.revision !== snapshot.revision || document.revision !== snapshot.revision)
+					throw new ConfigEditError("conflict");
+				const candidate = structuredClone(document.value) as Record<string, unknown>;
+				const seen = new Set<string>();
+				for (const change of update.changes) {
+					const field = snapshot.fields.find((entry) => entry.path === change.path);
+					if (
+						!field
+						|| field.readOnly
+						|| seen.has(change.path)
+						|| (field.kind === "secret"
+							&& (typeof change.value !== "string" || !change.value || change.value === "[redacted]"))
+					)
+						throw new ConfigEditError("invalid");
+					seen.add(change.path);
+					const parts = change.path.split(".");
+					let parent = candidate;
+					for (const key of parts.slice(0, -1)) parent = parent[key] as Record<string, unknown>;
+					parent[parts.at(-1)!] = structuredClone(change.value);
+				}
+				let next: PlatformConfig;
+				try {
+					next = this.parseDocument(candidate);
+					this.assertCompatible(next);
+				} catch (cause) {
+					throw new ConfigEditError("invalid", { cause });
+				}
+				const saved = await this.store.write(candidate);
+				this.document = saved;
+				this.current = next;
+				return this.getEditableConfig();
+			} catch (cause) {
+				if (cause instanceof ConfigEditError) throw cause;
+				throw new ConfigEditError("unavailable", { cause });
+			}
+		});
+	}
+
+	redact(value: string, additionalSecrets: string[] = []): string {
+		const current = this.requireConfig();
+		const secrets = [
+			current.auth?.github.clientSecret,
+			current.auth?.session.signingKey,
+			current.tls?.dns.credentials.apiToken,
+			...additionalSecrets,
+		]
+			.filter((entry): entry is string => Boolean(entry))
+			.sort((a, b) => b.length - a.length);
+		let text = value;
+		for (const secret of secrets) text = text.replaceAll(secret, "[redacted]");
+		return text.replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/g, "$1[redacted]@");
+	}
+
+	sanitize(value: unknown, additionalSecrets: string[] = []): JsonValue {
+		const visit = (entry: unknown, key = ""): JsonValue => {
+			if (/secret|password|token|signingkey|command|credentials/i.test(key)) return "[redacted]";
+			if (typeof entry === "string") return this.redact(entry, additionalSecrets);
+			if (typeof entry === "number" || typeof entry === "boolean" || entry === null) return entry;
+			if (Array.isArray(entry)) return entry.map((value) => visit(value));
+			if (typeof entry === "object")
+				return Object.fromEntries(
+					Object.entries(entry)
+						.filter(([, value]) => value !== undefined)
+						.map(([key, value]) => [key, visit(value, key)]),
+				);
+			return null;
+		};
+		return visit(value);
+	}
+
+	private serial<T>(operation: () => Promise<T>): Promise<T> {
+		const result = this.pending.then(operation);
+		this.pending = result.catch(() => {});
+		return result;
 	}
 
 	private requireConfig(): PlatformConfig {
@@ -89,10 +238,18 @@ export class PaasConfig implements IPaasConfig {
 		return this.current;
 	}
 
-	private async readConfig(): Promise<PlatformConfig> {
+	private assertCompatible(next: PlatformConfig): void {
+		if (
+			this.current
+			&& (next.metadata.clusterId !== this.current.metadata.clusterId
+				|| JSON.stringify(next.ingress) !== JSON.stringify(this.current.ingress)
+				|| Boolean(next.auth) !== Boolean(this.current.auth))
+		)
+			throw new Error("Platform identity, ingress and auth/TLS mode changes require a control-plane restart");
+	}
+
+	private parseDocument(raw: unknown): PlatformConfig {
 		try {
-			const fileContent = await this.readFile(PAAS_CONFIG_PATH);
-			if (!fileContent) throw Error();
 			const value = z
 				.object({
 					auth: z
@@ -111,7 +268,7 @@ export class PaasConfig implements IPaasConfig {
 						.optional(),
 				})
 				.passthrough()
-				.parse(parseYaml(fileContent, PAAS_CONFIG_PATH));
+				.parse(structuredClone(raw));
 			if (value.auth) {
 				const github = value.auth.github;
 				if (this.environment["GITHUB_CLIENT_ID"] !== undefined)

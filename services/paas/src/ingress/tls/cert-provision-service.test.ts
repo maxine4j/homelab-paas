@@ -27,7 +27,7 @@ test("covers nested resources for every configured service and follows additions
 	expect(provision.mock.calls.at(-1)?.at(0)).toMatchObject({
 		domains: ["example.test", "*.example.test", "*.demo.example.test"],
 	});
-	config.getConfig().services["other"] = { remote: "local", descriptorPath: "/repo/other.yaml" };
+	config.getServices()["other"] = { remote: "local", descriptorPath: "/repo/other.yaml" };
 	await service.provisionCert();
 	expect(provision.mock.calls.at(-1)?.at(0)).toMatchObject({
 		domains: ["example.test", "*.example.test", "*.demo.example.test", "*.other.example.test"],

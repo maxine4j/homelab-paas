@@ -11,7 +11,7 @@ services:
             homelab-paas.cluster: prod
             homelab-paas.role: control-plane
         volumes:
-            - /etc/homelab-paas:/etc/homelab-paas:ro,z
+            - /etc/homelab-paas:/etc/homelab-paas:z
             - /var/homelab-paas:/var/homelab-paas:z
             - /var/run/docker.sock:/var/run/docker.sock
         healthcheck:

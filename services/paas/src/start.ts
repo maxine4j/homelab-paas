@@ -6,6 +6,7 @@ import acme from "acme-client";
 import Koa from "koa";
 import { nanoid } from "nanoid";
 
+import { FileConfigStore } from "./config/config-store.ts";
 import { PaasConfig, decodeDescriptorYaml } from "./config/paas-config.ts";
 import { DockerClient } from "./docker/docker-client.ts";
 import { DockerService } from "./docker/docker-service.ts";
@@ -55,7 +56,7 @@ import { sleep } from "./util/sleep.ts";
 const STATE_DIRECTORY = "/var/homelab-paas/_paas";
 
 export async function start(lifecycle: Lifecycle, options: StartOptions = {}): Promise<void> {
-	const config = new PaasConfig(readFile, process.env);
+	const config = new PaasConfig(new FileConfigStore(readFile, atomicWriteFile), process.env);
 	await config.load();
 	const secureWrite: FileWriter = async (path, content) => {
 		await mkdir(STATE_DIRECTORY, { recursive: true, mode: 0o700 });
@@ -175,6 +176,11 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 			store,
 		),
 		sessions,
+		() => {
+			const { baseDomain, httpPort, httpsPort } = config.getIngressConfig();
+			const port = httpsPort ?? httpPort;
+			return `${httpsPort ? "https" : "http"}://${baseDomain}${port === (httpsPort ? 443 : 80) ? "" : `:${port}`}`;
+		},
 	);
 	app.use(ui.routes()).use(ui.allowedMethods());
 	app.use(

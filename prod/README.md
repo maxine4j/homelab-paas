@@ -27,13 +27,13 @@ Add your services under `services`, replacing the empty mapping with service ent
 
 Prepare application bind-mount sources on the Docker host with the required ownership and permissions before adding descriptors. Docker creates missing directory sources and applies shared SELinux labels according to the [volume contract](../docs/configuration.md#volumes-and-resource-limits); file sources must already exist. For secret references, install `/etc/homelab-paas/env/{serviceId}.env` with mode `0600`; these are application secret files, separate from Compose interpolation. See [secrets](../docs/configuration.md#environment-variables-and-secrets).
 
-The configuration directory is mounted read-only into both bootstrap containers. The control plane writes persistent state and TLS private material under `/var/homelab-paas`; Envoy mounts that directory read-only and runs as root to read restricted files. Keep these directories restricted to host administrators. Docker socket access grants the control plane host-level control.
+The configuration directory is mounted writable into the control plane so [management edits](../docs/configuration.md#management-edits) can atomically replace the host configuration. Envoy retains read-only access. The control plane writes persistent state and TLS private material under `/var/homelab-paas`; Envoy mounts that directory read-only and runs as root to read restricted files. Keep these directories restricted to host administrators. Docker socket access grants the control plane host-level control.
 
 The trusted control-plane container uses `security_opt: [label=disable]` so SELinux permits access to the Docker daemon socket. SELinux remains enabled on the host and confines Envoy and application containers. The socket is mounted without `z` or `Z` to preserve its host label. For an existing installation, add this security option under `services.paas` in the installed Compose file and recreate the container with `up -d`; the upgrade helper installs it automatically from the template.
 
 On SELinux-enforcing hosts such as Fedora CoreOS, the Compose mounts use the shared `z` label for the platform configuration and state directories so both containers can access them. Docker relabels these dedicated directories when creating the containers. The certificate chain and private key remain together at `/var/homelab-paas/_paas/ingress.pem` with mode `0600`; see [TLS storage](../docs/networking-and-auth.md#tls). A permission-denied error reading that file can indicate an incorrect SELinux label even when the container runs as root.
 
-For an existing installation, add `z` to the four configuration/state mounts in `/etc/homelab-paas/docker-compose.yaml` to match the [template](etc/homelab-paas/docker-compose.yaml), then run the `up -d` command below to recreate the containers and relabel the mounts. Keep the read-only `ro` option on both configuration mounts and Envoy's state mount. Leave the Docker socket mount unchanged and preserve existing certificate and account files.
+For an existing installation, add `z` to the four configuration/state mounts in `/etc/homelab-paas/docker-compose.yaml` to match the [template](etc/homelab-paas/docker-compose.yaml), remove `ro` from the control-plane configuration mount, then run the `up -d` command below to recreate the containers and relabel the mounts. Keep `ro` on Envoy's configuration and state mounts. The upgrade helper installs the updated mount contract from the template. Leave the Docker socket mount unchanged and preserve existing certificate and account files.
 
 ## Start and verify
 
@@ -57,7 +57,7 @@ Both bootstrap containers use `restart: unless-stopped`. With Docker enabled at 
 
 ## Configuration and updates
 
-After editing platform configuration, restart the control plane:
+Live settings can be saved through the management UI, or edited on the host and accepted by the periodic reload. See [configuration reload and management edits](../docs/configuration.md#platform-configuration-reload). For restart-required identity, ingress or auth/TLS mode changes, edit the host file and restart the control plane:
 
 ```sh
 sudo docker compose -f /etc/homelab-paas/docker-compose.yaml restart paas

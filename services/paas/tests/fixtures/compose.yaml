@@ -6,7 +6,7 @@ services:
             homelab-paas.cluster: ${TEST_CLUSTER:?required}
             homelab-paas.role: control-plane
         volumes:
-            - ${TEST_DIRECTORY}/etc:/etc/homelab-paas:ro
+            - ${TEST_DIRECTORY}/etc:/etc/homelab-paas
             - ${TEST_DIRECTORY}/var:/var/homelab-paas
             - ${TEST_DIRECTORY}/remote.git:${TEST_DIRECTORY}/remote.git:ro
             - /var/run/docker.sock:/var/run/docker.sock

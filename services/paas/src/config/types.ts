@@ -1,5 +1,10 @@
 import type { GitFileSource } from "../git/types.ts";
 
+export interface ConfigDocument {
+	value: unknown;
+	revision: string;
+}
+
 export interface PlatformConfig {
 	version: 1;
 	metadata: { clusterId: string };

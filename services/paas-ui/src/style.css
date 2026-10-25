@@ -17,7 +17,9 @@ a {
 	text-decoration: none;
 }
 button,
-select {
+select,
+input,
+textarea {
 	font: inherit;
 	color: inherit;
 	background: #1c232e;
@@ -34,6 +36,8 @@ select {
 a:focus-visible,
 button:focus-visible,
 select:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
 summary:focus-visible,
 pre:focus-visible {
 	outline: 2px solid #91b4ff;
@@ -41,6 +45,51 @@ pre:focus-visible {
 }
 button:hover {
 	background: #283448;
+}
+button:disabled {
+	cursor: default;
+	opacity: 0.5;
+}
+.config-editor fieldset {
+	border: 1px solid #364050;
+	border-radius: 10px;
+	padding: 1rem;
+	min-width: 0;
+}
+.config-fields {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
+	gap: 1.2rem;
+}
+.config-field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	min-width: 0;
+}
+.config-field-wide {
+	grid-column: 1 / -1;
+}
+.config-field label {
+	overflow-wrap: anywhere;
+}
+.config-field textarea {
+	resize: vertical;
+	font-family: ui-monospace, monospace;
+}
+.config-field small {
+	color: #8e9aa9;
+}
+.config-field input[readonly],
+.config-field textarea[readonly] {
+	opacity: 0.65;
+}
+.config-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.75rem;
+	margin-top: 1.5rem;
 }
 .app-shell {
 	display: grid;

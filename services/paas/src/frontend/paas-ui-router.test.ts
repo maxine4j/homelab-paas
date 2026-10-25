@@ -1,6 +1,7 @@
 import Koa from "koa";
 import { expect, test, vi } from "vitest";
 
+import { ConfigEditError } from "../config/paas-config.ts";
 import { captureLogs } from "../util/test/logs.ts";
 import { startTestApi } from "../util/test/router.ts";
 import { createPaasUiRouter } from "./paas-ui-router.ts";
@@ -8,9 +9,11 @@ import { PaasUiError, type IPaasUiService } from "./paas-ui-service.ts";
 
 const fixture = async (authenticated = true) => {
 	const calls: unknown[] = [];
+	const updateConfig = vi.fn(async (_update: unknown) => ({ config: {}, revision: "saved", fields: [] }));
 	const service: IPaasUiService = {
+		updateConfig,
 		async getCluster() {
-			return { clusterId: "local", config: {} };
+			return { clusterId: "local", config: {}, revision: "r1", fields: [] };
 		},
 		async listServices() {
 			return [];
@@ -31,8 +34,56 @@ const fixture = async (authenticated = true) => {
 	const verifyAuthCookie = vi.fn(() => (authenticated ? { userId: "owner" } : undefined));
 	const router = createPaasUiRouter(service, { verifyAuthCookie });
 	const server = await startTestApi(new Koa().use(router.routes()).use(router.allowedMethods()));
-	return { ...server, calls, verifyAuthCookie };
+	return { ...server, calls, verifyAuthCookie, updateConfig };
 };
+
+test("configuration writes require a session, same origin and bounded JSON before delegation", async () => {
+	const f = await fixture();
+	const update = { revision: "r1", changes: [{ path: "git.pollIntervalSeconds", value: 9 }] };
+	const send = (body: string, headers: Record<string, string> = {}) =>
+		fetch(`${f.origin}/api/ui/cluster/config`, {
+			method: "PUT",
+			headers: { origin: f.origin, "content-type": "application/json", "x-paas-config": "1", ...headers },
+			body,
+		});
+	try {
+		const saved = await send(JSON.stringify(update));
+		expect(saved.status).toBe(200);
+		expect(await saved.json()).toMatchObject({ revision: "saved" });
+		expect(saved.headers.get("cache-control")).toBe("no-store");
+		expect(f.updateConfig).toHaveBeenCalledWith(update);
+		for (const [body, headers, status] of [
+			[JSON.stringify(update), { origin: "https://evil.test" }, 403],
+			[JSON.stringify(update), { "x-paas-config": "" }, 403],
+			[JSON.stringify(update), { origin: "" }, 403],
+			[JSON.stringify(update), { "content-type": "text/plain" }, 415],
+			["{invalid", {}, 400],
+			[JSON.stringify({ ...update, unexpected: true }), {}, 400],
+			[JSON.stringify({ ...update, changes: "invalid" }), {}, 400],
+			[JSON.stringify({ value: "x".repeat(70_000) }), {}, 413],
+		] as const) {
+			const response = await send(body, headers);
+			expect(response.status, JSON.stringify(headers)).toBe(status);
+			await response.body?.cancel();
+		}
+		expect(f.updateConfig).toHaveBeenCalledTimes(1);
+		for (const [kind, status] of [
+			["invalid", 400],
+			["conflict", 409],
+			["unavailable", 503],
+		] as const) {
+			f.updateConfig.mockRejectedValueOnce(new ConfigEditError(kind, { cause: new Error("secret-canary") }));
+			const response = await send(JSON.stringify(update));
+			expect(response.status).toBe(status);
+			expect(await response.text()).not.toContain("secret-canary");
+		}
+		f.verifyAuthCookie.mockReturnValueOnce(undefined);
+		expect((await send(JSON.stringify(update))).status).toBe(401);
+		expect(f.updateConfig).toHaveBeenCalledTimes(4);
+	} finally {
+		await f.close();
+	}
+});
 
 test("UI routes map requests, mark snapshots private and translate domain failures", async () => {
 	const f = await fixture();

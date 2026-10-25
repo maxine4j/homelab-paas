@@ -26,9 +26,11 @@ test("web inspection links to the resource host and primary service alias", () =
 });
 
 test("cluster and service pages expose configuration, deployment status and resource navigation", () => {
-	expect(renderToStaticMarkup(<ClusterPage cluster={{ clusterId: "local", config: { version: 1 } }} />)).toContain(
-		"Cluster configuration",
-	);
+	expect(
+		renderToStaticMarkup(
+			<ClusterPage cluster={{ clusterId: "local", config: { version: 1 }, revision: "r1", fields: [] }} />,
+		),
+	).toContain("Cluster configuration");
 	const services = renderToStaticMarkup(<ServicesPage services={[{ serviceId: "demo", phase: "failed" }]} />);
 	expect(services).toContain("#/services/demo");
 	expect(services).toContain("failed");
@@ -47,6 +49,46 @@ test("cluster and service pages expose configuration, deployment status and reso
 	expect(detail).toContain("#/services/demo/resources/app");
 	expect(detail).toContain("Descriptor unavailable");
 	expect(detail).toContain("No containers");
+});
+
+test("cluster editor renders masked replacement inputs and marks environment and restart settings", () => {
+	const html = renderToStaticMarkup(
+		<ClusterPage
+			cluster={{
+				clusterId: "local",
+				config: {},
+				revision: "r1",
+				fields: [
+					{
+						path: "auth.github.clientSecret",
+						kind: "secret",
+						configured: true,
+						readOnly: false,
+						managedByEnvironment: false,
+					},
+					{
+						path: "tls.acme.email",
+						kind: "text",
+						value: "managed@example.test",
+						readOnly: true,
+						managedByEnvironment: true,
+					},
+					{
+						path: "ingress.baseDomain",
+						kind: "text",
+						value: "example.test",
+						readOnly: true,
+						managedByEnvironment: false,
+					},
+				],
+			}}
+		/>,
+	);
+	expect(html).toContain('type="password"');
+	expect(html).toContain("Configured");
+	expect(html).toContain("Managed by environment");
+	expect(html).toContain("Requires restart");
+	expect(html).toContain("Save configuration");
 });
 
 test("resource inspection renders configuration, state and escaped log output", () => {

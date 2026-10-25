@@ -1,7 +1,8 @@
 import { expect, test } from "vitest";
 
+import { TestPaasConfig as PaasConfig } from "../util/test/config.ts";
 import { captureLogs } from "../util/test/logs.ts";
-import { PaasConfig, decodeDescriptorYaml, parseConfig } from "./paas-config.ts";
+import { decodeDescriptorYaml, parseConfig } from "./paas-config.ts";
 
 const descriptor = {
 	version: 1,
@@ -137,7 +138,7 @@ test.each([
 	let content = JSON.stringify(authenticatedConfig);
 	const configuration = new PaasConfig(async () => content);
 	await configuration.load();
-	const before = configuration.getConfig();
+	const before = configuration.getEditableConfig();
 	content = JSON.stringify({
 		...authenticatedConfig,
 		...change,
@@ -149,13 +150,13 @@ test.each([
 	} finally {
 		capture.restore();
 	}
-	expect(configuration.getConfig()).toEqual(before);
+	expect(configuration.getEditableConfig()).toEqual(before);
 	expect(capture.lines.join("")).toContain("restart");
 });
 
 test("all getters reject access before initialization and protect nested configuration from mutation", async () => {
 	const configuration = new PaasConfig(async () => JSON.stringify(authenticatedConfig));
-	expect(() => configuration.getConfig()).toThrow("has not been loaded");
+	expect(() => configuration.getEditableConfig()).toThrow("has not been loaded");
 	const snapshot = await configuration.load();
 	snapshot.metadata.clusterId = "changed";
 	configuration.getAuthConfig()!.github.allowedUsers.push("mallory");
@@ -163,7 +164,7 @@ test("all getters reject access before initialization and protect nested configu
 	configuration.getGitConfig().operationTimeoutSeconds = 999;
 	configuration.getReconciliationConfig().retryBackoffSeconds = 999;
 	configuration.getIngressConfig().baseDomain = "changed";
-	expect(configuration.getConfig()).toEqual(parseConfig(authenticatedConfig));
+	expect(configuration.getEditableConfig().config).toEqual(configuration.sanitize(parseConfig(authenticatedConfig)));
 });
 
 test("rejects platform YAML warnings without exposing source", async () => {
