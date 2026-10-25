@@ -18,22 +18,15 @@ jobs:
                       echo "Release tags must use vX.X.X with no leading zeroes."
                       exit 1
                   fi
-    format:
-        name: Formatting
-        runs-on: ubuntu-24.04
-        needs: validate
-        steps:
-            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-            - uses: ./.github/actions/setup
-            - run: pnpm format:check
     lint:
-        name: Lint
+        name: Linting & formatting
         runs-on: ubuntu-24.04
         needs: validate
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
             - uses: ./.github/actions/setup
             - run: pnpm lint
+            - run: pnpm format:check
     typecheck:
         name: Typecheck
         runs-on: ubuntu-24.04
@@ -57,14 +50,25 @@ jobs:
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
             - run: bash -n prod/install.sh && bash -n prod/upgrade-paas.sh && python3 -m unittest discover -s prod -p 'test_*.py'
-    build:
-        name: Workspace build
+    docker-build:
+        name: Docker Build (${{ matrix.image }})
         runs-on: ubuntu-24.04
         needs: validate
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - image: test-service
+                      dockerfile: services/test-service/Dockerfile
+                    - image: control-plane
+                      dockerfile: services/paas/Dockerfile
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-            - uses: ./.github/actions/setup
-            - run: pnpm build
+            - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+            - name: Build image
+              env:
+                  DOCKERFILE: ${{ matrix.dockerfile }}
+              run: docker buildx build --platform linux/amd64 --file "$DOCKERFILE" --load .
     integration:
         name: Integration tests
         runs-on: ubuntu-24.04
@@ -81,9 +85,9 @@ jobs:
                   path: artifacts/
                   retention-days: 7
     e2e:
-        name: Image build and E2E tests
+        name: E2E test
         runs-on: ubuntu-24.04
-        needs: build
+        needs: validate
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
             - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -137,19 +141,3 @@ jobs:
                   name: e2e-diagnostics
                   path: artifacts/
                   retention-days: 7
-            - name: Export tested images
-              if: github.event_name == 'push'
-              env:
-                  IMAGE_REF: ${{ steps.image.outputs.ref }}
-                  IMAGE: ${{ steps.image.outputs.test-service-image }}
-                  SHORT_SHA: ${{ steps.image.outputs.short-sha }}
-              run: |
-                  docker save --output /tmp/tested-images.tar "$IMAGE_REF" "$IMAGE:$SHORT_SHA" "$IMAGE:latest"
-            - name: Retain tested images for publishing
-              if: github.event_name == 'push'
-              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-              with:
-                  name: tested-images
-                  path: /tmp/tested-images.tar
-                  compression-level: 0
-                  retention-days: 1
