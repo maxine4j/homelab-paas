@@ -135,6 +135,8 @@ Existing containers should be updated in place where Docker supports the change 
 
 Images are pulled when first creating a resource or deploying a changed image reference. Container creation uses the resolved local image identity.
 
+[Image tag variables](configuration.md#image-tag-variables) resolve from the same fixed source commit as the descriptor, before any workload changes. A changed commit prefix changes the desired image reference and triggers the normal replacement flow; unchanged resolved references retain existing reconciliation behavior.
+
 Periodic detection of changed content behind an unchanged image tag is not required. Image tagging policy belongs to each service.
 
 ### Removal

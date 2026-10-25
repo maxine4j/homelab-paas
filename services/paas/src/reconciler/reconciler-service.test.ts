@@ -74,6 +74,59 @@ function fixture() {
 	};
 }
 
+test("deploys web and worker tags from each fetched descriptor commit", async () => {
+	const f = fixture();
+	for (const revision of ["a".repeat(40), "b".repeat(40)]) {
+		f.fetchFile.mockResolvedValue({
+			revision,
+			content: JSON.stringify({
+				...descriptor,
+				resources: {
+					app: { ...descriptor.resources.app, image: "app:${COMMIT_ID:7}" },
+					jobs: { type: "worker", image: "jobs:${COMMIT_ID:9}", healthcheckPort: 8080 },
+				},
+			}),
+		});
+		await f.service.reconcile();
+		expect(f.reconcile).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				revision,
+				resource: expect.objectContaining({ image: `app:${revision.slice(0, 7)}` }),
+			}),
+		);
+		expect(f.reconcileWorker).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				revision,
+				resource: expect.objectContaining({ image: `jobs:${revision.slice(0, 9)}` }),
+			}),
+		);
+	}
+});
+
+test("invalid image variables preserve active workloads before any resource reconciliation", async () => {
+	const f = fixture();
+	await f.service.reconcile();
+	f.reconcile.mockClear();
+	f.fetchFile.mockResolvedValue({
+		revision: "b".repeat(40),
+		content: JSON.stringify({
+			...descriptor,
+			resources: {
+				...descriptor.resources,
+				jobs: { type: "worker", image: "jobs:${UNKNOWN:7}", healthcheckPort: 8080 },
+			},
+		}),
+	});
+	await f.service.reconcile();
+	expect(f.reconcile).not.toHaveBeenCalled();
+	expect(f.reconcileWorker).not.toHaveBeenCalled();
+	expect(f.states.get("demo")).toMatchObject({
+		activeRevision: "rev",
+		phase: "failed",
+		error: serviceEventMessages.descriptor,
+	});
+});
+
 test("includes missing secret names and the actual host file in persisted failure events", async () => {
 	const f = fixture();
 	f.resolveHostPath.mockResolvedValue("/srv/config/env/demo.env");

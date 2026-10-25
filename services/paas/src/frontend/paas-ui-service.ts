@@ -212,7 +212,7 @@ export class PaasUiService implements IPaasUiService {
 		const result = this.pending.then(async () => {
 			try {
 				const file = await this.git.fetchFile(serviceId, this.config.getServices()[serviceId]!);
-				return { revision: file.revision, descriptor: this.decode(file.content, serviceId) };
+				return { revision: file.revision, descriptor: this.decode(file.content, serviceId, file.revision) };
 			} catch (err) {
 				this.log.error({ err, serviceId }, "Cannot load management UI descriptor");
 				return undefined;

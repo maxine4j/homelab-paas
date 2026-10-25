@@ -10,6 +10,34 @@ const descriptor = {
 	resources: { app: { type: "web", image: "test-service:local", ingress: { public: true, port: 8080 } } },
 };
 
+test("resolves only resource image tags using the descriptor commit", () => {
+	const value = {
+		...descriptor,
+		resources: Object.fromEntries(
+			["web", "worker", "postgres", "rabbitmq"].map((type) => [
+				type,
+				{
+					type,
+					image: "app:${COMMIT_ID:7}",
+					...(type === "web" ? { ingress: { public: true, port: 8080 } } : {}),
+					...(type === "worker" ? { healthcheckPort: 8080 } : {}),
+					...(type === "web" || type === "worker"
+						? { env: [{ name: "LITERAL", value: "${COMMIT_ID:7}" }] }
+						: {}),
+				},
+			]),
+		),
+	};
+	const parsed = decodeDescriptorYaml(
+		JSON.stringify(value),
+		"test-service",
+		"abcdef0123456789abcdef0123456789abcdef01",
+	);
+	expect(Object.values(parsed.resources).map((resource) => resource.image)).toEqual(Array(4).fill("app:abcdef0"));
+	expect(parsed.resources["web"]).toMatchObject({ env: [{ name: "LITERAL", value: "${COMMIT_ID:7}" }] });
+	expect(() => decodeDescriptorYaml(JSON.stringify(value), "test-service")).toThrow("Invalid service descriptor");
+});
+
 test("loads the fixed configuration file and sanitizes YAML and filesystem failures", async () => {
 	const paths: string[] = [];
 	const configuration = new PaasConfig(async (path) => {

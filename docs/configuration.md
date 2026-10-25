@@ -110,6 +110,18 @@ resources:
 
 Resources are a discriminated union of `web`, `worker`, `postgres`, and `rabbitmq`. Every resource requires a nonempty `image` and may set `limits` and `termination.timeoutSeconds` (positive integer seconds, maximum 300). Web and worker resources additionally accept `command`, `env`, `volumes`, [devices and supplementary groups](#devices-and-supplementary-groups) (`devices`, `supplementaryGroups`), `hostPorts`, `egress`, positive integer `replicas` (default 1), and `rolloutStrategy` (`recreate` by default, or `surge`). Web resources require an ingress port (1–65535) and default `ingress.public` to `false`. Workers require `healthcheckPort` (integer 1–65535) and reject `ingress`. Both default `healthcheckUrl` to `/healthcheck`, accepting only a relative HTTP path beginning with a single `/`. PaaS probes worker health endpoints on the container's service-network address; no host port, public route, or Envoy health check is created automatically. Workers must listen on that container interface, rather than only loopback. See [health checks](reconciliation-and-deployments.md#health-checks-and-termination) for readiness and polling behavior. Managed PostgreSQL and RabbitMQ resources accept no custom environment, credentials, volumes, devices, supplementary groups, replicas, or rollout strategy; see [managed resources](managed-resources.md).
 
+### Image tag variables
+
+Resource `image` tags support `${COMMIT_ID:N}`, where `N` is a positive decimal integer without leading zeroes, no greater than the source commit hash length (40 for SHA-1 or 64 for SHA-256). For example:
+
+```yaml
+image: ghcr.io/example/foo:git-${COMMIT_ID:7}
+```
+
+PaaS replaces the variable with the first `N` characters of the exact Git commit used to read the descriptor. For a remote repository on branch `main`, this is the tip of `main` resolved by that fetch, even if the branch advances while reconciliation runs. Local sources use their resolved `HEAD` or explicit branch under the [Git source contract](#implemented-deployment-mvp). This is the source repository commit, not the last commit that changed the descriptor file.
+
+Tags may combine literal text and multiple variables. Expansion applies only to resource image tags; other descriptor values remain literal. Variables in registry names, repository paths or image digests, unknown variables, malformed expressions, invalid lengths and expanded tags outside Docker's tag syntax (at most 128 characters) fail descriptor loading before workloads change. Literal image references retain existing behavior. Deployment and management inspection use the same expansion rules and each read's fetched revision. The image must already be published under the resolved tag; PaaS does not build or publish images.
+
 ## Host ports
 
 Web and worker resources may explicitly publish fixed TCP and UDP ports through Docker Engine:

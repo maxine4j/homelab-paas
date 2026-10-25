@@ -63,7 +63,7 @@ export class ReconcilerService implements IReconcilerService {
 			const file = await this.git.fetchFile(serviceId, source);
 			desiredRevision = file.revision;
 			message = serviceEventMessages.descriptor;
-			const descriptor = this.decode(file.content, serviceId);
+			const descriptor = this.decode(file.content, serviceId, file.revision);
 			message = serviceEventMessages.capabilities;
 			const desired = this.deploymentResources(descriptor);
 			message = serviceEventMessages.secrets;

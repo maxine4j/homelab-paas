@@ -12,6 +12,7 @@ import type { GitFileSource } from "../git/types.ts";
 import { createLogger } from "../util/logger.ts";
 import { parseYaml } from "../util/yaml.ts";
 import type { IConfigStore } from "./config-store.ts";
+import { resolveImageTag } from "./image-tag-resolver.ts";
 import type { ConfigDocument, PlatformConfig } from "./types.ts";
 
 const environmentFields: Record<string, string> = {
@@ -294,9 +295,13 @@ export class PaasConfig implements IPaasConfig {
 	}
 }
 
-export function decodeDescriptorYaml(content: string, serviceId: string): ServiceDescriptor {
+export function decodeDescriptorYaml(content: string, serviceId: string, revision?: string): ServiceDescriptor {
 	try {
-		return parseDescriptor(parseYaml(content, `${serviceId}.sd.yaml`), serviceId);
+		const descriptor = parseDescriptor(parseYaml(content, `${serviceId}.sd.yaml`), serviceId);
+		for (const resource of Object.values(descriptor.resources)) {
+			resource.image = resolveImageTag(resource.image, revision);
+		}
+		return descriptor;
 	} catch (cause) {
 		throw new Error("Invalid service descriptor: check service identity and resource configuration", { cause });
 	}

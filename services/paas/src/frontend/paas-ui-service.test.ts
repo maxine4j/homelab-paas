@@ -81,6 +81,18 @@ const fixture = () => {
 	return { service, config, fetchFile, listServiceContainers, readServiceContainerLogs, listEvents };
 };
 
+test("inspection resolves image tags from the fetched descriptor commit", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "abcdef0123456789abcdef0123456789abcdef01",
+		content: JSON.stringify({
+			...descriptor,
+			resources: { app: { ...descriptor.resources.app, image: "app:${COMMIT_ID:7}" } },
+		}),
+	});
+	expect(await f.service.getResource("demo", "app")).toMatchObject({ config: { image: "app:abcdef0" } });
+});
+
 test("events remain readable without Git or Docker and unknown services cannot access history", async () => {
 	const f = fixture();
 	f.fetchFile.mockRejectedValue(new Error("Git unavailable"));
