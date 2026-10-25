@@ -8,45 +8,8 @@ permissions:
 jobs:
     ci:
         uses: ./.github/workflows/ci.yml
-    publish:
-        runs-on: ubuntu-24.04
-        needs: ci
         permissions:
             contents: read
             packages: write
-        steps:
-            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-            - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-            - name: Select image tag
-              id: image
-              shell: bash
-              run: |
-                  image="ghcr.io/${GITHUB_REPOSITORY,,}"
-                  tag="$GITHUB_SHA"
-                  if [[ "$GITHUB_REF_TYPE" == tag ]]; then
-                      tag="$GITHUB_REF_NAME"
-                  fi
-                  echo "ref=$image:$tag" >> "$GITHUB_OUTPUT"
-                  echo "test-service-image=$image/test-service" >> "$GITHUB_OUTPUT"
-                  echo "short-sha=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
-            - name: Log in to GHCR
-              env:
-                  GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-            - name: Build and publish control-plane image
-              env:
-                  IMAGE_REF: ${{ steps.image.outputs.ref }}
-              run: >-
-                  docker buildx build --platform linux/amd64
-                  --file services/paas/Dockerfile --tag "$IMAGE_REF"
-                  --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY"
-                  --label "org.opencontainers.image.revision=$GITHUB_SHA" --push .
-            - name: Build and publish test-service image
-              env:
-                  IMAGE: ${{ steps.image.outputs.test-service-image }}
-                  SHORT_SHA: ${{ steps.image.outputs.short-sha }}
-              run: >-
-                  docker buildx build --platform linux/amd64
-                  --file services/test-service/Dockerfile --tag "$IMAGE:$SHORT_SHA" --tag "$IMAGE:latest"
-                  --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY"
-                  --label "org.opencontainers.image.revision=$GITHUB_SHA" --push .
+        with:
+            publish-images: true
