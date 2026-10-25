@@ -1,9 +1,17 @@
-import type { UiCluster, UiLogs, UiResource, UiService, UiServiceSummary } from "@homelab-paas/shared-contracts";
+import type {
+	UiCluster,
+	UiLogs,
+	UiResource,
+	UiService,
+	UiServiceSummary,
+	UiServiceEvent,
+} from "@homelab-paas/shared-contracts";
 
 import { useApi } from "./hooks/use-api.ts";
 import { useRoute } from "./hooks/use-route.ts";
 import { ClusterPage } from "./pages/cluster-page.tsx";
 import { ResourcePage } from "./pages/resource-page.tsx";
+import { ServiceEventsPage } from "./pages/service-events-page.tsx";
 import { ServicePage } from "./pages/service-page.tsx";
 import { ServicesPage } from "./pages/services-page.tsx";
 
@@ -20,6 +28,9 @@ export const App = () => {
 						? `/services/${route.serviceId}/resources/${route.resourceId}`
 						: undefined;
 	const snapshot = useApi<UiCluster | UiServiceSummary[] | UiService | UiResource>(path);
+	const events = useApi<UiServiceEvent[]>(
+		route.page === "service" || route.page === "events" ? `/services/${route.serviceId}/events` : undefined,
+	);
 	const logs = useApi<UiLogs>(
 		route.page === "resource" && route.tab === "logs" && route.containerId
 			? `${path}/containers/${encodeURIComponent(route.containerId)}/logs`
@@ -59,13 +70,16 @@ export const App = () => {
 						onClick={() => {
 							snapshot.refresh();
 							logs.refresh();
+							events.refresh();
 						}}
 					>
 						↻ Refresh
 					</button>
 				</header>
 				<main id='main-content'>
-					{snapshot.error ? (
+					{route.page === "events" ? (
+						<ServiceEventsPage serviceId={route.serviceId} events={events.data} error={events.error} />
+					) : snapshot.error ? (
 						<div className='empty' role='alert'>
 							<h1>Unable to load cluster data</h1>
 							<p>{snapshot.error}</p>
@@ -82,7 +96,11 @@ export const App = () => {
 					) : route.page === "services" ? (
 						<ServicesPage services={snapshot.data as UiServiceSummary[]} />
 					) : route.page === "service" ? (
-						<ServicePage service={snapshot.data as UiService} />
+						<ServicePage
+							service={snapshot.data as UiService}
+							events={events.data}
+							eventError={events.error}
+						/>
 					) : (
 						<ResourcePage
 							serviceId={route.serviceId}

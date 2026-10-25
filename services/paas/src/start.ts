@@ -44,6 +44,7 @@ import { ReconcilerTask } from "./reconciler/reconciler-task.ts";
 import { ReconciliationStore } from "./reconciler/reconciliation-store.ts";
 import { WebResourceReconciler } from "./reconciler/resources/web/web-reconciler.ts";
 import { WorkerResourceReconciler } from "./reconciler/resources/worker/worker-reconciler.ts";
+import { ServiceEventStore } from "./reconciler/service-event-store.ts";
 import { FileSystemKeyValueStore } from "./store/file-system-store.ts";
 import { PeriodicTaskRunner } from "./task/periodic.ts";
 import type { StartOptions } from "./types.ts";
@@ -67,6 +68,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	};
 	const state = new FileSystemKeyValueStore<unknown>(STATE_DIRECTORY, readFile, secureWrite, remove, "yaml");
 	const store = new ReconciliationStore(state);
+	const events = new ServiceEventStore(state);
 	const endpoints = new EndpointsStore(state);
 	const docker = new DockerService(
 		new DockerClient(
@@ -113,6 +115,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 			new WorkerDeploymentService(docker, probe, sleep, () => nanoid(10)),
 			probe,
 		),
+		events,
 	);
 	const abort = new AbortController();
 	const pause = async (ms: number): Promise<void> => {
@@ -174,6 +177,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 			decodeDescriptorYaml,
 			docker,
 			store,
+			events,
 		),
 		sessions,
 		() => {

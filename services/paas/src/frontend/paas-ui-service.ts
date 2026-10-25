@@ -5,12 +5,14 @@ import type {
 	UiResource,
 	UiService,
 	UiServiceSummary,
+	UiServiceEvent,
 	UiEditableConfig,
 	UiConfigUpdate,
 } from "@homelab-paas/shared-contracts";
 
 import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IGitService } from "../git/git-service.ts";
+import type { IServiceEventStore } from "../reconciler/service-event-store.ts";
 import type { DescriptorDecoder, IReconciliationStateStore } from "../reconciler/types.ts";
 import { createLogger } from "../util/logger.ts";
 import type { UiDocker } from "./types.ts";
@@ -22,6 +24,8 @@ export interface IPaasUiService {
 	updateConfig(update: UiConfigUpdate): Promise<UiEditableConfig>;
 	listServices(): Promise<UiServiceSummary[]>;
 	getService(serviceId: string): Promise<UiService>;
+	/** Safe service events, newest first, independent of descriptor/Docker availability. */
+	getEvents(serviceId: string): Promise<UiServiceEvent[]>;
 	getResource(serviceId: string, resourceId: string): Promise<UiResource>;
 	/** Only a container belonging to the requested resource may be read. Last 200 lines. */
 	getLogs(serviceId: string, resourceId: string, containerId: string): Promise<UiLogs>;
@@ -49,6 +53,7 @@ export class PaasUiService implements IPaasUiService {
 		private readonly decode: DescriptorDecoder,
 		private readonly docker: UiDocker,
 		private readonly state: IReconciliationStateStore,
+		private readonly events: IServiceEventStore,
 	) {}
 
 	async getCluster(): Promise<UiCluster> {
@@ -56,6 +61,15 @@ export class PaasUiService implements IPaasUiService {
 			clusterId: this.config.getClusterId(),
 			...this.config.getEditableConfig(),
 		};
+	}
+
+	async getEvents(serviceId: string): Promise<UiServiceEvent[]> {
+		this.assertService(serviceId);
+		try {
+			return await this.events.list(serviceId);
+		} catch (cause) {
+			throw new PaasUiError("unavailable", { cause });
+		}
 	}
 
 	async updateConfig(update: UiConfigUpdate): Promise<UiEditableConfig> {

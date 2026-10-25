@@ -33,6 +33,7 @@ test("authenticated config edits persist on disk and update existing JWT and ser
 		decodeDescriptorYaml,
 		{ listServiceContainers: vi.fn(), inspectServiceContainer: vi.fn(), readServiceContainerLogs: vi.fn() },
 		{ read: async () => undefined, write: vi.fn() },
+		{ append: async () => {}, list: async () => [] },
 	);
 	const router = createPaasUiRouter(ui, {
 		verifyAuthCookie: (token) => {

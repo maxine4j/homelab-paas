@@ -1,4 +1,4 @@
-import type { ServiceDescriptor, WebResource, WorkerResource } from "@homelab-paas/shared-contracts";
+import type { ServiceDescriptor, WebResource, WorkerResource, UiServiceEvent } from "@homelab-paas/shared-contracts";
 
 import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IGitService } from "../git/git-service.ts";
@@ -9,6 +9,8 @@ import type { DeploymentWorkerResource } from "./deployment/types.ts";
 import type { IEnvironmentResolver } from "./environment-resolver.ts";
 import type { IWebResourceReconciler } from "./resources/web/web-reconciler.ts";
 import type { IWorkerResourceReconciler } from "./resources/worker/worker-reconciler.ts";
+import type { IServiceEventStore } from "./service-event-store.ts";
+import { serviceEventMessages } from "./types.ts";
 import type { DescriptorDecoder, IReconcilerService, IReconciliationStateStore } from "./types.ts";
 
 export class ReconcilerService implements IReconcilerService {
@@ -24,6 +26,7 @@ export class ReconcilerService implements IReconcilerService {
 		private readonly now: () => number,
 		private readonly environment: IEnvironmentResolver,
 		private readonly worker: IWorkerResourceReconciler,
+		private readonly events: IServiceEventStore,
 	) {}
 
 	reconcile(): Promise<void> {
@@ -32,6 +35,12 @@ export class ReconcilerService implements IReconcilerService {
 				try {
 					await this.reconcileService(serviceId, source);
 				} catch (error) {
+					await this.recordEvent(serviceId, {
+						timestamp: this.now(),
+						level: "error",
+						event: "reconciliation.state-failed",
+						message: serviceEventMessages.state,
+					});
 					this.log.error(
 						{ event: "reconciliation.state-failed", serviceId, err: error },
 						"Cannot persist reconciliation state; check platform state directory access",
@@ -47,41 +56,55 @@ export class ReconcilerService implements IReconcilerService {
 		const previous = await this.state.read(serviceId);
 		if ((previous?.retryAt ?? 0) > this.now()) return;
 		let desiredRevision = previous?.desiredRevision;
-		let message = "Cannot fetch descriptor; check repository, branch and committed file path";
+		let message: string = serviceEventMessages.fetch;
+		let resourceId: string | undefined;
 		try {
 			const file = await this.git.fetchFile(serviceId, source);
 			desiredRevision = file.revision;
-			message = "Invalid descriptor; check service identity and supported resource fields";
+			message = serviceEventMessages.descriptor;
 			const descriptor = this.decode(file.content, serviceId);
-			message =
-				"Unsupported descriptor capabilities; runtime supports workers and single-replica web resources, without egress; private ingress requires auth/TLS";
+			message = serviceEventMessages.capabilities;
 			const desired = this.deploymentResources(descriptor);
-			message = "Cannot resolve application secrets; check the service env file and required variable names";
+			message = serviceEventMessages.secrets;
 			const resources: [string, DeploymentWebResource | DeploymentWorkerResource][] = [];
-			for (const [resourceId, resource] of desired) {
+			for (const [id, resource] of desired) {
+				resourceId = id;
 				const env = await this.environment.resolve(serviceId, resource.env ?? []);
-				resources.push([resourceId, { ...resource, env }]);
+				resources.push([id, { ...resource, env }]);
 			}
+			resourceId = undefined;
 			if (previous?.desiredRevision !== desiredRevision)
 				this.log.info(
 					{ event: "reconciliation.revision", serviceId, revision: desiredRevision },
 					"Detected new valid descriptor revision; reconciling resources",
 				);
+			message = serviceEventMessages.state;
 			await this.state.write(serviceId, {
 				desiredRevision,
 				activeRevision: previous?.activeRevision,
 				phase: "deploying",
 			});
-			for (const [resourceId, resource] of resources) {
+			for (const [id, resource] of resources) {
+				resourceId = id;
 				if (resource.type === "web") {
-					message = "Cannot reconcile web resource; check Docker, image, readiness and Envoy access";
-					await this.web.reconcile({ serviceId, resourceId, revision: desiredRevision, resource });
+					message = serviceEventMessages.web;
+					await this.web.reconcile({ serviceId, resourceId: id, revision: desiredRevision, resource });
 				} else {
-					message = "Cannot reconcile worker resource; check Docker, image and private health check";
-					await this.worker.reconcile({ serviceId, resourceId, revision: desiredRevision, resource });
+					message = serviceEventMessages.worker;
+					await this.worker.reconcile({ serviceId, resourceId: id, revision: desiredRevision, resource });
 				}
 			}
+			resourceId = undefined;
+			message = serviceEventMessages.state;
 			await this.state.write(serviceId, { desiredRevision, activeRevision: desiredRevision, phase: "ready" });
+			if (previous?.phase === "failed" || previous?.activeRevision !== desiredRevision)
+				await this.recordEvent(serviceId, {
+					timestamp: this.now(),
+					level: "info",
+					event: previous?.phase === "failed" ? "reconciliation.recovered" : "deployment.succeeded",
+					message: previous?.phase === "failed" ? serviceEventMessages.recovered : serviceEventMessages.ready,
+					revision: desiredRevision,
+				});
 			if (previous?.phase === "failed")
 				this.log.info(
 					{ event: "reconciliation.recovered", serviceId, revision: desiredRevision },
@@ -96,6 +119,20 @@ export class ReconcilerService implements IReconcilerService {
 					this.config.getReconciliationConfig().retryBackoffSeconds * 2 ** (failures - 1),
 				) * 1000;
 			const retryAt = this.now() + delay;
+			await this.recordEvent(serviceId, {
+				timestamp: this.now(),
+				level: "error",
+				event: "reconciliation.failed",
+				message,
+				resourceId,
+				revision: desiredRevision,
+				failures,
+				retryAt,
+			});
+			this.log.error(
+				{ event: "reconciliation.failed", serviceId, failures, retryAt, err: error },
+				`${message}; retry scheduled`,
+			);
 			await this.state.write(serviceId, {
 				desiredRevision,
 				activeRevision: previous?.activeRevision,
@@ -104,9 +141,16 @@ export class ReconcilerService implements IReconcilerService {
 				failures,
 				retryAt,
 			});
+		}
+	}
+
+	private async recordEvent(serviceId: string, event: UiServiceEvent): Promise<void> {
+		try {
+			await this.events.append(serviceId, event);
+		} catch (error) {
 			this.log.error(
-				{ event: "reconciliation.failed", serviceId, failures, retryAt, err: error },
-				`${message}; retry scheduled`,
+				{ event: "service-events.append-failed", serviceId, err: error },
+				"Cannot append service event; check platform event history and directory permissions",
 			);
 		}
 	}

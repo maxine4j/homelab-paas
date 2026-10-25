@@ -11,6 +11,19 @@ const fixture = async (authenticated = true) => {
 	const calls: unknown[] = [];
 	const updateConfig = vi.fn(async (_update: unknown) => ({ config: {}, revision: "saved", fields: [] }));
 	const service: IPaasUiService = {
+		async getEvents(id) {
+			calls.push(id);
+			if (id === "missing") throw new PaasUiError("not-found");
+			return [
+				{
+					timestamp: 100,
+					level: "error",
+					event: "reconciliation.failed",
+					message:
+						"Cannot resolve application secrets; check the service env file and required variable names",
+				},
+			];
+		},
 		updateConfig,
 		async getCluster() {
 			return { clusterId: "local", config: {}, revision: "r1", fields: [] };
@@ -36,6 +49,28 @@ const fixture = async (authenticated = true) => {
 	const server = await startTestApi(new Koa().use(router.routes()).use(router.allowedMethods()));
 	return { ...server, calls, verifyAuthCookie, updateConfig };
 };
+
+test("service events support authenticated GET and HEAD, no-store and missing services", async () => {
+	const f = await fixture();
+	try {
+		const response = await fetch(`${f.origin}/api/ui/services/demo/events`);
+		expect(response.status).toBe(200);
+		expect(response.headers.get("cache-control")).toBe("no-store");
+		expect(await response.json()).toEqual([expect.objectContaining({ event: "reconciliation.failed" })]);
+		expect(f.calls).toEqual(["demo"]);
+		expect((await fetch(`${f.origin}/api/ui/services/demo/events`, { method: "HEAD" })).status).toBe(200);
+		expect((await fetch(`${f.origin}/api/ui/services/missing/events`)).status).toBe(404);
+	} finally {
+		await f.close();
+	}
+	const unauthenticated = await fixture(false);
+	try {
+		expect((await fetch(`${unauthenticated.origin}/api/ui/services/demo/events`)).status).toBe(401);
+		expect(unauthenticated.calls).toEqual([]);
+	} finally {
+		await unauthenticated.close();
+	}
+});
 
 test("configuration writes require a session, same origin and bounded JSON before delegation", async () => {
 	const f = await fixture();

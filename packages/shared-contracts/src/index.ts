@@ -16,6 +16,7 @@ export type {
 	JsonValue,
 	UiCluster,
 	UiServiceSummary,
+	UiServiceEvent,
 	UiContainer,
 	UiResource,
 	UiService,

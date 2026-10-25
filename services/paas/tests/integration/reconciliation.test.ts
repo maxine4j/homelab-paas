@@ -70,6 +70,9 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 		);
 		await paas.reconciler.reconcile();
 		expect(await paas.checkpoints.read("demo")).toMatchObject({ phase: "ready", activeRevision: first });
+		expect(await paas.events.list("demo")).toEqual([
+			expect.objectContaining({ event: "deployment.succeeded", revision: first }),
+		]);
 		const original = [...docker.containers.values()].find(
 			(c) => c.Config.Labels["homelab-paas.service"] === "demo",
 		)!;
@@ -128,6 +131,12 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 		await git.commit({ "demo.sd.yaml": descriptor("demo", "v4") });
 		await paas.reconciler.reconcile();
 		expect(await paas.checkpoints.read("demo")).toMatchObject({ phase: "failed" });
+		expect((await paas.events.list("demo")).at(0)).toMatchObject({
+			event: "reconciliation.failed",
+			resourceId: "app",
+			level: "error",
+			retryAt: expect.any(Number),
+		});
 		expect(
 			[...docker.containers.values()].filter((c) => c.Config.Labels["homelab-paas.service"] === "demo"),
 		).toHaveLength(2);

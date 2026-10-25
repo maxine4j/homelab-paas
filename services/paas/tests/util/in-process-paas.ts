@@ -20,6 +20,7 @@ import { ReconcilerService } from "../../src/reconciler/reconciler-service.ts";
 import { ReconciliationStore } from "../../src/reconciler/reconciliation-store.ts";
 import { WebResourceReconciler } from "../../src/reconciler/resources/web/web-reconciler.ts";
 import { WorkerResourceReconciler } from "../../src/reconciler/resources/worker/worker-reconciler.ts";
+import { ServiceEventStore } from "../../src/reconciler/service-event-store.ts";
 import { FileSystemKeyValueStore } from "../../src/store/file-system-store.ts";
 import { atomicWriteFile, mkdir, readFile, rm } from "../../src/util/file.ts";
 import { probe } from "../../src/util/healthcheck.ts";
@@ -43,6 +44,7 @@ export const inProcessPaas = async (
 		"yaml",
 	);
 	const checkpoints = new ReconciliationStore(state);
+	const events = new ServiceEventStore(state);
 	const endpoints = new EndpointsStore(state);
 	const docker = new DockerService(
 		new DockerClient(
@@ -82,6 +84,7 @@ export const inProcessPaas = async (
 			new WorkerDeploymentService(docker, probe, pause, generateInstanceId),
 			probe,
 		),
+		events,
 	);
-	return { reconciler, checkpoints, endpoints };
+	return { reconciler, checkpoints, endpoints, events };
 };

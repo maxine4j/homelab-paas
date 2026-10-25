@@ -33,6 +33,21 @@ export interface UiServiceSummary {
 	retryAt?: number;
 }
 
+export interface UiServiceEvent {
+	timestamp: number;
+	level: "info" | "error";
+	event:
+		| "reconciliation.failed"
+		| "reconciliation.state-failed"
+		| "reconciliation.recovered"
+		| "deployment.succeeded";
+	message: string;
+	resourceId?: string;
+	revision?: string;
+	failures?: number;
+	retryAt?: number;
+}
+
 export interface UiContainer {
 	id: string;
 	resourceId: string;

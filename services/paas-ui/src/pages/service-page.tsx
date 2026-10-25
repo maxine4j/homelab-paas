@@ -1,9 +1,18 @@
-import type { UiService } from "@homelab-paas/shared-contracts";
+import type { UiService, UiServiceEvent } from "@homelab-paas/shared-contracts";
 
 import { ConfigView } from "../components/config-view.tsx";
+import { ServiceEvents } from "../components/service-events.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
 
-export const ServicePage = ({ service }: { service: UiService }) => (
+export const ServicePage = ({
+	service,
+	events,
+	eventError,
+}: {
+	service: UiService;
+	events?: UiServiceEvent[];
+	eventError?: string;
+}) => (
 	<>
 		<a className='back-link' href='#/services'>
 			← Services
@@ -37,6 +46,13 @@ export const ServicePage = ({ service }: { service: UiService }) => (
 				</div>
 			)}
 		</dl>
+		<section aria-label='Recent service events'>
+			<div className='section-heading'>
+				<h2>Recent events</h2>
+				<a href={`#/services/${service.serviceId}/events`}>All events</a>
+			</div>
+			<ServiceEvents events={events?.slice(0, 5)} error={eventError} />
+		</section>
 		<h2>
 			Resources <span className='count'>{service.resources.length}</span>
 		</h2>

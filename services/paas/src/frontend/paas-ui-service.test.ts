@@ -34,6 +34,17 @@ const fixture = () => {
 		{ id: "orphan", resourceId: "old", imageId: "sha256:b", revision: "old", spec: "s", state: "exited" },
 	]);
 	const readServiceContainerLogs = vi.fn(async () => "hello env-canary\n");
+	const listEvents = vi.fn(async () => [
+		{
+			timestamp: 100,
+			level: "error" as const,
+			event: "reconciliation.failed" as const,
+			message: "Cannot resolve application secrets; check the service env file and required variable names",
+			resourceId: "app",
+			failures: 1,
+			retryAt: 1000,
+		},
+	]);
 	const service = new PaasUiService(
 		testConfig(config),
 		{ fetchFile },
@@ -65,9 +76,27 @@ const fixture = () => {
 			},
 			async write() {},
 		},
+		{ list: listEvents, append: async () => {} },
 	);
-	return { service, config, fetchFile, listServiceContainers, readServiceContainerLogs };
+	return { service, config, fetchFile, listServiceContainers, readServiceContainerLogs, listEvents };
 };
+
+test("events remain readable without Git or Docker and unknown services cannot access history", async () => {
+	const f = fixture();
+	f.fetchFile.mockRejectedValue(new Error("Git unavailable"));
+	f.listServiceContainers.mockRejectedValue(new Error("Docker unavailable"));
+	expect(await f.service.getEvents("demo")).toEqual(await f.listEvents());
+	expect(f.fetchFile).not.toHaveBeenCalled();
+	expect(f.listServiceContainers).not.toHaveBeenCalled();
+	f.listEvents.mockClear();
+	await expect(f.service.getEvents("missing")).rejects.toMatchObject({ kind: "not-found" });
+	expect(f.listEvents).not.toHaveBeenCalled();
+	f.listEvents.mockRejectedValue(new Error("private-storage-error"));
+	await expect(f.service.getEvents("demo")).rejects.toMatchObject({
+		kind: "unavailable",
+		message: "Cluster data is unavailable; retry shortly",
+	});
+});
 
 test("web inspection exposes resource URLs and only the primary service alias", async () => {
 	const f = fixture();
@@ -152,6 +181,7 @@ test("cluster inspection and edits delegate configuration policy to the config s
 		decodeDescriptorYaml,
 		{ listServiceContainers: vi.fn(), inspectServiceContainer: vi.fn(), readServiceContainerLogs: vi.fn() },
 		{ read: vi.fn(), write: vi.fn() },
+		{ append: async () => {}, list: async () => [] },
 	);
 	expect(await service.getCluster()).toEqual({ clusterId: "local", ...snapshot });
 	const update = { revision: "r1", changes: [{ path: "git.pollIntervalSeconds", value: 9 }] };

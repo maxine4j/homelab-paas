@@ -22,6 +22,14 @@ Docker event subscriptions, resource/service removal, managed resources, egress 
 
 Persistence adapters retain existing filenames and YAML shapes, including `{serviceId}.state.yaml`, `routes.yaml` and certificate metadata; ACME account material remains PEM. Domain stores validate decoded values and sanitize failures over injected generic key-value stores. Missing files are absent state; unreadable, malformed, warning-producing or schema-invalid files fail instead of silently becoming empty state. Legacy routes without an explicit `public` field still require the [documented repair](development.md#local-startup-troubleshooting). In-memory and persistent adapters enforce the same domain validation.
 
+## Service events
+
+`ReconcilerService` appends every reconciliation failure, including Git, descriptor, capability, secret-resolution, web/worker deployment and checkpoint failures, to an injected service-event store. Failures record a timestamp, severity, operation, fixed actionable message, revision, resource identity when known, retry count and scheduled retry time when available. Each eligible failed retry adds an event; polling during backoff adds none. Initial deployments, changed active revisions and recovery also add events; successful unchanged polling stays silent.
+
+`{serviceId}.events.yaml` under `/var/homelab-paas/_paas/` retains the latest 200 events across restarts, using the existing private, atomic YAML persistence. Appends are serialized; reads return newest first. Missing history is empty, while unreadable or invalid history fails explicitly. Event messages are validated against platform-owned safe messages, excluding raw exceptions, causes, commands and environment values. Full diagnostics remain in [operator logs](development.md#backend-logging). History starts when this feature is installed; previous stdout logs are not imported.
+
+Event writes are independent of checkpoint writes, so checkpoint failures can still be recorded when event storage is available. Event persistence failures are logged and do not prevent deployments or other services from reconciling. History cannot be recorded while its storage is unavailable. The [management UI](management-ui.md) exposes events independently of Git and Docker availability.
+
 ## Deployments
 
 Web and worker resources support:

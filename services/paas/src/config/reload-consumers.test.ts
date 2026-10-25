@@ -109,6 +109,7 @@ test("existing reconciler and UI discover reloaded service sources and retry bou
 		() => 0,
 		{ resolve: async () => [] },
 		{ type: "worker", lifecycle: "deployment", reconcile },
+		{ append: async () => {}, list: async () => [] },
 	);
 	const ui = new PaasUiService(
 		f.config,
@@ -120,6 +121,7 @@ test("existing reconciler and UI discover reloaded service sources and retry bou
 			readServiceContainerLogs: async () => "",
 		},
 		state,
+		{ append: async () => {}, list: async () => [] },
 	);
 	await service.reconcile();
 	expect(fetchFile).not.toHaveBeenCalled();

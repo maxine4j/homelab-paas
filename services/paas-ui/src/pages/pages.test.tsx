@@ -1,9 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 
+import { ServiceEvents } from "../components/service-events.tsx";
+import { StatusBadge } from "../components/status-badge.tsx";
 import { parseRoute } from "../hooks/use-route.ts";
 import { ClusterPage } from "./cluster-page.tsx";
 import { ResourcePage } from "./resource-page.tsx";
+import { ServiceEventsPage } from "./service-events-page.tsx";
 import { ServicePage } from "./service-page.tsx";
 import { ServicesPage } from "./services-page.tsx";
 
@@ -33,7 +36,7 @@ test("cluster and service pages expose configuration, deployment status and reso
 	).toContain("Cluster configuration");
 	const services = renderToStaticMarkup(<ServicesPage services={[{ serviceId: "demo", phase: "failed" }]} />);
 	expect(services).toContain("#/services/demo");
-	expect(services).toContain("failed");
+	expect(services).toContain("unhealthy");
 	expect(renderToStaticMarkup(<ServicesPage services={[]} />)).toContain("No services configured");
 	const detail = renderToStaticMarkup(
 		<ServicePage
@@ -49,6 +52,79 @@ test("cluster and service pages expose configuration, deployment status and reso
 	expect(detail).toContain("#/services/demo/resources/app");
 	expect(detail).toContain("Descriptor unavailable");
 	expect(detail).toContain("No containers");
+});
+
+test.each([
+	["ready", "healthy"],
+	["deploying", "deploying"],
+	["failed", "unhealthy"],
+	["unknown", "missing"],
+])("service phase %s displays %s", (phase, label) => {
+	const html = renderToStaticMarkup(<StatusBadge status={phase!} />);
+	expect(html).toContain(`badge-${label}`);
+	expect(html).toContain(` ${label}`);
+});
+
+test("service cards put identity first and active/desired revisions side by side without action clutter", () => {
+	const html = renderToStaticMarkup(
+		<ServicesPage
+			services={[
+				{ serviceId: "demo", phase: "ready", activeRevision: "active123", desiredRevision: "desired456" },
+			]}
+		/>,
+	);
+	expect(html).toMatch(/card-top[^]*<h2>demo<\/h2>[^]*badge-healthy/);
+	expect(html).toMatch(/class="service-revisions"[^]*Active revision[^]*active123[^]*Desired revision[^]*desired456/);
+	expect(html).not.toContain("View resources");
+	expect(html).not.toContain("↗");
+	expect(html).not.toContain('eyebrow">Service</span>');
+});
+
+const events = [
+	{
+		timestamp: 1000,
+		level: "error" as const,
+		event: "reconciliation.failed" as const,
+		message: "Cannot resolve application secrets <unsafe>",
+		resourceId: "app",
+		failures: 9,
+		retryAt: 2000,
+		revision: "abcdef",
+	},
+];
+
+test("service details show recent failure events and link to service event history", () => {
+	const html = renderToStaticMarkup(
+		<ServicePage
+			service={{ serviceId: "demo", phase: "failed", source: {}, descriptorStatus: "unavailable", resources: [] }}
+			events={events}
+		/>,
+	);
+	expect(html).toContain("Cannot resolve application secrets &lt;unsafe&gt;");
+	expect(html).toContain('href="#/services/demo/events"');
+	expect(html).toContain("Recent events");
+});
+
+test("event history direct links resolve and render timestamp, resource, severity and retry details", () => {
+	expect(parseRoute("#/services/demo/events")).toEqual({ page: "events", serviceId: "demo" });
+	expect(parseRoute("#/services/demo/events/extra")).toEqual({ page: "missing" });
+	const html = renderToStaticMarkup(<ServiceEventsPage serviceId='demo' events={events} />);
+	expect(html).toContain('href="#/services/demo"');
+	expect(html).toContain("reconciliation.failed");
+	expect(html).toContain("error");
+	expect(html).toContain("app");
+	expect(html).toContain("abcdef");
+	expect(html).toContain("Attempt 9");
+	expect(html).toContain("Next retry");
+	expect(html).toContain('dateTime="1970-01-01T00:00:01.000Z"');
+	expect(html).toContain("&lt;unsafe&gt;");
+});
+
+test("event views distinguish loading, unavailable and empty histories", () => {
+	expect(renderToStaticMarkup(<ServiceEvents />)).toContain("Loading events");
+	expect(renderToStaticMarkup(<ServiceEvents events={[]} />)).toContain("No events recorded");
+	expect(renderToStaticMarkup(<ServiceEvents error='History unavailable' />)).toContain('role="alert"');
+	expect(renderToStaticMarkup(<ServiceEvents error='History unavailable' />)).toContain("History unavailable");
 });
 
 test("cluster editor renders masked replacement inputs and marks environment and restart settings", () => {

@@ -20,19 +20,19 @@ export const ServicesPage = ({ services }: { services: UiServiceSummary[] }) => 
 				{services.map((service) => (
 					<a className='card resource-link' key={service.serviceId} href={`#/services/${service.serviceId}`}>
 						<div className='card-top'>
-							<span className='eyebrow'>Service</span>
+							<h2>{service.serviceId}</h2>
 							<StatusBadge status={service.phase} />
 						</div>
-						<h2>{service.serviceId}</h2>
-						<dl>
-							<dt>Active revision</dt>
-							<dd>{service.activeRevision?.slice(0, 12) ?? "Not deployed"}</dd>
-							<dt>Desired revision</dt>
-							<dd>{service.desiredRevision?.slice(0, 12) ?? "Not observed"}</dd>
+						<dl className='service-revisions'>
+							<div>
+								<dt>Active revision</dt>
+								<dd>{service.activeRevision?.slice(0, 12) ?? "Not deployed"}</dd>
+							</div>
+							<div>
+								<dt>Desired revision</dt>
+								<dd>{service.desiredRevision?.slice(0, 12) ?? "Not observed"}</dd>
+							</div>
 						</dl>
-						<span className='card-action'>
-							View resources <span aria-hidden='true'>↗</span>
-						</span>
 					</a>
 				))}
 			</div>

@@ -67,6 +67,9 @@ export const createPaasUiRouter = (
 	router.get("/cluster", async (context) => {
 		context.body = await service.getCluster();
 	});
+	router.get("/services/:serviceId/events", async (context) => {
+		context.body = await service.getEvents(context.params["serviceId"]!);
+	});
 	router.put(
 		"/cluster/config",
 		async (context, next) => {

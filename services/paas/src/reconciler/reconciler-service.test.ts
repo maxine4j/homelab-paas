@@ -1,3 +1,4 @@
+import type { UiServiceEvent } from "@homelab-paas/shared-contracts";
 import { expect, test, vi } from "vitest";
 
 import { decodeDescriptorYaml } from "../config/paas-config.ts";
@@ -7,6 +8,7 @@ import { captureLogs } from "../util/test/logs.ts";
 import { EnvironmentResolver } from "./environment-resolver.ts";
 import { ReconcilerService } from "./reconciler-service.ts";
 import type { ReconciliationState } from "./types.ts";
+import { serviceEventMessages } from "./types.ts";
 
 const descriptor = {
 	version: 1,
@@ -21,6 +23,7 @@ function fixture() {
 	const reconcile = vi.fn(async () => {});
 	const reconcileWorker = vi.fn(async () => {});
 	const readSecrets = vi.fn(async (): Promise<string | undefined> => undefined);
+	const appendEvent = vi.fn(async (_serviceId: string, _event: UiServiceEvent) => {});
 	const deps = {
 		services: { demo: { remote: "local", descriptorPath: "/repo/demo.sd.yaml" } },
 		retry: { retryBackoffSeconds: 1, maxRetryBackoffSeconds: 4 },
@@ -51,6 +54,7 @@ function fixture() {
 			deps.now,
 			new EnvironmentResolver("/etc/homelab-paas/env", readSecrets),
 			{ type: "worker", lifecycle: "deployment", reconcile: reconcileWorker },
+			{ append: appendEvent, list: async () => [] },
 		);
 	return {
 		deps,
@@ -59,6 +63,7 @@ function fixture() {
 		reconcile,
 		reconcileWorker,
 		readSecrets,
+		appendEvent,
 		createService,
 		service: createService(),
 		advance(ms: number) {
@@ -66,6 +71,132 @@ function fixture() {
 		},
 	};
 }
+
+test.each(["fetch", "descriptor", "capabilities", "secrets", "web", "worker"] as const)(
+	"records safe %s failures with retry metadata, then recovery without unchanged-poll noise",
+	async (stage) => {
+		const f = fixture();
+		if (stage === "fetch") f.fetchFile.mockRejectedValueOnce(new Error("raw-secret"));
+		if (stage === "descriptor") f.fetchFile.mockResolvedValueOnce({ revision: "rev", content: "invalid" });
+		if (stage === "capabilities")
+			f.fetchFile.mockResolvedValueOnce({
+				revision: "rev",
+				content: JSON.stringify({
+					...descriptor,
+					resources: { db: { type: "postgres", image: "postgres:17" } },
+				}),
+			});
+		if (stage === "secrets")
+			f.fetchFile.mockResolvedValueOnce({
+				revision: "rev",
+				content: JSON.stringify({
+					...descriptor,
+					resources: { app: { ...descriptor.resources.app, env: [{ name: "TOKEN", secret: true }] } },
+				}),
+			});
+		if (stage === "web") f.reconcile.mockRejectedValueOnce(new Error("raw-secret"));
+		if (stage === "worker") {
+			f.fetchFile.mockResolvedValueOnce({
+				revision: "rev",
+				content: JSON.stringify({
+					...descriptor,
+					resources: { app: { type: "worker", image: "app:1", healthcheckPort: 8080 } },
+				}),
+			});
+			f.reconcileWorker.mockRejectedValueOnce(new Error("raw-secret"));
+		}
+		await f.service.reconcile();
+		expect(f.appendEvent).toHaveBeenCalledWith(
+			"demo",
+			expect.objectContaining({
+				timestamp: 0,
+				level: "error",
+				event: "reconciliation.failed",
+				failures: 1,
+				retryAt: 1000,
+			}),
+		);
+		const [, failure] = f.appendEvent.mock.calls.at(0) ?? [];
+		expect(failure?.message).toBe(serviceEventMessages[stage]);
+		expect(JSON.stringify(failure)).not.toContain("raw-secret");
+		if (["secrets", "web", "worker"].includes(stage)) expect(failure).toMatchObject({ resourceId: "app" });
+		await f.service.reconcile();
+		expect(f.appendEvent).toHaveBeenCalledTimes(1);
+		f.advance(1000);
+		await f.service.reconcile();
+		expect(f.appendEvent).toHaveBeenLastCalledWith(
+			"demo",
+			expect.objectContaining({ event: "reconciliation.recovered", level: "info", timestamp: 1000 }),
+		);
+		const calls = f.appendEvent.mock.calls.length;
+		await f.service.reconcile();
+		expect(f.appendEvent).toHaveBeenCalledTimes(calls);
+	},
+);
+
+test("records state failures even when checkpoint storage is unavailable", async () => {
+	const f = fixture();
+	f.deps.state.read = vi.fn(async () => {
+		throw new Error("raw-secret");
+	});
+	await f.service.reconcile();
+	expect(f.appendEvent).toHaveBeenCalledWith(
+		"demo",
+		expect.objectContaining({
+			event: "reconciliation.state-failed",
+			level: "error",
+			message: "Cannot persist reconciliation state; check platform state directory access",
+		}),
+	);
+	expect(JSON.stringify(f.appendEvent.mock.calls)).not.toContain("raw-secret");
+});
+
+test("retains deployment diagnostics and events when writing the failed checkpoint also fails", async () => {
+	const f = fixture();
+	f.reconcile.mockRejectedValue(new Error("original-deployment-error"));
+	const write = f.deps.state.write;
+	f.deps.state.write = async (id, state) => {
+		if (state.phase === "failed") throw new Error("checkpoint-error");
+		await write(id, state);
+	};
+	const capture = captureLogs();
+	try {
+		await f.service.reconcile();
+	} finally {
+		capture.restore();
+	}
+	expect(f.appendEvent.mock.calls.map(([, event]) => event.event)).toEqual([
+		"reconciliation.failed",
+		"reconciliation.state-failed",
+	]);
+	expect(capture.lines.map((line) => JSON.parse(line))).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({
+				event: "reconciliation.failed",
+				err: expect.objectContaining({ message: "original-deployment-error" }),
+			}),
+			expect.objectContaining({
+				event: "reconciliation.state-failed",
+				err: expect.objectContaining({ message: "checkpoint-error" }),
+			}),
+		]),
+	);
+});
+
+test("event persistence failure is logged and does not prevent deployment or other services", async () => {
+	const f = fixture();
+	f.appendEvent.mockRejectedValue(new Error("event storage unavailable"));
+	const logs = captureLogs();
+	try {
+		await f.service.reconcile();
+	} finally {
+		logs.restore();
+	}
+	expect(f.states.get("demo")?.phase).toBe("ready");
+	expect(logs.lines.map((line) => JSON.parse(line))).toEqual(
+		expect.arrayContaining([expect.objectContaining({ event: "service-events.append-failed" })]),
+	);
+});
 
 test("fetches a committed descriptor, validates it and reconciles actual state on every poll", async () => {
 	const f = fixture();
