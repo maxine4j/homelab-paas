@@ -2,6 +2,7 @@ import { expect, test, vi } from "vitest";
 
 import type { IDockerService } from "../../docker/docker-service.ts";
 import type { ServiceContainer } from "../../docker/types.ts";
+import { captureLogs } from "../../util/test/logs.ts";
 import type { WorkerDeploymentRequest } from "./types.ts";
 import { WorkerDeploymentService } from "./worker-deployment-service.ts";
 
@@ -183,4 +184,59 @@ test("retirement attempts all replicas and preserves healthy replacements for re
 	await f.service.deploy(input);
 	expect([...f.containers.keys()]).toEqual(["new-1", "new-2"]);
 	expect(f.docker.createResourceContainer).toHaveBeenCalledTimes(2);
+});
+
+test("a running desired worker detached from its network is replaced", async () => {
+	const f = fixture();
+	f.old("detached", "desired");
+	vi.mocked(f.docker.inspectServiceNetwork).mockResolvedValueOnce({
+		id: "net",
+		name: "network",
+		driver: "bridge",
+		labels: {},
+		containerIds: [],
+	});
+	await f.service.deploy({ ...request, resource: { ...request.resource, replicas: 1 } });
+	expect([...f.containers.keys()]).toEqual(["new-1"]);
+});
+
+test("logs worker deployment outcomes without resolved environment values", async () => {
+	const f = fixture();
+	const logs = captureLogs();
+	try {
+		await f.service.deploy(request);
+		vi.mocked(f.docker.resolveImage).mockRejectedValueOnce(new Error("registry failure"));
+		await expect(f.service.deploy({ ...request, spec: "changed" })).rejects.toThrow("registry failure");
+	} finally {
+		logs.restore();
+	}
+	expect(logs.lines.map((line) => JSON.parse(line).event)).toEqual([
+		"deployment.started",
+		"deployment.completed",
+		"deployment.started",
+		"deployment.failed",
+	]);
+	expect(logs.lines.join("")).not.toContain("secret");
+});
+
+test.each(["recreate", "surge"] as const)(
+	"%s replaces only the missing or stopped desired replica",
+	async (strategy) => {
+		const f = fixture();
+		f.old("healthy", "desired");
+		f.old("stopped", "desired", "exited");
+		await f.service.deploy({ ...request, resource: { ...request.resource, rolloutStrategy: strategy } });
+		expect([...f.containers.keys()]).toEqual(["healthy", "new-1"]);
+		expect(f.docker.createResourceContainer).toHaveBeenCalledTimes(1);
+		expect(f.docker.stopServiceContainer).not.toHaveBeenCalledWith("demo", "healthy", expect.anything());
+	},
+);
+
+test("default worker settings start one replica and use the default health path and stop timeout", async () => {
+	const f = fixture();
+	f.old();
+	await f.service.deploy({ ...request, resource: { type: "worker", image: "worker:1", healthcheckPort: 8080 } });
+	expect(f.docker.createResourceContainer).toHaveBeenCalledTimes(1);
+	expect(f.probe).toHaveBeenCalledWith("new-1", 8080, "/healthcheck");
+	expect(f.docker.stopServiceContainer).toHaveBeenCalledWith("demo", "old", 30);
 });

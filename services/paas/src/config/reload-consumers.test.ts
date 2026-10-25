@@ -108,6 +108,7 @@ test("existing reconciler and UI discover reloaded service sources and retry bou
 		state,
 		() => 0,
 		{ resolve: async () => [] },
+		{ type: "worker", lifecycle: "deployment", reconcile },
 	);
 	const ui = new PaasUiService(
 		f.config,

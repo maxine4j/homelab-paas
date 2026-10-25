@@ -1,0 +1,147 @@
+import { expect, test, vi } from "vitest";
+
+import type { IDockerService } from "../../../docker/docker-service.ts";
+import type { ServiceContainer } from "../../../docker/types.ts";
+import { captureLogs } from "../../../util/test/logs.ts";
+import type { DeploymentWorkerResource } from "../../deployment/types.ts";
+import type { IWorkerDeploymentService } from "../../deployment/worker-deployment-service.ts";
+import { WorkerResourceReconciler } from "./worker-reconciler.ts";
+
+const resource: DeploymentWorkerResource = { type: "worker", image: "jobs:1", healthcheckPort: 9090, replicas: 2 };
+const input = { serviceId: "demo", resourceId: "jobs", revision: "rev1", resource };
+
+const fixture = () => {
+	let containers: ServiceContainer[] = [];
+	const deploy = vi.fn<IWorkerDeploymentService["deploy"]>(async () => {});
+	const probe = vi.fn(async () => true);
+	const docker: IDockerService = {
+		listServiceContainers: vi.fn(async () => containers),
+		inspectServiceNetwork: vi.fn(async () => ({
+			id: "n",
+			name: "network",
+			driver: "bridge",
+			labels: {},
+			containerIds: containers.map(({ id }) => id),
+		})),
+		inspectServiceContainer: vi.fn(async (_service, id) => ({
+			id,
+			imageId: "image",
+			running: true,
+			labels: {},
+			networks: { network: { address: id, aliases: [] } },
+		})),
+		prepareServiceNetwork: vi.fn(async () => {}),
+		resolveImage: vi.fn(),
+		createResourceContainer: vi.fn(),
+		startServiceContainer: vi.fn(),
+		stopServiceContainer: vi.fn(),
+		removeServiceContainer: vi.fn(),
+		readServiceContainerLogs: vi.fn(),
+	};
+	const reconciler = new WorkerResourceReconciler(docker, { deploy }, probe);
+	return {
+		reconciler,
+		docker,
+		deploy,
+		probe,
+		setContainers(value: ServiceContainer[]) {
+			containers = value;
+		},
+		async converge() {
+			await reconciler.reconcile(input);
+			const request = vi.mocked(deploy).mock.calls.at(-1)!.at(0)!;
+			containers = ["one", "two"].map((id) => ({
+				id,
+				spec: request.spec,
+				state: "running",
+				resourceId: "jobs",
+				revision: "rev1",
+				imageId: "image",
+			}));
+			deploy.mockClear();
+			return containers;
+		},
+	};
+};
+
+test("worker drift delegates deployment and unchanged commits only probe private endpoints", async () => {
+	const f = fixture();
+	await f.converge();
+	const logs = captureLogs();
+	try {
+		await f.reconciler.reconcile({ ...input, revision: "rev2" });
+	} finally {
+		logs.restore();
+	}
+	expect(f.deploy).not.toHaveBeenCalled();
+	expect(f.probe.mock.calls).toEqual([
+		["one", 9090, "/healthcheck"],
+		["two", 9090, "/healthcheck"],
+	]);
+	expect(f.docker.prepareServiceNetwork).toHaveBeenCalledWith("demo");
+	expect(logs.lines).toEqual([]);
+});
+
+test.each(["missing", "stopped", "duplicate"])("repairs a %s replica", async (drift) => {
+	const f = fixture();
+	const containers = await f.converge();
+	if (drift === "missing") f.setContainers(containers.slice(0, 1));
+	if (drift === "stopped") containers.at(0)!.state = "exited";
+	if (drift === "duplicate") f.setContainers([...containers, { ...containers.at(0)!, id: "extra" }]);
+	await f.reconciler.reconcile(input);
+	expect(f.deploy).toHaveBeenCalledTimes(1);
+});
+
+test("a failed private health check prevents reporting a converged worker as ready", async () => {
+	const f = fixture();
+	await f.converge();
+	f.probe.mockResolvedValue(false);
+	await expect(f.reconciler.reconcile(input)).rejects.toThrow("Worker readiness failed");
+	expect(f.deploy).not.toHaveBeenCalled();
+});
+
+test.each<Partial<DeploymentWorkerResource>>([
+	{ image: "jobs:2" },
+	{ command: ["run"] },
+	{ env: [{ name: "TOKEN", value: "secret" }] },
+	{ volumes: [{ hostPath: "/srv/data", mountPath: "/data" }] },
+	{ limits: { cpus: 0.5 } },
+	{ limits: { memoryMiB: 256 } },
+	{ replicas: 3 },
+	{ rolloutStrategy: "surge" },
+	{ termination: { timeoutSeconds: 60 } },
+	{ healthcheckPort: 9091 },
+	{ healthcheckUrl: "/ready" },
+])("configuration changes replace workers: %j", async (change) => {
+	const f = fixture();
+	await f.converge();
+	await f.reconciler.reconcile({ ...input, resource: { ...resource, ...change } });
+	expect(f.deploy).toHaveBeenCalledTimes(1);
+});
+
+test("environment ordering and explicit defaults keep the worker fingerprint stable", async () => {
+	const f = fixture();
+	const hash = async (value: DeploymentWorkerResource) => {
+		await f.reconciler.reconcile({ ...input, resource: value });
+		return f.deploy.mock.calls.at(-1)!.at(0)!.spec;
+	};
+	const first = await hash({
+		...resource,
+		env: [
+			{ name: "B", value: "b" },
+			{ name: "A", value: "secret" },
+		],
+	});
+	const second = await hash({
+		...resource,
+		healthcheckUrl: "/healthcheck",
+		rolloutStrategy: "recreate",
+		termination: { timeoutSeconds: 30 },
+		env: [
+			{ name: "A", value: "secret" },
+			{ name: "B", value: "b" },
+		],
+	});
+	expect(first).toBe(second);
+	expect(first).toMatch(/^[a-f0-9]{64}$/);
+});

@@ -34,6 +34,7 @@ import { DigitalOceanDnsAcmeChallengeProvider } from "./ingress/tls/dns-challeng
 import { DeploymentService } from "./reconciler/deployment/deployment-service.ts";
 import { RecreateDeploymentStrategy } from "./reconciler/deployment/strategy/recreate-deployment-strategy.ts";
 import { SurgeDeploymentStrategy } from "./reconciler/deployment/strategy/surge-deployment-strategy.ts";
+import { WorkerDeploymentService } from "./reconciler/deployment/worker-deployment-service.ts";
 import { EnvironmentResolver } from "./reconciler/environment-resolver.ts";
 import { EndpointsStore } from "./reconciler/networking/endpoints-store.ts";
 import { NetworkingService } from "./reconciler/networking/networking-service.ts";
@@ -41,6 +42,7 @@ import { ReconcilerService } from "./reconciler/reconciler-service.ts";
 import { ReconcilerTask } from "./reconciler/reconciler-task.ts";
 import { ReconciliationStore } from "./reconciler/reconciliation-store.ts";
 import { WebResourceReconciler } from "./reconciler/resources/web/web-reconciler.ts";
+import { WorkerResourceReconciler } from "./reconciler/resources/worker/worker-reconciler.ts";
 import { FileSystemKeyValueStore } from "./store/file-system-store.ts";
 import { PeriodicTaskRunner } from "./task/periodic.ts";
 import type { StartOptions } from "./types.ts";
@@ -105,6 +107,11 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		store,
 		Date.now,
 		new EnvironmentResolver("/etc/homelab-paas/env", readFile),
+		new WorkerResourceReconciler(
+			docker,
+			new WorkerDeploymentService(docker, probe, sleep, () => nanoid(10)),
+			probe,
+		),
 	);
 	const abort = new AbortController();
 	const pause = async (ms: number): Promise<void> => {

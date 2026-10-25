@@ -1,5 +1,6 @@
 import type { IDockerService } from "../../docker/docker-service.ts";
 import type { HttpProbe } from "../../util/healthcheck.ts";
+import { createLogger } from "../../util/logger.ts";
 import type { ISleep } from "../../util/sleep.ts";
 import type { WorkerDeploymentRequest } from "./types.ts";
 
@@ -12,6 +13,7 @@ export interface IWorkerDeploymentService {
 
 /** Workers have no routing dependency; their health endpoints are only probed by PaaS. */
 export class WorkerDeploymentService implements IWorkerDeploymentService {
+	private readonly log = createLogger(WorkerDeploymentService.name);
 	constructor(
 		private readonly docker: IDockerService,
 		private readonly probe: HttpProbe,
@@ -20,18 +22,44 @@ export class WorkerDeploymentService implements IWorkerDeploymentService {
 	) {}
 
 	async deploy(request: WorkerDeploymentRequest): Promise<void> {
+		const fields = {
+			serviceId: request.serviceId,
+			resourceId: request.resourceId,
+			revision: request.revision,
+			strategy: request.resource.rolloutStrategy ?? "recreate",
+		};
+		this.log.info({ ...fields, event: "deployment.started" }, "Deploying worker replicas");
+		try {
+			await this.deployReplicas(request);
+			this.log.info(
+				{ ...fields, event: "deployment.completed" },
+				"Worker replicas ready; previous containers retired",
+			);
+		} catch (err) {
+			this.log.error(
+				{ ...fields, event: "deployment.failed", err },
+				"Worker deployment failed; reconciliation will retry",
+			);
+			throw err;
+		}
+	}
+
+	private async deployReplicas(request: WorkerDeploymentRequest): Promise<void> {
 		const { serviceId, resourceId, resource } = request;
 		const current = await this.docker.listServiceContainers(serviceId, resourceId);
+		await this.docker.prepareServiceNetwork(serviceId);
+		const network = await this.docker.inspectServiceNetwork(serviceId);
+		if (!network) throw new Error("Service network is unavailable");
 		const retained = current
-			.filter(({ spec, state }) => spec === request.spec && state === "running")
+			.filter(
+				({ id, spec, state }) =>
+					spec === request.spec && state === "running" && network.containerIds.includes(id),
+			)
 			.slice(0, resource.replicas ?? 1);
 		const retainedIds = new Set(retained.map(({ id }) => id));
 		const retiring = current.filter(({ id }) => !retainedIds.has(id)).map(({ id }) => id);
 		const missing = (resource.replicas ?? 1) - retained.length;
 		const imageId = missing > 0 ? await this.docker.resolveImage(resource.image) : undefined;
-		await this.docker.prepareServiceNetwork(serviceId);
-		const network = await this.docker.inspectServiceNetwork(serviceId);
-		if (!network) throw new Error("Service network is unavailable");
 		for (const { id } of retained) await this.waitReady(request, id, network.name);
 		if ((resource.rolloutStrategy ?? "recreate") === "recreate") await this.retire(request, retiring);
 		const created: string[] = [];

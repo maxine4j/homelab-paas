@@ -12,12 +12,14 @@ import { NodeGitTransport } from "../../src/git/git-transport.ts";
 import { DeploymentService } from "../../src/reconciler/deployment/deployment-service.ts";
 import { RecreateDeploymentStrategy } from "../../src/reconciler/deployment/strategy/recreate-deployment-strategy.ts";
 import { SurgeDeploymentStrategy } from "../../src/reconciler/deployment/strategy/surge-deployment-strategy.ts";
+import { WorkerDeploymentService } from "../../src/reconciler/deployment/worker-deployment-service.ts";
 import { EnvironmentResolver } from "../../src/reconciler/environment-resolver.ts";
 import { EndpointsStore } from "../../src/reconciler/networking/endpoints-store.ts";
 import { NetworkingService } from "../../src/reconciler/networking/networking-service.ts";
 import { ReconcilerService } from "../../src/reconciler/reconciler-service.ts";
 import { ReconciliationStore } from "../../src/reconciler/reconciliation-store.ts";
 import { WebResourceReconciler } from "../../src/reconciler/resources/web/web-reconciler.ts";
+import { WorkerResourceReconciler } from "../../src/reconciler/resources/worker/worker-reconciler.ts";
 import { FileSystemKeyValueStore } from "../../src/store/file-system-store.ts";
 import { atomicWriteFile, mkdir, readFile, rm } from "../../src/util/file.ts";
 import { probe } from "../../src/util/healthcheck.ts";
@@ -73,6 +75,11 @@ export const inProcessPaas = async (
 		checkpoints,
 		now,
 		new EnvironmentResolver(`${directory}/env`, readFile),
+		new WorkerResourceReconciler(
+			docker,
+			new WorkerDeploymentService(docker, probe, pause, () => "integration"),
+			probe,
+		),
 	);
 	return { reconciler, checkpoints, endpoints };
 };
