@@ -157,7 +157,7 @@ test("rejects invalid identities, resource fields and multiple web resources", (
 
 test.each([
 	{ type: "worker", image: "app:1", ingress: { port: 3000 } },
-	{ type: "worker", image: "app:1", healthcheckUrl: "/health" },
+	{ type: "worker", image: "app:1", healthcheckUrl: "//health" },
 	{ type: "postgres", image: "postgres:17", volumes: [] },
 	{ type: "rabbitmq", image: "rabbitmq:4", env: [] },
 	{ type: "postgres", image: "postgres:17", credentials: {} },
@@ -176,7 +176,18 @@ test.each([
 	{ type: "worker", image: "app:1", volumes: [{ source: "app/../data", target: "/data" }] },
 	{ type: "worker", image: "app:1", volumes: [{ source: "app/data", target: "relative" }] },
 ])("rejects invalid resource configuration without exposing values: %j", (resource) => {
-	expect(() => parseDescriptor({ ...descriptor, resources: { app: resource } }, "test-service")).toThrow(
-		"Invalid service descriptor: check service identity and resource configuration",
-	);
+	expect(() =>
+		parseDescriptor(
+			{
+				...descriptor,
+				resources: {
+					app: {
+						...(resource.type === "worker" ? { healthcheckPort: 8081 } : {}),
+						...resource,
+					},
+				},
+			},
+			"test-service",
+		),
+	).toThrow("Invalid service descriptor: check service identity and resource configuration");
 });

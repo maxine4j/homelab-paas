@@ -63,9 +63,11 @@ export const inProcessPaas = async (
 	);
 	await envoy.bootstrap();
 	const networking = new NetworkingService(endpoints, envoy);
+	let instance = 0;
+	const generateInstanceId = () => `integration-${++instance}`;
 	const deployments = new DeploymentService([
 		new RecreateDeploymentStrategy(docker, networking, probe, pause),
-		new SurgeDeploymentStrategy(docker, networking, probe, pause, () => "integration"),
+		new SurgeDeploymentStrategy(docker, networking, probe, pause, generateInstanceId),
 	]);
 	const reconciler = new ReconcilerService(
 		config,
@@ -77,7 +79,7 @@ export const inProcessPaas = async (
 		new EnvironmentResolver(`${directory}/env`, readFile),
 		new WorkerResourceReconciler(
 			docker,
-			new WorkerDeploymentService(docker, probe, pause, () => "integration"),
+			new WorkerDeploymentService(docker, probe, pause, generateInstanceId),
 			probe,
 		),
 	);
