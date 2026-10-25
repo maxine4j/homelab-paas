@@ -1,26 +1,66 @@
-import type { EnvironmentVariable } from "@homelab-paas/shared-contracts";
+import type { EnvironmentVariable, UiSecretFailure } from "@homelab-paas/shared-contracts";
 
+import type { IHostPathResolver } from "../docker/docker-host-path-resolver.ts";
 import type { FileReader } from "../util/file.ts";
+import { createLogger } from "../util/logger.ts";
 
 export interface IEnvironmentResolver {
 	/** Resolves only declared values, reading secrets anew per call. Throws sanitized errors before deployment. */
 	resolve(serviceId: string, env: EnvironmentVariable[]): Promise<{ name: string; value: string }[]>;
 }
 
+export class EnvironmentResolutionError extends Error {
+	override readonly name = "EnvironmentResolutionError";
+	constructor(
+		public readonly details: UiSecretFailure,
+		options?: ErrorOptions,
+	) {
+		super(
+			`Cannot resolve application secrets; check the service env file and required variable names. ${details.reason}: ${details.hostFilePath ?? details.filePath}${details.line ? `, line ${details.line}` : ""}${details.missingVariables?.length ? `; missing variables: ${details.missingVariables.join(", ")}` : ""}`,
+			options,
+		);
+	}
+}
+
+class SecretFileSyntaxError extends Error {
+	constructor(readonly line: number) {
+		super(`Invalid secret assignment at line ${line}`);
+	}
+}
+
 export class EnvironmentResolver implements IEnvironmentResolver {
+	private readonly log = createLogger(EnvironmentResolver.name);
 	constructor(
 		private readonly directory: string,
 		private readonly read: FileReader,
+		private readonly hostPaths?: IHostPathResolver,
 	) {}
 
 	async resolve(serviceId: string, env: EnvironmentVariable[]): Promise<{ name: string; value: string }[]> {
+		if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(serviceId))
+			throw new Error("Cannot resolve application secrets; invalid service identity");
+		const filePath = `${this.directory}/${serviceId}.env`;
+		let reason: UiSecretFailure["reason"] = "unreadable-file";
+		let missingVariables: string[] | undefined;
 		try {
-			if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(serviceId)) throw new Error();
 			let secrets = new Map<string, string>();
 			if (env.some((entry) => "secret" in entry)) {
-				const content = await this.read(`${this.directory}/${serviceId}.env`);
-				if (content === undefined || content.includes("\0")) throw new Error();
+				const content = await this.read(filePath);
+				if (content === undefined) {
+					reason = "missing-file";
+					missingVariables = env.filter((entry) => "secret" in entry).map((entry) => entry.name);
+					throw new Error("Service secret file is missing");
+				}
+				reason = "invalid-file";
+				if (content.includes("\0")) throw new Error("Secret file contains NUL bytes");
 				secrets = this.parse(content);
+				missingVariables = env
+					.filter((entry) => "secret" in entry && !secrets.has(entry.name))
+					.map((entry) => entry.name);
+				if (missingVariables.length) {
+					reason = "missing-variables";
+					throw new Error("Required secret variables are missing");
+				}
 			}
 			return env.map((entry) => {
 				const value = "value" in entry ? entry.value : secrets.get(entry.name);
@@ -28,8 +68,23 @@ export class EnvironmentResolver implements IEnvironmentResolver {
 				return { name: entry.name, value };
 			});
 		} catch (cause) {
-			throw new Error(
-				"Cannot resolve application secrets; check the service env file and required variable names",
+			let hostFilePath: string | undefined;
+			try {
+				hostFilePath = await this.hostPaths?.resolve(filePath);
+			} catch (error) {
+				this.log.warn(
+					{ event: "secrets.host-path-unavailable", serviceId, err: error },
+					"Cannot resolve host secret file path; check Docker control-plane mounts",
+				);
+			}
+			throw new EnvironmentResolutionError(
+				{
+					reason,
+					filePath,
+					...(hostFilePath ? { hostFilePath } : {}),
+					...(missingVariables?.length ? { missingVariables } : {}),
+					...(cause instanceof SecretFileSyntaxError ? { line: cause.line } : {}),
+				},
 				{ cause },
 			);
 		}
@@ -37,14 +92,14 @@ export class EnvironmentResolver implements IEnvironmentResolver {
 
 	private parse(content: string): Map<string, string> {
 		const values = new Map<string, string>();
-		for (const line of content.split(/\r?\n/)) {
+		for (const [index, line] of content.split(/\r?\n/).entries()) {
 			if (/^\s*(?:#.*)?$/.test(line)) continue;
 			// Single-line dotenv assignments; quoting is literal, without shell expansion.
 			const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:'([^']*)'|"([^"]*)"|([^'"#]*?))\s*(?:#.*)?$/.exec(
 				line,
 			);
 			const name = match?.at(1);
-			if (!name || values.has(name)) throw new Error();
+			if (!name || values.has(name)) throw new SecretFileSyntaxError(index + 1);
 			values.set(name, match?.at(2) ?? match?.at(3) ?? match?.at(4)?.trim() ?? "");
 		}
 		return values;

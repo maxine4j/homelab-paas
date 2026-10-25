@@ -7,6 +7,7 @@ import { createLogger } from "../util/logger.ts";
 import type { DeploymentWebResource } from "./deployment/strategy/types.ts";
 import type { DeploymentWorkerResource } from "./deployment/types.ts";
 import type { IEnvironmentResolver } from "./environment-resolver.ts";
+import { EnvironmentResolutionError } from "./environment-resolver.ts";
 import type { IWebResourceReconciler } from "./resources/web/web-reconciler.ts";
 import type { IWorkerResourceReconciler } from "./resources/worker/worker-reconciler.ts";
 import type { IServiceEventStore } from "./service-event-store.ts";
@@ -124,6 +125,9 @@ export class ReconcilerService implements IReconcilerService {
 				level: "error",
 				event: "reconciliation.failed",
 				message,
+				...(message === serviceEventMessages.secrets && error instanceof EnvironmentResolutionError
+					? { secretFailure: error.details }
+					: {}),
 				resourceId,
 				revision: desiredRevision,
 				failures,

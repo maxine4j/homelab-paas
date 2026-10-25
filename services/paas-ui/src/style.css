@@ -359,6 +359,16 @@ p {
 	margin: 14px 0;
 	line-height: 1.5;
 }
+.secret-failure {
+	margin: 14px 0;
+	padding: 0 0 0 14px;
+	border-left: 2px solid #62404a;
+	font-size: 0.85rem;
+	line-height: 1.6;
+}
+.secret-failure p {
+	margin: 6px 0;
+}
 .event-metadata {
 	display: flex;
 	flex-wrap: wrap;

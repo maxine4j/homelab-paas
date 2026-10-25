@@ -3,6 +3,20 @@ import { expect, test } from "vitest";
 import { DockerClient, DockerClientError } from "./docker-client.ts";
 import type { IDockerTransport } from "./docker-transport.ts";
 
+test("maps Docker mount metadata for host secret file discovery", async () => {
+	const f = fixture(200, {
+		Id: "controller",
+		Image: "image",
+		State: { Running: true },
+		Config: { Labels: {} },
+		NetworkSettings: { Networks: {} },
+		Mounts: [{ Type: "bind", Source: "/srv/config", Destination: "/etc/homelab-paas", RW: true }],
+	});
+	expect((await f.client.inspectContainer("controller"))?.mounts).toEqual([
+		{ type: "bind", source: "/srv/config", destination: "/etc/homelab-paas" },
+	]);
+});
+
 test("maps devices with default and explicit permissions and numeric supplementary groups", async () => {
 	const f = fixture(201, { Id: "c" });
 	await f.client.createContainer({

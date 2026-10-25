@@ -58,3 +58,66 @@ test("sanitizes file access errors and rejects service path traversal", async ()
 	);
 	expect(read).not.toHaveBeenCalled();
 });
+
+test("reports every missing secret name and actual host file without exposing configured values", async () => {
+	const resolver = new EnvironmentResolver("/etc/homelab-paas/env", async () => "PRESENT=private-value\n", {
+		resolve: async () => "/srv/paas/config/env/demo.env",
+	});
+	await expect(
+		resolver.resolve("demo", [
+			{ name: "FIRST", secret: true },
+			{ name: "PRESENT", secret: true },
+			{ name: "SECOND", secret: true },
+			{ name: "LITERAL", value: "private-literal" },
+		]),
+	).rejects.toMatchObject({
+		name: "EnvironmentResolutionError",
+		details: {
+			reason: "missing-variables",
+			filePath: "/etc/homelab-paas/env/demo.env",
+			hostFilePath: "/srv/paas/config/env/demo.env",
+			missingVariables: ["FIRST", "SECOND"],
+		},
+		message: expect.stringContaining("FIRST, SECOND"),
+	});
+	try {
+		await resolver.resolve("demo", [{ name: "TOKEN", secret: true }]);
+	} catch (error) {
+		expect((error as Error).message).not.toContain("private-value");
+	}
+});
+
+test.each([
+	[undefined, "missing-file", undefined],
+	["TOKEN='private-value", "invalid-file", 1],
+	["# comment\nTOKEN=value\nTOKEN=private-value", "invalid-file", 3],
+	["TOKEN=private-value\0", "invalid-file", undefined],
+] as const)("reports safe file diagnostics: %s", async (content, reason, line) => {
+	const resolver = new EnvironmentResolver("/env", async () => content);
+	await expect(resolver.resolve("demo", [{ name: "TOKEN", secret: true }])).rejects.toMatchObject({
+		details: { reason, filePath: "/env/demo.env", ...(line ? { line } : {}) },
+	});
+});
+
+test("host lookup failure preserves the original file failure without guessing a host path", async () => {
+	const cause = new Error("private access failure");
+	const resolver = new EnvironmentResolver(
+		"/env",
+		async () => {
+			throw cause;
+		},
+		{
+			resolve: async () => {
+				throw new Error("Docker unavailable");
+			},
+		},
+	);
+	try {
+		await resolver.resolve("demo", [{ name: "TOKEN", secret: true }]);
+		throw new Error("expected failure");
+	} catch (error) {
+		expect(error).toMatchObject({ cause, details: { reason: "unreadable-file", filePath: "/env/demo.env" } });
+		expect((error as { details: object }).details).not.toHaveProperty("hostFilePath");
+		expect((error as Error).message).not.toContain("private access failure");
+	}
+});

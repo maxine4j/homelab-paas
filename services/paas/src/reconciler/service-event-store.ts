@@ -65,5 +65,26 @@ const eventSchema = z.strictObject({
 	revision: z.string().max(256).optional(),
 	failures: z.number().int().nonnegative().max(1024).optional(),
 	retryAt: z.number().finite().nonnegative().optional(),
+	secretFailure: z
+		.strictObject({
+			reason: z.enum(["missing-file", "unreadable-file", "invalid-file", "missing-variables"]),
+			filePath: z
+				.string()
+				.startsWith("/")
+				.max(4096)
+				.regex(/^[^\0\r\n]+$/),
+			hostFilePath: z
+				.string()
+				.startsWith("/")
+				.max(4096)
+				.regex(/^[^\0\r\n]+$/)
+				.optional(),
+			missingVariables: z
+				.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/))
+				.max(1024)
+				.optional(),
+			line: z.number().int().positive().optional(),
+		})
+		.optional(),
 });
 const historySchema = z.array(eventSchema).max(200);

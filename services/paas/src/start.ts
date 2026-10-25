@@ -9,6 +9,7 @@ import { nanoid } from "nanoid";
 import { FileConfigStore } from "./config/config-store.ts";
 import { PaasConfig, decodeDescriptorYaml } from "./config/paas-config.ts";
 import { DockerClient } from "./docker/docker-client.ts";
+import { DockerHostPathResolver } from "./docker/docker-host-path-resolver.ts";
 import { DockerService } from "./docker/docker-service.ts";
 import { NodeDockerTransport } from "./docker/docker-transport.ts";
 import { EnvoyClient } from "./envoy/envoy-client.ts";
@@ -70,19 +71,17 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const store = new ReconciliationStore(state);
 	const events = new ServiceEventStore(state);
 	const endpoints = new EndpointsStore(state);
-	const docker = new DockerService(
-		new DockerClient(
-			new NodeDockerTransport(
-				{
-					socketPath: "/var/run/docker.sock",
-					timeoutMs: 120_000,
-					maxResponseBytes: 16 * 1024 * 1024,
-				},
-				sleep,
-			),
+	const dockerClient = new DockerClient(
+		new NodeDockerTransport(
+			{
+				socketPath: "/var/run/docker.sock",
+				timeoutMs: 120_000,
+				maxResponseBytes: 16 * 1024 * 1024,
+			},
+			sleep,
 		),
-		config,
 	);
+	const docker = new DockerService(dockerClient, config);
 	const envoy = new EnvoyService(
 		new EnvoyClient(
 			new NodeEnvoyTransport({
@@ -109,7 +108,11 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		new WebResourceReconciler(docker, deployment, networking, probe),
 		store,
 		Date.now,
-		new EnvironmentResolver("/etc/homelab-paas/env", readFile),
+		new EnvironmentResolver(
+			"/etc/homelab-paas/env",
+			readFile,
+			new DockerHostPathResolver(dockerClient, config.getClusterId()),
+		),
 		new WorkerResourceReconciler(
 			docker,
 			new WorkerDeploymentService(docker, probe, sleep, () => nanoid(10)),

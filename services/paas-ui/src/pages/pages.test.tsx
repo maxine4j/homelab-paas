@@ -127,6 +127,43 @@ test("event views distinguish loading, unavailable and empty histories", () => {
 	expect(renderToStaticMarkup(<ServiceEvents error='History unavailable' />)).toContain("History unavailable");
 });
 
+test("both service event views show missing names, host edit path and safe syntax location", () => {
+	const detailed = [
+		{
+			...events[0]!,
+			secretFailure: {
+				reason: "missing-variables" as const,
+				filePath: "/etc/homelab-paas/env/demo.env",
+				hostFilePath: "/srv/config/env/demo.env",
+				missingVariables: ["TOKEN", "PASSWORD"],
+			},
+		},
+	];
+	const full = renderToStaticMarkup(<ServiceEventsPage serviceId='demo' events={detailed} />);
+	const recent = renderToStaticMarkup(
+		<ServicePage
+			service={{ serviceId: "demo", phase: "failed", source: {}, descriptorStatus: "available", resources: [] }}
+			events={detailed}
+		/>,
+	);
+	for (const html of [full, recent]) {
+		expect(html).toContain("Missing variables");
+		expect(html).toContain("TOKEN, PASSWORD");
+		expect(html).toContain("Edit on Docker host");
+		expect(html).toContain("/srv/config/env/demo.env");
+		expect(html).toContain("/etc/homelab-paas/env/demo.env");
+	}
+	const syntax = renderToStaticMarkup(
+		<ServiceEvents
+			events={[{ ...events[0]!, secretFailure: { reason: "invalid-file", filePath: "/env/demo.env", line: 3 } }]}
+		/>,
+	);
+	expect(syntax).toContain("Invalid secret file format");
+	expect(syntax).toContain("Line 3");
+	expect(syntax).toContain("Host path unavailable");
+	expect(syntax).not.toContain("Edit on Docker host");
+});
+
 test("cluster editor renders masked replacement inputs and marks environment and restart settings", () => {
 	const html = renderToStaticMarkup(
 		<ClusterPage

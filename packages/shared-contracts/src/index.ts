@@ -17,6 +17,7 @@ export type {
 	UiCluster,
 	UiServiceSummary,
 	UiServiceEvent,
+	UiSecretFailure,
 	UiContainer,
 	UiResource,
 	UiService,

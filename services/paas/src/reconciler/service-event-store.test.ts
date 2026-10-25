@@ -55,3 +55,24 @@ test("rejects invalid persisted events, unsafe messages and service identities",
 	await backing.set("demo.events", [{ ...event(1), message: "raw-secret" }]);
 	await expect(store.list("demo")).rejects.toThrow("Cannot read service events");
 });
+
+test("retains structured secret diagnostics with legacy events and rejects raw file content", async () => {
+	const backing = new InMemoryKeyValueStore<unknown>();
+	const store = new ServiceEventStore(backing);
+	await store.append("demo", event(1));
+	const detailed = {
+		...event(2),
+		secretFailure: {
+			reason: "missing-variables" as const,
+			filePath: "/etc/homelab-paas/env/demo.env",
+			hostFilePath: "/srv/config/env/demo.env",
+			missingVariables: ["TOKEN", "PASSWORD"],
+		},
+	};
+	await store.append("demo", detailed);
+	expect(await new ServiceEventStore(backing).list("demo")).toEqual([detailed, event(1)]);
+	await backing.set("demo.events", [
+		{ ...detailed, secretFailure: { ...detailed.secretFailure, content: "private-value" } },
+	]);
+	await expect(store.list("demo")).rejects.toThrow("Cannot read service events");
+});

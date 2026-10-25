@@ -9,6 +9,8 @@ export interface DockerContainer {
 }
 
 export interface DockerContainerDetails {
+	/** Internal mount metadata; never return wholesale in UI snapshots. */
+	mounts?: { type: string; source: string; destination: string }[];
 	/** Internal only; never serialize environment in status responses. */
 	env?: Record<string, string>;
 	id: string;
@@ -16,6 +18,11 @@ export interface DockerContainerDetails {
 	running: boolean;
 	labels: Labels;
 	networks: Record<string, { address: string; aliases: string[] }>;
+}
+
+export interface HostPathDocker {
+	listContainers(options: { all: boolean; labels: Labels }): Promise<DockerContainer[]>;
+	inspectContainer(id: string): Promise<DockerContainerDetails | null>;
 }
 
 export interface DockerNetwork {

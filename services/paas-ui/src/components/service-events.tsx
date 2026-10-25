@@ -28,6 +28,38 @@ export const ServiceEvents = ({ events, error }: { events?: UiServiceEvent[]; er
 						</time>
 					</div>
 					<p className='event-message'>{event.message}</p>
+					{event.secretFailure && (
+						<div className='secret-failure'>
+							<p>
+								{event.secretFailure.reason === "missing-file"
+									? "Secret file is missing"
+									: event.secretFailure.reason === "unreadable-file"
+										? "Secret file cannot be read; check permissions and mounts"
+										: event.secretFailure.reason === "invalid-file"
+											? "Invalid secret file format"
+											: "Required secret variables are missing"}
+							</p>
+							{event.secretFailure.missingVariables?.length ? (
+								<p>
+									Missing variables: <code>{event.secretFailure.missingVariables.join(", ")}</code>
+								</p>
+							) : undefined}
+							{event.secretFailure.hostFilePath ? (
+								<p>
+									Edit on Docker host: <code>{event.secretFailure.hostFilePath}</code>
+								</p>
+							) : (
+								<p>
+									Host path unavailable. Check the control-plane bind mount for the container path
+									below.
+								</p>
+							)}
+							<p>
+								Container path: <code>{event.secretFailure.filePath}</code>
+							</p>
+							{event.secretFailure.line && <p>Line {event.secretFailure.line}</p>}
+						</div>
+					)}
 					<div className='event-metadata'>
 						<code>{event.event}</code>
 						{event.resourceId && <span>Resource: {event.resourceId}</span>}

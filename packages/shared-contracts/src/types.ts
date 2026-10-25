@@ -46,6 +46,17 @@ export interface UiServiceEvent {
 	revision?: string;
 	failures?: number;
 	retryAt?: number;
+	secretFailure?: UiSecretFailure;
+}
+
+export interface UiSecretFailure {
+	reason: "missing-file" | "unreadable-file" | "invalid-file" | "missing-variables";
+	/** Path read inside the control-plane container. */
+	filePath: string;
+	/** Actual Docker host path, only when a bind mount mapping is known. */
+	hostFilePath?: string;
+	missingVariables?: string[];
+	line?: number;
 }
 
 export interface UiContainer {

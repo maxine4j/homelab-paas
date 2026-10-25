@@ -140,6 +140,23 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 		expect(
 			[...docker.containers.values()].filter((c) => c.Config.Labels["homelab-paas.service"] === "demo"),
 		).toHaveLength(2);
+		const missingSecrets = JSON.parse(descriptor("demo", "v5"));
+		missingSecrets.resources.app.env = [
+			{ name: "TOKEN", secret: true },
+			{ name: "PASSWORD", secret: true },
+		];
+		await git.commit({ "demo.sd.yaml": JSON.stringify(missingSecrets) });
+		now += config.getReconciliationConfig().maxRetryBackoffSeconds * 1000;
+		await paas.reconciler.reconcile();
+		expect((await paas.events.list("demo")).at(0)).toMatchObject({
+			event: "reconciliation.failed",
+			resourceId: "app",
+			secretFailure: {
+				reason: "missing-file",
+				filePath: `${directory}/state/env/demo.env`,
+				missingVariables: ["TOKEN", "PASSWORD"],
+			},
+		});
 	} finally {
 		await Promise.all([docker.server.close(), envoy.server.close(), health.close()]);
 	}

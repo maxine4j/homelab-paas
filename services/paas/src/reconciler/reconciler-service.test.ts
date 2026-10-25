@@ -24,6 +24,7 @@ function fixture() {
 	const reconcileWorker = vi.fn(async () => {});
 	const readSecrets = vi.fn(async (): Promise<string | undefined> => undefined);
 	const appendEvent = vi.fn(async (_serviceId: string, _event: UiServiceEvent) => {});
+	const resolveHostPath = vi.fn(async (): Promise<string | undefined> => undefined);
 	const deps = {
 		services: { demo: { remote: "local", descriptorPath: "/repo/demo.sd.yaml" } },
 		retry: { retryBackoffSeconds: 1, maxRetryBackoffSeconds: 4 },
@@ -52,7 +53,7 @@ function fixture() {
 			deps.web,
 			deps.state,
 			deps.now,
-			new EnvironmentResolver("/etc/homelab-paas/env", readSecrets),
+			new EnvironmentResolver("/etc/homelab-paas/env", readSecrets, { resolve: resolveHostPath }),
 			{ type: "worker", lifecycle: "deployment", reconcile: reconcileWorker },
 			{ append: appendEvent, list: async () => [] },
 		);
@@ -64,6 +65,7 @@ function fixture() {
 		reconcileWorker,
 		readSecrets,
 		appendEvent,
+		resolveHostPath,
 		createService,
 		service: createService(),
 		advance(ms: number) {
@@ -71,6 +73,43 @@ function fixture() {
 		},
 	};
 }
+
+test("includes missing secret names and the actual host file in persisted failure events", async () => {
+	const f = fixture();
+	f.resolveHostPath.mockResolvedValue("/srv/config/env/demo.env");
+	f.readSecrets.mockResolvedValue("PRESENT=private-value\n");
+	f.fetchFile.mockResolvedValue({
+		revision: "rev",
+		content: JSON.stringify({
+			...descriptor,
+			resources: {
+				app: {
+					...descriptor.resources.app,
+					env: [
+						{ name: "PRESENT", secret: true },
+						{ name: "TOKEN", secret: true },
+						{ name: "PASSWORD", secret: true },
+					],
+				},
+			},
+		}),
+	});
+	await f.service.reconcile();
+	expect(f.appendEvent).toHaveBeenCalledWith(
+		"demo",
+		expect.objectContaining({
+			resourceId: "app",
+			secretFailure: {
+				reason: "missing-variables",
+				filePath: "/etc/homelab-paas/env/demo.env",
+				hostFilePath: "/srv/config/env/demo.env",
+				missingVariables: ["TOKEN", "PASSWORD"],
+			},
+		}),
+	);
+	expect(JSON.stringify(f.appendEvent.mock.calls)).not.toContain("private-value");
+	expect(f.reconcile).not.toHaveBeenCalled();
+});
 
 test.each(["fetch", "descriptor", "capabilities", "secrets", "web", "worker"] as const)(
 	"records safe %s failures with retry metadata, then recovery without unchanged-poll noise",
@@ -307,37 +346,39 @@ test("resolves secrets again on unchanged Git polls and passes mounts and limits
 	expect(f.states.get("demo")).toEqual({ desiredRevision: "rev", activeRevision: "rev", phase: "ready" });
 });
 
-test.each([undefined, "OTHER=secret", "TOKEN='secret", "TOKEN=secret\nTOKEN=another"])(
-	"secret failure preserves active deployment before invoking rollout: %j",
-	async (content) => {
-		const f = fixture();
+test.each([
+	undefined,
+	"OTHER=secret-value-canary",
+	"TOKEN='secret-value-canary",
+	"TOKEN=secret-value-canary\nTOKEN=another",
+])("secret failure preserves active deployment before invoking rollout: %j", async (content) => {
+	const f = fixture();
+	await f.service.reconcile();
+	f.reconcile.mockClear();
+	f.fetchFile.mockResolvedValue({
+		revision: "changed",
+		content: JSON.stringify({
+			...descriptor,
+			resources: { app: { ...descriptor.resources.app, env: [{ name: "TOKEN", secret: true }] } },
+		}),
+	});
+	f.readSecrets.mockResolvedValue(content);
+	const capture = captureLogs();
+	try {
 		await f.service.reconcile();
-		f.reconcile.mockClear();
-		f.fetchFile.mockResolvedValue({
-			revision: "changed",
-			content: JSON.stringify({
-				...descriptor,
-				resources: { app: { ...descriptor.resources.app, env: [{ name: "TOKEN", secret: true }] } },
-			}),
-		});
-		f.readSecrets.mockResolvedValue(content);
-		const capture = captureLogs();
-		try {
-			await f.service.reconcile();
-		} finally {
-			capture.restore();
-		}
-		expect(f.reconcile).not.toHaveBeenCalled();
-		expect(f.states.get("demo")).toMatchObject({
-			desiredRevision: "changed",
-			activeRevision: "rev",
-			phase: "failed",
-			error: "Cannot resolve application secrets; check the service env file and required variable names",
-		});
-		expect(JSON.stringify([...f.states])).not.toContain("TOKEN");
-		expect(capture.lines.join("")).not.toContain("TOKEN");
-	},
-);
+	} finally {
+		capture.restore();
+	}
+	expect(f.reconcile).not.toHaveBeenCalled();
+	expect(f.states.get("demo")).toMatchObject({
+		desiredRevision: "changed",
+		activeRevision: "rev",
+		phase: "failed",
+		error: "Cannot resolve application secrets; check the service env file and required variable names",
+	});
+	expect(JSON.stringify([...f.states])).not.toContain("TOKEN");
+	expect(capture.lines.join("")).not.toContain("secret-value-canary");
+});
 
 test("accepts private ingress when platform authentication and TLS are enabled", async () => {
 	const f = fixture();

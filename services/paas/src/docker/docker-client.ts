@@ -178,6 +178,15 @@ export class DockerClient implements IDockerClient {
 		return {
 			id: data.Id,
 			imageId: data.Image,
+			...(data.Mounts
+				? {
+						mounts: data.Mounts.map((mount) => ({
+							type: mount.Type,
+							source: mount.Source,
+							destination: mount.Destination,
+						})),
+					}
+				: {}),
 			running: data.State.Running,
 			labels: data.Config.Labels,
 			...(data.Config.Env
@@ -310,6 +319,9 @@ const container = z.object({
 	Image: z.string().min(1),
 	State: z.object({ Running: z.boolean() }),
 	Config: z.object({ Labels: labels, Env: z.array(z.string().includes("=")).nullish() }),
+	Mounts: z
+		.array(z.object({ Type: z.string(), Source: z.string().default(""), Destination: z.string().startsWith("/") }))
+		.optional(),
 	NetworkSettings: z.object({
 		Networks: z.record(
 			z.string(),
