@@ -1,8 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { once } from "node:events";
 import { request as httpsRequest } from "node:https";
-import { createServer } from "node:net";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -13,20 +11,13 @@ import { testConfig } from "../../src/util/test/config.ts";
 import { parseYaml, stringifyYaml } from "../../src/util/yaml.ts";
 import { MockGitHub } from "../mocks/github.ts";
 import { artifactDirectory, TestGit } from "./git.ts";
+import { ingressPorts } from "./ports.ts";
 import { createTls, seedTls } from "./tls.ts";
 import { waitFor } from "./wait.ts";
 
 const execute = promisify(execFile);
 const fixtures = resolve(import.meta.dirname, "../fixtures");
 const root = resolve(import.meta.dirname, "../../../..");
-const freePort = async (): Promise<number> => {
-	const server = createServer().listen(0, "127.0.0.1");
-	await once(server, "listening");
-	const address = server.address();
-	if (!address || typeof address === "string") throw new Error("Cannot reserve port");
-	await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
-	return address.port;
-};
 
 /** One test owns one cluster, bare Git remote, state directory and OAuth server. */
 export class ContainerEnvironment {
@@ -53,8 +44,7 @@ export class ContainerEnvironment {
 		this.config = parseYaml((await readFile(join(fixtures, "config.yaml")))!, "test config") as PlatformConfig;
 		this.config.metadata.clusterId = this.cluster;
 		this.config.ingress.baseDomain = `${this.cluster}.paas.test`;
-		this.config.ingress.httpPort = await freePort();
-		this.config.ingress.httpsPort = await freePort();
+		[this.config.ingress.httpPort, this.config.ingress.httpsPort] = await ingressPorts();
 		for (const service of ["public", "private", "second"]) {
 			this.config.services[service] = {
 				remote: this.git.remote,

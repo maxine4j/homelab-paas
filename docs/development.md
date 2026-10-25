@@ -87,7 +87,7 @@ Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no registr
 
 ## Integration and E2E tests
 
-Ordinary `pnpm test` selects source unit tests explicitly. `pnpm test:integration` selects `services/paas/tests/integration/` with Vitest. These scenarios compose real services, stores, Git, JWT, routers and clients within the test process. Small typed mocks serve GitHub, DigitalOcean and Envoy over HTTP and the focused Docker Engine endpoints over a Unix socket. They validate captured request parameters and meaningful ordering, and fail teardown on unexpected traffic. They do not globally replace fetch or emulate complete external systems.
+Ordinary `pnpm test` selects source unit tests and backend test-utility unit tests explicitly. `pnpm test:integration` selects `services/paas/tests/integration/` with Vitest. These scenarios compose real services, stores, Git, JWT, routers and clients within the test process. Small typed mocks serve GitHub, DigitalOcean and Envoy over HTTP and the focused Docker Engine endpoints over a Unix socket. They validate captured request parameters and meaningful ordering, and fail teardown on unexpected traffic. They do not globally replace fetch or emulate complete external systems.
 
 Direct integration needs Git, OpenSSL and permission to open local HTTP/Unix-socket listeners; the private Linux runner supplies these tools for containerized runs. E2E additionally needs Docker Engine/Compose and the three test images below. Run `nvm use` first, then:
 
