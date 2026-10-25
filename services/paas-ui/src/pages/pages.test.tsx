@@ -101,11 +101,10 @@ test("service details show recent failure events and link to service event histo
 		/>,
 	);
 	expect(html).toContain("Cannot resolve application secrets &lt;unsafe&gt;");
-	expect(html).toContain('href="#/services/demo/events"');
-	expect(html).toContain("Recent events");
+	expect(html).toContain("Latest event");
 });
 
-test("service details put resources before events and the complete descriptor after events", () => {
+test("service details show one latest event above resources and collapse the complete descriptor", () => {
 	const html = renderToStaticMarkup(
 		<ServicePage
 			service={{
@@ -123,11 +122,15 @@ test("service details put resources before events and the complete descriptor af
 					{ resourceId: "app", type: "web", primaryUrl: "https://demo.example.test", containers: [] },
 				],
 			}}
-			events={events}
+			events={[...events, { ...events[0]!, timestamp: 500, message: "Earlier event" }]}
 		/>,
 	);
-	expect(html.indexOf("Resources")).toBeLessThan(html.indexOf("Recent events"));
-	expect(html.indexOf("Recent events")).toBeLessThan(html.indexOf("Service descriptor"));
+	expect(html.indexOf("Latest event")).toBeLessThan(html.indexOf("Resources"));
+	expect(html.indexOf("Resources")).toBeLessThan(html.indexOf("Service descriptor"));
+	expect(html).toContain("1 more events...");
+	expect(html).not.toContain("Earlier event");
+	expect(html).not.toContain("Inspect resource");
+	expect(html).toContain('<details class="json-disclosure"><summary>Service descriptor JSON</summary>');
 	expect(html).toContain('href="https://github.com/example/demo/blob/abc1234/service.sd.yaml"');
 	expect(html).toContain('href="https://demo.example.test"');
 	expect(html).toContain("app:1");

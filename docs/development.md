@@ -53,6 +53,8 @@ For the production installer and [upgrade helper](../prod/upgrade.md), run `bash
 
 On macOS, `./scripts/bootstrap.sh` installs the tools in `Brewfile` and the pinned workspace dependencies. Add Homebrew's `node@24/bin` directory to your shell `PATH` and start Docker Desktop before running container commands. Kubernetes and appliance packaging scripts are no longer used.
 
+For UI design with mock data, run `pnpm --filter @homelab-paas/ui dev --mode mock` and open the Vite URL. This opts into a read-only mock API in the development server with Paperless resource, container, event and log fixtures. Normal development still proxies to the control plane; production builds do not serve mock API routes.
+
 ## Backend infrastructure boundaries
 
 Backend filesystem operations go through `services/paas/src/util/file.ts`, including Git and Envoy transports, stores, and startup wiring. Optional text reads return absence only for `ENOENT`; permission and other I/O failures propagate to the owning adapter for contextual error translation with the original `cause`. Binary reads preserve bytes. Atomic writes use an exclusively created, restricted, unique sibling file and rename, cleaning up temporary files after failure. Exclusive create-if-missing preserves existing discovery files. Callers create private directories with mode `0700`; private files default to `0600`. Existing files are not rewritten merely to initialize them.

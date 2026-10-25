@@ -491,6 +491,99 @@ dd {
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
+.inspection-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+	gap: 20px;
+	align-items: start;
+}
+.inspection-panel {
+	background: #151b24;
+	border: 1px solid #303844;
+	border-radius: 12px;
+	padding: 24px;
+	min-width: 0;
+}
+.inspection-panel h2 {
+	margin: 0 0 20px;
+	font-size: 1rem;
+}
+.inspection-panel h3 {
+	font-size: 0.85rem;
+	margin-top: 24px;
+}
+.settings > div {
+	padding: 12px 0;
+	border-top: 1px solid #282e38;
+}
+.settings dd {
+	margin-bottom: 0;
+}
+.settings .settings {
+	margin-top: 10px;
+	padding-left: 16px;
+	border-left: 2px solid #303844;
+}
+.setting-list {
+	display: grid;
+	gap: 12px;
+}
+.setting-list > div + div {
+	border-top: 1px solid #364050;
+}
+.container-list {
+	display: grid;
+	gap: 20px;
+}
+.container-settings {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+	gap: 0 24px;
+}
+.table-scroll {
+	overflow: auto;
+}
+.table-scroll table {
+	border-collapse: collapse;
+	width: 100%;
+	font-size: 0.8rem;
+	text-align: left;
+}
+.table-scroll th {
+	color: #91a0b3;
+	font-weight: 400;
+}
+.table-scroll td,
+.table-scroll th {
+	padding: 12px 16px 12px 0;
+	border-bottom: 1px solid #303844;
+}
+.inspection-log-link {
+	display: inline-flex;
+	min-height: 44px;
+	align-items: center;
+	color: #b2c9ff;
+	margin-top: 16px;
+	font-size: 0.85rem;
+}
+.json-disclosure {
+	margin-top: 24px;
+	border: 1px solid #303844;
+	border-radius: 10px;
+	background: #121820;
+}
+.json-disclosure summary {
+	padding: 18px 20px;
+	min-height: 44px;
+	color: #9ba7b6;
+	font-size: 0.85rem;
+}
+.json-disclosure .code-view {
+	margin: 0;
+	border: 0;
+	border-top: 1px solid #303844;
+	border-radius: 0 0 10px 10px;
+}
 .log-toolbar {
 	display: flex;
 	justify-content: space-between;

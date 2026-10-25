@@ -1,6 +1,7 @@
 import type { UiLogs, UiResource } from "@homelab-paas/shared-contracts";
 
-import { ConfigView } from "../components/config-view.tsx";
+import { ResourceConfiguration } from "../components/resource-configuration.tsx";
+import { ResourceState } from "../components/resource-state.tsx";
 import type { ResourceTab } from "../types.ts";
 
 export const ResourcePage = ({
@@ -49,18 +50,14 @@ export const ResourcePage = ({
 					</a>
 				))}
 			</nav>
-			{tab === "config" && (
-				<>
-					<p>Desired descriptor configuration. Environment values and commands are redacted.</p>
-					<ConfigView value={resource.config} />
-				</>
+			{tab === "config" && <ResourceConfiguration config={resource.config} />}
+			{tab === "state" && (
+				<ResourceState
+					serviceId={serviceId}
+					resourceId={resource.resourceId}
+					containers={resource.containers}
+				/>
 			)}
-			{tab === "state"
-				&& (resource.containers.length ? (
-					<ConfigView value={resource.containers} label='Live container state' />
-				) : (
-					<p className='empty'>No containers observed for this resource.</p>
-				))}
 			{tab === "logs" && (
 				<>
 					<div className='log-toolbar'>

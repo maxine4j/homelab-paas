@@ -28,7 +28,7 @@ export const ServicePage = ({
 					<p>Desired resources alongside observed containers.</p>
 					{primaryUrl && (
 						<a className='primary-web-link' href={primaryUrl} target='_blank' rel='noreferrer'>
-							Open primary web resource ↗
+							{new URL(primaryUrl).host}
 						</a>
 					)}
 				</div>
@@ -55,6 +55,16 @@ export const ServicePage = ({
 					</div>
 				)}
 			</dl>
+			<section aria-label='Latest service event'>
+				<div className='section-heading'>
+					<h2>Latest event</h2>
+					{events && events.length > 1 && (
+						<a href={`#/services/${service.serviceId}/events`}>{events.length - 1} more events...</a>
+					)}
+					{eventError && <a href={`#/services/${service.serviceId}/events`}>Event history</a>}
+				</div>
+				<ServiceEvents events={events?.slice(0, 1)} error={eventError} />
+			</section>
 			<h2>
 				Resources <span className='count'>{service.resources.length}</span>
 			</h2>
@@ -75,17 +85,9 @@ export const ServicePage = ({
 								? resource.containers.map((container) => container.state).join(" · ")
 								: "No containers"}
 						</p>
-						<span className='card-action'>Inspect resource ↗</span>
 					</a>
 				))}
 			</div>
-			<section aria-label='Recent service events'>
-				<div className='section-heading'>
-					<h2>Recent events</h2>
-					<a href={`#/services/${service.serviceId}/events`}>All events</a>
-				</div>
-				<ServiceEvents events={events?.slice(0, 5)} error={eventError} />
-			</section>
 			<section aria-labelledby='service-descriptor-heading'>
 				<div className='section-heading'>
 					<h2 id='service-descriptor-heading'>Service descriptor</h2>
@@ -98,7 +100,10 @@ export const ServicePage = ({
 					)}
 				</div>
 				{service.descriptor ? (
-					<ConfigView value={service.descriptor} label='Service descriptor' />
+					<details className='json-disclosure'>
+						<summary>Service descriptor JSON</summary>
+						<ConfigView value={service.descriptor} label='Service descriptor' />
+					</details>
 				) : (
 					<p>Descriptor unavailable.</p>
 				)}
