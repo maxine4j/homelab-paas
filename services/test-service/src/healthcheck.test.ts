@@ -18,3 +18,21 @@ test("the descriptor health endpoint reports readiness", async () => {
 		await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 	}
 });
+
+test("reports controlled readiness and version without exposing arbitrary headers", async () => {
+	const server = new Koa()
+		.use(createHealthCheckRouter({ ready: false, version: "v2" }).routes())
+		.listen(0, "127.0.0.1");
+	try {
+		await once(server, "listening");
+		const address = server.address();
+		if (!address || typeof address === "string") throw new Error("Missing test address");
+		const url = `http://127.0.0.1:${address.port}`;
+		expect((await fetch(`${url}/health`)).status).toBe(503);
+		const response = await fetch(`${url}/inspect`, { headers: { cookie: "app=yes", authorization: "secret" } });
+		expect(await response.json()).toEqual({ version: "v2", cookie: "app=yes" });
+		expect(await (await fetch(`${url}/version`)).json()).toEqual({ version: "v2" });
+	} finally {
+		await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+	}
+});

@@ -3,6 +3,17 @@ import { expect, test, vi } from "vitest";
 import { testConfig } from "../../../util/test/config.ts";
 import { DigitalOceanDnsAcmeChallengeProvider } from "./digitalocean-dns-challenge-provider.ts";
 
+test("uses an explicit API origin for zone lookup and record creation", async () => {
+	const request = vi
+		.fn<typeof fetch>()
+		.mockResolvedValueOnce(Response.json({ domain: { name: "example.test" } }))
+		.mockResolvedValueOnce(Response.json({ domain_record: { id: 7 } }));
+	const provider = new DigitalOceanDnsAcmeChallengeProvider(testConfig(), request, "http://localhost:9001/v2");
+	expect(await provider.createChallenge("example.test", "proof")).toEqual({ zone: "example.test", id: 7 });
+	expect(request.mock.calls.at(0)?.at(0)).toBe("http://localhost:9001/v2/domains/example.test");
+	expect(request.mock.calls.at(1)?.at(0)).toBe("http://localhost:9001/v2/domains/example.test/records");
+});
+
 test("discovers the managed zone, creates the correct TXT record and deletes only its own ID", async () => {
 	const request = vi
 		.fn<typeof fetch>()

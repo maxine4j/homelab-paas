@@ -1,0 +1,31 @@
+version: 1
+metadata:
+    clusterId: fixture
+ingress:
+    baseDomain: paas.test
+    httpPort: 18080
+    httpsPort: 18443
+auth:
+    github:
+        clientId: test-client
+        clientSecret: test-secret
+        allowedUsers: [Alice]
+    session:
+        issuer: paas-test
+        audience: paas-test
+        signingKey: test-signing-key-with-at-least-32-characters
+        ttlSeconds: 3600
+tls:
+    acme:
+        email: ci@example.test
+    dns:
+        provider: digitalocean
+        credentials:
+            apiToken: unused-test-token
+git:
+    pollIntervalSeconds: 1
+    operationTimeoutSeconds: 5
+reconciliation:
+    retryBackoffSeconds: 1
+    maxRetryBackoffSeconds: 2
+services: {}

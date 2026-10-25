@@ -1,5 +1,11 @@
 import type { AuthedUserDetails } from "../types.ts";
 
+export interface GitHubEndpoints {
+	authorization: string;
+	token: string;
+	profile: string;
+}
+
 export interface Oauth2Provider {
 	getLoginUrl(state: string, callbackUrl: string): string;
 	fetchAccessToken(code: string, callbackUrl: string): Promise<string>;

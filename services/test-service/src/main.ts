@@ -11,7 +11,12 @@ const main = () => {
 	const app = new Koa();
 
 	app.use(createRequestLogger())
-		.use(createHealthCheckRouter().routes())
+		.use(
+			createHealthCheckRouter({
+				ready: process.env["READY"] !== "false",
+				version: process.env["VERSION"] ?? "dev",
+			}).routes(),
+		)
 		.use(bodyParser())
 		.use(createPingRouter().routes())
 		.use((ctx) => {

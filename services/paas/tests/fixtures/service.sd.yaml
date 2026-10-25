@@ -1,0 +1,18 @@
+version: 1
+metadata:
+    serviceId: public
+resources:
+    app:
+        type: web
+        image: fixture:local
+        healthcheckUrl: /health
+        ingress:
+            public: true
+            port: 8080
+        termination:
+            timeoutSeconds: 2
+        env:
+            - name: VERSION
+              value: v1
+            - name: READY
+              value: "true"

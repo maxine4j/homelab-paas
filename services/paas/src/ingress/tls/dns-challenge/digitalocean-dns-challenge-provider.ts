@@ -12,6 +12,7 @@ export class DigitalOceanDnsAcmeChallengeProvider implements IDnsAcmeChallengePr
 	constructor(
 		private readonly config: IPaasConfig,
 		private readonly request: typeof fetch,
+		private readonly apiEndpoint = "https://api.digitalocean.com/v2",
 	) {}
 	async createChallenge(identifier: string, value: string): Promise<DnsChallengeRecord> {
 		try {
@@ -66,7 +67,7 @@ export class DigitalOceanDnsAcmeChallengeProvider implements IDnsAcmeChallengePr
 		}
 	}
 	private send(path: string, method: string, body?: Record<string, string | number>): Promise<Response> {
-		return this.request(`https://api.digitalocean.com/v2${path}`, {
+		return this.request(`${this.apiEndpoint}${path}`, {
 			method,
 			headers: {
 				Authorization: `Bearer ${this.config.getTlsConfig()!.dns.credentials.apiToken}`,

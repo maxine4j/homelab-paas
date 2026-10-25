@@ -43,6 +43,7 @@ import { ReconciliationStore } from "./reconciler/reconciliation-store.ts";
 import { WebResourceReconciler } from "./reconciler/resources/web/web-reconciler.ts";
 import { FileSystemKeyValueStore } from "./store/file-system-store.ts";
 import { PeriodicTaskRunner } from "./task/periodic.ts";
+import type { StartOptions } from "./types.ts";
 import { atomicWriteFile, lstat, mkdir, readFileBytes, readFile, rm, type FileWriter } from "./util/file.ts";
 import { createHealthCheckRouter, probe } from "./util/healthcheck.ts";
 import type { Lifecycle } from "./util/lifecycle.ts";
@@ -51,7 +52,7 @@ import { sleep } from "./util/sleep.ts";
 
 const STATE_DIRECTORY = "/var/homelab-paas/_paas";
 
-export async function start(lifecycle: Lifecycle): Promise<void> {
+export async function start(lifecycle: Lifecycle, options: StartOptions = {}): Promise<void> {
 	const config = new PaasConfig(readFile, process.env);
 	await config.load();
 	const secureWrite: FileWriter = async (path, content) => {
@@ -129,7 +130,7 @@ export async function start(lifecycle: Lifecycle): Promise<void> {
 	let sessions: AuthService | undefined;
 	if (config.getAuthConfig() && config.getTlsConfig()) {
 		const auth = new AuthService(
-			new GitHubOauth2Provider(config, fetch),
+			new GitHubOauth2Provider(config, fetch, options.githubEndpoints),
 			new JwtClient(config, Date.now),
 			config,
 			() => randomBytes(32).toString("base64url"),

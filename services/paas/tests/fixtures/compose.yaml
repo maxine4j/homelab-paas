@@ -1,0 +1,42 @@
+services:
+    paas:
+        image: ${PAAS_IMAGE:?required}
+        init: true
+        labels:
+            homelab-paas.cluster: ${TEST_CLUSTER:?required}
+            homelab-paas.role: control-plane
+        volumes:
+            - ${TEST_DIRECTORY}/etc:/etc/homelab-paas:ro
+            - ${TEST_DIRECTORY}/var:/var/homelab-paas
+            - ${TEST_DIRECTORY}/remote.git:${TEST_DIRECTORY}/remote.git:ro
+            - /var/run/docker.sock:/var/run/docker.sock
+        extra_hosts:
+            - host.docker.internal:host-gateway
+        healthcheck:
+            test:
+                [
+                    CMD,
+                    node,
+                    -e,
+                    "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+                ]
+            interval: 1s
+            timeout: 3s
+            retries: 30
+    envoy:
+        image: envoyproxy/envoy:v1.37.0
+        command: [-c, /etc/homelab-paas/envoy.yaml]
+        environment:
+            ENVOY_UID: "0"
+        labels:
+            homelab-paas.cluster: ${TEST_CLUSTER}
+            homelab-paas.role: envoy
+        ports:
+            - "127.0.0.1:${TEST_HTTP_PORT}:${TEST_HTTP_PORT}"
+            - "127.0.0.1:${TEST_HTTPS_PORT}:${TEST_HTTPS_PORT}"
+        volumes:
+            - ${TEST_DIRECTORY}/etc:/etc/homelab-paas:ro
+            - ${TEST_DIRECTORY}/var:/var/homelab-paas:ro
+        depends_on:
+            paas:
+                condition: service_healthy

@@ -2,14 +2,19 @@ import { z } from "zod";
 
 import type { IPaasConfig } from "../../../config/paas-config.ts";
 import type { AuthedUserDetails } from "../types.ts";
-import type { Oauth2Provider } from "./types.ts";
+import type { GitHubEndpoints, Oauth2Provider } from "./types.ts";
 export class GitHubOauth2Provider implements Oauth2Provider {
 	constructor(
 		private readonly config: IPaasConfig,
 		private readonly request: typeof fetch,
+		private readonly endpoints: GitHubEndpoints = {
+			authorization: "https://github.com/login/oauth/authorize",
+			token: "https://github.com/login/oauth/access_token",
+			profile: "https://api.github.com/user",
+		},
 	) {}
 	getLoginUrl(state: string, callbackUrl: string): string {
-		const url = new URL("https://github.com/login/oauth/authorize");
+		const url = new URL(this.endpoints.authorization);
 		url.search = new URLSearchParams({
 			client_id: this.config.getAuthConfig()!.github.clientId,
 			redirect_uri: callbackUrl,
@@ -19,7 +24,7 @@ export class GitHubOauth2Provider implements Oauth2Provider {
 	}
 	async fetchAccessToken(code: string, callbackUrl: string): Promise<string> {
 		try {
-			const response = await this.request("https://github.com/login/oauth/access_token", {
+			const response = await this.request(this.endpoints.token, {
 				method: "POST",
 				headers: { "Content-Type": "application/json", Accept: "application/json" },
 				body: JSON.stringify({
@@ -41,7 +46,7 @@ export class GitHubOauth2Provider implements Oauth2Provider {
 	}
 	async fetchUserDetails(token: string): Promise<AuthedUserDetails> {
 		try {
-			const response = await this.request("https://api.github.com/user", {
+			const response = await this.request(this.endpoints.profile, {
 				headers: {
 					Accept: "application/vnd.github+json",
 					Authorization: `Bearer ${token}`,

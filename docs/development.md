@@ -30,19 +30,22 @@ Import shared public contracts from `@homelab-paas/shared-contracts`. Do not dup
 
 Run from the repository root:
 
-| Command                          | Purpose                                                                         |
-| -------------------------------- | ------------------------------------------------------------------------------- |
-| `pnpm install --frozen-lockfile` | Install pinned dependencies                                                     |
-| `pnpm dev`                       | Build shared contracts and start the control plane and UI development processes |
-| `pnpm format:check`              | Check formatting                                                                |
-| `pnpm format`                    | Apply formatting                                                                |
-| `pnpm lint`                      | Run Oxc lint checks with warnings treated as errors                             |
-| `pnpm typecheck`                 | Build shared contracts and typecheck workspace packages                         |
-| `pnpm check`                     | Run formatting, lint, and type checks                                           |
-| `pnpm test`                      | Build shared contracts and run workspace tests                                  |
-| `pnpm build`                     | Build workspace packages                                                        |
-| `pnpm image`                     | Build the control-plane Docker image tagged `homelab-paas/paas:dev`             |
-| `pnpm dev:deploy`                | Build the control plane and start the local Compose bootstrap                   |
+| Command                          | Purpose                                                                          |
+| -------------------------------- | -------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile` | Install pinned dependencies                                                      |
+| `pnpm dev`                       | Build shared contracts and start the control plane and UI development processes  |
+| `pnpm format:check`              | Check formatting                                                                 |
+| `pnpm format`                    | Apply formatting                                                                 |
+| `pnpm lint`                      | Run Oxc lint checks with warnings treated as errors                              |
+| `pnpm typecheck`                 | Build shared contracts and typecheck workspace packages                          |
+| `pnpm check`                     | Run formatting, lint, and type checks                                            |
+| `pnpm test`                      | Build shared contracts and run workspace tests                                   |
+| `pnpm test:integration`          | Run in-process backend integration scenarios with real local transports          |
+| `pnpm test:e2e`                  | Run Playwright against built images, real Docker and Envoy                       |
+| `pnpm test:containers`           | Run integration/E2E with a private Docker Engine in a disposable Linux container |
+| `pnpm build`                     | Build workspace packages                                                         |
+| `pnpm image`                     | Build the control-plane Docker image tagged `homelab-paas/paas:dev`              |
+| `pnpm dev:deploy`                | Build the control plane and start the local Compose bootstrap                    |
 
 Run checks appropriate to the change. For code changes, use `pnpm check`, relevant tests, and `pnpm build` when build output or packaging is affected. For documentation-only changes, check formatting and relative links; application tests are unnecessary.
 
@@ -76,11 +79,41 @@ Fatal process failures use the same serialization under `failure` and shut down 
 
 The [CI workflow](../.github/workflows/ci.yml) runs on pull requests, pushes to `main`, and pushed release tags matching `vX.X.X` (nonnegative integers without leading zeroes). Prerelease and build metadata suffixes are not supported. Other branch pushes do not trigger CI independently of a pull request.
 
-Every run installs the pinned dependencies, runs `pnpm check` (formatting, linting, and typechecking), `pnpm test`, and `pnpm build`, then builds the control-plane and test-service Docker images for `linux/amd64` and validates the local and [production](../prod/README.md) Compose configurations. Publishing requires all these checks to pass.
+Every run installs the pinned dependencies, runs `pnpm check` (formatting, linting, and typechecking), `pnpm test`, and `pnpm build`, then builds the control-plane and test-service Docker images for `linux/amd64` and validates the local and [production](../prod/README.md) Compose configurations. The packaging runner loads these images, runs integration and E2E checks, and only then publishes those same loaded images. Publishing never rebuilds them. Failed tests prevent publication; pull requests run the same tests without publishing.
 
-Pull requests only build images. Pushes to `main` publish `ghcr.io/maxine4j/homelab-paas:<full-commit-sha>`. Release tag pushes publish the same image name with the exact Git tag, for example `ghcr.io/maxine4j/homelab-paas:v1.2.3`. The control-plane image has no `latest` tag. Both push events also publish `ghcr.io/maxine4j/homelab-paas/test-service` with `latest` and the first seven characters of the commit SHA as tags. Invalid release tags caught by the broad trigger fail before building or publishing.
+Pull requests validate images without publishing. Pushes to `main` publish `ghcr.io/maxine4j/homelab-paas:<full-commit-sha>`. Release tag pushes publish the same image name with the exact Git tag, for example `ghcr.io/maxine4j/homelab-paas:v1.2.3`. The control-plane image has no `latest` tag. Both push events also publish `ghcr.io/maxine4j/homelab-paas/test-service` with `latest` and the first seven characters of the commit SHA as tags. Invalid release tags caught by the broad trigger fail before building or publishing.
 
 Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no registry secret is required. The repository must be allowed to publish the GHCR package. Package visibility and deployment credentials for pulling private images are managed separately in GitHub. See [GitHub's container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
+## Integration and E2E tests
+
+Ordinary `pnpm test` selects source unit tests explicitly. `pnpm test:integration` selects `services/paas/tests/integration/` with Vitest. These scenarios compose real services, stores, Git, JWT, routers and clients within the test process. Small typed mocks serve GitHub, DigitalOcean and Envoy over HTTP and the focused Docker Engine endpoints over a Unix socket. They validate captured request parameters and meaningful ordering, and fail teardown on unexpected traffic. They do not globally replace fetch or emulate complete external systems.
+
+Direct integration needs Git, OpenSSL and permission to open local HTTP/Unix-socket listeners; the private Linux runner supplies these tools for containerized runs. E2E additionally needs Docker Engine/Compose and the three test images below. Run `nvm use` first, then:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm test:integration
+docker build -f services/paas/Dockerfile -t homelab-paas/paas:ci .
+docker build -f services/test-service/Dockerfile -t homelab-paas/test-service:ci .
+version=$(pnpm --filter @homelab-paas/paas exec node -p "require('@playwright/test/package.json').version")
+docker build -f services/paas/tests/fixtures/browser.Dockerfile --build-arg "PLAYWRIGHT_VERSION=$version" -t homelab-paas/playwright:ci .
+pnpm test:containers
+```
+
+`PAAS_IMAGE`, `TEST_SERVICE_IMAGE` and `PLAYWRIGHT_IMAGE` can select existing images. Each test creates unique `:local` workload/control-plane aliases, a cluster ID, bare Git remote, committed descriptors, configuration, restricted state and test CA under ignored `artifacts/`. Absolute remote bind paths match inside the control-plane container. Fixtures are independent of `local/.env` and operator credentials. Tests poll observable routing/checkpoints with deadlines, without startup sleeps or blanket retries. Cluster mutations run serially; browser contexts and mocks are fresh per test.
+
+`pnpm test:containers` is the CI and cross-platform path. It builds a Linux Node 24 test runner from the current checkout, starts its own Docker 28 daemon in a privileged container, and streams the already built images into that daemon using Docker save/load. Tests and dockerd share a filesystem and network namespace, so inner bind paths and loopback ingress work identically on Docker Desktop and Linux. The outer host Docker socket is never mounted. The private Engine has its own disposable data volume; test artifacts are the only host bind mount. Teardown removes that runner, its anonymous Engine volume and its temporary image, including after test failure. This isolates Docker objects and image state, not the host kernel or resource capacity. Docker-in-Docker [requires privileged mode](https://github.com/docker-library/docs/blob/master/docker/README.md); it is intended for trusted repository tests, not a security sandbox.
+
+Use `pnpm test:containers integration` for containerized integration only, or `pnpm test:containers e2e --grep production` for a focused E2E run. For fast host iteration, `pnpm test:integration` and `pnpm test:e2e` remain available. Direct E2E uses the selected host Engine with cluster-scoped cleanup; on Linux its user must be able to read the restricted state created by container root. The private runner avoids that host UID difference and returns artifact ownership to the invoking user. Integration mocks still run in the Vitest process inside the runner; they do not need nested Docker APIs.
+
+Playwright runs HTTP deployment assertions and browser OAuth scenarios. Compose starts real Envoy and the built control-plane image; Docker Engine creates the workloads and service networks. OAuth uses the mounted `tests/bootstrap.mjs` entrypoint with constructor endpoint overrides and the shared process lifecycle. Mock GitHub listens in the test-runner process and is reachable from both control-plane and browser containers through `host.docker.internal`. In private runs, this resolves to the runner's own network namespace. A separate production startup scenario keeps the image's exact normal command, supplies a valid local session, and verifies deployment, authenticated routing, graceful shutdown and fatal startup without endpoint overrides.
+
+Ingress uses a generated base-domain/wildcard certificate signed by a private test CA. HTTPS observations verify that CA and the requested hostname. Chromium runs in an isolated Linux image with its own NSS trust database containing the CA, including on macOS hosts. Browser resolution maps only the test domain to that cluster's Envoy. No host trust-store changes, live DNS, ACME, GitHub, DigitalOcean, registry credentials or TLS-validation bypasses are needed. The browser image version must match the pinned Playwright dependency. See [Chromium's NSS certificate management](https://chromium.googlesource.com/chromium/src/+/main/docs/linux/cert_management.md) and [Playwright's remote Docker browser support](https://playwright.dev/docs/docker#remote-connection).
+
+Tests retain diagnostics before teardown: Compose/workload logs, scoped Docker inspection/network inventory, Envoy config dump, captured GitHub requests, deployment checkpoints, discovery files and routes. Failure traces and the HTML report live in `artifacts/playwright/` for direct runs, or `artifacts/paas-tests-*/playwright/` for private-runner runs; CI uploads `artifacts/` for seven days. Private runs also retain daemon logs and final Docker/network inventory. These artifacts include test keys/tokens and are test-only data. Teardown stops reconciliation, removes only this cluster's labelled containers and service networks, and drops its image aliases. Compose down alone cannot clean up directly managed workloads. If interrupted before cleanup, inspect the recorded cluster ID for direct runs or the outer `homelab-paas.test-run` label for private runs and remove only those objects, including the private runner's anonymous volume.
+
+The DNS integration scenario exercises real DigitalOcean HTTP requests and certificate publication with an injected ACME SDK boundary. It does not prove live DNS propagation or full ACME issuance. Mock Docker/Envoy integration checks do not prove real deployment/routing; the E2E suite covers those boundaries. Live GitHub and certificate issuance remain separate staging checks.
 
 ## Local container environment
 
