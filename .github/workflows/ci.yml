@@ -1,13 +1,12 @@
 name: CI
 on:
-    push:
-        branches: [main]
-        tags: ["v*.*.*"]
     pull_request:
+    workflow_call:
 permissions:
     contents: read
 jobs:
-    build:
+    validate:
+        name: Validate release tag
         runs-on: ubuntu-24.04
         steps:
             - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -19,33 +18,78 @@ jobs:
                       echo "Release tags must use vX.X.X with no leading zeroes."
                       exit 1
                   fi
-            - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
-            - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-              with:
-                  node-version-file: .nvmrc
-                  cache: pnpm
-            - run: pnpm install --frozen-lockfile
-            - run: pnpm check
+    format:
+        name: Formatting
+        runs-on: ubuntu-24.04
+        needs: validate
+        steps:
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+            - uses: ./.github/actions/setup
+            - run: pnpm format:check
+    lint:
+        name: Lint
+        runs-on: ubuntu-24.04
+        needs: validate
+        steps:
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+            - uses: ./.github/actions/setup
+            - run: pnpm lint
+    typecheck:
+        name: Typecheck
+        runs-on: ubuntu-24.04
+        needs: validate
+        steps:
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+            - uses: ./.github/actions/setup
+            - run: pnpm typecheck
+    unit:
+        name: Unit tests
+        runs-on: ubuntu-24.04
+        needs: validate
+        steps:
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+            - uses: ./.github/actions/setup
             - run: pnpm test
+    installer:
+        name: Installer checks
+        runs-on: ubuntu-24.04
+        needs: validate
+        steps:
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
             - run: bash -n prod/install.sh && bash -n prod/upgrade-paas.sh && python3 -m unittest discover -s prod -p 'test_*.py'
+    build:
+        name: Workspace build
+        runs-on: ubuntu-24.04
+        needs: validate
+        steps:
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+            - uses: ./.github/actions/setup
             - run: pnpm build
-    package:
+    integration:
+        name: Integration tests
+        runs-on: ubuntu-24.04
+        needs: validate
+        steps:
+            - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+            - uses: ./.github/actions/setup
+            - run: pnpm test:containers integration
+            - name: Retain integration diagnostics
+              if: always()
+              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+              with:
+                  name: integration-diagnostics
+                  path: artifacts/
+                  retention-days: 7
+    e2e:
+        name: Image build and E2E tests
         runs-on: ubuntu-24.04
         needs: build
-        permissions:
-            contents: read
-            packages: write
         steps:
             - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
             - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
               with:
                   name: homelab-paas-build
-            - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
-            - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-              with:
-                  node-version-file: .nvmrc
-                  cache: pnpm
-            - run: pnpm install --frozen-lockfile
+            - uses: ./.github/actions/setup
             - name: Select image tag
               id: image
               shell: bash
@@ -81,33 +125,31 @@ jobs:
               run: |
                   version=$(pnpm --filter @homelab-paas/paas exec node -p "require('@playwright/test/package.json').version")
                   docker build --file services/paas/tests/fixtures/browser.Dockerfile --build-arg "PLAYWRIGHT_VERSION=$version" --tag homelab-paas/playwright:ci .
-            - name: Run integration and real Docker/Envoy E2E in a disposable daemon
+            - name: Real Docker/Envoy E2E tests
               env:
                   PAAS_IMAGE: ${{ steps.image.outputs.ref }}
                   TEST_SERVICE_IMAGE: ${{ steps.image.outputs.test-service-image }}:${{ steps.image.outputs.short-sha }}
-              run: pnpm test:containers
-            - name: Retain integration and E2E diagnostics
+              run: pnpm test:containers e2e
+            - name: Retain E2E diagnostics
               if: always()
               uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
               with:
-                  name: ci-testing-diagnostics
+                  name: e2e-diagnostics
                   path: artifacts/
                   retention-days: 7
-            - name: Log in to GHCR
-              if: github.event_name == 'push'
-              env:
-                  GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-            - name: Publish control-plane image
+            - name: Export tested images
               if: github.event_name == 'push'
               env:
                   IMAGE_REF: ${{ steps.image.outputs.ref }}
-              run: docker push "$IMAGE_REF"
-            - name: Publish test-service image
-              if: github.event_name == 'push'
-              env:
                   IMAGE: ${{ steps.image.outputs.test-service-image }}
                   SHORT_SHA: ${{ steps.image.outputs.short-sha }}
               run: |
-                  docker push "$IMAGE:$SHORT_SHA"
-                  docker push "$IMAGE:latest"
+                  docker save --output /tmp/tested-images.tar "$IMAGE_REF" "$IMAGE:$SHORT_SHA" "$IMAGE:latest"
+            - name: Retain tested images for publishing
+              if: github.event_name == 'push'
+              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+              with:
+                  name: tested-images
+                  path: /tmp/tested-images.tar
+                  compression-level: 0
+                  retention-days: 1
