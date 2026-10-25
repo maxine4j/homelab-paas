@@ -93,6 +93,18 @@ const fixture = () => {
 	};
 };
 
+test("worker recreate passes host bindings after retiring the predecessor", async () => {
+	const f = fixture();
+	f.old();
+	const hostPorts = [{ protocol: "udp" as const, containerPort: 8080, hostPort: 18080, bindAddress: "0.0.0.0" }];
+	await f.service.deploy({
+		...request,
+		resource: { ...request.resource, replicas: 1, rolloutStrategy: "recreate", hostPorts },
+	});
+	expect(f.docker.createResourceContainer).toHaveBeenCalledWith(expect.objectContaining({ hostPorts }));
+	expect(f.events.indexOf("stop:old")).toBeLessThan(f.events.indexOf("create:new-1"));
+});
+
 test.each(["recreate", "surge"] as const)("%s starts and privately probes every worker replica", async (strategy) => {
 	const f = fixture();
 	f.old();

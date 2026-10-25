@@ -1,6 +1,6 @@
 # Networking and authentication
 
-The [deployment runtime](configuration.md#implemented-deployment-mvp) supports public HTTP for local development and authenticated HTTPS when auth/TLS are configured. The internal listener and inter-service discovery remain deferred. The control plane and Envoy attach to each service's dedicated Docker network; workloads publish no host ports. Bootstrap containers must carry `homelab-paas.cluster={clusterId}` and `homelab-paas.role=control-plane` or `envoy` labels so the control plane can discover them. Envoy loads generated filesystem xDS from the shared platform state directory. Its administration/configuration interfaces have no published ports. Later sections also describe intended capabilities beyond this runtime.
+The [deployment runtime](configuration.md#implemented-deployment-mvp) supports public HTTP for local development and authenticated HTTPS when auth/TLS are configured. The internal listener and inter-service discovery remain deferred. The control plane and Envoy attach to each service's dedicated Docker network. Workloads publish no host ports by default; explicit [host ports](configuration.md#host-ports) connect directly to web or worker applications outside Envoy's authentication, TLS and readiness controls. Bootstrap containers must carry `homelab-paas.cluster={clusterId}` and `homelab-paas.role=control-plane` or `envoy` labels so the control plane can discover them. Envoy loads generated filesystem xDS from the shared platform state directory. Its administration/configuration interfaces have no published ports. Later sections also describe intended capabilities beyond this runtime.
 
 ## Networking
 
@@ -11,10 +11,10 @@ The reconciler uses `INetworkingService.routeTo` with a `{resourceId}.{serviceId
 Each service receives a dedicated Docker network.
 
 - Resources within a service communicate directly using resource names, such as `store:5432`.
-- Resources in different services cannot communicate directly.
+- Resources in different services have no direct service-network connectivity; explicitly published host ports are reachable according to host routing and firewall rules.
 - Envoy connects to each service network and routes inter-service traffic.
-- Workload ports are not published on the host.
-- Only Envoy’s external ingress ports are published.
+- Workload ports are published only when explicitly configured with `hostPorts`.
+- Envoy’s external ingress ports provide platform-managed HTTP ingress.
 
 Envoy uses separate external and internal listeners. The internal listener, administration interface, and configuration interfaces must not be externally accessible.
 
@@ -63,7 +63,7 @@ ingress:
 
 `public` defaults to `false`.
 
-Every external application request passes through Envoy’s authorization check against the control plane:
+Every application request through Envoy ingress passes through its authorization check against the control plane:
 
 - Private ingress requires a valid platform JWT session.
 - Public ingress allows access without a platform session.

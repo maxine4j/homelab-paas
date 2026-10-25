@@ -1,3 +1,5 @@
+import { createSocket } from "node:dgram";
+
 import { bodyParser } from "@koa/bodyparser";
 import Koa from "koa";
 
@@ -29,6 +31,13 @@ const main = () => {
 	app.listen(port, () => {
 		console.log(`Listening on ${port}`);
 	});
+	if (process.env["UDP_PORT"]) {
+		const socket = createSocket("udp4");
+		socket.on("message", (_message, peer) => {
+			socket.send(process.env["VERSION"] ?? "dev", peer.port, peer.address);
+		});
+		socket.bind(Number(process.env["UDP_PORT"]), "0.0.0.0");
+	}
 };
 
 main();

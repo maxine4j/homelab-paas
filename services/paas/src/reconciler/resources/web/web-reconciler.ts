@@ -91,6 +91,7 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 					resourceId,
 					{
 						image: resource.image,
+						...(resource.hostPorts?.length ? { hostPorts: resource.hostPorts } : {}),
 						command: resource.command ?? null,
 						env,
 						volumes:

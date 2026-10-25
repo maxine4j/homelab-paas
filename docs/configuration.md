@@ -10,6 +10,8 @@ The current runtime supports one or more workload resources per service: any num
 
 Managed databases/brokers, egress, web replicas beyond one, and resource/service removal are deferred. Private ingress (including the default `public: false`) requires platform auth and TLS. Without them, ingress must explicitly set `public: true`. The remaining service examples include capabilities beyond the deployed runtime.
 
+Both workload types also support explicit [TCP and UDP host ports](#host-ports), restricted to one replica and recreate deployment.
+
 At startup and on reload, supplied environment variables override the corresponding YAML fields before validation:
 
 | Environment variable     | YAML field                     |
@@ -94,7 +96,33 @@ resources:
         ingress: { port: 8080, public: false }
 ```
 
-Resources are a discriminated union of `web`, `worker`, `postgres`, and `rabbitmq`. Every resource requires a nonempty `image` and may set `limits` and `termination.timeoutSeconds` (positive integer seconds, maximum 300). Web and worker resources additionally accept `command`, `env`, `volumes`, `egress`, positive integer `replicas` (default 1), and `rolloutStrategy` (`recreate` by default, or `surge`). Web resources require an ingress port (1–65535) and default `ingress.public` to `false`. Workers require `healthcheckPort` (integer 1–65535) and reject `ingress`. Both default `healthcheckUrl` to `/healthcheck`, accepting only a relative HTTP path beginning with a single `/`. Worker health endpoints are private: PaaS probes the container's service-network address; no host port, public route, or Envoy health check is created. Workers must listen on that container interface, rather than only loopback. See [health checks](reconciliation-and-deployments.md#health-checks-and-termination) for readiness and polling behavior. Managed PostgreSQL and RabbitMQ resources accept no custom environment, credentials, volumes, replicas, or rollout strategy; see [managed resources](managed-resources.md).
+Resources are a discriminated union of `web`, `worker`, `postgres`, and `rabbitmq`. Every resource requires a nonempty `image` and may set `limits` and `termination.timeoutSeconds` (positive integer seconds, maximum 300). Web and worker resources additionally accept `command`, `env`, `volumes`, `hostPorts`, `egress`, positive integer `replicas` (default 1), and `rolloutStrategy` (`recreate` by default, or `surge`). Web resources require an ingress port (1–65535) and default `ingress.public` to `false`. Workers require `healthcheckPort` (integer 1–65535) and reject `ingress`. Both default `healthcheckUrl` to `/healthcheck`, accepting only a relative HTTP path beginning with a single `/`. PaaS probes worker health endpoints on the container's service-network address; no host port, public route, or Envoy health check is created automatically. Workers must listen on that container interface, rather than only loopback. See [health checks](reconciliation-and-deployments.md#health-checks-and-termination) for readiness and polling behavior. Managed PostgreSQL and RabbitMQ resources accept no custom environment, credentials, volumes, replicas, or rollout strategy; see [managed resources](managed-resources.md).
+
+## Host ports
+
+Web and worker resources may explicitly publish fixed TCP and UDP ports through Docker Engine:
+
+```yaml
+replicas: 1
+rolloutStrategy: recreate
+hostPorts:
+    - protocol: tcp
+      containerPort: 8096
+      hostPort: 8096
+      bindAddress: 127.0.0.1
+    - protocol: udp
+      containerPort: 7359
+      hostPort: 7359
+      bindAddress: 0.0.0.0
+```
+
+Every mapping requires `protocol` (`tcp` or `udp`), integer `containerPort` and `hostPort` in 1–65535, and an explicit literal IPv4 or IPv6 `bindAddress` without brackets or a zone identifier. Hostnames, dynamic ports, and port ranges are unsupported. The address refers to the Docker host. `127.0.0.1` and `::1` restrict publication to host loopback; `0.0.0.0` and `::` request wildcard publication. Actual IPv6 availability and dual-stack behavior depend on the Docker host and Engine configuration. Multiple host bindings may target the same container port. TCP and UDP may use the same numeric host port.
+
+Omitted or empty `hostPorts` publishes nothing. Fixed bindings require exactly one replica and `recreate`; descriptors combining them with `surge` or more replicas fail validation. Adding, changing, or removing a binding replaces that resource. Recreate releases previous bindings before starting replacements, with expected downtime and no rollback guarantee if the new bind fails.
+
+Validation rejects overlapping host address/port/protocol bindings anywhere within one descriptor before any workload changes. Equivalent IPv6 addresses and IPv4-mapped IPv6 addresses are compared canonically; the IPv6 wildcard is conservatively treated as overlapping both address families. Across services, other clusters, bootstrap containers, and existing host listeners, Docker remains the authority. An unavailable address, occupied port, or unsupported host configuration fails creation/startup and uses normal reconciliation retries; the platform does not reserve host ports in advance.
+
+Published host traffic connects directly to the application. It bypasses Envoy authentication, TLS termination, routing, cookie stripping, and readiness gating, even when web ingress is private. Bindings become reachable when Docker starts the container and the application listens, potentially before readiness succeeds, and remain reachable if later health checks fail. Applications and operators own authentication, encryption, firewall rules, and exposure for these ports. HTTP health checks still use the service network; UDP application readiness requires application-specific handling. Host publication also permits communication outside the service-network isolation boundary. It does not configure host networking, multicast forwarding, or device access.
 
 ## Environment variables and secrets
 

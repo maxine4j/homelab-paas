@@ -10,6 +10,25 @@ import { WebResourceReconciler } from "./web-reconciler.ts";
 const resource: DeploymentWebResource = { type: "web", image: "app:1", ingress: { public: true, port: 8080 } };
 const input = { serviceId: "demo", resourceId: "app", revision: "rev", resource };
 
+test("every host binding field and binding removal change the web specification", async () => {
+	const f = fixture();
+	const binding = { protocol: "tcp" as const, hostPort: 18080, containerPort: 8080, bindAddress: "127.0.0.1" };
+	const hash = async (hostPorts: DeploymentWebResource["hostPorts"]) => {
+		await f.reconciler.reconcile({ ...input, resource: { ...resource, hostPorts } });
+		return f.requests.at(-1)!.spec;
+	};
+	const original = await hash([binding]);
+	for (const changed of [
+		{ ...binding, protocol: "udp" as const },
+		{ ...binding, hostPort: 18081 },
+		{ ...binding, containerPort: 8081 },
+		{ ...binding, bindAddress: "::1" },
+	])
+		expect(await hash([changed])).not.toBe(original);
+	expect(await hash(undefined)).not.toBe(original);
+	expect(await hash([])).toBe(await hash(undefined));
+});
+
 test("logs drift with an action and stays silent once converged", async () => {
 	const f = fixture();
 	const capture = captureLogs();
@@ -247,6 +266,7 @@ test("changed resolved secret values change the specification without exposing t
 
 test.each([
 	{ volumes: [{ hostPath: "/srv/other", mountPath: "/data" }] },
+	{ hostPorts: [{ protocol: "tcp" as const, hostPort: 18080, containerPort: 8080, bindAddress: "127.0.0.1" }] },
 	{ volumes: [{ hostPath: "/srv/data", mountPath: "/other" }] },
 	{ volumes: [{ hostPath: "/srv/data", mountPath: "/data", readOnly: true }] },
 	{ limits: { cpus: 1, memoryMiB: 256 } },

@@ -101,6 +101,7 @@ test("a failed private health check prevents reporting a converged worker as rea
 });
 
 test.each<Partial<DeploymentWorkerResource>>([
+	{ hostPorts: [{ protocol: "tcp", hostPort: 18080, containerPort: 8080, bindAddress: "127.0.0.1" }] },
 	{ image: "jobs:2" },
 	{ command: ["run"] },
 	{ env: [{ name: "TOKEN", value: "secret" }] },
@@ -117,6 +118,25 @@ test.each<Partial<DeploymentWorkerResource>>([
 	await f.converge();
 	await f.reconciler.reconcile({ ...input, resource: { ...resource, ...change } });
 	expect(f.deploy).toHaveBeenCalledTimes(1);
+});
+
+test("every host binding field and binding removal change the worker specification", async () => {
+	const f = fixture();
+	const binding = { protocol: "tcp" as const, hostPort: 18080, containerPort: 8080, bindAddress: "127.0.0.1" };
+	const hash = async (hostPorts: DeploymentWorkerResource["hostPorts"]) => {
+		await f.reconciler.reconcile({ ...input, resource: { ...resource, replicas: 1, hostPorts } });
+		return f.deploy.mock.calls.at(-1)!.at(0)!.spec;
+	};
+	const original = await hash([binding]);
+	for (const changed of [
+		{ ...binding, protocol: "udp" as const },
+		{ ...binding, hostPort: 18081 },
+		{ ...binding, containerPort: 8081 },
+		{ ...binding, bindAddress: "::1" },
+	])
+		expect(await hash([changed])).not.toBe(original);
+	expect(await hash(undefined)).not.toBe(original);
+	expect(await hash([])).toBe(await hash(undefined));
 });
 
 test("environment ordering and explicit defaults keep the worker fingerprint stable", async () => {

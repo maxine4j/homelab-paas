@@ -8,6 +8,136 @@ const descriptor = {
 	resources: { app: { type: "web", image: "test-service:local", ingress: { public: true, port: 8080 } } },
 };
 
+const binding = { protocol: "tcp", containerPort: 8080, hostPort: 18080, bindAddress: "127.0.0.1" };
+
+test("every host binding field is explicit; empty bindings retain replica and surge support", () => {
+	for (const field of Object.keys(binding)) {
+		const incomplete = Object.fromEntries(Object.entries(binding).filter(([key]) => key !== field));
+		expect(() =>
+			parseDescriptor(
+				{ ...descriptor, resources: { app: { ...descriptor.resources.app, hostPorts: [incomplete] } } },
+				"test-service",
+			),
+		).toThrow("Invalid service descriptor");
+	}
+	expect(() =>
+		parseDescriptor(
+			{
+				...descriptor,
+				resources: {
+					jobs: {
+						type: "worker",
+						image: "jobs:1",
+						healthcheckPort: 8080,
+						replicas: 2,
+						rolloutStrategy: "surge",
+						hostPorts: [],
+					},
+				},
+			},
+			"test-service",
+		),
+	).not.toThrow();
+});
+
+test.each(["web", "worker"])("accepts explicit TCP and UDP host bindings for %s", (type) => {
+	const app = type === "web" ? descriptor.resources.app : { type, image: "jobs:1", healthcheckPort: 8080 };
+	const hostPorts = [binding, { ...binding, protocol: "udp" }, { ...binding, bindAddress: "::1" }];
+	expect(
+		parseDescriptor({ ...descriptor, resources: { app: { ...app, hostPorts } } }, "test-service").resources["app"],
+	).toMatchObject({ hostPorts });
+});
+
+test.each(["::ffff:127.0.0.1", "0:0:0:0:0:ffff:127.0.0.1", "2001:db8::192.0.2.1"])(
+	"accepts literal IPv6 with an embedded IPv4 address: %s",
+	(bindAddress) => {
+		expect(() =>
+			parseDescriptor(
+				{
+					...descriptor,
+					resources: { app: { ...descriptor.resources.app, hostPorts: [{ ...binding, bindAddress }] } },
+				},
+				"test-service",
+			),
+		).not.toThrow();
+	},
+);
+
+test.each([
+	{ protocol: "sctp" },
+	{ hostPort: 0 },
+	{ hostPort: 65536 },
+	{ containerPort: 1.5 },
+	{ bindAddress: "localhost" },
+	{ bindAddress: "" },
+	{ bindAddress: "127.0.0.1:80" },
+	{ bindAddress: "::1]/path" },
+	{ bindAddress: "[::1]:80" },
+	{ bindAddress: "fe80::1%eth0" },
+])("rejects invalid host bindings: %j", (fields) => {
+	expect(() =>
+		parseDescriptor(
+			{
+				...descriptor,
+				resources: { app: { ...descriptor.resources.app, hostPorts: [{ ...binding, ...fields }] } },
+			},
+			"test-service",
+		),
+	).toThrow("Invalid service descriptor");
+});
+
+test.each(["web", "worker"])("fixed host bindings require recreate and one replica for %s", (type) => {
+	const app = type === "web" ? descriptor.resources.app : { type, image: "jobs:1", healthcheckPort: 8080 };
+	for (const fields of [{ replicas: 2 }, { rolloutStrategy: "surge" }]) {
+		expect(() =>
+			parseDescriptor(
+				{ ...descriptor, resources: { app: { ...app, hostPorts: [binding], ...fields } } },
+				"test-service",
+			),
+		).toThrow("Invalid service descriptor");
+	}
+});
+
+test.each(["127.0.0.1", "0.0.0.0", "::", "0:0:0:0:0:0:0:0", "::ffff:127.0.0.1", "::ffff:7f00:1"])(
+	"rejects overlapping bindings within and across resources: %s",
+	(bindAddress) => {
+		const other = { ...binding, bindAddress, containerPort: 9090 };
+		for (const resources of [
+			{ app: { ...descriptor.resources.app, hostPorts: [binding, other] } },
+			{
+				app: { ...descriptor.resources.app, hostPorts: [binding] },
+				jobs: { type: "worker", image: "jobs:1", healthcheckPort: 8080, hostPorts: [other] },
+			},
+		])
+			expect(() => parseDescriptor({ ...descriptor, resources }, "test-service")).toThrow(
+				"Invalid service descriptor",
+			);
+	},
+);
+
+test("rejects equivalent IPv6 addresses while allowing distinct bind addresses", () => {
+	for (const addresses of [
+		["::1", "0:0:0:0:0:0:0:1"],
+		["127.0.0.1", "127.0.0.2"],
+	]) {
+		const parse = () =>
+			parseDescriptor(
+				{
+					...descriptor,
+					resources: {
+						app: {
+							...descriptor.resources.app,
+							hostPorts: addresses.map((bindAddress) => ({ ...binding, bindAddress })),
+						},
+					},
+				},
+				"test-service",
+			);
+		if (addresses[0] === "::1") expect(parse).toThrow("Invalid service descriptor");
+		else expect(parse).not.toThrow();
+	}
+});
+
 test("descriptor schema failures retain field-level validation details as a cause", () => {
 	expect(() => parseDescriptor({ version: "invalid" }, "demo")).toThrow(
 		expect.objectContaining({ cause: expect.any(Error) }),

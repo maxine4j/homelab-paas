@@ -3,6 +3,31 @@ import { expect, test } from "vitest";
 import { DockerClient, DockerClientError } from "./docker-client.ts";
 import type { IDockerTransport } from "./docker-transport.ts";
 
+test("publishes TCP and UDP host ports, retaining multiple bindings for a container port", async () => {
+	const f = fixture(201, { Id: "c" });
+	await f.client.createContainer({
+		name: "app",
+		image: "image",
+		hostPorts: [
+			{ protocol: "tcp", containerPort: 8080, hostPort: 18080, bindAddress: "127.0.0.1" },
+			{ protocol: "tcp", containerPort: 8080, hostPort: 18081, bindAddress: "::1" },
+			{ protocol: "udp", containerPort: 8080, hostPort: 18080, bindAddress: "0.0.0.0" },
+		],
+	});
+	expect(f.calls.at(0)?.body).toMatchObject({
+		ExposedPorts: { "8080/tcp": {}, "8080/udp": {} },
+		HostConfig: {
+			PortBindings: {
+				"8080/tcp": [
+					{ HostIp: "127.0.0.1", HostPort: "18080" },
+					{ HostIp: "::1", HostPort: "18081" },
+				],
+				"8080/udp": [{ HostIp: "0.0.0.0", HostPort: "18080" }],
+			},
+		},
+	});
+});
+
 test("creates shared SELinux binds with explicit access and converts CPU/memory limits to Docker units", async () => {
 	const f = fixture(201, { Id: "c" });
 	await f.client.createContainer({

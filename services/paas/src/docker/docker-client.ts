@@ -1,4 +1,4 @@
-import type { ResourceLimits, ResourceVolume } from "@homelab-paas/shared-contracts";
+import type { ResourceHostPort, ResourceLimits, ResourceVolume } from "@homelab-paas/shared-contracts";
 import { z } from "zod";
 
 import type { IDockerTransport } from "./docker-transport.ts";
@@ -10,6 +10,7 @@ export interface CreateContainerOptions {
 	command?: string[];
 	env?: Record<string, string>;
 	volumes?: ResourceVolume[];
+	hostPorts?: ResourceHostPort[];
 	limits?: ResourceLimits;
 	labels?: Labels;
 	network?: string;
@@ -197,6 +198,11 @@ export class DockerClient implements IDockerClient {
 	}
 
 	async createContainer(options: CreateContainerOptions): Promise<string> {
+		const portBindings: Record<string, { HostIp: string; HostPort: string }[]> = {};
+		for (const binding of options.hostPorts ?? []) {
+			const key = `${binding.containerPort}/${binding.protocol}`;
+			(portBindings[key] ??= []).push({ HostIp: binding.bindAddress, HostPort: String(binding.hostPort) });
+		}
 		const response = await this.request(
 			"POST",
 			`/containers/create?name=${encodeURIComponent(options.name)}`,
@@ -205,7 +211,11 @@ export class DockerClient implements IDockerClient {
 				Cmd: options.command,
 				Env: options.env ? Object.entries(options.env).map(([key, value]) => `${key}=${value}`) : undefined,
 				Labels: options.labels,
+				ExposedPorts: options.hostPorts?.length
+					? Object.fromEntries(Object.keys(portBindings).map((key) => [key, {}]))
+					: undefined,
 				HostConfig: {
+					PortBindings: options.hostPorts?.length ? portBindings : undefined,
 					Binds: options.volumes?.map(
 						({ hostPath, mountPath, readOnly }) => `${hostPath}:${mountPath}:${readOnly ? "ro" : "rw"},z`,
 					),

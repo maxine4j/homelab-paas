@@ -30,6 +30,35 @@ const limits = z.strictObject({
 		.optional(),
 	memoryMiB: positive.max(Math.floor(Number.MAX_SAFE_INTEGER / 1048576)).optional(),
 });
+const hostPort = z.strictObject({
+	protocol: z.enum(["tcp", "udp"]),
+	containerPort: positive.max(65535),
+	hostPort: positive.max(65535),
+	bindAddress: z.union([z.ipv4(), z.ipv6()]).refine((address) => !address.includes("%")),
+});
+
+// URL canonicalization handles equivalent IPv6 spellings without a Node-only dependency.
+const canonicalAddress = (address: string): string => {
+	if (!address.includes(":")) return address;
+	const normalized = new URL(`http://[${address}]/`).hostname.slice(1, -1);
+	const mapped = /^::ffff:([0-9a-f]+):([0-9a-f]+)$/.exec(normalized);
+	if (!mapped) return normalized;
+	const high = Number.parseInt(mapped[1]!, 16);
+	const low = Number.parseInt(mapped[2]!, 16);
+	return [high >> 8, high & 255, low >> 8, low & 255].join(".");
+};
+
+const addressesOverlap = (left: string, right: string): boolean => {
+	const a = canonicalAddress(left);
+	const b = canonicalAddress(right);
+	return (
+		a === b
+		|| a === "::"
+		|| b === "::"
+		|| (a === "0.0.0.0" && !b.includes(":"))
+		|| (b === "0.0.0.0" && !a.includes(":"))
+	);
+};
 const base = {
 	image: z.string().min(1),
 	termination: z.strictObject({ timeoutSeconds: positive.max(300) }).optional(),
@@ -37,6 +66,7 @@ const base = {
 };
 const workload = {
 	...base,
+	hostPorts: z.array(hostPort).optional(),
 	replicas: positive.default(1),
 	rolloutStrategy: z.enum(["recreate", "surge"]).default("recreate"),
 	command: z.array(z.string()).min(1).optional(),
@@ -69,18 +99,49 @@ const worker = z.strictObject({
 const postgres = z.strictObject({ ...base, type: z.literal("postgres") });
 const rabbitmq = z.strictObject({ ...base, type: z.literal("rabbitmq") });
 const resource = z.discriminatedUnion("type", [web, worker, postgres, rabbitmq]);
-export const serviceDescriptorSchema = z.strictObject({
-	version: z.literal(1),
-	metadata: z.strictObject({
-		serviceId: id,
-		description: z.string().optional(),
-		labels: z.record(z.string(), z.string()).optional(),
-	}),
-	resources: z.record(id, resource).refine((resources) => {
-		const webs = Object.values(resources).filter((resource) => resource.type === "web");
-		return webs.length <= 1 || webs.filter((resource) => resource.primary === true).length === 1;
-	}),
-});
+export const serviceDescriptorSchema = z
+	.strictObject({
+		version: z.literal(1),
+		metadata: z.strictObject({
+			serviceId: id,
+			description: z.string().optional(),
+			labels: z.record(z.string(), z.string()).optional(),
+		}),
+		resources: z.record(id, resource).refine((resources) => {
+			const webs = Object.values(resources).filter((resource) => resource.type === "web");
+			return webs.length <= 1 || webs.filter((resource) => resource.primary === true).length === 1;
+		}),
+	})
+	.superRefine((descriptor, context) => {
+		const bindings: z.output<typeof hostPort>[] = [];
+		for (const [resourceId, resource] of Object.entries(descriptor.resources)) {
+			if (resource.type !== "web" && resource.type !== "worker") continue;
+			if (resource.hostPorts?.length && (resource.replicas !== 1 || resource.rolloutStrategy !== "recreate")) {
+				context.addIssue({
+					code: "custom",
+					path: ["resources", resourceId, "hostPorts"],
+					message: "Host ports require one replica and recreate rollout",
+				});
+			}
+			for (const binding of resource.hostPorts ?? []) {
+				if (
+					bindings.some(
+						(other) =>
+							other.protocol === binding.protocol
+							&& other.hostPort === binding.hostPort
+							&& addressesOverlap(other.bindAddress, binding.bindAddress),
+					)
+				) {
+					context.addIssue({
+						code: "custom",
+						path: ["resources", resourceId, "hostPorts"],
+						message: "Overlapping host port bindings",
+					});
+				}
+				bindings.push(binding);
+			}
+		}
+	});
 
 export type ServiceDescriptor = z.input<typeof serviceDescriptorSchema>;
 export type Resource = z.input<typeof resource>;
@@ -91,6 +152,7 @@ export type RabbitMqResource = z.input<typeof rabbitmq>;
 export type EnvironmentVariable = z.input<typeof environmentVariable>;
 export type ResourceVolume = z.input<typeof volume>;
 export type ResourceLimits = z.input<typeof limits>;
+export type ResourceHostPort = z.input<typeof hostPort>;
 
 /** Validates the full descriptor contract; schema failures retain their cause for diagnostics. */
 export function parseDescriptor(value: unknown, serviceId: string): ServiceDescriptor {

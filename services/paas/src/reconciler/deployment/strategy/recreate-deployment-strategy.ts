@@ -51,6 +51,7 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 			command: resource.command,
 			env: Object.fromEntries((resource.env ?? []).map(({ name, value }) => [name, value])),
 			volumes: resource.volumes,
+			hostPorts: resource.hostPorts,
 			limits: resource.limits,
 		});
 		let endpoint: Endpoint;

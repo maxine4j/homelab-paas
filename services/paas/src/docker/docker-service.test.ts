@@ -12,6 +12,7 @@ test("preserves descriptor mounts and resource limits for the Docker adapter", a
 	const f = fixture();
 	const volumes = [{ hostPath: "/mnt/external drive", mountPath: "/data", readOnly: true }];
 	const limits = { cpus: 0.5, memoryMiB: 512 };
+	const hostPorts = [{ protocol: "udp" as const, containerPort: 8080, hostPort: 18080, bindAddress: "::1" }];
 	await f.service.createResourceContainer({
 		serviceId: "demo",
 		resourceId: "app",
@@ -19,10 +20,11 @@ test("preserves descriptor mounts and resource limits for the Docker adapter", a
 		spec: "spec",
 		imageId: "image",
 		volumes,
+		hostPorts,
 		limits,
 	});
 	expect(f.calls.find(({ operation }) => operation === "createContainer")?.args).toEqual([
-		expect.objectContaining({ volumes, limits }),
+		expect.objectContaining({ volumes, limits, hostPorts }),
 	]);
 });
 const identity = {

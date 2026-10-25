@@ -30,6 +30,8 @@ rolloutStrategy: recreate
 
 `recreate` is the default.
 
+Resources with explicit [host ports](configuration.md#host-ports) require one replica and recreate. Binding changes replace containers; Docker start publishes ports independently of HTTP readiness and Envoy route acceptance. Conflicts with bindings outside the descriptor are reported through Docker startup failures and normal retries.
+
 | Strategy   | Behaviour                                                                                                 |
 | ---------- | --------------------------------------------------------------------------------------------------------- |
 | `recreate` | Stop existing containers before starting replacements. Downtime is expected.                              |

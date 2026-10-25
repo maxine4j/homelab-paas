@@ -72,6 +72,7 @@ export class WorkerResourceReconciler implements IWorkerResourceReconciler {
 					{
 						type: "worker",
 						image: resource.image,
+						...(resource.hostPorts?.length ? { hostPorts: resource.hostPorts } : {}),
 						command: resource.command ?? null,
 						env,
 						volumes:

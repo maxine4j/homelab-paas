@@ -29,6 +29,7 @@ The platform supports:
 - Recreate and surge deployments.
 - Multiple web or worker replicas.
 - Persistent host storage.
+- Explicit TCP and UDP host ports for web and worker applications; see the [host-port contract](configuration.md#host-ports).
 
 The initial version excludes multi-host scheduling, internal authorization, backups, disaster recovery, automated database upgrades, and cross-service database or broker endpoints.
 
