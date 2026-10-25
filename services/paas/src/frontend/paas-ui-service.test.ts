@@ -193,6 +193,10 @@ test("joins every desired resource with live containers, retaining resources abs
 	const { service } = fixture();
 	const detail = await service.getService("demo");
 	expect(detail.descriptorRevision).toBe("new");
+	expect(detail).toHaveProperty(
+		"descriptor",
+		expect.objectContaining({ version: 1, metadata: { serviceId: "demo" } }),
+	);
 	expect(detail.resources.map((r) => r.resourceId)).toEqual(["app", "db", "old"]);
 	expect(detail.resources.at(1)?.containers).toEqual([]);
 	expect(JSON.stringify(detail)).not.toMatch(/env-canary|unsafe-canary/);
@@ -245,6 +249,7 @@ test("Git failures preserve live resource visibility and disable logs when redac
 	f.fetchFile.mockRejectedValue(new Error("secret-canary"));
 	const detail = await f.service.getService("demo");
 	expect(detail.descriptorStatus).toBe("unavailable");
+	expect(detail).not.toHaveProperty("descriptor", expect.anything());
 	expect(detail.resources.map((r) => r.resourceId)).toEqual(["app", "old"]);
 	await expect(f.service.getLogs("demo", "app", "c")).rejects.toMatchObject({ kind: "unavailable" });
 });

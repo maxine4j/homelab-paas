@@ -105,6 +105,36 @@ test("service details show recent failure events and link to service event histo
 	expect(html).toContain("Recent events");
 });
 
+test("service details put resources before events and the complete descriptor after events", () => {
+	const html = renderToStaticMarkup(
+		<ServicePage
+			service={{
+				serviceId: "demo",
+				phase: "ready",
+				source: { remote: "https://github.com/example/demo.git", descriptorPath: "service.sd.yaml" },
+				descriptorStatus: "available",
+				descriptorRevision: "abc1234",
+				descriptor: {
+					version: 1,
+					metadata: { serviceId: "demo" },
+					resources: { app: { type: "web", image: "app:1" } },
+				},
+				resources: [
+					{ resourceId: "app", type: "web", primaryUrl: "https://demo.example.test", containers: [] },
+				],
+			}}
+			events={events}
+		/>,
+	);
+	expect(html.indexOf("Resources")).toBeLessThan(html.indexOf("Recent events"));
+	expect(html.indexOf("Recent events")).toBeLessThan(html.indexOf("Service descriptor"));
+	expect(html).toContain('href="https://github.com/example/demo/blob/abc1234/service.sd.yaml"');
+	expect(html).toContain('href="https://demo.example.test"');
+	expect(html).toContain("app:1");
+	expect(html).toContain("&quot;metadata&quot;");
+	expect(html).not.toContain("Service source configuration");
+});
+
 test("event history direct links resolve and render timestamp, resource, severity and retry details", () => {
 	expect(parseRoute("#/services/demo/events")).toEqual({ page: "events", serviceId: "demo" });
 	expect(parseRoute("#/services/demo/events/extra")).toEqual({ page: "missing" });
@@ -198,7 +228,7 @@ test("cluster editor renders masked replacement inputs and marks environment and
 		/>,
 	);
 	expect(html).toContain('type="password"');
-	expect(html).toContain("Configured");
+	expect(html).toContain("Secret value - enter replacement");
 	expect(html).toContain("Managed by environment");
 	expect(html).toContain("Requires restart");
 	expect(html).toContain("Save configuration");
@@ -229,6 +259,31 @@ test("resource inspection renders configuration, state and escaped log output", 
 			expect(html).not.toContain("<script>");
 		}
 	}
+});
+
+test("logs select the first observed container by default and preserve an explicit selection", () => {
+	const resource = {
+		resourceId: "app",
+		type: "web",
+		containers: ["first", "second"].map((id) => ({
+			id,
+			resourceId: "app",
+			imageId: "sha256:a",
+			state: "running",
+			revision: "rev",
+		})),
+	};
+	const initial = renderToStaticMarkup(<ResourcePage serviceId='demo' resource={resource} tab='logs' />);
+	expect(initial).toContain('<option value="first" selected="">');
+	expect(initial).toContain("Loading logs");
+	const explicit = renderToStaticMarkup(
+		<ResourcePage serviceId='demo' resource={resource} tab='logs' containerId='second' />,
+	);
+	expect(explicit).toContain('<option value="second" selected="">');
+	const empty = renderToStaticMarkup(
+		<ResourcePage serviceId='demo' resource={{ ...resource, containers: [] }} tab='logs' />,
+	);
+	expect(empty).toContain("No containers available for logs");
 });
 
 test("routes distinguish service/resource inspection and reject unsupported navigation", () => {

@@ -61,6 +61,37 @@ button:disabled {
 	grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
 	gap: 1.2rem;
 }
+.config-section {
+	border-top: 1px solid #282e38;
+	margin-top: 28px;
+	padding-top: 8px;
+}
+.primary-web-link {
+	display: inline-flex;
+	align-items: center;
+	min-height: 44px;
+	color: #c6d7ff;
+	font-size: 0.875rem;
+}
+.config-section h2 {
+	font-family: ui-monospace, monospace;
+	font-size: 1rem;
+	color: #c6d7ff;
+}
+.service-sources-editor {
+	display: grid;
+	gap: 16px;
+}
+.service-sources-editor > p {
+	margin: 0;
+}
+.service-sources-editor > button {
+	justify-self: start;
+}
+.remove-service {
+	margin-top: 16px;
+	color: #f1afb5;
+}
 .config-field {
 	display: flex;
 	flex-direction: column;
@@ -146,12 +177,27 @@ button:disabled {
 	color: #c6d7ff;
 	background: #243047;
 }
-.sidebar-note {
-	margin-top: auto;
-	padding-top: 48px;
-	color: #8692a1;
-	font-size: 0.75rem;
-	line-height: 1.8;
+.breadcrumbs {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	color: #94a0af;
+	font-size: 0.8rem;
+	min-width: 0;
+}
+.breadcrumbs a {
+	display: inline-flex;
+	align-items: center;
+	min-height: 44px;
+}
+.breadcrumbs a:hover {
+	color: #c6d7ff;
+	text-decoration: underline;
+}
+.breadcrumbs [aria-current="page"] {
+	color: #e3e8ee;
+	overflow-wrap: anywhere;
 }
 .workspace {
 	min-width: 0;
@@ -489,7 +535,7 @@ summary {
 }
 footer {
 	display: flex;
-	justify-content: space-between;
+	justify-content: flex-end;
 	gap: 16px;
 	padding: 20px 40px;
 	border-top: 1px solid #252c36;
@@ -539,19 +585,12 @@ footer {
 		gap: 20px;
 		flex: 1;
 	}
-	.sidebar-note {
-		display: none;
-	}
 	main {
 		padding: 28px 20px 40px;
 	}
 	.topbar {
 		min-height: 72px;
 		padding: 12px 20px;
-	}
-	.topbar .eyebrow {
-		font-size: 0.6rem;
-		letter-spacing: 0.07em;
 	}
 	.page-heading {
 		gap: 12px;

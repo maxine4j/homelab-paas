@@ -10,3 +10,10 @@ export interface ApiResult<T> {
 	data?: T;
 	error?: string;
 }
+
+export interface ServiceSourceDraft {
+	serviceId: string;
+	remote: string;
+	branch: string;
+	descriptorPath: string;
+}

@@ -7,7 +7,7 @@ export const ResourcePage = ({
 	serviceId,
 	resource,
 	tab,
-	containerId,
+	containerId = resource.containers.at(0)?.id,
 	logs,
 	logError,
 }: {

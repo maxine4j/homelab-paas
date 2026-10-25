@@ -2,6 +2,9 @@ import type { JsonValue, UiCluster, UiConfigField, UiEditableConfig } from "@hom
 import { useEffect, useRef, useState } from "react";
 
 import { fetchUi, saveConfig } from "../api.ts";
+import type { ServiceSourceDraft } from "../types.ts";
+import { ServiceSourcesEditor } from "./service-sources-editor.tsx";
+import { readServiceSources, saveServiceSources } from "./service-sources.ts";
 
 export const ConfigEditor = ({ snapshot }: { snapshot: UiEditableConfig }) => {
 	const [base, setBase] = useState(snapshot);
@@ -21,7 +24,7 @@ export const ConfigEditor = ({ snapshot }: { snapshot: UiEditableConfig }) => {
 		field.kind === "secret"
 			? ""
 			: field.kind === "json"
-				? JSON.stringify(field.value, null, 2)
+				? JSON.stringify(field.path === "services" ? readServiceSources(field.value) : field.value)
 				: field.kind === "list" && Array.isArray(field.value)
 					? field.value.join("\n")
 					: String(field.value ?? "");
@@ -48,11 +51,10 @@ export const ConfigEditor = ({ snapshot }: { snapshot: UiEditableConfig }) => {
 							.map((line) => line.trim())
 							.filter(Boolean);
 					if (field.kind === "json") {
-						try {
-							value = JSON.parse(text);
-						} catch {
-							throw new Error("Services must contain valid JSON");
-						}
+						value =
+							field.path === "services"
+								? saveServiceSources(JSON.parse(text) as ServiceSourceDraft[])
+								: JSON.parse(text);
 					}
 					return { path: field.path, value };
 				});
@@ -90,6 +92,12 @@ export const ConfigEditor = ({ snapshot }: { snapshot: UiEditableConfig }) => {
 			if (!abort.signal.aborted) setSaving(false);
 		}
 	};
+	const groups = new Map<string, UiConfigField[]>();
+	for (const field of base.fields) {
+		const group =
+			field.path.split(".").slice(0, -1).join(".") || (field.path === "services" ? "services" : "general");
+		groups.set(group, [...(groups.get(group) ?? []), field]);
+	}
 	return (
 		<form
 			className='config-editor'
@@ -100,71 +108,97 @@ export const ConfigEditor = ({ snapshot }: { snapshot: UiEditableConfig }) => {
 		>
 			<fieldset disabled={saving}>
 				<legend>Platform settings</legend>
-				<p>
-					Leave secret fields empty to keep their current values. Services use a JSON object keyed by service
-					ID.
-				</p>
-				<div className='config-fields'>
-					{base.fields.map((field) => (
-						<div
-							className={`config-field ${field.kind === "json" ? "config-field-wide" : ""}`}
-							key={field.path}
-						>
-							<label htmlFor={`config-${field.path}`}>{field.path}</label>
-							{field.kind === "json" || field.kind === "list" ? (
-								<textarea
-									id={`config-${field.path}`}
-									rows={field.kind === "json" ? 12 : 3}
-									spellCheck={false}
-									readOnly={field.readOnly}
-									value={drafts[field.path] ?? fieldValue(field)}
-									onChange={(event) =>
-										setDrafts((previous) => ({ ...previous, [field.path]: event.target.value }))
-									}
-								/>
-							) : (
-								<input
-									id={`config-${field.path}`}
-									type={
-										field.kind === "secret"
-											? "password"
-											: field.kind === "number"
-												? "number"
-												: "text"
-									}
-									autoComplete={field.kind === "secret" ? "new-password" : "off"}
-									min={field.kind === "number" ? 1 : undefined}
-									step={field.kind === "number" ? 1 : undefined}
-									readOnly={field.readOnly}
-									placeholder={
-										field.kind === "secret"
-											? field.configured
-												? "Configured — enter replacement"
-												: "Not configured"
-											: undefined
-									}
-									value={drafts[field.path] ?? fieldValue(field)}
-									onChange={(event) =>
-										setDrafts((previous) => ({ ...previous, [field.path]: event.target.value }))
-									}
-								/>
-							)}
-							<small>
-								{field.managedByEnvironment
-									? "Managed by environment"
-									: field.readOnly
-										? field.path.startsWith("ingress.") || field.path.startsWith("metadata.")
-											? "Requires restart — edit the host file"
-											: "Read only"
-										: field.kind === "secret"
-											? "Replacement only; current value is never returned"
-											: field.kind === "list"
-												? "One value per line"
-												: ""}
-							</small>
+				<p>Leave secret fields empty to keep their current values.</p>
+				{Array.from(groups, ([group, fields]) => (
+					<section className='config-section' key={group} aria-labelledby={`group-${group}`}>
+						<h2 id={`group-${group}`}>{group}</h2>
+						<div className='config-fields'>
+							{fields.map((field) => (
+								<div
+									className={`config-field ${field.kind === "json" ? "config-field-wide" : ""}`}
+									key={field.path}
+								>
+									{field.path !== "services" && (
+										<label htmlFor={`config-${field.path}`}>{field.path.split(".").at(-1)}</label>
+									)}
+									{field.path === "services" ? (
+										<ServiceSourcesEditor
+											rows={
+												JSON.parse(
+													drafts[field.path] ?? fieldValue(field),
+												) as ServiceSourceDraft[]
+											}
+											readOnly={field.readOnly}
+											onChange={(rows) =>
+												setDrafts((previous) => ({
+													...previous,
+													[field.path]: JSON.stringify(rows),
+												}))
+											}
+										/>
+									) : field.kind === "json" || field.kind === "list" ? (
+										<textarea
+											id={`config-${field.path}`}
+											rows={field.kind === "json" ? 12 : 3}
+											spellCheck={false}
+											readOnly={field.readOnly}
+											value={drafts[field.path] ?? fieldValue(field)}
+											onChange={(event) =>
+												setDrafts((previous) => ({
+													...previous,
+													[field.path]: event.target.value,
+												}))
+											}
+										/>
+									) : (
+										<input
+											id={`config-${field.path}`}
+											type={
+												field.kind === "secret"
+													? "password"
+													: field.kind === "number"
+														? "number"
+														: "text"
+											}
+											autoComplete={field.kind === "secret" ? "new-password" : "off"}
+											min={field.kind === "number" ? 1 : undefined}
+											step={field.kind === "number" ? 1 : undefined}
+											readOnly={field.readOnly}
+											placeholder={
+												field.kind === "secret"
+													? field.configured
+														? "Secret value - enter replacement"
+														: "Not configured"
+													: undefined
+											}
+											value={drafts[field.path] ?? fieldValue(field)}
+											onChange={(event) =>
+												setDrafts((previous) => ({
+													...previous,
+													[field.path]: event.target.value,
+												}))
+											}
+										/>
+									)}
+									<small>
+										{field.managedByEnvironment
+											? "Managed by environment"
+											: field.readOnly
+												? field.path.startsWith("ingress.")
+													|| field.path.startsWith("metadata.")
+													? "Requires restart — edit the host file"
+													: "Read only"
+												: field.kind === "secret"
+													? ""
+													: field.kind === "list"
+														? "One value per line"
+														: ""}
+									</small>
+								</div>
+							))}
 						</div>
-					))}
-				</div>
+					</section>
+				))}
 				<div className='config-actions'>
 					<button type='submit' disabled={!dirty}>
 						{saving ? "Saving…" : "Save configuration"}

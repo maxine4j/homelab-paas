@@ -122,6 +122,7 @@ export class PaasUiService implements IPaasUiService {
 				source: this.config.sanitize(this.config.getServices()[serviceId], secrets),
 				descriptorRevision: file?.revision,
 				descriptorStatus: file ? "available" : "unavailable",
+				descriptor: file ? this.config.sanitize(file.descriptor, secrets) : undefined,
 				resources: ids.map((resourceId) => ({
 					resourceId,
 					url:

@@ -83,6 +83,8 @@ export interface UiService extends UiServiceSummary {
 	source: JsonValue;
 	descriptorRevision?: string;
 	descriptorStatus: "available" | "unavailable";
+	/** Complete parsed descriptor with credentials, environment values and commands redacted. */
+	descriptor?: JsonValue;
 	resources: UiResource[];
 }
 

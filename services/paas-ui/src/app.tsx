@@ -28,12 +28,17 @@ export const App = () => {
 						? `/services/${route.serviceId}/resources/${route.resourceId}`
 						: undefined;
 	const snapshot = useApi<UiCluster | UiServiceSummary[] | UiService | UiResource>(path);
+	const containerId =
+		route.page === "resource"
+			? (route.containerId
+				?? (snapshot.data && "containers" in snapshot.data ? snapshot.data.containers.at(0)?.id : undefined))
+			: undefined;
 	const events = useApi<UiServiceEvent[]>(
 		route.page === "service" || route.page === "events" ? `/services/${route.serviceId}/events` : undefined,
 	);
 	const logs = useApi<UiLogs>(
-		route.page === "resource" && route.tab === "logs" && route.containerId
-			? `${path}/containers/${encodeURIComponent(route.containerId)}/logs`
+		route.page === "resource" && route.tab === "logs" && containerId
+			? `${path}/containers/${encodeURIComponent(containerId)}/logs`
 			: undefined,
 	);
 	return (
@@ -49,23 +54,51 @@ export const App = () => {
 				</a>
 				<nav aria-label='Main navigation'>
 					<a href='#/services' aria-current={route.page !== "cluster" ? "page" : undefined}>
-						Services <span aria-hidden='true'>↗</span>
+						Services
 					</a>
 					<a href='#/cluster' aria-current={route.page === "cluster" ? "page" : undefined}>
-						Cluster config <span aria-hidden='true'>⚙</span>
+						Cluster config
 					</a>
 				</nav>
-				<p className='sidebar-note'>
-					Single host. One place.
-					<br />
-					Cluster management
-				</p>
 			</aside>
 			<div className='workspace'>
 				<header className='topbar'>
-					<span className='eyebrow'>
-						Workspace / {route.page === "cluster" ? "Configuration" : "Services"}
-					</span>
+					<nav className='breadcrumbs' aria-label='Breadcrumb'>
+						{route.page === "cluster" ? (
+							<span aria-current='page'>Cluster config</span>
+						) : route.page === "missing" ? (
+							<span aria-current='page'>Page not found</span>
+						) : (
+							<>
+								<a href='#/services' aria-current={route.page === "services" ? "page" : undefined}>
+									Services
+								</a>
+								{(route.page === "service" || route.page === "resource" || route.page === "events") && (
+									<>
+										<span aria-hidden='true'>/</span>
+										<a
+											href={`#/services/${route.serviceId}`}
+											aria-current={route.page === "service" ? "page" : undefined}
+										>
+											{route.serviceId}
+										</a>
+									</>
+								)}
+								{route.page === "resource" && (
+									<>
+										<span aria-hidden='true'>/</span>
+										<span aria-current='page'>{route.resourceId}</span>
+									</>
+								)}
+								{route.page === "events" && (
+									<>
+										<span aria-hidden='true'>/</span>
+										<span aria-current='page'>Events</span>
+									</>
+								)}
+							</>
+						)}
+					</nav>
 					<button
 						onClick={() => {
 							snapshot.refresh();
@@ -106,14 +139,14 @@ export const App = () => {
 							serviceId={route.serviceId}
 							resource={snapshot.data as UiResource}
 							tab={route.tab}
-							containerId={route.containerId}
+							containerId={containerId}
 							logs={logs.data}
 							logError={logs.error}
 						/>
 					)}
 				</main>
 				<footer>
-					Homelab PaaS <span>Auto-refresh 5s</span>
+					<span>Auto-refresh 5s</span>
 				</footer>
 			</div>
 		</div>
