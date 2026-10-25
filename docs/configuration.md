@@ -6,7 +6,7 @@ All platform and descriptor YAML is parsed through the canonical backend YAML ut
 
 ## Implemented deployment MVP
 
-The current runtime supports one or more workload resources per service: any number of `web` resources with one replica each, and any number of `worker` resources with positive integer replica counts. Worker-only services are supported without auth/TLS. Both workload types support `recreate` or `surge` deployment. Descriptors use the schema below with only `version`, `metadata`, and `resources` at the top level. Runtime-supported web fields are `type`, `image`, `ingress`, `primary`, optional `replicas: 1`, `rolloutStrategy` (`recreate` or `surge`), `healthcheckUrl`, `command`, literal or secret-reference `env` values, `volumes`, `limits`, and `termination.timeoutSeconds` (default 30, maximum 300). Workers support the same application settings, with `healthcheckPort` instead of `ingress` and multiple replicas. Unknown fields fail descriptor validation; unsupported runtime features fail a separate capability check before changing workloads. The public TypeScript types, Zod schema, and `parseDescriptor` validator in `@homelab-paas/shared-contracts` describe the complete service descriptor contract below. Platform configuration, runtime capability checks, and deployment state stay in the backend.
+The current runtime supports one or more workload resources per service: any number of `web` resources with one replica each, and any number of `worker` resources with positive integer replica counts. Worker-only services are supported without auth/TLS. Both workload types support `recreate` or `surge` deployment. Descriptors use the schema below with only `version`, `metadata`, and `resources` at the top level. Runtime-supported web fields are `type`, `image`, `ingress`, `primary`, optional `replicas: 1`, `rolloutStrategy` (`recreate` or `surge`), `healthcheckUrl`, `command`, literal or secret-reference `env` values, `volumes`, `hostPorts`, `devices`, `supplementaryGroups`, `limits`, and `termination.timeoutSeconds` (default 30, maximum 300). Workers support the same application settings, with `healthcheckPort` instead of `ingress` and multiple replicas. Unknown fields fail descriptor validation; unsupported runtime features fail a separate capability check before changing workloads. The public TypeScript types, Zod schema, and `parseDescriptor` validator in `@homelab-paas/shared-contracts` describe the complete service descriptor contract below. Platform configuration, runtime capability checks, and deployment state stay in the backend.
 
 Managed databases/brokers, egress, web replicas beyond one, and resource/service removal are deferred. Private ingress (including the default `public: false`) requires platform auth and TLS. Without them, ingress must explicitly set `public: true`. The remaining service examples include capabilities beyond the deployed runtime.
 
@@ -96,7 +96,7 @@ resources:
         ingress: { port: 8080, public: false }
 ```
 
-Resources are a discriminated union of `web`, `worker`, `postgres`, and `rabbitmq`. Every resource requires a nonempty `image` and may set `limits` and `termination.timeoutSeconds` (positive integer seconds, maximum 300). Web and worker resources additionally accept `command`, `env`, `volumes`, `hostPorts`, `egress`, positive integer `replicas` (default 1), and `rolloutStrategy` (`recreate` by default, or `surge`). Web resources require an ingress port (1–65535) and default `ingress.public` to `false`. Workers require `healthcheckPort` (integer 1–65535) and reject `ingress`. Both default `healthcheckUrl` to `/healthcheck`, accepting only a relative HTTP path beginning with a single `/`. PaaS probes worker health endpoints on the container's service-network address; no host port, public route, or Envoy health check is created automatically. Workers must listen on that container interface, rather than only loopback. See [health checks](reconciliation-and-deployments.md#health-checks-and-termination) for readiness and polling behavior. Managed PostgreSQL and RabbitMQ resources accept no custom environment, credentials, volumes, replicas, or rollout strategy; see [managed resources](managed-resources.md).
+Resources are a discriminated union of `web`, `worker`, `postgres`, and `rabbitmq`. Every resource requires a nonempty `image` and may set `limits` and `termination.timeoutSeconds` (positive integer seconds, maximum 300). Web and worker resources additionally accept `command`, `env`, `volumes`, [devices and supplementary groups](#devices-and-supplementary-groups) (`devices`, `supplementaryGroups`), `hostPorts`, `egress`, positive integer `replicas` (default 1), and `rolloutStrategy` (`recreate` by default, or `surge`). Web resources require an ingress port (1–65535) and default `ingress.public` to `false`. Workers require `healthcheckPort` (integer 1–65535) and reject `ingress`. Both default `healthcheckUrl` to `/healthcheck`, accepting only a relative HTTP path beginning with a single `/`. PaaS probes worker health endpoints on the container's service-network address; no host port, public route, or Envoy health check is created automatically. Workers must listen on that container interface, rather than only loopback. See [health checks](reconciliation-and-deployments.md#health-checks-and-termination) for readiness and polling behavior. Managed PostgreSQL and RabbitMQ resources accept no custom environment, credentials, volumes, devices, supplementary groups, replicas, or rollout strategy; see [managed resources](managed-resources.md).
 
 ## Host ports
 
@@ -180,6 +180,28 @@ limits:
 ```
 
 Both fields are optional. `cpus` is a positive CPU count (fractional values allowed), mapped to Docker `HostConfig.NanoCpus` by rounding `cpus × 1,000,000,000`. It must be at least one nanocpu and fit a safe integer after conversion. `memoryMiB` is a positive integer mapped to Docker `HostConfig.Memory` in bytes (`memoryMiB × 1,048,576`), also bounded to safe integer conversion. Omitted fields leave Docker's defaults in effect. Docker enforces additional host-specific minimums and capacity restrictions; invalid settings fail deployment. Limit changes replace containers through either rollout strategy.
+
+## Devices and supplementary groups
+
+Web and worker resources support simple Docker host device mappings, including Intel Quick Sync for applications such as Jellyfin:
+
+```yaml
+devices:
+    - hostPath: /dev/dri
+      mountPath: /dev/dri
+      permissions: rwm
+supplementaryGroups:
+    - 44 # Example video GID; use the actual Docker host GIDs
+    - 109 # Example render GID
+```
+
+`hostPath` names an existing device node or device directory on the **Docker host**; `mountPath` is its destination inside the workload container. Both must be absolute normalized paths other than `/`, without empty, `.` or `..` segments, trailing slashes, NUL bytes or colons. Device destinations must be unique. Docker maps directories' existing device nodes; newly added host nodes require container replacement. `permissions` defaults to `rwm` and accepts a nonempty subset in `r`, `w`, `m` order: read, write and device-node creation access in the device cgroup. These permissions do not override Unix ownership or mode bits.
+
+Optional `supplementaryGroups` adds unique numeric Linux GIDs (0 through 4294967294) to the container process, allowing the image's configured user to access group-owned devices. Obtain the actual GIDs from the Docker host's device ownership; group names and image group IDs may differ. Image entrypoints that switch users and drop supplementary groups may require image-specific configuration to preserve device access. Group ordering is immaterial. Neither option is available on managed PostgreSQL or RabbitMQ resources.
+
+The Engine API receives `HostConfig.Devices` and `HostConfig.GroupAdd`. Device mappings are separate from ordinary bind volumes and do not apply the volume SELinux `z` relabel option. The operator must provision compatible host drivers, application/image hardware acceleration support, device permissions and any required SELinux device-access policy. The control plane neither changes the host nor checks device existence through its own filesystem; Docker reports unavailable devices or denied access through normal deployment failures and retries.
+
+Device paths, permissions and supplementary group changes replace web and worker containers with the configured rollout strategy. Devices may be shared between replicas and surge revisions; use recreate and one replica where the device or application requires exclusive access. Omitted or empty device/group lists retain the existing workload specification identity. Privileged containers, NVIDIA runtimes/device requests and GPU scheduling are outside this contract.
 
 ## Example platform configuration
 

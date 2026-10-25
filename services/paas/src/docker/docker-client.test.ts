@@ -3,6 +3,29 @@ import { expect, test } from "vitest";
 import { DockerClient, DockerClientError } from "./docker-client.ts";
 import type { IDockerTransport } from "./docker-transport.ts";
 
+test("maps devices with default and explicit permissions and numeric supplementary groups", async () => {
+	const f = fixture(201, { Id: "c" });
+	await f.client.createContainer({
+		name: "app",
+		image: "image",
+		devices: [
+			{ hostPath: "/dev/dri", mountPath: "/dev/dri" },
+			{ hostPath: "/dev/null", mountPath: "/dev/custom", permissions: "rw" },
+		],
+		supplementaryGroups: [0, 109],
+	});
+	expect(JSON.parse(JSON.stringify(f.calls.at(0)?.body))).toEqual({
+		Image: "image",
+		HostConfig: {
+			Devices: [
+				{ PathOnHost: "/dev/dri", PathInContainer: "/dev/dri", CgroupPermissions: "rwm" },
+				{ PathOnHost: "/dev/null", PathInContainer: "/dev/custom", CgroupPermissions: "rw" },
+			],
+			GroupAdd: ["0", "109"],
+		},
+	});
+});
+
 test("publishes TCP and UDP host ports, retaining multiple bindings for a container port", async () => {
 	const f = fixture(201, { Id: "c" });
 	await f.client.createContainer({

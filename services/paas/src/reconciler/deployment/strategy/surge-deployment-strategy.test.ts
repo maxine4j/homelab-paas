@@ -35,13 +35,22 @@ test("publishes the selected resource with its primary policy", async () => {
 test("propagates resolved secrets, arbitrary host mounts and CPU/memory limits to the surge replacement", async () => {
 	const f = fixture();
 	const volumes = [{ hostPath: "/srv/media", mountPath: "/media", readOnly: true }];
+	const devices = [{ hostPath: "/dev/dri", mountPath: "/dev/dri" }];
+	const supplementaryGroups = [109];
 	const limits = { cpus: 0.5, memoryMiB: 256 };
 	await f.strategy.deploy({
 		...request,
-		resource: { ...request.resource, env: [{ name: "TOKEN", value: "resolved-secret" }], volumes, limits },
+		resource: {
+			...request.resource,
+			env: [{ name: "TOKEN", value: "resolved-secret" }],
+			volumes,
+			limits,
+			devices,
+			supplementaryGroups,
+		},
 	});
 	expect(f.calls.find((c) => c.action === "create")?.args).toEqual([
-		expect.objectContaining({ env: { TOKEN: "resolved-secret" }, volumes, limits }),
+		expect.objectContaining({ env: { TOKEN: "resolved-secret" }, volumes, limits, devices, supplementaryGroups }),
 	]);
 });
 

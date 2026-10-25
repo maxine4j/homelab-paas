@@ -1,4 +1,4 @@
-import type { ResourceHostPort, ResourceLimits, ResourceVolume } from "@homelab-paas/shared-contracts";
+import type { ResourceDevice, ResourceHostPort, ResourceLimits, ResourceVolume } from "@homelab-paas/shared-contracts";
 
 import type { IPaasConfig } from "../config/paas-config.ts";
 import { DockerClientError } from "./docker-client.ts";
@@ -16,6 +16,8 @@ export interface CreateResourceContainerOptions {
 	command?: string[];
 	env?: Record<string, string>;
 	volumes?: ResourceVolume[];
+	devices?: ResourceDevice[];
+	supplementaryGroups?: number[];
 	hostPorts?: ResourceHostPort[];
 	limits?: ResourceLimits;
 }
@@ -160,6 +162,8 @@ export class DockerService implements IDockerService {
 			command: options.command,
 			env: options.env,
 			volumes: options.volumes,
+			devices: options.devices,
+			supplementaryGroups: options.supplementaryGroups,
 			hostPorts: options.hostPorts,
 			limits: options.limits,
 			labels: {

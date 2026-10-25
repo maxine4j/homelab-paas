@@ -8,6 +8,7 @@ export type {
 	RabbitMqResource,
 	EnvironmentVariable,
 	ResourceVolume,
+	ResourceDevice,
 	ResourceLimits,
 	ResourceHostPort,
 } from "./service-descriptor.ts";

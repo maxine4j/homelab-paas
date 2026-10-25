@@ -72,6 +72,18 @@ export class WorkerResourceReconciler implements IWorkerResourceReconciler {
 					{
 						type: "worker",
 						image: resource.image,
+						...(resource.devices?.length
+							? {
+									devices: resource.devices.map(({ hostPath, mountPath, permissions }) => ({
+										hostPath,
+										mountPath,
+										permissions: permissions ?? "rwm",
+									})),
+								}
+							: {}),
+						...(resource.supplementaryGroups?.length
+							? { supplementaryGroups: [...resource.supplementaryGroups].sort((a, b) => a - b) }
+							: {}),
 						...(resource.hostPorts?.length ? { hostPorts: resource.hostPorts } : {}),
 						command: resource.command ?? null,
 						env,

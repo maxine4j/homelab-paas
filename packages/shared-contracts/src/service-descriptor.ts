@@ -22,6 +22,22 @@ const volume = z.strictObject({
 	mountPath: absolutePath.refine((path) => path !== "/"),
 	readOnly: z.boolean().optional(),
 });
+const devicePath = absolutePath.refine(
+	(path) =>
+		path !== "/"
+		&& path
+			.slice(1)
+			.split("/")
+			.every((part) => part !== "" && part !== "." && part !== ".."),
+);
+const device = z.strictObject({
+	hostPath: devicePath,
+	mountPath: devicePath,
+	permissions: z
+		.string()
+		.regex(/^(?:r(?:w?m?)|wm?|m)$/)
+		.default("rwm"),
+});
 const limits = z.strictObject({
 	cpus: z
 		.number()
@@ -66,6 +82,14 @@ const base = {
 };
 const workload = {
 	...base,
+	devices: z
+		.array(device)
+		.refine((devices) => new Set(devices.map(({ mountPath }) => mountPath)).size === devices.length)
+		.optional(),
+	supplementaryGroups: z
+		.array(z.number().int().min(0).max(4294967294))
+		.refine((groups) => new Set(groups).size === groups.length)
+		.optional(),
 	hostPorts: z.array(hostPort).optional(),
 	replicas: positive.default(1),
 	rolloutStrategy: z.enum(["recreate", "surge"]).default("recreate"),
@@ -151,6 +175,7 @@ export type PostgresResource = z.input<typeof postgres>;
 export type RabbitMqResource = z.input<typeof rabbitmq>;
 export type EnvironmentVariable = z.input<typeof environmentVariable>;
 export type ResourceVolume = z.input<typeof volume>;
+export type ResourceDevice = z.input<typeof device>;
 export type ResourceLimits = z.input<typeof limits>;
 export type ResourceHostPort = z.input<typeof hostPort>;
 

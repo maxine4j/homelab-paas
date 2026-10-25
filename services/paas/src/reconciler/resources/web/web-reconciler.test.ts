@@ -10,6 +10,28 @@ import { WebResourceReconciler } from "./web-reconciler.ts";
 const resource: DeploymentWebResource = { type: "web", image: "app:1", ingress: { public: true, port: 8080 } };
 const input = { serviceId: "demo", resourceId: "app", revision: "rev", resource };
 
+test("device paths, access and supplementary groups affect replacement while omitted fields retain identity", async () => {
+	const f = fixture();
+	const hash = async (settings: Partial<DeploymentWebResource>) => {
+		await f.reconciler.reconcile({ ...input, resource: { ...resource, ...settings } });
+		return f.requests.at(-1)!.spec;
+	};
+	const device = { hostPath: "/dev/dri", mountPath: "/dev/dri" };
+	const original = await hash({ devices: [device], supplementaryGroups: [44, 109] });
+	expect(await hash({ devices: [{ ...device, permissions: "rwm" }], supplementaryGroups: [109, 44] })).toBe(original);
+	for (const settings of [
+		{ devices: [{ ...device, hostPath: "/dev/other" }], supplementaryGroups: [44, 109] },
+		{ devices: [{ ...device, mountPath: "/dev/other" }], supplementaryGroups: [44, 109] },
+		{ devices: [{ ...device, permissions: "rw" }], supplementaryGroups: [44, 109] },
+		{ devices: [device], supplementaryGroups: [44] },
+		{ devices: [device] },
+		{ supplementaryGroups: [44, 109] },
+		{},
+	])
+		expect(await hash(settings)).not.toBe(original);
+	expect(await hash({ devices: [], supplementaryGroups: [] })).toBe(await hash({}));
+});
+
 test("every host binding field and binding removal change the web specification", async () => {
 	const f = fixture();
 	const binding = { protocol: "tcp" as const, hostPort: 18080, containerPort: 8080, bindAddress: "127.0.0.1" };

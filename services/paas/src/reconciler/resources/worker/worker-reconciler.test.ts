@@ -10,6 +10,28 @@ import { WorkerResourceReconciler } from "./worker-reconciler.ts";
 const resource: DeploymentWorkerResource = { type: "worker", image: "jobs:1", healthcheckPort: 9090, replicas: 2 };
 const input = { serviceId: "demo", resourceId: "jobs", revision: "rev1", resource };
 
+test("device paths, access and supplementary groups affect replacement while omitted fields retain identity", async () => {
+	const f = fixture();
+	const hash = async (settings: Partial<DeploymentWorkerResource>) => {
+		await f.reconciler.reconcile({ ...input, resource: { ...resource, ...settings } });
+		return f.deploy.mock.calls.at(-1)!.at(0)!.spec;
+	};
+	const device = { hostPath: "/dev/dri", mountPath: "/dev/dri" };
+	const original = await hash({ devices: [device], supplementaryGroups: [44, 109] });
+	expect(await hash({ devices: [{ ...device, permissions: "rwm" }], supplementaryGroups: [109, 44] })).toBe(original);
+	for (const settings of [
+		{ devices: [{ ...device, hostPath: "/dev/other" }], supplementaryGroups: [44, 109] },
+		{ devices: [{ ...device, mountPath: "/dev/other" }], supplementaryGroups: [44, 109] },
+		{ devices: [{ ...device, permissions: "rw" }], supplementaryGroups: [44, 109] },
+		{ devices: [device], supplementaryGroups: [44] },
+		{ devices: [device] },
+		{ supplementaryGroups: [44, 109] },
+		{},
+	])
+		expect(await hash(settings)).not.toBe(original);
+	expect(await hash({ devices: [], supplementaryGroups: [] })).toBe(await hash({}));
+});
+
 const fixture = () => {
 	let containers: ServiceContainer[] = [];
 	const deploy = vi.fn<IWorkerDeploymentService["deploy"]>(async () => {});

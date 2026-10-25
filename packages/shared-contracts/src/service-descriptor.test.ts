@@ -10,6 +10,76 @@ const descriptor = {
 
 const binding = { protocol: "tcp", containerPort: 8080, hostPort: 18080, bindAddress: "127.0.0.1" };
 
+test.each(["web", "worker"])("accepts simple device mappings and numeric supplementary groups for %s", (type) => {
+	const app = type === "web" ? descriptor.resources.app : { type, image: "jobs:1", healthcheckPort: 8080 };
+	const devices = [{ hostPath: "/dev/dri", mountPath: "/dev/dri" }];
+	expect(
+		parseDescriptor(
+			{ ...descriptor, resources: { app: { ...app, devices, supplementaryGroups: [44, 109] } } },
+			"test-service",
+		).resources["app"],
+	).toMatchObject({ devices: [{ ...devices[0], permissions: "rwm" }], supplementaryGroups: [44, 109] });
+});
+
+test.each([
+	{ devices: [{ hostPath: "dev/dri", mountPath: "/dev/dri" }] },
+	{ devices: [{ hostPath: "/", mountPath: "/dev/dri" }] },
+	{ devices: [{ hostPath: "/dev/../etc", mountPath: "/dev/dri" }] },
+	{ devices: [{ hostPath: "/dev/dri", mountPath: "/" }] },
+	{ devices: [{ hostPath: "/dev/dri", mountPath: "/dev//dri" }] },
+	{ devices: [{ hostPath: "/dev/dri\0", mountPath: "/dev/dri" }] },
+	{ devices: [{ hostPath: "/dev/dri:rw", mountPath: "/dev/dri" }] },
+	...["", "rr", "rwz", "wr", "rwmx"].map((permissions) => ({
+		devices: [{ hostPath: "/dev/dri", mountPath: "/dev/dri", permissions }],
+	})),
+	{
+		devices: [
+			{ hostPath: "/dev/dri", mountPath: "/dev/video" },
+			{ hostPath: "/dev/video0", mountPath: "/dev/video" },
+		],
+	},
+	{ supplementaryGroups: [-1] },
+	{ supplementaryGroups: [1.5] },
+	{ supplementaryGroups: [4294967295] },
+	{ supplementaryGroups: ["video"] },
+	{ supplementaryGroups: [44, 44] },
+])("rejects invalid device configuration: %j", (fields) => {
+	expect(() =>
+		parseDescriptor(
+			{ ...descriptor, resources: { app: { ...descriptor.resources.app, ...fields } } },
+			"test-service",
+		),
+	).toThrow("Invalid service descriptor");
+});
+
+test.each(["r", "w", "m", "rw", "rm", "wm", "rwm"])("accepts device permission subset %s", (permissions) => {
+	expect(() =>
+		parseDescriptor(
+			{
+				...descriptor,
+				resources: {
+					app: {
+						...descriptor.resources.app,
+						devices: [{ hostPath: "/dev/null", mountPath: "/dev/custom", permissions }],
+					},
+				},
+			},
+			"test-service",
+		),
+	).not.toThrow();
+});
+
+test("device configuration is unavailable for managed resources", () => {
+	for (const type of ["postgres", "rabbitmq"])
+		for (const fields of [{ devices: [] }, { supplementaryGroups: [] }])
+			expect(() =>
+				parseDescriptor(
+					{ ...descriptor, resources: { store: { type, image: "store:1", ...fields } } },
+					"test-service",
+				),
+			).toThrow();
+});
+
 test("every host binding field is explicit; empty bindings retain replica and surge support", () => {
 	for (const field of Object.keys(binding)) {
 		const incomplete = Object.fromEntries(Object.entries(binding).filter(([key]) => key !== field));

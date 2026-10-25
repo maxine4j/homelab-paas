@@ -1,4 +1,4 @@
-import type { ResourceHostPort, ResourceLimits, ResourceVolume } from "@homelab-paas/shared-contracts";
+import type { ResourceDevice, ResourceHostPort, ResourceLimits, ResourceVolume } from "@homelab-paas/shared-contracts";
 import { z } from "zod";
 
 import type { IDockerTransport } from "./docker-transport.ts";
@@ -10,6 +10,8 @@ export interface CreateContainerOptions {
 	command?: string[];
 	env?: Record<string, string>;
 	volumes?: ResourceVolume[];
+	devices?: ResourceDevice[];
+	supplementaryGroups?: number[];
 	hostPorts?: ResourceHostPort[];
 	limits?: ResourceLimits;
 	labels?: Labels;
@@ -215,6 +217,12 @@ export class DockerClient implements IDockerClient {
 					? Object.fromEntries(Object.keys(portBindings).map((key) => [key, {}]))
 					: undefined,
 				HostConfig: {
+					Devices: options.devices?.map(({ hostPath, mountPath, permissions }) => ({
+						PathOnHost: hostPath,
+						PathInContainer: mountPath,
+						CgroupPermissions: permissions ?? "rwm",
+					})),
+					GroupAdd: options.supplementaryGroups?.map(String),
 					PortBindings: options.hostPorts?.length ? portBindings : undefined,
 					Binds: options.volumes?.map(
 						({ hostPath, mountPath, readOnly }) => `${hostPath}:${mountPath}:${readOnly ? "ro" : "rw"},z`,

@@ -75,6 +75,8 @@ export class WorkerDeploymentService implements IWorkerDeploymentService {
 					command: resource.command,
 					env: Object.fromEntries((resource.env ?? []).map(({ name, value }) => [name, value])),
 					volumes: resource.volumes,
+					devices: resource.devices,
+					supplementaryGroups: resource.supplementaryGroups,
 					hostPorts: resource.hostPorts,
 					limits: resource.limits,
 				});

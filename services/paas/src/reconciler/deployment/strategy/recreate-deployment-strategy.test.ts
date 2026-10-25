@@ -165,6 +165,8 @@ test("uses descriptor defaults for termination and health checks", async () => {
 test("propagates resolved secrets, arbitrary host mounts and CPU/memory limits to the replacement", async () => {
 	const f = fixture();
 	const volumes = [{ hostPath: "/srv/media", mountPath: "/media", readOnly: true }];
+	const devices = [{ hostPath: "/dev/dri", mountPath: "/dev/dri" }];
+	const supplementaryGroups = [109];
 	const limits = { cpus: 0.5, memoryMiB: 256 };
 	const hostPorts = [{ protocol: "tcp" as const, containerPort: 8080, hostPort: 18080, bindAddress: "127.0.0.1" }];
 	await f.strategy.deploy({
@@ -173,12 +175,21 @@ test("propagates resolved secrets, arbitrary host mounts and CPU/memory limits t
 			...request.resource,
 			env: [{ name: "TOKEN", value: "resolved-secret" }],
 			volumes,
+			devices,
+			supplementaryGroups,
 			limits,
 			hostPorts,
 		},
 	});
 	expect(f.calls.find((c) => c.action === "create")?.args).toEqual([
-		expect.objectContaining({ env: { TOKEN: "resolved-secret" }, volumes, limits, hostPorts }),
+		expect.objectContaining({
+			env: { TOKEN: "resolved-secret" },
+			volumes,
+			limits,
+			hostPorts,
+			devices,
+			supplementaryGroups,
+		}),
 	]);
 });
 
