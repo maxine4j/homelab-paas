@@ -59,7 +59,12 @@ const web = z.strictObject({
 		.regex(/^\/(?!\/)[^\s]*$/)
 		.default("/healthcheck"),
 });
-const worker = z.strictObject({ ...workload, type: z.literal("worker") });
+const worker = z.strictObject({
+	...workload,
+	type: z.literal("worker"),
+	healthcheckPort: positive.max(65535),
+	healthcheckUrl: web.shape.healthcheckUrl,
+});
 const postgres = z.strictObject({ ...base, type: z.literal("postgres") });
 const rabbitmq = z.strictObject({ ...base, type: z.literal("rabbitmq") });
 const resource = z.discriminatedUnion("type", [web, worker, postgres, rabbitmq]);
