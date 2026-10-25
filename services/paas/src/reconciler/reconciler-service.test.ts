@@ -19,6 +19,7 @@ function fixture() {
 	const states = new Map<string, ReconciliationState>();
 	const fetchFile = vi.fn(async (): Promise<GitFile> => ({ revision: "rev", content: JSON.stringify(descriptor) }));
 	const reconcile = vi.fn(async () => {});
+	const reconcileWorker = vi.fn(async () => {});
 	const readSecrets = vi.fn(async (): Promise<string | undefined> => undefined);
 	const deps = {
 		services: { demo: { remote: "local", descriptorPath: "/repo/demo.sd.yaml" } },
@@ -49,12 +50,14 @@ function fixture() {
 			deps.state,
 			deps.now,
 			new EnvironmentResolver("/etc/homelab-paas/env", readSecrets),
+			{ type: "worker", lifecycle: "deployment", reconcile: reconcileWorker },
 		);
 	return {
 		deps,
 		states,
 		fetchFile,
 		reconcile,
+		reconcileWorker,
 		readSecrets,
 		createService,
 		service: createService(),
@@ -209,7 +212,7 @@ test("validates the entire descriptor before invoking a resource reconciler", as
 });
 
 test.each([
-	{ ...descriptor.resources, worker: { type: "worker", image: "worker:1" } },
+	{ worker: { type: "worker", image: "worker:1", healthcheckPort: 9090, egress: ["other"] } },
 	{ ...descriptor.resources, db: { type: "postgres", image: "postgres:17" } },
 	{ ...descriptor.resources, queue: { type: "rabbitmq", image: "rabbitmq:4" } },
 	{},
@@ -222,6 +225,61 @@ test.each([
 	await f.service.reconcile();
 	expect(f.reconcile).not.toHaveBeenCalled();
 	expect(f.states.get("demo")).toMatchObject({ desiredRevision: "unsupported", phase: "failed" });
+});
+
+test.each([false, true])("reconciles worker replicas with optional web resource: web=%j", async (withWeb) => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "workers",
+		content: JSON.stringify({
+			...descriptor,
+			resources: {
+				...(withWeb ? descriptor.resources : {}),
+				jobs: {
+					type: "worker",
+					image: "jobs:1",
+					healthcheckPort: 9090,
+					replicas: 3,
+					env: [{ name: "TOKEN", secret: true }],
+				},
+				other: { type: "worker", image: "other:1", healthcheckPort: 9091 },
+			},
+		}),
+	});
+	f.readSecrets.mockResolvedValue("TOKEN=worker-secret");
+	await f.service.reconcile();
+	expect(f.reconcile).toHaveBeenCalledTimes(withWeb ? 1 : 0);
+	expect(f.reconcileWorker).toHaveBeenCalledTimes(2);
+	expect(f.reconcileWorker).toHaveBeenCalledWith(
+		expect.objectContaining({
+			resourceId: "jobs",
+			resource: expect.objectContaining({ replicas: 3, env: [{ name: "TOKEN", value: "worker-secret" }] }),
+		}),
+	);
+	expect(f.states.get("demo")).toEqual({ desiredRevision: "workers", activeRevision: "workers", phase: "ready" });
+});
+
+test("resolves every worker secret before changing a web resource", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "workers",
+		content: JSON.stringify({
+			...descriptor,
+			resources: {
+				...descriptor.resources,
+				jobs: {
+					type: "worker",
+					image: "jobs:1",
+					healthcheckPort: 9090,
+					env: [{ name: "TOKEN", secret: true }],
+				},
+			},
+		}),
+	});
+	await f.service.reconcile();
+	expect(f.reconcile).not.toHaveBeenCalled();
+	expect(f.reconcileWorker).not.toHaveBeenCalled();
+	expect(f.states.get("demo")).toMatchObject({ phase: "failed", error: expect.stringContaining("secrets") });
 });
 
 test("Git failures preserve active state, sanitize errors and do not prevent other services", async () => {

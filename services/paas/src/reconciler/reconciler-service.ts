@@ -1,12 +1,14 @@
-import type { ServiceDescriptor, WebResource } from "@homelab-paas/shared-contracts";
+import type { ServiceDescriptor, WebResource, WorkerResource } from "@homelab-paas/shared-contracts";
 
 import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IGitService } from "../git/git-service.ts";
 import type { GitFileSource } from "../git/types.ts";
 import { createLogger } from "../util/logger.ts";
 import type { DeploymentWebResource } from "./deployment/strategy/types.ts";
+import type { DeploymentWorkerResource } from "./deployment/types.ts";
 import type { IEnvironmentResolver } from "./environment-resolver.ts";
 import type { IWebResourceReconciler } from "./resources/web/web-reconciler.ts";
+import type { IWorkerResourceReconciler } from "./resources/worker/worker-reconciler.ts";
 import type { DescriptorDecoder, IReconcilerService, IReconciliationStateStore } from "./types.ts";
 
 export class ReconcilerService implements IReconcilerService {
@@ -21,6 +23,7 @@ export class ReconcilerService implements IReconcilerService {
 		private readonly state: IReconciliationStateStore,
 		private readonly now: () => number,
 		private readonly environment: IEnvironmentResolver,
+		private readonly worker: IWorkerResourceReconciler,
 	) {}
 
 	reconcile(): Promise<void> {
@@ -48,13 +51,13 @@ export class ReconcilerService implements IReconcilerService {
 		try {
 			const file = await this.git.fetchFile(serviceId, source);
 			desiredRevision = file.revision;
-			message = "Invalid descriptor; check service identity and supported web resource fields";
+			message = "Invalid descriptor; check service identity and supported resource fields";
 			const descriptor = this.decode(file.content, serviceId);
 			message =
-				"Unsupported descriptor capabilities; runtime requires one web resource, one replica, recreate or surge deployment and configured auth/TLS for private ingress";
+				"Unsupported descriptor capabilities; runtime supports workers and at most one single-replica web resource, without egress; private ingress requires auth/TLS";
 			const desired = this.deploymentResources(descriptor);
 			message = "Cannot resolve application secrets; check the service env file and required variable names";
-			const resources: [string, DeploymentWebResource][] = [];
+			const resources: [string, DeploymentWebResource | DeploymentWorkerResource][] = [];
 			for (const [resourceId, resource] of desired) {
 				const env = await this.environment.resolve(serviceId, resource.env ?? []);
 				resources.push([resourceId, { ...resource, env }]);
@@ -69,9 +72,14 @@ export class ReconcilerService implements IReconcilerService {
 				activeRevision: previous?.activeRevision,
 				phase: "deploying",
 			});
-			message = "Cannot reconcile web resource; check Docker, image, readiness and Envoy access";
 			for (const [resourceId, resource] of resources) {
-				await this.web.reconcile({ serviceId, resourceId, revision: desiredRevision, resource });
+				if (resource.type === "web") {
+					message = "Cannot reconcile web resource; check Docker, image, readiness and Envoy access";
+					await this.web.reconcile({ serviceId, resourceId, revision: desiredRevision, resource });
+				} else {
+					message = "Cannot reconcile worker resource; check Docker, image and private health check";
+					await this.worker.reconcile({ serviceId, resourceId, revision: desiredRevision, resource });
+				}
 			}
 			await this.state.write(serviceId, { desiredRevision, activeRevision: desiredRevision, phase: "ready" });
 			if (previous?.phase === "failed")
@@ -103,14 +111,15 @@ export class ReconcilerService implements IReconcilerService {
 		}
 	}
 
-	private deploymentResources(descriptor: ServiceDescriptor): [string, WebResource][] {
+	private deploymentResources(descriptor: ServiceDescriptor): [string, WebResource | WorkerResource][] {
 		const entries = Object.entries(descriptor.resources);
-		if (entries.length !== 1) throw new Error("Runtime requires exactly one web resource");
+		if (entries.length === 0) throw new Error("Runtime requires at least one workload resource");
 		return entries.map(([resourceId, resource]) => {
 			if (
-				resource.type !== "web"
-				|| (!this.config.getAuthConfig() && resource.ingress.public !== true)
-				|| (resource.replicas ?? 1) !== 1
+				(resource.type !== "web" && resource.type !== "worker")
+				|| (resource.type === "web"
+					&& ((!this.config.getAuthConfig() && resource.ingress.public !== true)
+						|| (resource.replicas ?? 1) !== 1))
 				|| resource.egress !== undefined
 			)
 				throw new Error("Resource requires unsupported runtime capabilities");
