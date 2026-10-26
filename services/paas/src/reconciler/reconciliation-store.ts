@@ -42,4 +42,5 @@ const stateSchema = z.strictObject({
 	error: z.string().optional(),
 	failures: z.number().int().nonnegative().max(1024).optional(),
 	retryAt: z.number().finite().nonnegative().optional(),
+	deploymentStartedAt: z.number().finite().nonnegative().optional(),
 });

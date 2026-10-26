@@ -26,6 +26,20 @@ const fileStore = (directory: string) =>
 	);
 
 const contract = (given: () => Promise<KeyValueStore<unknown>>) => {
+	test("persists deployment start times across store recreation and validates timestamps", async () => {
+		const values = await given();
+		await new ReconciliationStore(values).write("demo", { phase: "deploying", deploymentStartedAt: 0 });
+		expect(await new ReconciliationStore(values).read("demo")).toEqual({
+			phase: "deploying",
+			deploymentStartedAt: 0,
+		});
+		for (const deploymentStartedAt of [-1, Infinity, "invalid"]) {
+			await values.set("demo.state", { phase: "deploying", deploymentStartedAt });
+			await expect(new ReconciliationStore(values).read("demo")).rejects.toThrow(
+				"Cannot read reconciliation data",
+			);
+		}
+	});
 	test("validates and copies checkpoints and preserves legacy pending states", async () => {
 		const values = await given();
 		const store = new ReconciliationStore(values);

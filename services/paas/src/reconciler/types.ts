@@ -25,6 +25,8 @@ export interface ReconciliationState {
 	error?: string;
 	failures?: number;
 	retryAt?: number;
+	/** Start of the current out-of-sync revision's five-minute deployment grace window. */
+	deploymentStartedAt?: number;
 }
 
 export interface IReconciliationStateStore {

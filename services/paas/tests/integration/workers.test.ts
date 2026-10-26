@@ -72,7 +72,11 @@ test("worker-only reconciliation probes replicas without publishing routes and r
 		healthy = false;
 		await git.commit({ "jobs.sd.yaml": descriptor("v2") });
 		await paas.reconciler.reconcile();
-		expect(await paas.checkpoints.read("jobs")).toMatchObject({ phase: "failed", failures: 1 });
+		expect(await paas.checkpoints.read("jobs")).toMatchObject({
+			phase: "deploying",
+			failures: 1,
+			deploymentStartedAt: now,
+		});
 		expect(ids()).toEqual(original);
 		healthy = true;
 		now = 1000;

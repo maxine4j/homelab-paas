@@ -245,6 +245,7 @@ test("records state failures even when checkpoint storage is unavailable", async
 
 test("retains deployment diagnostics and events when writing the failed checkpoint also fails", async () => {
 	const f = fixture();
+	f.states.set("demo", { desiredRevision: "rev", activeRevision: "rev", phase: "ready" });
 	f.reconcile.mockRejectedValue(new Error("original-deployment-error"));
 	const write = f.deps.state.write;
 	f.deps.state.write = async (id, state) => {
@@ -586,6 +587,71 @@ test("persists deploying before mutation and applies bounded exponential retries
 	f.advance(4000);
 	await f.service.reconcile();
 	expect(f.states.get("demo")).toEqual({ desiredRevision: "rev", activeRevision: "rev", phase: "ready" });
+});
+
+test.each(["web", "worker"])(
+	"keeps out-of-sync %s deployments deploying for five minutes across restarts",
+	async (type) => {
+		const f = fixture();
+		f.states.set("demo", { desiredRevision: "old", activeRevision: "old", phase: "ready" });
+		if (type === "worker") {
+			f.fetchFile.mockResolvedValue({
+				revision: "rev",
+				content: JSON.stringify({
+					...descriptor,
+					resources: { app: { type: "worker", image: "app:1", healthcheckPort: 8080 } },
+				}),
+			});
+		}
+		const deploy = type === "web" ? f.reconcile : f.reconcileWorker;
+		deploy.mockRejectedValue(new Error("image not published yet"));
+		await f.service.reconcile();
+		expect(f.states.get("demo")).toMatchObject({
+			phase: "deploying",
+			activeRevision: "old",
+			deploymentStartedAt: 0,
+			failures: 1,
+			retryAt: 1000,
+		});
+		await f.createService().reconcile();
+		expect(deploy).toHaveBeenCalledTimes(1);
+		f.advance(299_999);
+		await f.createService().reconcile();
+		expect(f.states.get("demo")).toMatchObject({ phase: "deploying", deploymentStartedAt: 0, failures: 2 });
+		f.advance(2000);
+		await f.createService().reconcile();
+		expect(f.states.get("demo")).toMatchObject({ phase: "failed", deploymentStartedAt: 0, failures: 3 });
+		deploy.mockResolvedValue();
+		f.advance(4000);
+		await f.createService().reconcile();
+		expect(f.states.get("demo")).toEqual({ desiredRevision: "rev", activeRevision: "rev", phase: "ready" });
+	},
+);
+
+test("initial deployment expires at exactly five minutes and a newer revision gets a fresh window", async () => {
+	const f = fixture();
+	f.reconcile.mockRejectedValue(new Error("waiting for CI"));
+	await f.service.reconcile();
+	expect(f.states.get("demo")).toMatchObject({ phase: "deploying", deploymentStartedAt: 0 });
+	f.advance(300_000);
+	await f.service.reconcile();
+	expect(f.states.get("demo")).toMatchObject({ phase: "failed", deploymentStartedAt: 0 });
+	f.fetchFile.mockResolvedValue({ revision: "newer", content: JSON.stringify(descriptor) });
+	f.advance(2000);
+	await f.service.reconcile();
+	expect(f.states.get("demo")).toMatchObject({ phase: "deploying", deploymentStartedAt: 302_000, failures: 1 });
+	f.reconcile.mockResolvedValue();
+	f.advance(1000);
+	await f.service.reconcile();
+	expect(f.states.get("demo")).toEqual({ desiredRevision: "newer", activeRevision: "newer", phase: "ready" });
+});
+
+test("a current revision health failure is immediately failed", async () => {
+	const f = fixture();
+	await f.service.reconcile();
+	f.reconcile.mockRejectedValue(new Error("unhealthy"));
+	await f.service.reconcile();
+	expect(f.states.get("demo")).toMatchObject({ phase: "failed", activeRevision: "rev", desiredRevision: "rev" });
 });
 
 test("concurrent entry points serialize Git fetches and deployments", async () => {

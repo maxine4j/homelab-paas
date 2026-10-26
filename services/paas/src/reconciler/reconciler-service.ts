@@ -57,11 +57,13 @@ export class ReconcilerService implements IReconcilerService {
 		const previous = await this.state.read(serviceId);
 		if ((previous?.retryAt ?? 0) > this.now()) return;
 		let desiredRevision = previous?.desiredRevision;
+		let deploymentStartedAt = previous?.deploymentStartedAt;
 		let message: string = serviceEventMessages.fetch;
 		let resourceId: string | undefined;
 		try {
 			const file = await this.git.fetchFile(serviceId, source);
 			desiredRevision = file.revision;
+			if (previous?.desiredRevision !== desiredRevision) deploymentStartedAt = undefined;
 			message = serviceEventMessages.descriptor;
 			const descriptor = this.decode(file.content, serviceId, file.revision);
 			message = serviceEventMessages.capabilities;
@@ -80,10 +82,14 @@ export class ReconcilerService implements IReconcilerService {
 					"Detected new valid descriptor revision; reconciling resources",
 				);
 			message = serviceEventMessages.state;
+			if (previous?.activeRevision !== desiredRevision) deploymentStartedAt ??= this.now();
 			await this.state.write(serviceId, {
 				desiredRevision,
 				activeRevision: previous?.activeRevision,
 				phase: "deploying",
+				deploymentStartedAt,
+				failures: previous?.desiredRevision === desiredRevision ? previous.failures : undefined,
+				retryAt: previous?.retryAt,
 			});
 			for (const [id, resource] of resources) {
 				resourceId = id;
@@ -98,22 +104,26 @@ export class ReconcilerService implements IReconcilerService {
 			resourceId = undefined;
 			message = serviceEventMessages.state;
 			await this.state.write(serviceId, { desiredRevision, activeRevision: desiredRevision, phase: "ready" });
-			if (previous?.phase === "failed" || previous?.activeRevision !== desiredRevision)
+			const recovered = (previous?.failures ?? 0) > 0 || previous?.phase === "failed";
+			if (recovered || previous?.activeRevision !== desiredRevision)
 				await this.recordEvent(serviceId, {
 					timestamp: this.now(),
 					level: "info",
-					event: previous?.phase === "failed" ? "reconciliation.recovered" : "deployment.succeeded",
-					message: previous?.phase === "failed" ? serviceEventMessages.recovered : serviceEventMessages.ready,
+					event: recovered ? "reconciliation.recovered" : "deployment.succeeded",
+					message: recovered ? serviceEventMessages.recovered : serviceEventMessages.ready,
 					revision: desiredRevision,
 				});
-			if (previous?.phase === "failed")
+			if (recovered)
 				this.log.info(
 					{ event: "reconciliation.recovered", serviceId, revision: desiredRevision },
 					"Service recovered; clearing retry backoff",
 				);
 		} catch (error) {
 			const retry = this.config.getReconciliationConfig();
-			const failures = Math.min((previous?.failures ?? 0) + 1, 1024);
+			const failures = Math.min(
+				(previous?.desiredRevision === desiredRevision ? (previous?.failures ?? 0) : 0) + 1,
+				1024,
+			);
 			const delay =
 				Math.min(
 					retry.maxRetryBackoffSeconds,
@@ -140,7 +150,14 @@ export class ReconcilerService implements IReconcilerService {
 			await this.state.write(serviceId, {
 				desiredRevision,
 				activeRevision: previous?.activeRevision,
-				phase: "failed",
+				phase:
+					(message === serviceEventMessages.web || message === serviceEventMessages.worker)
+					&& previous?.activeRevision !== desiredRevision
+					&& deploymentStartedAt !== undefined
+					&& this.now() - deploymentStartedAt < 300_000
+						? "deploying"
+						: "failed",
+				deploymentStartedAt,
 				error: message,
 				failures,
 				retryAt,
