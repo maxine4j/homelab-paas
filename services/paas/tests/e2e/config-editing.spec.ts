@@ -9,11 +9,16 @@ test("browser edits configuration on the host and consumers immediately see save
 }) => {
 	await page.goto(env.url("", "/#/cluster"));
 	await expect(page.getByRole("button", { name: "Save configuration" })).toBeVisible();
-	const secret = page
-		.getByRole("region", { name: "auth.github", exact: true })
-		.getByLabel("clientSecret", { exact: true });
-	await expect(secret).toHaveValue("");
-	await expect(secret).toHaveAttribute("type", "password");
+	const summary = page.getByRole("region", { name: "Cluster details", exact: true });
+	await expect(summary).toContainText(env.config.metadata.clusterId);
+	await expect(summary).toContainText(env.config.ingress.baseDomain);
+	await expect(summary).toContainText(String(env.config.ingress.httpPort));
+	await expect(summary).toContainText(String(env.config.ingress.httpsPort));
+	await expect(summary.locator("input")).toHaveCount(0);
+	await expect(page.getByRole("region", { name: "auth.github", exact: true })).toHaveCount(0);
+	await expect(page.getByRole("region", { name: "auth.session", exact: true })).toHaveCount(0);
+	await expect(page.getByRole("region", { name: "tls.acme", exact: true })).toHaveCount(0);
+	await expect(page.getByLabel("version", { exact: true })).toHaveCount(0);
 	const poll = page
 		.getByRole("region", { name: "git", exact: true })
 		.getByLabel("pollIntervalSeconds", { exact: true });
@@ -23,27 +28,24 @@ test("browser edits configuration on the host and consumers immediately see save
 	await page.getByRole("button", { name: "Refresh", exact: false }).click();
 	expect((await refreshed).status()).toBe(200);
 	await expect(poll).toHaveValue("7");
-	await secret.fill("replacement-github-secret");
 	await page.getByRole("button", { name: "Save configuration" }).click();
 	await expect(page.getByRole("status")).toHaveText("Configuration saved");
-	await expect(secret).toHaveValue("");
 	const persisted = parseYaml(
 		(await readFile(`${env.directory}/etc/config.yaml`))!,
 		"saved config",
 	) as PlatformConfig;
 	expect(persisted.git.pollIntervalSeconds).toBe(7);
-	expect(persisted.auth?.github.clientSecret).toBe("replacement-github-secret");
+	expect(persisted.auth?.github.clientSecret).toBe(env.config.auth?.github.clientSecret);
 	expect(persisted.auth?.session.signingKey).toBe(env.config.auth?.session.signingKey);
 	const response = await env.request(env.url("", "/api/ui/cluster"), `__Secure-paas_session=${env.session()}`);
 	const snapshot = await response.json();
 	expect(snapshot.config.git.pollIntervalSeconds).toBe(7);
-	expect(JSON.stringify(snapshot)).not.toContain("replacement-github-secret");
+	expect(JSON.stringify(snapshot)).not.toContain(env.config.auth!.github.clientSecret);
 	// Reload from the saved host file, including across process recreation.
 	await env.compose(["restart", "paas"]);
 	await env.waitReady("public", "v1");
 	await page.reload();
 	await expect(poll).toHaveValue("7");
-	await expect(secret).toHaveValue("");
 });
 
 test("the editor preserves failed drafts and requires a reload after another editor saves", async ({

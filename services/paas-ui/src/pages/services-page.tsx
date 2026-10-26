@@ -1,5 +1,6 @@
 import type { UiServiceSummary } from "@homelab-paas/shared-contracts";
 
+import { RevisionDetails } from "../components/revision-details.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
 
 export const ServicesPage = ({ services }: { services: UiServiceSummary[] }) => (
@@ -26,11 +27,19 @@ export const ServicesPage = ({ services }: { services: UiServiceSummary[] }) => 
 						<dl className='service-revisions'>
 							<div>
 								<dt>Active revision</dt>
-								<dd>{service.activeRevision?.slice(0, 12) ?? "Not deployed"}</dd>
+								<RevisionDetails
+									revision={service.activeRevision?.slice(0, 12)}
+									metadata={service.activeRevisionMetadata}
+									fallback='Not deployed'
+								/>
 							</div>
 							<div>
 								<dt>Desired revision</dt>
-								<dd>{service.desiredRevision?.slice(0, 12) ?? "Not observed"}</dd>
+								<RevisionDetails
+									revision={service.desiredRevision?.slice(0, 12)}
+									metadata={service.desiredRevisionMetadata}
+									fallback='Not observed'
+								/>
 							</div>
 						</dl>
 					</a>

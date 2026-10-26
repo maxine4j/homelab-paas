@@ -360,6 +360,7 @@ p {
 }
 .service-revisions > div {
 	min-width: 0;
+	flex: 1;
 }
 .service-revisions > div:last-child {
 	text-align: right;

@@ -84,11 +84,26 @@ export class PaasUiService implements IPaasUiService {
 					.sort()
 					.map(async (serviceId) => {
 						const state = await this.state.read(serviceId);
+						const file =
+							state?.activeRevision || state?.desiredRevision
+								? await this.descriptor(serviceId)
+								: undefined;
+						const metadata = await this.revisionMetadata(
+							serviceId,
+							[state?.activeRevision, state?.desiredRevision],
+							this.secrets(file?.descriptor),
+						);
 						return {
 							serviceId,
 							phase: state?.phase ?? "unknown",
 							desiredRevision: state?.desiredRevision,
 							activeRevision: state?.activeRevision,
+							activeRevisionMetadata: state?.activeRevision
+								? metadata.get(state.activeRevision)
+								: undefined,
+							desiredRevisionMetadata: state?.desiredRevision
+								? metadata.get(state.desiredRevision)
+								: undefined,
 							failures: state?.failures,
 							retryAt: state?.retryAt,
 						};

@@ -132,6 +132,39 @@ test("service revision hashes stay visible when metadata is unavailable", () => 
 	expect(html.match(/Commit details unavailable/g)).toHaveLength(2);
 });
 
+test("service cards show full commit messages, authors and dates for both revisions", () => {
+	const metadata = {
+		message: "Deploy <web>\n\nFull details",
+		authorName: "Alex",
+		authoredAt: "2026-10-26T00:00:00Z",
+	};
+	const html = renderToStaticMarkup(
+		<ServicesPage
+			services={[
+				{
+					serviceId: "demo",
+					phase: "ready",
+					activeRevision: "active",
+					desiredRevision: "desired",
+					activeRevisionMetadata: metadata,
+					desiredRevisionMetadata: { ...metadata, message: "Next deployment", authorName: "Sam" },
+				},
+			]}
+		/>,
+	);
+	expect(html).toContain("Deploy &lt;web&gt;\n\nFull details");
+	expect(html).toContain("Alex");
+	expect(html).toContain("Next deployment");
+	expect(html).toContain("Sam");
+	expect(html.match(/dateTime="2026-10-26T00:00:00Z"/g)).toHaveLength(2);
+	const unavailable = renderToStaticMarkup(
+		<ServicesPage
+			services={[{ serviceId: "demo", phase: "ready", activeRevision: "active", desiredRevision: "desired" }]}
+		/>,
+	);
+	expect(unavailable.match(/Commit details unavailable/g)).toHaveLength(2);
+});
+
 const events = [
 	{
 		timestamp: 1000,
@@ -184,7 +217,8 @@ test("service details show one latest event above resources and collapse the com
 	expect(html).not.toContain("Inspect resource");
 	expect(html).toContain('<details class="json-disclosure"><summary>Service descriptor JSON</summary>');
 	expect(html).toContain('href="https://github.com/example/demo/blob/abc1234/service.sd.yaml"');
-	expect(html).toContain('href="https://demo.example.test"');
+	expect(html).toContain('href="https://demo.example.test" target="_blank" rel="noreferrer"');
+	expect(html).toMatch(/primary-web-link[^>]*>demo.example.test[^<]*<span aria-hidden="true">↗<\/span><\/a>/);
 	expect(html).toContain("app:1");
 	expect(html).toContain("&quot;metadata&quot;");
 	expect(html).not.toContain("Service source configuration");
@@ -249,7 +283,7 @@ test("both service event views show missing names, host edit path and safe synta
 	expect(syntax).not.toContain("Edit on Docker host");
 });
 
-test("cluster editor renders masked replacement inputs and marks environment and restart settings", () => {
+test("cluster presents identity and ingress above an editor limited to Git, reconciliation and services", () => {
 	const html = renderToStaticMarkup(
 		<ClusterPage
 			cluster={{
@@ -257,6 +291,22 @@ test("cluster editor renders masked replacement inputs and marks environment and
 				config: {},
 				revision: "r1",
 				fields: [
+					...Object.entries({
+						version: 1,
+						"metadata.clusterId": "local",
+						"ingress.httpPort": 8080,
+						"ingress.httpsPort": 8443,
+						"session.maxAgeSeconds": 3600,
+						"git.pollIntervalSeconds": 5,
+						"reconciliation.retryBackoffSeconds": 10,
+					}).map(([path, value]) => ({
+						path,
+						value,
+						kind: "text" as const,
+						readOnly: false,
+						managedByEnvironment: false,
+					})),
+					{ path: "services", kind: "json", value: {}, readOnly: false, managedByEnvironment: false },
 					{
 						path: "auth.github.clientSecret",
 						kind: "secret",
@@ -282,10 +332,33 @@ test("cluster editor renders masked replacement inputs and marks environment and
 			}}
 		/>,
 	);
-	expect(html).toContain('type="password"');
-	expect(html).toContain("Secret value - enter replacement");
-	expect(html).toContain("Managed by environment");
-	expect(html).toContain("Requires restart");
+	const summary = html.slice(html.indexOf('aria-label="Cluster details"'), html.indexOf("<form"));
+	for (const value of [
+		"Cluster ID",
+		"local",
+		"Base domain",
+		"example.test",
+		"HTTP port",
+		"8080",
+		"HTTPS port",
+		"8443",
+	])
+		expect(summary).toContain(value);
+	expect(summary).not.toContain("<input");
+	for (const path of [
+		"version",
+		"metadata.clusterId",
+		"ingress.baseDomain",
+		"ingress.httpPort",
+		"ingress.httpsPort",
+		"auth.github.clientSecret",
+		"session.maxAgeSeconds",
+		"tls.acme.email",
+	])
+		expect(html).not.toContain(`id="config-${path}"`);
+	expect(html).toContain('id="config-git.pollIntervalSeconds"');
+	expect(html).toContain('id="config-reconciliation.retryBackoffSeconds"');
+	expect(html).toContain("Add service");
 	expect(html).toContain("Save configuration");
 });
 

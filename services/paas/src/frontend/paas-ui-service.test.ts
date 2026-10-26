@@ -100,9 +100,38 @@ test("service detail reads metadata for each exact revision and redacts known se
 	});
 	expect(f.readCommit.mock.calls.map((call) => call[2])).toEqual(["old", "new"]);
 	f.readCommit.mockClear();
-	await f.service.listServices();
 	await f.service.getResource("demo", "app");
 	expect(f.readCommit).not.toHaveBeenCalled();
+});
+
+test("service list includes redacted metadata for active and desired commits without Docker", async () => {
+	const f = fixture();
+	expect(await f.service.listServices()).toMatchObject([
+		{
+			serviceId: "demo",
+			activeRevisionMetadata: {
+				authorName: "Alex",
+				authoredAt: "2026-10-26T00:00:00Z",
+				message: "Deploy old [redacted]",
+			},
+			desiredRevisionMetadata: { message: "Deploy new [redacted]" },
+		},
+	]);
+	expect(f.readCommit.mock.calls.map((call) => call[2])).toEqual(["old", "new"]);
+	expect(f.listServiceContainers).not.toHaveBeenCalled();
+});
+
+test("service list preserves deployment status when Git is unavailable", async () => {
+	const f = fixture();
+	f.fetchFile.mockRejectedValue(new Error("Git unavailable"));
+	f.readCommit.mockRejectedValue(new Error("private-metadata-error"));
+	const summaries = await f.service.listServices();
+	expect(summaries).toMatchObject([
+		{ serviceId: "demo", phase: "failed", activeRevision: "old", desiredRevision: "new" },
+	]);
+	expect(summaries[0]).not.toHaveProperty("activeRevisionMetadata", expect.anything());
+	expect(JSON.stringify(summaries)).not.toContain("private-metadata-error");
+	expect(f.readCommit).toHaveBeenCalledTimes(2);
 });
 
 test("unavailable metadata preserves hashes, descriptor and observed resources", async () => {
@@ -222,7 +251,7 @@ test("descriptor fallback logs the original Git failure", async () => {
 	expect(JSON.parse(capture.lines.at(0)!).err.message).toBe("Git failure");
 });
 
-test("cluster config is allowlisted and configured services remain visible without fetching Git", async () => {
+test("cluster config is allowlisted and configured services include deployment summaries", async () => {
 	const f = fixture();
 	f.config.auth = {
 		github: { clientId: "id", clientSecret: "secret-canary", allowedUsers: ["owner"] },
@@ -231,7 +260,7 @@ test("cluster config is allowlisted and configured services remain visible witho
 	const cluster = await f.service.getCluster();
 	expect(cluster.clusterId).toBe("local");
 	expect(JSON.stringify(cluster)).not.toMatch(/secret-canary|key-canary/);
-	expect(await f.service.listServices()).toEqual([
+	expect(await f.service.listServices()).toMatchObject([
 		{
 			serviceId: "demo",
 			phase: "failed",
@@ -241,7 +270,6 @@ test("cluster config is allowlisted and configured services remain visible witho
 			retryAt: 1000,
 		},
 	]);
-	expect(f.fetchFile).not.toHaveBeenCalled();
 });
 
 test("cluster inspection and edits delegate configuration policy to the config service", async () => {

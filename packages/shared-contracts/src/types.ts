@@ -29,6 +29,8 @@ export interface UiServiceSummary {
 	phase: "unknown" | "deploying" | "ready" | "failed";
 	desiredRevision?: string;
 	activeRevision?: string;
+	activeRevisionMetadata?: UiRevisionMetadata;
+	desiredRevisionMetadata?: UiRevisionMetadata;
 	failures?: number;
 	retryAt?: number;
 }
@@ -88,7 +90,6 @@ export interface UiRevisionMetadata {
 export interface UiService extends UiServiceSummary {
 	source: JsonValue;
 	descriptorRevision?: string;
-	activeRevisionMetadata?: UiRevisionMetadata;
 	descriptorRevisionMetadata?: UiRevisionMetadata;
 	descriptorStatus: "available" | "unavailable";
 	/** Complete parsed descriptor with literal environment values visible; credentials and commands redacted. */

@@ -1,35 +1,10 @@
-import type { UiRevisionMetadata, UiService, UiServiceEvent } from "@homelab-paas/shared-contracts";
+import type { UiService, UiServiceEvent } from "@homelab-paas/shared-contracts";
 
 import { ConfigView } from "../components/config-view.tsx";
 import { gitSourceLink } from "../components/git-source-link.ts";
+import { RevisionDetails } from "../components/revision-details.tsx";
 import { ServiceEvents } from "../components/service-events.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
-
-const RevisionDetails = ({
-	revision,
-	metadata,
-	fallback,
-}: {
-	revision?: string;
-	metadata?: UiRevisionMetadata;
-	fallback: string;
-}) => (
-	<dd>
-		{revision ?? fallback}
-		{revision
-			&& (metadata ? (
-				<div className='revision-details'>
-					<p className='revision-message'>{metadata.message || "No commit message"}</p>
-					<p className='muted'>
-						{metadata.authorName || "Unknown author"} ·{" "}
-						<time dateTime={metadata.authoredAt}>{new Date(metadata.authoredAt).toLocaleString()}</time>
-					</p>
-				</div>
-			) : (
-				<p className='revision-details muted'>Commit details unavailable</p>
-			))}
-	</dd>
-);
 
 export const ServicePage = ({
 	service,
@@ -54,7 +29,7 @@ export const ServicePage = ({
 					<p>Desired resources alongside observed containers.</p>
 					{primaryUrl && (
 						<a className='primary-web-link' href={primaryUrl} target='_blank' rel='noreferrer'>
-							{new URL(primaryUrl).host}
+							{new URL(primaryUrl).host} <span aria-hidden='true'>↗</span>
 						</a>
 					)}
 				</div>

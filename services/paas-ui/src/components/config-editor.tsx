@@ -94,6 +94,8 @@ export const ConfigEditor = ({ snapshot }: { snapshot: UiEditableConfig }) => {
 	};
 	const groups = new Map<string, UiConfigField[]>();
 	for (const field of base.fields) {
+		if (field.path !== "services" && !field.path.startsWith("git.") && !field.path.startsWith("reconciliation."))
+			continue;
 		const group =
 			field.path.split(".").slice(0, -1).join(".") || (field.path === "services" ? "services" : "general");
 		groups.set(group, [...(groups.get(group) ?? []), field]);
@@ -108,7 +110,6 @@ export const ConfigEditor = ({ snapshot }: { snapshot: UiEditableConfig }) => {
 		>
 			<fieldset disabled={saving}>
 				<legend>Platform settings</legend>
-				<p>Leave secret fields empty to keep their current values.</p>
 				{Array.from(groups, ([group, fields]) => (
 					<section className='config-section' key={group} aria-labelledby={`group-${group}`}>
 						<h2 id={`group-${group}`}>{group}</h2>
