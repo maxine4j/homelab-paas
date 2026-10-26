@@ -2,6 +2,7 @@ import { basename, dirname, isAbsolute, join, relative } from "node:path";
 
 import type { IGitTransport } from "./git-transport.ts";
 import { GitClientError } from "./types.ts";
+import type { GitCommit } from "./types.ts";
 
 /** All operations reject with GitClientError; paths refer to repositories on disk. */
 export interface IGitClient {
@@ -10,6 +11,8 @@ export interface IGitClient {
 	locateFile(path: string): Promise<{ directory: string; path: string }>;
 	resolveRevision(directory: string, ref: string): Promise<string>;
 	readFile(directory: string, revision: string, path: string): Promise<string>;
+	readCommit(directory: string, revision: string): Promise<GitCommit>;
+	fetchCommit(directory: string, remote: string, revision: string): Promise<void>;
 }
 
 const commitId = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
@@ -59,6 +62,36 @@ export class GitClient implements IGitClient {
 		return this.operation(() => {
 			if (!commitId.test(revision)) throw new GitClientError();
 			return this.transport.execute(directory, ["show", `${revision}:${path}`]);
+		});
+	}
+
+	readCommit(directory: string, revision: string): Promise<GitCommit> {
+		return this.operation(async () => {
+			if (!commitId.test(revision)) throw new GitClientError();
+			const output = await this.transport.execute(directory, [
+				"show",
+				"--no-patch",
+				"--format=%an%x00%aI%x00%B",
+				revision,
+				"--",
+			]);
+			const [authorName, authoredAt, message, extra] = output.split("\0");
+			if (
+				authorName === undefined
+				|| !authoredAt
+				|| !Number.isFinite(Date.parse(authoredAt))
+				|| message === undefined
+				|| extra !== undefined
+			)
+				throw new GitClientError();
+			return { authorName, authoredAt, message: message.trimEnd() };
+		});
+	}
+
+	async fetchCommit(directory: string, remote: string, revision: string): Promise<void> {
+		await this.operation(() => {
+			if (!commitId.test(revision)) throw new GitClientError();
+			return this.transport.execute(directory, ["fetch", "--depth=1", "--", remote, revision]);
 		});
 	}
 

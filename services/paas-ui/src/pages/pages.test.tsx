@@ -80,6 +80,58 @@ test("service cards put identity first and active/desired revisions side by side
 	expect(html).not.toContain('eyebrow">Service</span>');
 });
 
+test("service revision metadata appears only in the first summary, with escaped multiline messages", () => {
+	const service = {
+		serviceId: "demo",
+		phase: "ready" as const,
+		source: {},
+		descriptorStatus: "available" as const,
+		resources: [],
+		activeRevision: "active123",
+		descriptorRevision: "descriptor456",
+		activeRevisionMetadata: {
+			authorName: "Alex <admin>",
+			authoredAt: "2026-10-26T00:00:00Z",
+			message: "Deploy <script>\n\nDetails",
+		},
+		descriptorRevisionMetadata: {
+			authorName: "Sam",
+			authoredAt: "2026-10-25T00:00:00Z",
+			message: "Update descriptor",
+		},
+	};
+	const html = renderToStaticMarkup(<ServicePage service={service} />);
+	const summary = html.slice(html.indexOf('<dl class="summary">'), html.indexOf("</dl>"));
+	expect(summary).toContain("active123");
+	expect(summary).toContain("descriptor456");
+	expect(summary).toContain("Alex &lt;admin&gt;");
+	expect(summary).toContain("Deploy &lt;script&gt;\n\nDetails");
+	expect(summary).toContain("Sam");
+	expect(summary).toContain("Update descriptor");
+	expect(summary).toContain('dateTime="2026-10-26T00:00:00Z"');
+	expect(html.slice(html.indexOf("</dl>"))).not.toContain("Update descriptor");
+	expect(renderToStaticMarkup(<ServicesPage services={[service]} />)).not.toContain("Update descriptor");
+});
+
+test("service revision hashes stay visible when metadata is unavailable", () => {
+	const html = renderToStaticMarkup(
+		<ServicePage
+			service={{
+				serviceId: "demo",
+				phase: "ready",
+				source: {},
+				descriptorStatus: "available",
+				resources: [],
+				activeRevision: "active123",
+				descriptorRevision: "descriptor456",
+			}}
+		/>,
+	);
+	expect(html).toContain("active123");
+	expect(html).toContain("descriptor456");
+	expect(html.match(/Commit details unavailable/g)).toHaveLength(2);
+});
+
 const events = [
 	{
 		timestamp: 1000,

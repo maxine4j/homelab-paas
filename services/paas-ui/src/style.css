@@ -445,6 +445,18 @@ dd {
 .summary dd {
 	margin-bottom: 0;
 }
+.revision-details {
+	margin: 10px 0 0;
+	font-family: inherit;
+	font-size: 0.85rem;
+}
+.revision-details p {
+	margin: 6px 0 0;
+	font-family: system-ui, sans-serif;
+}
+.revision-message {
+	white-space: pre-wrap;
+}
 .back-link {
 	display: inline-block;
 	color: #adc7ff;

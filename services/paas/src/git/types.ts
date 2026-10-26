@@ -1,3 +1,9 @@
+export interface GitCommit {
+	authorName: string;
+	authoredAt: string;
+	message: string;
+}
+
 export interface GitFile {
 	revision: string;
 	content: string;

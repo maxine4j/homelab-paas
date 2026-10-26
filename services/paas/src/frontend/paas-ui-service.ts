@@ -8,10 +8,11 @@ import type {
 	UiServiceEvent,
 	UiEditableConfig,
 	UiConfigUpdate,
+	UiRevisionMetadata,
 } from "@homelab-paas/shared-contracts";
 
 import type { IPaasConfig } from "../config/paas-config.ts";
-import type { IGitService } from "../git/git-service.ts";
+import type { IGitRevisionService } from "../git/git-service.ts";
 import type { IServiceEventStore } from "../reconciler/service-event-store.ts";
 import type { DescriptorDecoder, IReconciliationStateStore } from "../reconciler/types.ts";
 import { createLogger } from "../util/logger.ts";
@@ -49,7 +50,7 @@ export class PaasUiService implements IPaasUiService {
 	private pending: Promise<unknown> = Promise.resolve();
 	constructor(
 		private readonly config: IPaasConfig,
-		private readonly git: IGitService,
+		private readonly git: IGitRevisionService,
 		private readonly decode: DescriptorDecoder,
 		private readonly docker: UiDocker,
 		private readonly state: IReconciliationStateStore,
@@ -98,63 +99,12 @@ export class PaasUiService implements IPaasUiService {
 		}
 	}
 
-	async getService(serviceId: string): Promise<UiService> {
-		this.assertService(serviceId);
-		try {
-			const [state, containers, file] = await Promise.all([
-				this.state.read(serviceId),
-				this.docker.listServiceContainers(serviceId),
-				this.descriptor(serviceId),
-			]);
-			const resources = file?.descriptor.resources ?? {};
-			const webCount = Object.values(resources).filter((resource) => resource.type === "web").length;
-			const secrets = this.secrets(file?.descriptor);
-			const ids = [
-				...new Set([...Object.keys(resources), ...containers.map((container) => container.resourceId)]),
-			].sort();
-			return {
-				serviceId,
-				phase: state?.phase ?? "unknown",
-				desiredRevision: state?.desiredRevision,
-				activeRevision: state?.activeRevision,
-				failures: state?.failures,
-				retryAt: state?.retryAt,
-				source: this.config.sanitize(this.config.getServices()[serviceId], secrets),
-				descriptorRevision: file?.revision,
-				descriptorStatus: file ? "available" : "unavailable",
-				descriptor: file ? this.config.sanitize(file.descriptor, secrets) : undefined,
-				resources: ids.map((resourceId) => ({
-					resourceId,
-					url:
-						resources[resourceId]?.type === "web"
-							? this.ingressUrl(`${resourceId}.${serviceId}`)
-							: undefined,
-					primaryUrl:
-						resources[resourceId]?.type === "web"
-						&& (webCount === 1 || resources[resourceId].primary === true)
-							? this.ingressUrl(serviceId)
-							: undefined,
-					type: resources[resourceId]?.type ?? "unknown",
-					config: resources[resourceId] ? this.config.sanitize(resources[resourceId], secrets) : undefined,
-					containers: containers
-						.filter((container) => container.resourceId === resourceId)
-						.map((container) => ({
-							id: container.id,
-							resourceId: container.resourceId,
-							imageId: container.imageId,
-							state: container.state,
-							revision: container.revision,
-						})),
-				})),
-			};
-		} catch (error) {
-			if (error instanceof PaasUiError) throw error;
-			throw new PaasUiError("unavailable", { cause: error });
-		}
+	getService(serviceId: string): Promise<UiService> {
+		return this.serviceSnapshot(serviceId, true);
 	}
 
 	async getResource(serviceId: string, resourceId: string): Promise<UiResource> {
-		const resource = (await this.getService(serviceId)).resources.find(
+		const resource = (await this.serviceSnapshot(serviceId, false)).resources.find(
 			(resource) => resource.resourceId === resourceId,
 		);
 		if (!resource) throw new PaasUiError("not-found");
@@ -197,6 +147,66 @@ export class PaasUiService implements IPaasUiService {
 		}
 	}
 
+	private async serviceSnapshot(serviceId: string, includeRevisionMetadata: boolean): Promise<UiService> {
+		this.assertService(serviceId);
+		try {
+			const [state, containers, file] = await Promise.all([
+				this.state.read(serviceId),
+				this.docker.listServiceContainers(serviceId),
+				this.descriptor(serviceId),
+			]);
+			const resources = file?.descriptor.resources ?? {};
+			const webCount = Object.values(resources).filter((resource) => resource.type === "web").length;
+			const secrets = this.secrets(file?.descriptor);
+			const metadata = includeRevisionMetadata
+				? await this.revisionMetadata(serviceId, [state?.activeRevision, file?.revision], secrets)
+				: new Map<string, UiRevisionMetadata>();
+			const ids = [
+				...new Set([...Object.keys(resources), ...containers.map((container) => container.resourceId)]),
+			].sort();
+			return {
+				serviceId,
+				phase: state?.phase ?? "unknown",
+				desiredRevision: state?.desiredRevision,
+				activeRevision: state?.activeRevision,
+				failures: state?.failures,
+				retryAt: state?.retryAt,
+				source: this.config.sanitize(this.config.getServices()[serviceId], secrets),
+				descriptorRevision: file?.revision,
+				activeRevisionMetadata: state?.activeRevision ? metadata.get(state.activeRevision) : undefined,
+				descriptorRevisionMetadata: file ? metadata.get(file.revision) : undefined,
+				descriptorStatus: file ? "available" : "unavailable",
+				descriptor: file ? this.config.sanitize(file.descriptor, secrets) : undefined,
+				resources: ids.map((resourceId) => ({
+					resourceId,
+					url:
+						resources[resourceId]?.type === "web"
+							? this.ingressUrl(`${resourceId}.${serviceId}`)
+							: undefined,
+					primaryUrl:
+						resources[resourceId]?.type === "web"
+						&& (webCount === 1 || resources[resourceId].primary === true)
+							? this.ingressUrl(serviceId)
+							: undefined,
+					type: resources[resourceId]?.type ?? "unknown",
+					config: resources[resourceId] ? this.config.sanitize(resources[resourceId], secrets) : undefined,
+					containers: containers
+						.filter((container) => container.resourceId === resourceId)
+						.map((container) => ({
+							id: container.id,
+							resourceId: container.resourceId,
+							imageId: container.imageId,
+							state: container.state,
+							revision: container.revision,
+						})),
+				})),
+			};
+		} catch (error) {
+			if (error instanceof PaasUiError) throw error;
+			throw new PaasUiError("unavailable", { cause: error });
+		}
+	}
+
 	private assertService(serviceId: string): void {
 		if (!Object.hasOwn(this.config.getServices(), serviceId)) throw new PaasUiError("not-found");
 	}
@@ -217,6 +227,36 @@ export class PaasUiService implements IPaasUiService {
 				this.log.error({ err, serviceId }, "Cannot load management UI descriptor");
 				return undefined;
 			}
+		});
+		this.pending = result;
+		return result;
+	}
+
+	private revisionMetadata(
+		serviceId: string,
+		revisions: (string | undefined)[],
+		secrets: string[],
+	): Promise<Map<string, UiRevisionMetadata>> {
+		const result = this.pending.then(async () => {
+			const metadata = new Map<string, UiRevisionMetadata>();
+			for (const revision of new Set(revisions)) {
+				if (!revision) continue;
+				try {
+					const commit = await this.git.readCommit(
+						serviceId,
+						this.config.getServices()[serviceId]!,
+						revision,
+					);
+					metadata.set(revision, {
+						authorName: this.config.redact(commit.authorName, secrets),
+						authoredAt: commit.authoredAt,
+						message: this.config.redact(commit.message, secrets),
+					});
+				} catch (err) {
+					this.log.error({ err, serviceId, revision }, "Cannot load management UI revision metadata");
+				}
+			}
+			return metadata;
 		});
 		this.pending = result;
 		return result;

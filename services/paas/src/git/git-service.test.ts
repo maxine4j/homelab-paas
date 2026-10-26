@@ -13,9 +13,43 @@ function fixture() {
 			.mockResolvedValue({ directory: "/repo", path: "nested/file.yaml" }),
 		resolveRevision: vi.fn<IGitClient["resolveRevision"]>().mockResolvedValue("revision"),
 		readFile: vi.fn<IGitClient["readFile"]>().mockResolvedValue("committed\n"),
+		readCommit: vi
+			.fn<IGitClient["readCommit"]>()
+			.mockResolvedValue({ authorName: "Alex", authoredAt: "2026-10-26T00:00:00Z", message: "Deploy" }),
+		fetchCommit: vi.fn<IGitClient["fetchCommit"]>().mockResolvedValue(undefined),
 	} satisfies IGitClient;
 	return { client, service: new GitService(client, "/state/git") };
 }
+
+test("commit metadata reads the requested revision and fetches it if absent from the shallow cache", async () => {
+	const { client, service } = fixture();
+	const source = { remote: "https://example.com/repo.git", descriptorPath: "file.yaml" };
+	const revision = "a".repeat(40);
+	client.readCommit.mockRejectedValueOnce(new GitClientError());
+	expect(await service.readCommit("demo", source, revision)).toEqual({
+		authorName: "Alex",
+		authoredAt: "2026-10-26T00:00:00Z",
+		message: "Deploy",
+	});
+	expect(client.fetchCommit).toHaveBeenCalledWith("/state/git/demo", source.remote, revision);
+	expect(client.readCommit).toHaveBeenLastCalledWith("/state/git/demo", revision);
+	client.fetchCommit.mockClear();
+	await service.readCommit("demo", source, revision);
+	expect(client.fetchCommit).not.toHaveBeenCalled();
+});
+
+test("local commit metadata uses the repository without fetching and propagates unavailable commits", async () => {
+	const { client, service } = fixture();
+	const source = { remote: "local", descriptorPath: "/repo/nested/file.yaml" };
+	await service.readCommit("demo", source, "a".repeat(40));
+	expect(client.readCommit).toHaveBeenCalledWith("/repo", "a".repeat(40));
+	expect(client.initRepo).not.toHaveBeenCalled();
+	expect(client.fetchCommit).not.toHaveBeenCalled();
+	client.readCommit.mockRejectedValue(new GitClientError());
+	await expect(service.readCommit("demo", source, "a".repeat(40))).rejects.toBeInstanceOf(GitClientError);
+	expect(client.fetchCommit).not.toHaveBeenCalled();
+	await expect(service.readCommit("../escape", source, "a".repeat(40))).rejects.toBeInstanceOf(GitServiceError);
+});
 
 test("remote reads initialize, fetch and resolve the branch before reading a fixed commit", async () => {
 	const { client, service } = fixture();

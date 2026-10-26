@@ -1,9 +1,35 @@
-import type { UiService, UiServiceEvent } from "@homelab-paas/shared-contracts";
+import type { UiRevisionMetadata, UiService, UiServiceEvent } from "@homelab-paas/shared-contracts";
 
 import { ConfigView } from "../components/config-view.tsx";
 import { gitSourceLink } from "../components/git-source-link.ts";
 import { ServiceEvents } from "../components/service-events.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
+
+const RevisionDetails = ({
+	revision,
+	metadata,
+	fallback,
+}: {
+	revision?: string;
+	metadata?: UiRevisionMetadata;
+	fallback: string;
+}) => (
+	<dd>
+		{revision ?? fallback}
+		{revision
+			&& (metadata ? (
+				<div className='revision-details'>
+					<p className='revision-message'>{metadata.message || "No commit message"}</p>
+					<p className='muted'>
+						{metadata.authorName || "Unknown author"} ·{" "}
+						<time dateTime={metadata.authoredAt}>{new Date(metadata.authoredAt).toLocaleString()}</time>
+					</p>
+				</div>
+			) : (
+				<p className='revision-details muted'>Commit details unavailable</p>
+			))}
+	</dd>
+);
 
 export const ServicePage = ({
 	service,
@@ -42,11 +68,19 @@ export const ServicePage = ({
 			<dl className='summary'>
 				<div>
 					<dt>Active revision</dt>
-					<dd>{service.activeRevision ?? "Not deployed"}</dd>
+					<RevisionDetails
+						revision={service.activeRevision}
+						metadata={service.activeRevisionMetadata}
+						fallback='Not deployed'
+					/>
 				</div>
 				<div>
 					<dt>Descriptor revision</dt>
-					<dd>{service.descriptorRevision ?? "Unavailable"}</dd>
+					<RevisionDetails
+						revision={service.descriptorRevision}
+						metadata={service.descriptorRevisionMetadata}
+						fallback='Unavailable'
+					/>
 				</div>
 				{service.retryAt && (
 					<div>

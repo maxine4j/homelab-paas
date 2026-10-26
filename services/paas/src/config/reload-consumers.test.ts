@@ -113,7 +113,7 @@ test("existing reconciler and UI discover reloaded service sources and retry bou
 	);
 	const ui = new PaasUiService(
 		f.config,
-		{ fetchFile },
+		{ fetchFile, readCommit: vi.fn() },
 		decodeDescriptorYaml,
 		{
 			listServiceContainers: async () => [],

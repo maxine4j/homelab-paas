@@ -21,6 +21,7 @@ export type {
 	UiContainer,
 	UiResource,
 	UiService,
+	UiRevisionMetadata,
 	UiLogs,
 	UiEditableConfig,
 	UiConfigField,

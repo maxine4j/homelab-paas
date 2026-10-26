@@ -29,6 +29,11 @@ const fixture = () => {
 		services: { demo: { remote: "local", descriptorPath: "/repo/demo.yaml" } },
 	});
 	const fetchFile = vi.fn(async () => ({ revision: "new", content: JSON.stringify(descriptor) }));
+	const readCommit = vi.fn(async (_serviceId: string, _source: unknown, revision: string) => ({
+		authorName: "Alex",
+		authoredAt: "2026-10-26T00:00:00Z",
+		message: `Deploy ${revision} env-canary`,
+	}));
 	const listServiceContainers = vi.fn(async () => [
 		{ id: "c", resourceId: "app", imageId: "sha256:a", revision: "old", spec: "s", state: "running" },
 		{ id: "orphan", resourceId: "old", imageId: "sha256:b", revision: "old", spec: "s", state: "exited" },
@@ -47,7 +52,7 @@ const fixture = () => {
 	]);
 	const service = new PaasUiService(
 		testConfig(config),
-		{ fetchFile },
+		{ fetchFile, readCommit },
 		decodeDescriptorYaml,
 		{
 			listServiceContainers,
@@ -78,8 +83,65 @@ const fixture = () => {
 		},
 		{ list: listEvents, append: async () => {} },
 	);
-	return { service, config, fetchFile, listServiceContainers, readServiceContainerLogs, listEvents };
+	return { service, config, fetchFile, readCommit, listServiceContainers, readServiceContainerLogs, listEvents };
 };
+
+test("service detail reads metadata for each exact revision and redacts known secrets", async () => {
+	const f = fixture();
+	expect(await f.service.getService("demo")).toMatchObject({
+		activeRevision: "old",
+		descriptorRevision: "new",
+		activeRevisionMetadata: {
+			authorName: "Alex",
+			authoredAt: "2026-10-26T00:00:00Z",
+			message: "Deploy old [redacted]",
+		},
+		descriptorRevisionMetadata: { message: "Deploy new [redacted]" },
+	});
+	expect(f.readCommit.mock.calls.map((call) => call[2])).toEqual(["old", "new"]);
+	f.readCommit.mockClear();
+	await f.service.listServices();
+	await f.service.getResource("demo", "app");
+	expect(f.readCommit).not.toHaveBeenCalled();
+});
+
+test("unavailable metadata preserves hashes, descriptor and observed resources", async () => {
+	const f = fixture();
+	f.readCommit.mockRejectedValue(new Error("private-metadata-error"));
+	const detail = await f.service.getService("demo");
+	expect(detail).toMatchObject({ activeRevision: "old", descriptorRevision: "new", descriptorStatus: "available" });
+	expect(detail.activeRevisionMetadata).toBeUndefined();
+	expect(detail.descriptorRevisionMetadata).toBeUndefined();
+	expect(detail.resources).toHaveLength(3);
+	expect(JSON.stringify(detail)).not.toContain("private-metadata-error");
+	expect(f.readCommit).toHaveBeenCalledTimes(2);
+});
+
+test("matching active and descriptor revisions share one metadata read", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({ revision: "old", content: JSON.stringify(descriptor) });
+	const detail = await f.service.getService("demo");
+	expect(detail.activeRevisionMetadata).toEqual(detail.descriptorRevisionMetadata);
+	expect(f.readCommit).toHaveBeenCalledTimes(1);
+});
+
+test("a missing active commit does not suppress descriptor commit details", async () => {
+	const f = fixture();
+	f.readCommit.mockRejectedValueOnce(new Error("Active commit unavailable"));
+	const detail = await f.service.getService("demo");
+	expect(detail.activeRevisionMetadata).toBeUndefined();
+	expect(detail.descriptorRevisionMetadata).toMatchObject({ authorName: "Alex", message: "Deploy new [redacted]" });
+});
+
+test("active metadata remains available when the descriptor cannot be read", async () => {
+	const f = fixture();
+	f.fetchFile.mockRejectedValue(new Error("Git unavailable"));
+	expect(await f.service.getService("demo")).toMatchObject({
+		descriptorStatus: "unavailable",
+		activeRevisionMetadata: { authorName: "Alex" },
+	});
+	expect(f.readCommit).toHaveBeenCalledTimes(1);
+});
 
 test("inspection resolves image tags from the fetched descriptor commit", async () => {
 	const f = fixture();
@@ -189,7 +251,7 @@ test("cluster inspection and edits delegate configuration policy to the config s
 	configuration.updateConfig = vi.fn(async () => snapshot);
 	const service = new PaasUiService(
 		configuration,
-		{ fetchFile: vi.fn() },
+		{ fetchFile: vi.fn(), readCommit: vi.fn() },
 		decodeDescriptorYaml,
 		{ listServiceContainers: vi.fn(), inspectServiceContainer: vi.fn(), readServiceContainerLogs: vi.fn() },
 		{ read: vi.fn(), write: vi.fn() },

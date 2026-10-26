@@ -29,7 +29,7 @@ test("authenticated config edits persist on disk and update existing JWT and ser
 	const token = tokens.issue({ userId: "Alice" }, "session");
 	const ui = new PaasUiService(
 		config,
-		{ fetchFile: vi.fn() },
+		{ fetchFile: vi.fn(), readCommit: vi.fn() },
 		decodeDescriptorYaml,
 		{ listServiceContainers: vi.fn(), inspectServiceContainer: vi.fn(), readServiceContainerLogs: vi.fn() },
 		{ read: async () => undefined, write: vi.fn() },

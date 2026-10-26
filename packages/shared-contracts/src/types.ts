@@ -79,9 +79,17 @@ export interface UiResource {
 	containers: UiContainer[];
 }
 
+export interface UiRevisionMetadata {
+	authorName: string;
+	authoredAt: string;
+	message: string;
+}
+
 export interface UiService extends UiServiceSummary {
 	source: JsonValue;
 	descriptorRevision?: string;
+	activeRevisionMetadata?: UiRevisionMetadata;
+	descriptorRevisionMetadata?: UiRevisionMetadata;
 	descriptorStatus: "available" | "unavailable";
 	/** Complete parsed descriptor with credentials, environment values and commands redacted. */
 	descriptor?: JsonValue;

@@ -5,6 +5,51 @@ import type { IGitTransport } from "./git-transport.ts";
 import { GitClientError } from "./types.ts";
 
 const revision = "a".repeat(40);
+
+test("reads author, author date and full message from an exact commit without email addresses", async () => {
+	const { client, transport } = fixture();
+	transport.execute.mockResolvedValue(
+		"Alex\u00002026-10-26T10:00:00+11:00\u0000Improve service details\n\nMore context.\n",
+	);
+	expect(await client.readCommit("/repo", revision)).toEqual({
+		authorName: "Alex",
+		authoredAt: "2026-10-26T10:00:00+11:00",
+		message: "Improve service details\n\nMore context.",
+	});
+	expect(transport.execute).toHaveBeenCalledWith("/repo", [
+		"show",
+		"--no-patch",
+		"--format=%an%x00%aI%x00%B",
+		revision,
+		"--",
+	]);
+});
+
+test("fetches an exact missing commit for a shallow repository", async () => {
+	const { client, transport } = fixture();
+	await client.fetchCommit("/repo", "remote", revision);
+	expect(transport.execute).toHaveBeenCalledWith("/repo", ["fetch", "--depth=1", "--", "remote", revision]);
+});
+
+test.each(["HEAD", "--output=/tmp/escape"])(
+	"metadata operations reject unresolved revision %s before I/O",
+	async (ref) => {
+		const { client, transport } = fixture();
+		await expect(client.readCommit("/repo", ref)).rejects.toEqual(new GitClientError());
+		await expect(client.fetchCommit("/repo", "remote", ref)).rejects.toEqual(new GitClientError());
+		expect(transport.execute).not.toHaveBeenCalled();
+	},
+);
+
+test.each([
+	"malformed",
+	"Alex\u0000invalid-date\u0000Message",
+	"Alex\u00002026-10-26T00:00:00Z\u0000Message\u0000extra",
+])("rejects malformed metadata %s", async (output) => {
+	const { client, transport } = fixture();
+	transport.execute.mockResolvedValue(output);
+	await expect(client.readCommit("/repo", revision)).rejects.toEqual(new GitClientError());
+});
 function fixture() {
 	const transport = {
 		execute: vi.fn<IGitTransport["execute"]>().mockResolvedValue(""),
@@ -60,7 +105,7 @@ test.each(["", "HEAD", "secret credential", "a".repeat(39)])("rejects invalid co
 	await expect(client.resolveRevision("/repo", "HEAD")).rejects.toBeInstanceOf(GitClientError);
 });
 
-test.each(["initRepo", "fetch", "locateFile", "resolveRevision", "readFile"] as const)(
+test.each(["initRepo", "fetch", "locateFile", "resolveRevision", "readFile", "readCommit", "fetchCommit"] as const)(
 	"wraps %s command failures without credentials or output",
 	async (operation) => {
 		const { client, transport } = fixture();
@@ -71,6 +116,8 @@ test.each(["initRepo", "fetch", "locateFile", "resolveRevision", "readFile"] as 
 			locateFile: () => client.locateFile("/repo/file.yaml"),
 			resolveRevision: () => client.resolveRevision("/repo", "HEAD"),
 			readFile: () => client.readFile("/repo", revision, "file.yaml"),
+			readCommit: () => client.readCommit("/repo", revision),
+			fetchCommit: () => client.fetchCommit("/repo", "remote", revision),
 		};
 		await expect(calls[operation]()).rejects.toEqual(new GitClientError());
 	},
