@@ -19,30 +19,39 @@ export const ServicesPage = ({ services }: { services: UiServiceSummary[] }) => 
 		) : (
 			<div className='card-grid'>
 				{services.map((service) => (
-					<a className='card resource-link' key={service.serviceId} href={`#/services/${service.serviceId}`}>
+					<article className='card service-card' key={service.serviceId}>
 						<div className='card-top'>
-							<h2>{service.serviceId}</h2>
+							<h2>
+								<a href={`#/services/${service.serviceId}`}>{service.serviceId}</a>
+							</h2>
 							<StatusBadge status={service.phase} />
 						</div>
-						<dl className='service-revisions'>
-							<div>
-								<dt>Active revision</dt>
-								<RevisionDetails
-									revision={service.activeRevision?.slice(0, 12)}
-									metadata={service.activeRevisionMetadata}
-									fallback='Not deployed'
-								/>
+						<div className='service-card-bottom'>
+							<div className='service-card-info'>
+								{service.primaryUrl && (
+									<a
+										className='primary-web-link'
+										href={service.primaryUrl}
+										target='_blank'
+										rel='noreferrer'
+									>
+										{new URL(service.primaryUrl).host} <span aria-hidden='true'>↗</span>
+									</a>
+								)}
+								{service.description && <p>{service.description}</p>}
 							</div>
-							<div>
-								<dt>Desired revision</dt>
-								<RevisionDetails
-									revision={service.desiredRevision?.slice(0, 12)}
-									metadata={service.desiredRevisionMetadata}
-									fallback='Not observed'
-								/>
-							</div>
-						</dl>
-					</a>
+							<dl className='service-revisions'>
+								<div>
+									<dt>Revision</dt>
+									<RevisionDetails
+										revision={service.activeRevision?.slice(0, 12)}
+										metadata={service.activeRevisionMetadata}
+										fallback='Not deployed'
+									/>
+								</div>
+							</dl>
+						</div>
+					</article>
 				))}
 			</div>
 		)}

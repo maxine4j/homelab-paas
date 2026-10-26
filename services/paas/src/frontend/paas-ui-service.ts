@@ -16,6 +16,7 @@ import type { IGitRevisionService } from "../git/git-service.ts";
 import type { IServiceEventStore } from "../reconciler/service-event-store.ts";
 import type { DescriptorDecoder, IReconciliationStateStore } from "../reconciler/types.ts";
 import { createLogger } from "../util/logger.ts";
+import { stringifyYaml } from "../util/yaml.ts";
 import type { UiDocker } from "./types.ts";
 
 export interface IPaasUiService {
@@ -84,17 +85,26 @@ export class PaasUiService implements IPaasUiService {
 					.sort()
 					.map(async (serviceId) => {
 						const state = await this.state.read(serviceId);
-						const file =
-							state?.activeRevision || state?.desiredRevision
-								? await this.descriptor(serviceId)
-								: undefined;
+						const file = await this.descriptor(serviceId);
+						const secrets = this.secrets(file?.descriptor);
+						const webResources = Object.values(file?.descriptor.resources ?? {}).filter(
+							(resource) => resource.type === "web",
+						);
 						const metadata = await this.revisionMetadata(
 							serviceId,
 							[state?.activeRevision, state?.desiredRevision],
-							this.secrets(file?.descriptor),
+							secrets,
 						);
 						return {
 							serviceId,
+							description:
+								file?.descriptor.metadata.description === undefined
+									? undefined
+									: this.config.redact(file.descriptor.metadata.description, secrets),
+							primaryUrl:
+								webResources.length === 1 || webResources.some((resource) => resource.primary)
+									? this.ingressUrl(serviceId)
+									: undefined,
 							phase: state?.phase ?? "unknown",
 							desiredRevision: state?.desiredRevision,
 							activeRevision: state?.activeRevision,
@@ -192,6 +202,7 @@ export class PaasUiService implements IPaasUiService {
 				descriptorRevisionMetadata: file ? metadata.get(file.revision) : undefined,
 				descriptorStatus: file ? "available" : "unavailable",
 				descriptor: file ? this.config.sanitize(file.descriptor) : undefined,
+				descriptorYaml: file ? stringifyYaml(this.config.sanitize(file.descriptor)) : undefined,
 				resources: ids.map((resourceId) => ({
 					resourceId,
 					url:

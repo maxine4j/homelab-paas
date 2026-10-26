@@ -1,6 +1,5 @@
 import type { UiService, UiServiceEvent } from "@homelab-paas/shared-contracts";
 
-import { ConfigView } from "../components/config-view.tsx";
 import { gitSourceLink } from "../components/git-source-link.ts";
 import { RevisionDetails } from "../components/revision-details.tsx";
 import { ServiceEvents } from "../components/service-events.tsx";
@@ -22,18 +21,21 @@ export const ServicePage = ({
 			<a className='back-link' href='#/services'>
 				← Services
 			</a>
-			<div className='page-heading'>
-				<div>
+			<div className='page-heading service-heading'>
+				<div className='service-heading-content'>
 					<p className='eyebrow'>Service</p>
-					<h1>{service.serviceId}</h1>
-					<p>Desired resources alongside observed containers.</p>
-					{primaryUrl && (
-						<a className='primary-web-link' href={primaryUrl} target='_blank' rel='noreferrer'>
-							{new URL(primaryUrl).host} <span aria-hidden='true'>↗</span>
-						</a>
-					)}
+					<div className='service-heading-row'>
+						<div className='service-identity'>
+							<h1>{service.serviceId}</h1>
+							<StatusBadge status={service.phase} />
+						</div>
+						{primaryUrl && (
+							<a className='primary-web-link' href={primaryUrl} target='_blank' rel='noreferrer'>
+								{new URL(primaryUrl).host} <span aria-hidden='true'>↗</span>
+							</a>
+						)}
+					</div>
 				</div>
-				<StatusBadge status={service.phase} />
 			</div>
 			{service.descriptorStatus === "unavailable" && (
 				<p className='notice' role='status'>
@@ -50,7 +52,7 @@ export const ServicePage = ({
 					/>
 				</div>
 				<div>
-					<dt>Descriptor revision</dt>
+					<dt>Desired revision</dt>
 					<RevisionDetails
 						revision={service.descriptorRevision}
 						metadata={service.descriptorRevisionMetadata}
@@ -77,7 +79,7 @@ export const ServicePage = ({
 			<h2>
 				Resources <span className='count'>{service.resources.length}</span>
 			</h2>
-			<div className='card-grid'>
+			<div className='card-grid resource-grid'>
 				{service.resources.map((resource) => (
 					<a
 						className='card resource-link'
@@ -110,8 +112,10 @@ export const ServicePage = ({
 				</div>
 				{service.descriptor ? (
 					<details className='json-disclosure'>
-						<summary>Service descriptor JSON</summary>
-						<ConfigView value={service.descriptor} label='Service descriptor' />
+						<summary>Service descriptor YAML</summary>
+						<pre className='code-view' tabIndex={0} aria-label='Service descriptor YAML'>
+							{service.descriptorYaml ?? "Descriptor unavailable."}
+						</pre>
 					</details>
 				) : (
 					<p>Descriptor unavailable.</p>

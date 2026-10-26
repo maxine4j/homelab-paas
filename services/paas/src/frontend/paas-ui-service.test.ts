@@ -104,6 +104,14 @@ test("service detail reads metadata for each exact revision and redacts known se
 	expect(f.readCommit).not.toHaveBeenCalled();
 });
 
+test("service detail supplies YAML of the sanitized descriptor", async () => {
+	const f = fixture();
+	const detail = await f.service.getService("demo");
+	expect(detail.descriptorYaml).toContain("serviceId: demo");
+	expect(detail.descriptorYaml).toContain("image: app:1");
+	expect(detail.descriptorYaml).not.toContain("--password=env-canary");
+});
+
 test("service list includes redacted metadata for active and desired commits without Docker", async () => {
 	const f = fixture();
 	expect(await f.service.listServices()).toMatchObject([
@@ -132,6 +140,32 @@ test("service list preserves deployment status when Git is unavailable", async (
 	expect(summaries[0]).not.toHaveProperty("activeRevisionMetadata", expect.anything());
 	expect(JSON.stringify(summaries)).not.toContain("private-metadata-error");
 	expect(f.readCommit).toHaveBeenCalledTimes(2);
+	expect(summaries[0]?.description).toBeUndefined();
+	expect(summaries[0]?.primaryUrl).toBeUndefined();
+});
+
+test.each([
+	[{ app: descriptor.resources.app }, "http://demo.example.com"],
+	[
+		{ app: descriptor.resources.app, other: { ...descriptor.resources.app, primary: true } },
+		"http://demo.example.com",
+	],
+	[{ db: descriptor.resources.db }, undefined],
+])("service list supplies a redacted description and only a primary web link", async (resources, primaryUrl) => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "new",
+		content: JSON.stringify({
+			...descriptor,
+			metadata: { serviceId: "demo", description: "Archive env-canary" },
+			resources,
+		}),
+	});
+	expect((await f.service.listServices()).at(0)).toMatchObject({
+		description: "app" in resources ? "Archive [redacted]" : "Archive env-canary",
+		primaryUrl,
+	});
+	expect(f.listServiceContainers).not.toHaveBeenCalled();
 });
 
 test("unavailable metadata preserves hashes, descriptor and observed resources", async () => {

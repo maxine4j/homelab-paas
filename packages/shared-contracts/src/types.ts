@@ -26,6 +26,9 @@ export interface UiCluster extends UiEditableConfig {
 
 export interface UiServiceSummary {
 	serviceId: string;
+	description?: string;
+	/** Desired primary web ingress; presence does not imply readiness. */
+	primaryUrl?: string;
 	phase: "unknown" | "deploying" | "ready" | "failed";
 	desiredRevision?: string;
 	activeRevision?: string;
@@ -94,6 +97,8 @@ export interface UiService extends UiServiceSummary {
 	descriptorStatus: "available" | "unavailable";
 	/** Complete parsed descriptor with literal environment values visible; credentials and commands redacted. */
 	descriptor?: JsonValue;
+	/** YAML rendering of the same sanitized descriptor. */
+	descriptorYaml?: string;
 	resources: UiResource[];
 }
 
