@@ -9,10 +9,14 @@ test("browser edits configuration on the host and consumers immediately see save
 }) => {
 	await page.goto(env.url("", "/#/cluster"));
 	await expect(page.getByRole("button", { name: "Save configuration" })).toBeVisible();
-	const secret = page.getByLabel("auth.github.clientSecret", { exact: true });
+	const secret = page
+		.getByRole("region", { name: "auth.github", exact: true })
+		.getByLabel("clientSecret", { exact: true });
 	await expect(secret).toHaveValue("");
 	await expect(secret).toHaveAttribute("type", "password");
-	const poll = page.getByLabel("git.pollIntervalSeconds", { exact: true });
+	const poll = page
+		.getByRole("region", { name: "git", exact: true })
+		.getByLabel("pollIntervalSeconds", { exact: true });
 	await poll.fill("7");
 	// An automatic snapshot refresh must not discard a dirty draft.
 	const refreshed = page.waitForResponse((response) => response.url().endsWith("/api/ui/cluster"));
@@ -51,25 +55,37 @@ test("the editor preserves failed drafts and requires a reload after another edi
 	await expect(page.getByRole("button", { name: "Save configuration" })).toBeVisible();
 	const other = await context.newPage();
 	await other.goto(env.url("", "/#/cluster"));
-	await other.getByLabel("git.operationTimeoutSeconds", { exact: true }).fill("13");
-	await page.getByLabel("git.operationTimeoutSeconds", { exact: true }).fill("11");
+	const timeout = page
+		.getByRole("region", { name: "git", exact: true })
+		.getByLabel("operationTimeoutSeconds", { exact: true });
+	const otherTimeout = other
+		.getByRole("region", { name: "git", exact: true })
+		.getByLabel("operationTimeoutSeconds", { exact: true });
+	await otherTimeout.fill("13");
+	await timeout.fill("11");
 	await page.getByRole("button", { name: "Save configuration" }).click();
 	await expect(page.getByRole("status")).toHaveText("Configuration saved");
 	await other.getByRole("button", { name: "Save configuration" }).click();
 	await expect(other.getByRole("alert")).toContainText("Configuration changed");
-	await expect(other.getByLabel("git.operationTimeoutSeconds", { exact: true })).toHaveValue("13");
+	await expect(otherTimeout).toHaveValue("13");
 	await other.getByRole("button", { name: "Reload configuration" }).click();
-	await expect(other.getByLabel("git.operationTimeoutSeconds", { exact: true })).toHaveValue("11");
-	await other.getByLabel("services", { exact: true }).fill("{invalid");
+	await expect(otherTimeout).toHaveValue("11");
+	const repository = other
+		.getByRole("group", { name: "second", exact: true })
+		.getByLabel("Repository", { exact: true });
+	await repository.fill("   ");
 	await other.getByRole("button", { name: "Save configuration" }).click();
-	await expect(other.getByRole("alert")).toContainText("Services must contain valid JSON");
-	await expect(other.getByLabel("services", { exact: true })).toHaveValue("{invalid");
+	await expect(other.getByRole("alert")).toContainText("Repository is required for second");
+	await expect(repository).toHaveValue("   ");
 	await other.getByRole("button", { name: "Reload configuration" }).click();
-	await expect(other.getByLabel("services", { exact: true })).not.toHaveValue("{invalid");
-	await other.getByLabel("reconciliation.retryBackoffSeconds", { exact: true }).fill("99");
+	await expect(repository).toHaveValue(env.config.services["second"]!.remote);
+	const retryBackoff = other
+		.getByRole("region", { name: "reconciliation", exact: true })
+		.getByLabel("retryBackoffSeconds", { exact: true });
+	await retryBackoff.fill("99");
 	await other.getByRole("button", { name: "Save configuration" }).click();
 	await expect(other.getByRole("alert")).toContainText("Invalid configuration");
-	await expect(other.getByLabel("reconciliation.retryBackoffSeconds", { exact: true })).toHaveValue("99");
+	await expect(retryBackoff).toHaveValue("99");
 	const persisted = parseYaml(
 		(await readFile(`${env.directory}/etc/config.yaml`))!,
 		"unchanged config",
