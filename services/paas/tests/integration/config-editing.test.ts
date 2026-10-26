@@ -55,16 +55,25 @@ test("authenticated config edits persist on disk and update existing JWT and ser
 			body: JSON.stringify({
 				revision: snapshot.revision,
 				changes: [
-					{ path: "services", value: { demo: { remote: "https://example.test/demo.git" } } },
+					{
+						path: "services",
+						value: {
+							demo: { remote: "https://example.test/demo.git", accessToken: "repository-access-token" },
+						},
+					},
 					{ path: "auth.session.signingKey", value: "new-key-".repeat(8) },
 				],
 			}),
 		});
 		expect(response.status).toBe(200);
-		expect(await response.text()).not.toContain("new-key-");
+		const savedResponse = await response.text();
+		expect(savedResponse).not.toContain("new-key-");
+		expect(savedResponse).not.toContain("repository-access-token");
+		expect(config.getEditableConfig().fields.find((field) => field.path === "services")?.readOnly).toBe(false);
 		expect((await stat(path)).mode & 0o777).toBe(0o600);
 		expect(parseYaml((await readFile(path))!, "saved config")).toMatchObject({
 			auth: { session: { signingKey: "new-key-".repeat(8) } },
+			services: { demo: { accessToken: "repository-access-token" } },
 		});
 		expect(await ui.listServices()).toEqual([{ serviceId: "demo", phase: "unknown" }]);
 		expect(tokens.verify(token, "session")).toBeUndefined();

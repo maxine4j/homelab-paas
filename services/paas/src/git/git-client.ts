@@ -2,17 +2,17 @@ import { basename, dirname, isAbsolute, join, relative } from "node:path";
 
 import type { IGitTransport } from "./git-transport.ts";
 import { GitClientError } from "./types.ts";
-import type { GitCommit } from "./types.ts";
+import type { GitCommit, GitCredentials } from "./types.ts";
 
 /** All operations reject with GitClientError; paths refer to repositories on disk. */
 export interface IGitClient {
 	initRepo(directory: string): Promise<void>;
-	fetch(directory: string, remote: string, branch: string): Promise<void>;
+	fetch(directory: string, remote: string, branch: string, credentials?: GitCredentials): Promise<void>;
 	locateFile(path: string): Promise<{ directory: string; path: string }>;
 	resolveRevision(directory: string, ref: string): Promise<string>;
 	readFile(directory: string, revision: string, path: string): Promise<string>;
 	readCommit(directory: string, revision: string): Promise<GitCommit>;
-	fetchCommit(directory: string, remote: string, revision: string): Promise<void>;
+	fetchCommit(directory: string, remote: string, revision: string, credentials?: GitCredentials): Promise<void>;
 }
 
 const commitId = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
@@ -27,9 +27,13 @@ export class GitClient implements IGitClient {
 		});
 	}
 
-	async fetch(directory: string, remote: string, branch: string): Promise<void> {
+	async fetch(directory: string, remote: string, branch: string, credentials?: GitCredentials): Promise<void> {
 		await this.operation(() =>
-			this.transport.execute(directory, ["fetch", "--depth=1", "--", remote, `refs/heads/${branch}`]),
+			this.transport.execute(
+				directory,
+				["fetch", "--depth=1", "--", remote, `refs/heads/${branch}`],
+				...this.authentication(directory, remote, credentials),
+			),
 		);
 	}
 
@@ -88,11 +92,46 @@ export class GitClient implements IGitClient {
 		});
 	}
 
-	async fetchCommit(directory: string, remote: string, revision: string): Promise<void> {
+	async fetchCommit(
+		directory: string,
+		remote: string,
+		revision: string,
+		credentials?: GitCredentials,
+	): Promise<void> {
 		await this.operation(() => {
 			if (!commitId.test(revision)) throw new GitClientError();
-			return this.transport.execute(directory, ["fetch", "--depth=1", "--", remote, revision]);
+			return this.transport.execute(
+				directory,
+				["fetch", "--depth=1", "--", remote, revision],
+				...this.authentication(directory, remote, credentials),
+			);
 		});
+	}
+
+	private authentication(
+		directory: string,
+		remote: string,
+		credentials?: GitCredentials,
+	): [] | [Record<string, string>] {
+		if (credentials?.accessToken)
+			return [
+				{
+					GIT_CONFIG_COUNT: "2",
+					GIT_CONFIG_KEY_0: "credential.helper",
+					GIT_CONFIG_VALUE_0: "",
+					GIT_CONFIG_KEY_1: `http.${remote}.extraHeader`,
+					GIT_CONFIG_VALUE_1: `Authorization: Basic ${Buffer.from(`x-access-token:${credentials.accessToken}`).toString("base64")}`,
+				},
+			];
+		if (/^ssh:\/\//i.test(remote) || (/^(?:[^@/:\s]+@)?[^/:\s]+:.+/.test(remote) && !remote.includes("://"))) {
+			const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+			return [
+				{
+					GIT_SSH_COMMAND: `ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${quote(join(directory, "known_hosts"))}${credentials?.privateKeyPath ? ` -o IdentitiesOnly=yes -i ${quote(credentials.privateKeyPath)}` : ""}`,
+				},
+			];
+		}
+		return [];
 	}
 
 	private async operation<T>(run: () => Promise<T>): Promise<T> {

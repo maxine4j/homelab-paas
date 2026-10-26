@@ -1,6 +1,24 @@
 import { expect, test } from "vitest";
 
-import { readServiceSources, saveServiceSources } from "./service-sources.ts";
+import { readServiceSources, saveServiceSources, changeRepository } from "./service-sources.ts";
+
+test("credential drafts preserve saved token markers and discard credentials when the repository changes", () => {
+	const sources = {
+		demo: { remote: "https://example.com/repo", descriptorPath: "file.yaml", accessToken: "[redacted]" },
+		ssh: { remote: "git@example.com:repo", descriptorPath: "ssh.yaml", privateKeyPath: "/keys/ssh" },
+	};
+	expect(saveServiceSources(readServiceSources(sources))).toEqual(sources);
+	const row = readServiceSources(sources)[0]!;
+	expect(saveServiceSources([{ ...row, accessToken: "replacement" }])).toMatchObject({
+		demo: { accessToken: "replacement" },
+	});
+	expect(saveServiceSources([changeRepository(row, "ssh://git@example.com/repo")])).toEqual({
+		demo: { remote: "ssh://git@example.com/repo", descriptorPath: "file.yaml" },
+	});
+	expect(saveServiceSources([{ ...row, accessToken: undefined }])).toEqual({
+		demo: { remote: row.remote, descriptorPath: row.descriptorPath },
+	});
+});
 
 test("service forms preserve remote and local sources and omit an empty optional branch", () => {
 	const value = {

@@ -12,6 +12,8 @@ export interface ApiResult<T> {
 }
 
 export interface ServiceSourceDraft {
+	privateKeyPath?: string;
+	accessToken?: string;
 	serviceId: string;
 	remote: string;
 	branch: string;

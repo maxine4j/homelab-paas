@@ -65,6 +65,8 @@ Services receive infrastructure effects through constructor contracts. Timers us
 
 Generic file key-value stores own serialization and key-to-path mapping. Domain stores own state validation and error translation, receive injected key-value stores, and keep filesystem paths out of services. The [persisted-state contract](reconciliation-and-deployments.md#implemented-deployment-mvp) remains compatible across this separation.
 
+Private Git sources use the existing Git/OpenSSH runtime tools. Put deploy keys under `/etc/homelab-paas/keys/` by default, or mount another host location into the control plane. The local bootstrap maps `local/etc/keys/` to that default directory. SSH automatically accepts new host keys and persists them in each Git cache. See the authoritative [Git credential contract](configuration.md#private-git-repositories) for path, protocol, token and host-key semantics.
+
 ## Backend logging
 
 The control plane writes Pino JSON lines to stdout with ISO UTC timestamps, numeric severity, and a message. Import `logger` or use `private readonly log = createLogger(Component.name)` from `services/paas/src/util/logger.ts`; child loggers add a stable `component` field. Source file/line stack inspection is intentionally omitted; component and event fields identify operations without per-log stack capture or production source maps.

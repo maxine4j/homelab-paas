@@ -10,6 +10,40 @@ const descriptor = {
 	resources: { app: { type: "web", image: "test-service:local", ingress: { public: true, port: 8080 } } },
 };
 
+test("repository credentials are optional and must match the remote protocol", () => {
+	const base = {
+		version: 1,
+		metadata: { clusterId: "local" },
+		ingress: { baseDomain: "localhost" },
+		git: { pollIntervalSeconds: 5, operationTimeoutSeconds: 60 },
+		reconciliation: { retryBackoffSeconds: 5, maxRetryBackoffSeconds: 60 },
+	};
+	const parse = (source: Record<string, unknown>) => parseConfig({ ...base, services: { demo: source } });
+	for (const remote of ["https://example.com/repo", "ssh://git@example.com/repo", "git@example.com:org/repo"])
+		expect(parse({ remote }).services["demo"]?.remote).toBe(remote);
+	expect(parse({ remote: "https://example.com/repo", accessToken: "private-token" }).services["demo"]).toHaveProperty(
+		"accessToken",
+		"private-token",
+	);
+	for (const remote of ["ssh://git@example.com/repo", "git@example.com:org/repo"])
+		expect(parse({ remote, privateKeyPath: "/arbitrary/host/key" }).services["demo"]).toHaveProperty(
+			"privateKeyPath",
+			"/arbitrary/host/key",
+		);
+	for (const source of [
+		{ remote: "https://example.com/repo", privateKeyPath: "/key" },
+		{ remote: "git@example.com:org/repo", accessToken: "private-token" },
+		{ remote: "ssh://git@example.com/repo", accessToken: "private-token" },
+		{ remote: "local", descriptorPath: "/repo/file", accessToken: "private-token" },
+		{ remote: "/repo", privateKeyPath: "/key" },
+		{ remote: "http://example.com/repo", accessToken: "private-token" },
+		{ remote: "ssh://git@example.com/repo", privateKeyPath: "relative/key" },
+		{ remote: "https://example.com/repo", accessToken: "" },
+		{ remote: "https://example.com/repo", accessToken: "bad\nheader" },
+	])
+		expect(() => parse(source)).toThrow("Invalid platform configuration");
+});
+
 test("resolves only resource image tags using the descriptor commit", () => {
 	const value = {
 		...descriptor,

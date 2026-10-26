@@ -2,7 +2,7 @@ import { isAbsolute, join, normalize } from "node:path";
 
 import type { IGitClient } from "./git-client.ts";
 import { GitServiceError } from "./types.ts";
-import type { GitCommit, GitFile, GitFileSource } from "./types.ts";
+import type { GitCommit, GitCredentials, GitFile, GitFileSource } from "./types.ts";
 
 const DEFAULT_GIT_BRANCH = "main";
 
@@ -36,7 +36,12 @@ export class GitService implements IGitRevisionService {
 		} else {
 			file = { directory: join(this.directory, serviceId), path: source.descriptorPath };
 			await this.client.initRepo(file.directory);
-			await this.client.fetch(file.directory, source.remote, source.branch ?? DEFAULT_GIT_BRANCH);
+			await this.client.fetch(
+				file.directory,
+				source.remote,
+				source.branch ?? DEFAULT_GIT_BRANCH,
+				...this.credentials(source),
+			);
 			ref = "FETCH_HEAD";
 		}
 		const revision = await this.client.resolveRevision(file.directory, ref);
@@ -54,9 +59,15 @@ export class GitService implements IGitRevisionService {
 		try {
 			return await this.client.readCommit(directory, revision);
 		} catch {
-			await this.client.fetchCommit(directory, source.remote, revision);
+			await this.client.fetchCommit(directory, source.remote, revision, ...this.credentials(source));
 			return this.client.readCommit(directory, revision);
 		}
+	}
+
+	private credentials(source: GitFileSource): [] | [GitCredentials] {
+		if (source.privateKeyPath) return [{ privateKeyPath: source.privateKeyPath }];
+		if (source.accessToken) return [{ accessToken: source.accessToken }];
+		return [];
 	}
 
 	private validateSource(serviceId: string, source: GitFileSource): void {

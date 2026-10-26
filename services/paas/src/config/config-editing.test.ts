@@ -1,6 +1,32 @@
+import type { JsonValue } from "@homelab-paas/shared-contracts";
 import { expect, test, vi } from "vitest";
 
 import { createTestPaasConfig, testConfigValue } from "../util/test/config.ts";
+
+test("service token edits preserve redacted tokens, support replacement and removal, and remain editable", async () => {
+	const f = await fixture();
+	const save = (services: Record<string, JsonValue>) =>
+		f.config.updateConfig({
+			revision: f.config.getEditableConfig().revision,
+			changes: [{ path: "services", value: services }],
+		});
+	await save({ demo: { remote: "https://example.com/repo", accessToken: "repo-private-token" } });
+	expect(f.config.redact("failure repo-private-token")).toBe("failure [redacted]");
+	expect(JSON.stringify(f.config.getEditableConfig())).not.toContain("repo-private-token");
+	expect(f.config.getEditableConfig().fields.find((field) => field.path === "services")?.readOnly).toBe(false);
+	await save({ demo: { remote: "https://example.com/repo", accessToken: "[redacted]", branch: "release" } });
+	expect(f.config.getServices()["demo"]?.accessToken).toBe("repo-private-token");
+	await expect(
+		save({ demo: { remote: "https://other.example/repo", accessToken: "[redacted]" } }),
+	).rejects.toMatchObject({ kind: "invalid" });
+	await save({ demo: { remote: "https://example.com/repo", accessToken: "new-repo-token" } });
+	expect(f.config.getServices()["demo"]?.accessToken).toBe("new-repo-token");
+	await save({ demo: { remote: "https://example.com/repo" } });
+	expect(f.config.getServices()["demo"]?.accessToken).toBeUndefined();
+	await expect(
+		save({ other: { remote: "https://evil.example/repo", accessToken: "[redacted]" } }),
+	).rejects.toMatchObject({ kind: "invalid" });
+});
 
 const fixture = async (environment: Record<string, string> = {}) => {
 	let content = JSON.stringify(testConfigValue());

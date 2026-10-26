@@ -24,7 +24,7 @@ At startup and on reload, supplied environment variables override the correspond
 
 Unset variables preserve YAML values; empty overrides fail validation when their section is configured. Environment credentials alone do not enable authentication or TLS. The YAML must still contain the corresponding sections, GitHub allowlist and session settings. Keep local credentials in the ignored Compose `.env` file; see [development](development.md#local-container-environment).
 
-Platform configuration contains `version: 1`, `metadata.clusterId`, `ingress.baseDomain`, optional `ingress.httpPort` (default 80), `git`, `reconciliation`, and `services`. The `auth` and `tls` sections shown below are optional together; supplying only one fails startup. With both enabled, `ingress.httpsPort` defaults to 443 and HTTP redirects to HTTPS. HTTP and HTTPS ports must differ. Without auth/TLS, `httpsPort` is rejected and public HTTP remains available for local development. Git credentials remain deferred. Polling, operation timeout, and retry bounds are required positive integer seconds.
+Platform configuration contains `version: 1`, `metadata.clusterId`, `ingress.baseDomain`, optional `ingress.httpPort` (default 80), `git`, `reconciliation`, and `services`. The `auth` and `tls` sections shown below are optional together; supplying only one fails startup. With both enabled, `ingress.httpsPort` defaults to 443 and HTTP redirects to HTTPS. HTTP and HTTPS ports must differ. Without auth/TLS, `httpsPort` is rejected and public HTTP remains available for local development. Polling, operation timeout, and retry bounds are required positive integer seconds.
 
 GitHub client ID, client secret, and a nonempty username allowlist are required when authentication is enabled. Username matching is case-insensitive. `AuthService` derives the callback as `https://auth.{baseDomain}/auth/callback`, including `:{httpsPort}` for a nonstandard HTTPS port; `callbackUrl` is not a configurable field. Register this derived URL in the GitHub OAuth application. The service ID `auth` is reserved in this mode. Session issuer, audience, signing key (at least 32 characters), and positive integer lifetime in seconds are required. TLS requires an ACME email and DigitalOcean API token; provider selection is fixed to `digitalocean`. Certificate paths, production ACME directory, and renewal timing are platform-owned; see [TLS](networking-and-auth.md#tls).
 
@@ -51,6 +51,26 @@ services:
         descriptorPath: /mnt/repo/services/test-service/test-service.sd.yaml
 ```
 
+### Private Git repositories
+
+Each `services.{serviceId}` source optionally accepts `privateKeyPath` for SSH or `accessToken` for HTTPS. Both may be omitted for public repositories. Supplying a key with a non-SSH remote, a token with a non-HTTPS remote, or both credentials fails configuration validation. SSH includes `ssh://git@host/path` and SCP-style `git@host:org/repo.git`. Credentials are rejected for `local` and filesystem remotes. Supplied tokens must be nonempty and contain no control characters; key paths must be absolute and contain no control characters.
+
+```yaml
+services:
+    private-ssh:
+        remote: git@github.com:org/private-repo.git
+        privateKeyPath: /etc/homelab-paas/keys/private-repo
+    private-https:
+        remote: https://github.com/org/private-repo.git
+        accessToken: replace-with-repository-access-token
+```
+
+The default documented key location is `/etc/homelab-paas/keys/`, covered by the existing configuration-directory mount. Arbitrary host paths are supported: mount the key into the control-plane container at the configured absolute path, preferably read-only. For example, add `/srv/deploy-keys/repo:/srv/deploy-keys/repo:ro` to the control-plane Compose volumes and set `privateKeyPath: /srv/deploy-keys/repo`. Configuring a host path alone does not make it accessible inside the container. Restrict the key directory to mode `0700` and key files to `0600`, readable by the control-plane process. Use keys that work without an interactive passphrase prompt.
+
+SSH runs noninteractively with `StrictHostKeyChecking=accept-new`: first-contact host keys are automatically trusted and saved, while changed keys fail. Each deployment and UI Git cache retains its own `known_hosts` file in persistent platform state. No manual host-key approval is required. An explicitly supplied key uses `IdentitiesOnly=yes`. HTTPS tokens use HTTP Basic authentication with username `x-access-token`; choose a repository token accepted by the Git host. Tokens are scoped to the configured repository URL and passed through the subprocess environment, without embedding them in remote URLs, command arguments or persisted Git configuration. Both descriptor and commit-metadata fetches use the configured credentials. Operators must protect configuration and logs under the [logging contract](development.md#backend-logging).
+
+The management UI shows a token input for HTTPS and a key-path input for SSH, with neither for local sources. Tokens are never returned by the API. An unchanged redacted token is retained when saving the same service and remote; replacement and explicit removal are supported. Changing the repository clears credential drafts and requires entering credentials for the new source. See [management editing](#management-edits).
+
 ## Platform configuration reload
 
 `PaasConfig` owns the effective configuration. Control-plane components read it through typed getters, including `getTlsConfig`, rather than retaining startup copies. After startup, a serial background task rereads `/etc/homelab-paas/config.yaml` every 60 seconds through the canonical file reader. Reload requires read access and no filesystem notification subscription, including on SELinux-enforcing CoreOS. Management edits additionally require a writable configuration directory; see below. Keep the mounted directory accessible under the production SELinux policy; update the file atomically within that directory.
@@ -65,7 +85,7 @@ Cluster identity, ingress domain/ports and enabling or disabling auth/TLS requir
 
 The [management editor](management-ui.md) changes live settings and service sources through `PaasConfig.updateConfig`. `getEditableConfig` returns a redacted effective snapshot, an opaque disk-content revision, and field metadata. The GitHub client secret, session signing key and DigitalOcean API token have replacement-only inputs: their values are never returned, only whether they are configured. Unchanged or omitted fields retain their original YAML values. Secret replacements must be nonempty and cannot be the redaction marker. Environment-managed fields and restart-required settings are read-only. Values containing redacted credentials are also read-only, preventing redaction markers from overwriting hidden values. Authentication/TLS sections cannot be enabled or disabled in the editor.
 
-The configuration service owns platform-secret redaction for configuration, resource inspection and logs. The UI service supplies descriptor secrets without reading platform credentials to construct its own redaction rules. Runtime consumers use typed getters; there is no full unredacted configuration getter.
+The configuration service owns platform-secret redaction, including repository access tokens, for configuration, resource inspection and logs. The services editor preserves `[redacted]` tokens only for the same service ID and exact remote; it never persists that marker as a credential. Omitting a token from a submitted service entry removes it. The UI service supplies descriptor secrets without reading platform credentials to construct its own redaction rules. Runtime consumers use typed getters; there is no full unredacted configuration getter.
 
 Saves and reloads share a serial queue. Before saving, the service checks both the submitted revision and the current disk revision, applies only explicitly changed fields to the disk configuration, reapplies environment overrides, and validates the complete candidate against the reload contract. Stale edits fail without writing. External editors must still coordinate writes: an external file replacement racing after the revision check is outside this in-process serialization guarantee.
 

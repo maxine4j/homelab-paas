@@ -4,6 +4,27 @@ import type { IGitClient } from "./git-client.ts";
 import { GitService } from "./git-service.ts";
 import { GitClientError, GitServiceError } from "./types.ts";
 
+test("credentials reach both descriptor and missing commit fetches", async () => {
+	const { client, service } = fixture();
+	for (const credentials of [{ accessToken: "token" }, { privateKeyPath: "/keys/repo" }]) {
+		const source = {
+			remote: credentials.accessToken ? "https://example.com/repo" : "git@example.com:repo",
+			descriptorPath: "file.yaml",
+			...credentials,
+		};
+		await service.fetchFile("demo", source);
+		expect(client.fetch).toHaveBeenLastCalledWith("/state/git/demo", source.remote, "main", credentials);
+		client.readCommit.mockRejectedValueOnce(new GitClientError());
+		await service.readCommit("demo", source, "a".repeat(40));
+		expect(client.fetchCommit).toHaveBeenLastCalledWith(
+			"/state/git/demo",
+			source.remote,
+			"a".repeat(40),
+			credentials,
+		);
+	}
+});
+
 function fixture() {
 	const client = {
 		initRepo: vi.fn<IGitClient["initRepo"]>().mockResolvedValue(undefined),

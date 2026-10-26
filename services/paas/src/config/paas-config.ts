@@ -127,6 +127,15 @@ export class PaasConfig implements IPaasConfig {
 			const secret = secretFields.has(path);
 			const managedByEnvironment = this.environment[environmentFields[path] ?? ""] !== undefined;
 			const safe = this.sanitize(value);
+			const comparable =
+				path === "services"
+					? Object.fromEntries(
+							Object.entries(current.services).map(([id, source]) => [
+								id,
+								{ ...source, ...(source.accessToken ? { accessToken: "[redacted]" } : {}) },
+							]),
+						)
+					: value;
 			fields.push({
 				path,
 				kind: secret
@@ -145,7 +154,7 @@ export class PaasConfig implements IPaasConfig {
 					|| path === "version"
 					|| path.startsWith("metadata.")
 					|| path.startsWith("ingress.")
-					|| (!secret && JSON.stringify(safe) !== JSON.stringify(value)),
+					|| (!secret && JSON.stringify(safe) !== JSON.stringify(comparable)),
 			});
 		};
 		visit(current, "");
@@ -173,6 +182,29 @@ export class PaasConfig implements IPaasConfig {
 					)
 						throw new ConfigEditError("invalid");
 					seen.add(change.path);
+					if (
+						change.path === "services"
+						&& change.value
+						&& typeof change.value === "object"
+						&& !Array.isArray(change.value)
+					) {
+						const services = structuredClone(change.value);
+						for (const [id, source] of Object.entries(services)) {
+							if (
+								!source
+								|| typeof source !== "object"
+								|| Array.isArray(source)
+								|| source["accessToken"] !== "[redacted]"
+							)
+								continue;
+							const previous = this.requireConfig().services[id];
+							if (!previous?.accessToken || source["remote"] !== previous.remote)
+								throw new ConfigEditError("invalid");
+							source["accessToken"] = previous.accessToken;
+						}
+						candidate["services"] = services;
+						continue;
+					}
 					const parts = change.path.split(".");
 					let parent = candidate;
 					for (const key of parts.slice(0, -1)) parent = parent[key] as Record<string, unknown>;
@@ -202,6 +234,7 @@ export class PaasConfig implements IPaasConfig {
 			current.auth?.github.clientSecret,
 			current.auth?.session.signingKey,
 			current.tls?.dns.credentials.apiToken,
+			...Object.values(current.services).map((source) => source.accessToken),
 			...additionalSecrets,
 		]
 			.filter((entry): entry is string => Boolean(entry))
@@ -335,6 +368,19 @@ const tls = z.strictObject({
 });
 const source = z.strictObject({
 	remote: z.string().min(1),
+	privateKeyPath: z
+		.string()
+		.startsWith("/")
+		// oxlint-disable-next-line no-control-regex -- Reject control characters in credential paths.
+		.regex(/^[^\x00-\x1f\x7f]+$/)
+		.optional(),
+	accessToken: z
+		.string()
+		.min(1)
+		// oxlint-disable-next-line no-control-regex -- Reject control characters in credentials.
+		.regex(/^[^\x00-\x1f\x7f]+$/)
+		.refine((value) => value !== "[redacted]")
+		.optional(),
 	branch: z
 		.string()
 		.min(1)
@@ -369,6 +415,14 @@ export function parseConfig(value: unknown): PlatformConfig {
 	}
 	const services: Record<string, GitFileSource> = {};
 	for (const [serviceId, entry] of Object.entries(result.data.services)) {
+		const ssh =
+			/^ssh:\/\//i.test(entry.remote)
+			|| (/^(?:[^@/:\s]+@)?[^/:\s]+:.+/.test(entry.remote) && !entry.remote.includes("://"));
+		if (
+			(entry.privateKeyPath !== undefined && !ssh)
+			|| (entry.accessToken !== undefined && !/^https:\/\//i.test(entry.remote))
+		)
+			throw new Error("Invalid platform configuration: privateKeyPath requires SSH; accessToken requires HTTPS");
 		const descriptorPath = entry.descriptorPath ?? `${serviceId}.sd.yaml`;
 		if (
 			entry.remote === "local"

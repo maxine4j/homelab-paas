@@ -14,6 +14,18 @@ import { GitClientError } from "./types.ts";
 
 const execute = promisify(execFile);
 const roots: string[] = [];
+
+test("operation environment reaches Git without leaking into subsequent commands", async () => {
+	const { repo, transport } = await fixture();
+	expect(
+		await transport.execute(repo, ["config", "--get", "paas.marker"], {
+			GIT_CONFIG_COUNT: "1",
+			GIT_CONFIG_KEY_0: "paas.marker",
+			GIT_CONFIG_VALUE_0: "private",
+		}),
+	).toBe("private\n");
+	await expect(transport.execute(repo, ["config", "--get", "paas.marker"])).rejects.toThrow();
+});
 afterEach(async () => {
 	await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });

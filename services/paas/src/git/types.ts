@@ -9,7 +9,12 @@ export interface GitFile {
 	content: string;
 }
 
-export interface GitFileSource {
+export interface GitCredentials {
+	privateKeyPath?: string;
+	accessToken?: string;
+}
+
+export interface GitFileSource extends GitCredentials {
 	remote: string;
 	branch?: string;
 	descriptorPath: string;

@@ -4,6 +4,8 @@ This Compose bootstrap starts Envoy and the control plane on one Linux Docker ho
 
 ## Prepare the host
 
+For private service repositories, place SSH deploy keys under `/etc/homelab-paas/keys/` (directory `0700`, files `0600`) and configure each service's `privateKeyPath`, or supply an HTTPS `accessToken`. Arbitrary host key paths work with an explicit control-plane bind mount at the configured path. SSH trusts new host keys automatically and retains them in persistent Git caches. See [private Git repositories](../docs/configuration.md#private-git-repositories).
+
 - Install Docker Engine and the Docker Compose plugin on a `linux/amd64` host, matching the [published images](../docs/development.md#continuous-integration-and-image-publishing). Enable Docker at host boot (on a systemd host: `sudo systemctl enable --now docker`).
 - Reserve public TCP ports 80 and 443 for Envoy and allow them through the host firewall. Do not expose the Docker API, control-plane port 8080, or Envoy admin port 9901. The Compose file publishes only Envoy ingress.
 - Point the base domain and its wildcard at the host, for example `apps.example.com` and `*.apps.example.com`. Configure IPv6 records only if the host accepts IPv6 traffic. DigitalOcean must manage the DNS zone; provide an API token that can discover the zone and create/delete DNS challenge records. The host needs outbound access to Docker registries, Git, GitHub OAuth, DigitalOcean and Let's Encrypt. See [networking and TLS](../docs/networking-and-auth.md).

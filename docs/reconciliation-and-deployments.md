@@ -1,5 +1,7 @@
 # Reconciliation and deployments
 
+Remote descriptor and commit-metadata fetches support optional per-service [Git credentials](configuration.md#private-git-repositories), including live credential changes through configuration reloads.
+
 ## Implemented deployment MVP
 
 The runtime checks configured services at startup and periodically, serializes reconciliation, validates the entire descriptor, and reconciles the [supported web and worker resources](configuration.md#implemented-deployment-mvp). Private ingress requires platform auth/TLS. Unchanged resource specifications keep their containers even if the repository commit changes. Docker labels record cluster, service, resource, source revision, and specification identities. Each poll inspects actual Docker state and recovers stopped or missing containers. Git and descriptor failures leave the working deployment and routes intact. Failures retry with exponential backoff bounded by the configured maximum; another service can still reconcile.

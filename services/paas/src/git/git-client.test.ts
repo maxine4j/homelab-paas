@@ -6,6 +6,29 @@ import { GitClientError } from "./types.ts";
 
 const revision = "a".repeat(40);
 
+test("private fetches use per-operation credentials without putting tokens in arguments", async () => {
+	const { client, transport } = fixture();
+	const remote = "https://example.com/org/repo";
+	await client.fetch("/repo", remote, "main", { accessToken: "secret-token" });
+	const call = transport.execute.mock.calls.at(-1)!;
+	expect(call[1]).toEqual(["fetch", "--depth=1", "--", remote, "refs/heads/main"]);
+	expect(call[2]).toMatchObject({
+		GIT_CONFIG_COUNT: "2",
+		GIT_CONFIG_KEY_0: "credential.helper",
+		GIT_CONFIG_VALUE_0: "",
+		GIT_CONFIG_KEY_1: `http.${remote}.extraHeader`,
+		GIT_CONFIG_VALUE_1: `Authorization: Basic ${Buffer.from("x-access-token:secret-token").toString("base64")}`,
+	});
+	await client.fetchCommit("/repo", remote, revision, { accessToken: "secret-token" });
+	expect(transport.execute.mock.calls.at(-1)?.[2]).toEqual(call[2]);
+	await client.fetch("/repo", "git@example.com:org/repo", "main", { privateKeyPath: "/keys/a ' key" });
+	expect(transport.execute.mock.calls.at(-1)?.[2]?.["GIT_SSH_COMMAND"]).toContain("StrictHostKeyChecking=accept-new");
+	expect(transport.execute.mock.calls.at(-1)?.[2]?.["GIT_SSH_COMMAND"]).toContain("IdentitiesOnly=yes");
+	expect(transport.execute.mock.calls.at(-1)?.[2]?.["GIT_SSH_COMMAND"]).toContain("'/keys/a '\\'' key'");
+	await client.fetch("/repo", "ssh://git@example.com/repo", "main");
+	expect(transport.execute.mock.calls.at(-1)?.[2]?.["GIT_SSH_COMMAND"]).toContain("BatchMode=yes");
+});
+
 test("reads author, author date and full message from an exact commit without email addresses", async () => {
 	const { client, transport } = fixture();
 	transport.execute.mockResolvedValue(
