@@ -59,7 +59,7 @@ export const ResourceConfiguration = ({ config }: { config?: JsonValue }) => {
 	const extra = Object.fromEntries(Object.entries(config).filter(([key]) => !known.has(key)));
 	return (
 		<>
-			<p>Desired descriptor configuration. Environment values and commands are redacted.</p>
+			<p>Desired descriptor configuration. Secrets and commands are redacted.</p>
 			<div className='inspection-grid'>
 				{groups.map(([title, keys]) => {
 					const fields = Object.fromEntries(

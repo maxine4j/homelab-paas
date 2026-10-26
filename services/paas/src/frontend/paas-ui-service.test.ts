@@ -273,7 +273,10 @@ test("joins every desired resource with live containers, retaining resources abs
 	);
 	expect(detail.resources.map((r) => r.resourceId)).toEqual(["app", "db", "old"]);
 	expect(detail.resources.at(1)?.containers).toEqual([]);
-	expect(JSON.stringify(detail)).not.toMatch(/env-canary|unsafe-canary/);
+	expect(detail.descriptor).toMatchObject({
+		resources: { app: { env: [{ name: "PASSWORD", value: "env-canary" }], command: "[redacted]" } },
+	});
+	expect(JSON.stringify(detail)).not.toContain("unsafe-canary");
 	expect((await service.getResource("demo", "app")).containers.at(0)).toMatchObject({
 		running: true,
 		networks: { demo: { address: "172.1.0.2" } },
@@ -283,6 +286,37 @@ test("joins every desired resource with live containers, retaining resources abs
 		content: "hello [redacted]\n",
 		tail: 200,
 	});
+});
+
+test("inspection preserves literal environment values while hiding secrets and commands", async () => {
+	const f = fixture();
+	const env = [
+		{ name: "NODE_ENV", value: "production" },
+		{ name: "LETTER", value: "a" },
+		{ name: "EMPTY", value: "" },
+		{ name: "PASSWORD_LABEL", value: "public-label" },
+		{ name: "TOKEN", secret: true },
+		{ name: "ENDPOINT", value: "https://user:password@example.com" },
+	];
+	f.fetchFile.mockResolvedValue({
+		revision: "new",
+		content: JSON.stringify({ ...descriptor, resources: { app: { ...descriptor.resources.app, env } } }),
+	});
+	const expected = {
+		image: "app:1",
+		command: "[redacted]",
+		env: [
+			...env.slice(0, 4),
+			{ name: "TOKEN", secret: "[redacted]" },
+			{ name: "ENDPOINT", value: "https://[redacted]@example.com" },
+		],
+	};
+	const detail = await f.service.getService("demo");
+	expect(detail.descriptor).toMatchObject({ resources: { app: expected } });
+	expect(detail.resources.at(0)?.config).toMatchObject(expected);
+	const resource = await f.service.getResource("demo", "app");
+	expect(resource.config).toMatchObject(expected);
+	expect(JSON.stringify(resource)).not.toContain("actual-secret-canary");
 });
 
 test("unknown service, resource and container never read unrelated logs", async () => {

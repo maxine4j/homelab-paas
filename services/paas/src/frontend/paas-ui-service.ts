@@ -176,7 +176,7 @@ export class PaasUiService implements IPaasUiService {
 				activeRevisionMetadata: state?.activeRevision ? metadata.get(state.activeRevision) : undefined,
 				descriptorRevisionMetadata: file ? metadata.get(file.revision) : undefined,
 				descriptorStatus: file ? "available" : "unavailable",
-				descriptor: file ? this.config.sanitize(file.descriptor, secrets) : undefined,
+				descriptor: file ? this.config.sanitize(file.descriptor) : undefined,
 				resources: ids.map((resourceId) => ({
 					resourceId,
 					url:
@@ -189,7 +189,7 @@ export class PaasUiService implements IPaasUiService {
 							? this.ingressUrl(serviceId)
 							: undefined,
 					type: resources[resourceId]?.type ?? "unknown",
-					config: resources[resourceId] ? this.config.sanitize(resources[resourceId], secrets) : undefined,
+					config: resources[resourceId] ? this.config.sanitize(resources[resourceId]) : undefined,
 					containers: containers
 						.filter((container) => container.resourceId === resourceId)
 						.map((container) => ({

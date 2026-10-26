@@ -12,7 +12,10 @@ test("configuration presents grouped settings, environment and mounts without hi
 				image: "app:1",
 				replicas: 1,
 				ingress: { port: 8080, public: false },
-				env: [{ name: "TOKEN", secret: "[redacted]" }],
+				env: [
+					{ name: "NODE_ENV", value: "production" },
+					{ name: "TOKEN", secret: "[redacted]" },
+				],
 				volumes: [{ hostPath: "/srv/data", mountPath: "/data", readOnly: true }],
 				limits: { cpus: 0.5, memoryMiB: 512 },
 			}}
@@ -22,6 +25,8 @@ test("configuration presents grouped settings, environment and mounts without hi
 	expect(html).toContain("Networking");
 	expect(html).toContain("Environment");
 	expect(html).toContain("TOKEN");
+	expect(html).toContain("production");
+	expect(html).toContain("Secrets and commands are redacted.");
 	expect(html).toContain("[redacted]");
 	expect(html).toContain("/srv/data");
 	expect(html).toContain("Memory (MiB)");

@@ -91,7 +91,7 @@ export interface UiService extends UiServiceSummary {
 	activeRevisionMetadata?: UiRevisionMetadata;
 	descriptorRevisionMetadata?: UiRevisionMetadata;
 	descriptorStatus: "available" | "unavailable";
-	/** Complete parsed descriptor with credentials, environment values and commands redacted. */
+	/** Complete parsed descriptor with literal environment values visible; credentials and commands redacted. */
 	descriptor?: JsonValue;
 	resources: UiResource[];
 }
