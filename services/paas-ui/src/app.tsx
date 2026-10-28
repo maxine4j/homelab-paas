@@ -43,7 +43,7 @@ export const App = () => {
 	);
 	return (
 		<div className='app-shell'>
-			<aside className='sidebar'>
+			<header className='primary-header'>
 				<a className='brand' href='#/services'>
 					<span className='brand-icon' aria-hidden='true'>
 						H
@@ -60,7 +60,7 @@ export const App = () => {
 						Cluster config
 					</a>
 				</nav>
-			</aside>
+			</header>
 			<div className='workspace'>
 				<header className='topbar'>
 					<nav className='breadcrumbs' aria-label='Breadcrumb'>

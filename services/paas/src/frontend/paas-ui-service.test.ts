@@ -3,6 +3,7 @@ import { expect, test, vi } from "vitest";
 import { parseConfig, decodeDescriptorYaml } from "../config/paas-config.ts";
 import { testConfig } from "../util/test/config.ts";
 import { captureLogs } from "../util/test/logs.ts";
+import { parseYaml } from "../util/yaml.ts";
 import { PaasUiService } from "./paas-ui-service.ts";
 
 const descriptor = {
@@ -110,6 +111,16 @@ test("service detail supplies YAML of the sanitized descriptor", async () => {
 	expect(detail.descriptorYaml).toContain("serviceId: demo");
 	expect(detail.descriptorYaml).toContain("image: app:1");
 	expect(detail.descriptorYaml).not.toContain("--password=env-canary");
+});
+
+test("resource supplies YAML matching its sanitized configuration and omits it for observed-only resources", async () => {
+	const f = fixture();
+	const resource = await f.service.getResource("demo", "app");
+	expect(resource).toHaveProperty("configYaml", expect.stringContaining("image: app:1"));
+	const yaml = resource.configYaml!;
+	expect(yaml).toContain("value: env-canary");
+	expect(yaml).not.toContain("--password=env-canary");
+	expect(await f.service.getResource("demo", "old")).not.toHaveProperty("configYaml", expect.anything());
 });
 
 test("service list includes redacted metadata for active and desired commits without Docker", async () => {
@@ -378,6 +389,7 @@ test("inspection preserves literal environment values while hiding secrets and c
 	expect(detail.resources.at(0)?.config).toMatchObject(expected);
 	const resource = await f.service.getResource("demo", "app");
 	expect(resource.config).toMatchObject(expected);
+	expect(parseYaml(resource.configYaml!, "resource.yaml")).toEqual(resource.config);
 	expect(JSON.stringify(resource)).not.toContain("actual-secret-canary");
 });
 

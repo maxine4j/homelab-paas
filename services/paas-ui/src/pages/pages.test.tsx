@@ -389,6 +389,7 @@ test("resource inspection renders configuration, state and escaped log output", 
 		resourceId: "app",
 		type: "web",
 		config: { image: "app:1" },
+		configYaml: "image: app:1\n",
 		containers: [{ id: "c", resourceId: "app", state: "running", imageId: "sha256:a", revision: "rev" }],
 	};
 	for (const tab of ["config", "state", "logs"] as const) {
@@ -402,7 +403,10 @@ test("resource inspection renders configuration, state and escaped log output", 
 			/>,
 		);
 		expect(html).toContain('aria-current="page"');
-		if (tab === "config") expect(html).toContain("app:1");
+		if (tab === "config") {
+			expect(html).toContain("image: app:1\n");
+			expect(html).not.toContain("Descriptor unavailable.");
+		}
 		if (tab === "state") expect(html).toContain("running");
 		if (tab === "logs") {
 			expect(html).toContain("&lt;script&gt;");

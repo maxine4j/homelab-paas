@@ -50,7 +50,7 @@ export const ResourcePage = ({
 					</a>
 				))}
 			</nav>
-			{tab === "config" && <ResourceConfiguration config={resource.config} />}
+			{tab === "config" && <ResourceConfiguration config={resource.config} configYaml={resource.configYaml} />}
 			{tab === "state" && (
 				<ResourceState
 					serviceId={serviceId}

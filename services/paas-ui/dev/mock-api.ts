@@ -8,6 +8,34 @@ const resources: UiResource[] = [
 		type: "web",
 		url: "https://web.paperless.example.test",
 		primaryUrl: "https://paperless.example.test",
+		configYaml: `type: web
+image: ghcr.io/paperless-ngx/paperless-ngx:2.20
+replicas: 1
+rolloutStrategy: recreate
+ingress:
+  port: 8000
+  public: false
+primary: true
+healthcheckUrl: /health
+env:
+  - name: PAPERLESS_TIME_ZONE
+    value: "[redacted]"
+  - name: PAPERLESS_SECRET_KEY
+    secret: "[redacted]"
+volumes:
+  - hostPath: /srv/paperless/data
+    mountPath: /usr/src/paperless/data
+    readOnly: false
+  - hostPath: /srv/paperless/consume
+    mountPath: /usr/src/paperless/consume
+    readOnly: false
+limits:
+  cpus: 2
+  memoryMiB: 2048
+egress:
+  - database
+  - broker
+`,
 		config: {
 			type: "web",
 			image: "ghcr.io/paperless-ngx/paperless-ngx:2.20",
@@ -42,6 +70,7 @@ const resources: UiResource[] = [
 	{
 		resourceId: "database",
 		type: "postgres",
+		configYaml: "type: postgres\nimage: postgres:17\nlimits:\n  cpus: 1\n  memoryMiB: 1024\n",
 		config: { type: "postgres", image: "postgres:17", limits: { cpus: 1, memoryMiB: 1024 } },
 		containers: [
 			{
@@ -58,6 +87,7 @@ const resources: UiResource[] = [
 	{
 		resourceId: "broker",
 		type: "rabbitmq",
+		configYaml: "type: rabbitmq\nimage: rabbitmq:4\nlimits:\n  memoryMiB: 512\n",
 		config: { type: "rabbitmq", image: "rabbitmq:4", limits: { memoryMiB: 512 } },
 		containers: [
 			{

@@ -81,6 +81,8 @@ export interface UiResource {
 	url?: string;
 	primaryUrl?: string;
 	config?: JsonValue;
+	/** YAML rendering of the same sanitized resource configuration. */
+	configYaml?: string;
 	containers: UiContainer[];
 }
 

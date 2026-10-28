@@ -216,6 +216,9 @@ export class PaasUiService implements IPaasUiService {
 							: undefined,
 					type: resources[resourceId]?.type ?? "unknown",
 					config: resources[resourceId] ? this.config.sanitize(resources[resourceId]) : undefined,
+					configYaml: resources[resourceId]
+						? stringifyYaml(this.config.sanitize(resources[resourceId]))
+						: undefined,
 					containers: containers
 						.filter((container) => container.resourceId === resourceId)
 						.map((container) => ({

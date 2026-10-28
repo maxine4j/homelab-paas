@@ -4,13 +4,14 @@ import { expect, test } from "vitest";
 import { ResourceConfiguration } from "./resource-configuration.tsx";
 import { ResourceState } from "./resource-state.tsx";
 
-test("configuration presents grouped settings, environment and mounts without hiding the JSON disclosure", () => {
+test("configuration presents image, deployment, inline ingress, environment rows and a collapsed YAML descriptor", () => {
 	const html = renderToStaticMarkup(
 		<ResourceConfiguration
 			config={{
 				type: "web",
 				image: "app:1",
 				replicas: 1,
+				rolloutStrategy: "surge",
 				ingress: { port: 8080, public: false },
 				env: [
 					{ name: "NODE_ENV", value: "production" },
@@ -19,18 +20,25 @@ test("configuration presents grouped settings, environment and mounts without hi
 				volumes: [{ hostPath: "/srv/data", mountPath: "/data", readOnly: true }],
 				limits: { cpus: 0.5, memoryMiB: 512 },
 			}}
+			configYaml={"type: web\nimage: app:1\n"}
 		/>,
 	);
-	expect(html).toContain("Runtime");
+	expect(html).toContain("Image");
+	expect(html).toContain("Deployment strategy");
+	expect(html).toContain("surge");
 	expect(html).toContain("Networking");
 	expect(html).toContain("Environment");
-	expect(html).toContain("TOKEN");
-	expect(html).toContain("production");
+	expect(html).toContain("NODE_ENV: production");
+	expect(html).toMatch(/TOKEN: <span class="secret-badge"[^>]*>.*<svg[^>]*.*&lt;secret&gt;<\/span>/);
+	expect(html).toMatch(
+		/<dl class="[^"]*inline-settings[^"]*"><div><dt>Port<\/dt><dd>.*8080.*<\/dd><\/div><div><dt>Public<\/dt><dd>.*No.*<\/dd><\/div><\/dl>/,
+	);
 	expect(html).toContain("Secrets and commands are redacted.");
-	expect(html).toContain("[redacted]");
 	expect(html).toContain("/srv/data");
 	expect(html).toContain("Memory (MiB)");
-	expect(html).toMatch(/<details[^>]*><summary>Configuration JSON/);
+	expect(html).toMatch(/<details[^>]*><summary>Descriptor YAML/);
+	expect(html).toContain('aria-label="Resource descriptor YAML"');
+	expect(html).toContain("image: app:1\n");
 	expect(html).not.toMatch(/<details[^>]* open/);
 });
 

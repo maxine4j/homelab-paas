@@ -123,16 +123,18 @@ button:disabled {
 	margin-top: 1.5rem;
 }
 .app-shell {
-	display: grid;
-	grid-template-columns: 232px minmax(0, 1fr);
-	min-height: 100dvh;
-}
-.sidebar {
 	display: flex;
 	flex-direction: column;
-	padding: 32px 20px;
+	min-height: 100dvh;
+}
+.primary-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 24px;
+	padding: 16px 40px;
 	background: #12161d;
-	border-right: 1px solid #282e38;
+	border-bottom: 1px solid #282e38;
 }
 .brand {
 	display: flex;
@@ -159,12 +161,11 @@ button:disabled {
 	font-weight: 400;
 	letter-spacing: 0.04em;
 }
-.sidebar nav {
-	display: grid;
+.primary-header nav {
+	display: flex;
 	gap: 8px;
-	margin-top: 48px;
 }
-.sidebar nav a {
+.primary-header nav a {
 	display: flex;
 	justify-content: space-between;
 	padding: 12px;
@@ -173,7 +174,7 @@ button:disabled {
 	min-height: 44px;
 	font-size: 0.9rem;
 }
-.sidebar nav a[aria-current="page"] {
+.primary-header nav a[aria-current="page"] {
 	color: #c6d7ff;
 	background: #243047;
 }
@@ -200,6 +201,7 @@ button:disabled {
 	overflow-wrap: anywhere;
 }
 .workspace {
+	flex: 1;
 	min-width: 0;
 	display: flex;
 	flex-direction: column;
@@ -582,6 +584,64 @@ dd {
 .setting-list > div + div {
 	border-top: 1px solid #364050;
 }
+.resource-configuration {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 16px;
+}
+.resource-configuration .inspection-panel {
+	padding: 20px;
+}
+.resource-configuration .settings {
+	margin: 0;
+}
+.inline-settings {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 24px;
+}
+.inline-settings > div {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.resource-configuration .settings .settings {
+	margin-top: 0;
+	padding-left: 0;
+	border-left: 0;
+}
+.resource-configuration .settings .settings > div {
+	border-top: 0;
+	padding: 0;
+}
+.environment-panel {
+	grid-column: 1 / -1;
+}
+.environment-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: 0.85rem;
+	line-height: 2;
+}
+.environment-list li {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.secret-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0 8px;
+	border: 1px solid #66527e;
+	border-radius: 6px;
+	background: #30253e;
+	color: #ddbbff;
+	font-size: 0.8rem;
+	vertical-align: middle;
+}
+.secret-badge svg {
+	flex-shrink: 0;
+}
 .container-list {
 	display: grid;
 	gap: 20px;
@@ -687,11 +747,11 @@ footer {
 	font-size: 0.7rem;
 }
 @media (max-width: 1000px) {
-	.app-shell {
-		grid-template-columns: 185px minmax(0, 1fr);
+	.resource-configuration {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
-	.sidebar {
-		padding: 24px 14px;
+	.primary-header {
+		padding: 16px 24px;
 	}
 	main {
 		padding: 32px 24px 48px;
@@ -706,12 +766,12 @@ footer {
 	}
 }
 @media (max-width: 700px) {
-	.app-shell {
-		display: block;
+	.resource-configuration {
+		grid-template-columns: minmax(0, 1fr);
 	}
-	.sidebar {
-		border-right: 0;
-		border-bottom: 1px solid #282e38;
+	.primary-header {
+		flex-wrap: wrap;
+		gap: 12px;
 		padding: 16px 20px;
 	}
 	.brand {
@@ -720,14 +780,11 @@ footer {
 	.brand-subtitle {
 		font-size: 0.6rem;
 	}
-	.sidebar nav {
-		display: flex;
-		margin-top: 18px;
-		gap: 8px;
+	.primary-header nav {
+		flex-wrap: wrap;
 	}
-	.sidebar nav a {
-		gap: 20px;
-		flex: 1;
+	.primary-header nav a {
+		padding: 12px;
 	}
 	main {
 		padding: 28px 20px 40px;
