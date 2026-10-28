@@ -18,7 +18,6 @@ import { NodeEnvoyTransport } from "./envoy/envoy-transport.ts";
 import { createFrontendRouter } from "./frontend/frontend-router.ts";
 import { FrontendService } from "./frontend/frontend-service.ts";
 import { DirectoryUiFiles } from "./frontend/frontend-store.ts";
-import { PaasUiGitCache } from "./frontend/paas-ui-git-cache.ts";
 import { createPaasUiRouter } from "./frontend/paas-ui-router.ts";
 import { PaasUiService } from "./frontend/paas-ui-service.ts";
 import { GitClient } from "./git/git-client.ts";
@@ -177,10 +176,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const ui = createPaasUiRouter(
 		new PaasUiService(
 			config,
-			new PaasUiGitCache(
-				new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/ui-git`),
-				Date.now,
-			),
+			new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/ui-git`),
 			decodeDescriptorYaml,
 			docker,
 			store,
