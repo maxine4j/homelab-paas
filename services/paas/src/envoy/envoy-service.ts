@@ -83,10 +83,17 @@ export class EnvoyService implements IEnvoyService {
 										"@type":
 											"type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
 										stat_prefix: "http",
+										upgrade_configs: [{ upgrade_type: "websocket", enabled: false }],
 										route_config: {
 											name: "services",
 											virtual_hosts: [
-												virtualHost("paas", ingress.baseDomain, "paas"),
+												{
+													...virtualHost("paas", ingress.baseDomain, "paas"),
+													routes: [
+														this.liveRoute(),
+														{ match: { prefix: "/" }, route: { cluster: "paas" } },
+													],
+												},
 												...entries.map(([id, endpoint]) => this.resourceHost(id, endpoint)),
 											],
 										},
@@ -117,6 +124,18 @@ export class EnvoyService implements IEnvoyService {
 			host.domains.push(alias, `${alias}:*`);
 		}
 		return host;
+	}
+
+	private liveRoute() {
+		return {
+			match: { path: "/api/ui/live" },
+			route: {
+				cluster: "paas",
+				timeout: "0s",
+				idle_timeout: "0s",
+				upgrade_configs: [{ upgrade_type: "websocket", enabled: true }],
+			},
+		};
 	}
 
 	private secureListeners(entries: [string, Endpoint][]) {
@@ -165,6 +184,7 @@ export class EnvoyService implements IEnvoyService {
 				"@type":
 					"type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
 				stat_prefix: name,
+				upgrade_configs: [{ upgrade_type: "websocket", enabled: false }],
 				route_config: { name, virtual_hosts: virtualHosts },
 				http_filters: filters,
 			},
@@ -231,6 +251,7 @@ export class EnvoyService implements IEnvoyService {
 									{
 										...virtualHost("management", ingress.baseDomain, "paas"),
 										routes: [
+											this.liveRoute(),
 											{ match: { prefix: "/api/ui/" }, route: { cluster: "paas" } },
 											...["/api/", "/auth/", "/oauth/", "/health"].map((prefix) => ({
 												match: { prefix },

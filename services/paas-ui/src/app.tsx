@@ -157,7 +157,13 @@ export const App = () => {
 					)}
 				</main>
 				<footer>
-					<span>Auto-refresh 5s</span>
+					<span aria-live='polite'>
+						{import.meta.env.MODE === "mock"
+							? "Mock snapshots"
+							: snapshot.connected || events.connected
+								? "Live · connected"
+								: "Live · reconnecting…"}
+					</span>
 				</footer>
 			</div>
 		</div>

@@ -17,7 +17,7 @@ export interface PlatformConfig {
 		acme: { email: string };
 		dns: { provider: "digitalocean"; credentials: { apiToken: string } };
 	};
-	git: { pollIntervalSeconds: number; operationTimeoutSeconds: number; fetchIntervalSeconds?: number };
+	git: { pollIntervalSeconds: number; operationTimeoutSeconds: number };
 	reconciliation: { retryBackoffSeconds: number; maxRetryBackoffSeconds: number };
 	services: Record<string, GitFileSource>;
 }

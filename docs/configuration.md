@@ -24,7 +24,9 @@ At startup and on reload, supplied environment variables override the correspond
 
 Unset variables preserve YAML values; empty overrides fail validation when their section is configured. Environment credentials alone do not enable authentication or TLS. The YAML must still contain the corresponding sections, GitHub allowlist and session settings. Keep local credentials in the ignored Compose `.env` file; see [development](development.md#local-container-environment).
 
-Platform configuration contains `version: 1`, `metadata.clusterId`, `ingress.baseDomain`, optional `ingress.httpPort` (default 80), `git`, `reconciliation`, and `services`. The `auth` and `tls` sections shown below are optional together; supplying only one fails startup. With both enabled, `ingress.httpsPort` defaults to 443 and HTTP redirects to HTTPS. HTTP and HTTPS ports must differ. Without auth/TLS, `httpsPort` is rejected and public HTTP remains available for local development. Polling, operation timeout, and retry bounds are positive integer seconds. `git.fetchIntervalSeconds` is optional and defaults to `300` (five minutes); it controls periodic remote refresh independently of reconciliation. The existing required `git.pollIntervalSeconds` retains the health, secret and retry reconciliation cadence for compatibility. Existing configuration therefore keeps its reconciliation frequency while remote fetches move to the five-minute default. Both intervals apply live after configuration reload.
+Platform configuration contains `version: 1`, `metadata.clusterId`, `ingress.baseDomain`, optional `ingress.httpPort` (default 80), `git`, `reconciliation`, and `services`. The `auth` and `tls` sections shown below are optional together; supplying only one fails startup. With both enabled, `ingress.httpsPort` defaults to 443 and HTTP redirects to HTTPS. HTTP and HTTPS ports must differ. Without auth/TLS, `httpsPort` is rejected and public HTTP remains available for local development. Polling, operation timeout, and retry bounds are positive integer seconds. `git.pollIntervalSeconds` is the single configurable Git refresh interval and defaults to `300` (five minutes). It applies live after configuration reload. Health, secret changes and deployment retries run independently every five seconds, a platform-owned cadence.
+
+Migration: the temporary `git.fetchIntervalSeconds` field is removed and rejected. Remove it from configurations that adopted it, and put the desired remote fetch interval in `git.pollIntervalSeconds`. Existing explicit `pollIntervalSeconds` values remain unchanged; operators can raise former short health-poll values to `300` to reduce Git traffic. There is no configurable health interval.
 
 GitHub client ID, client secret, and a nonempty username allowlist are required when authentication is enabled. Username matching is case-insensitive. `AuthService` derives the callback as `https://auth.{baseDomain}/auth/callback`, including `:{httpsPort}` for a nonstandard HTTPS port; `callbackUrl` is not a configurable field. Register this derived URL in the GitHub OAuth application. The service ID `auth` is reserved in this mode. Session issuer, audience, signing key (at least 32 characters), and positive integer lifetime in seconds are required. TLS requires an ACME email and DigitalOcean API token; provider selection is fixed to `digitalocean`. Certificate paths, production ACME directory, and renewal timing are platform-owned; see [TLS](networking-and-auth.md#tls).
 
@@ -40,8 +42,7 @@ ingress:
     baseDomain: localhost
     httpPort: 80
 git:
-    pollIntervalSeconds: 5
-    fetchIntervalSeconds: 300
+    pollIntervalSeconds: 300
     operationTimeoutSeconds: 60
 reconciliation:
     retryBackoffSeconds: 5
@@ -277,8 +278,7 @@ auth:
         ttlSeconds: 43200
 
 git:
-    pollIntervalSeconds: 120
-    fetchIntervalSeconds: 300
+    pollIntervalSeconds: 300
     operationTimeoutSeconds: 60
 
 reconciliation:

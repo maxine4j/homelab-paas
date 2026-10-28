@@ -1,7 +1,52 @@
 import type { JsonValue } from "@homelab-paas/shared-contracts";
 import { expect, test, vi } from "vitest";
 
+import { ChangeBus } from "../events/change-bus.ts";
 import { createTestPaasConfig, testConfigValue } from "../util/test/config.ts";
+import { PaasConfig } from "./paas-config.ts";
+
+test("publishes validated configuration changes and avoids restarting live streams for unchanged reloads", async () => {
+	const changes = new ChangeBus();
+	const receive = vi.fn();
+	changes.subscribe(receive);
+	let value: unknown = testConfigValue();
+	let revision = "r1";
+	const config = new PaasConfig(
+		{
+			read: async () => ({ value, revision }),
+			write: async (next) => {
+				value = next;
+				revision = "saved";
+				return { value, revision };
+			},
+		},
+		{},
+		changes,
+	);
+	await config.load();
+	await config.reload();
+	expect(receive).toHaveBeenCalledTimes(1);
+	await config.updateConfig({ revision, changes: [{ path: "git.pollIntervalSeconds", value: 6 }] });
+	expect(receive).toHaveBeenCalledTimes(2);
+	value = { ...testConfigValue(), services: { demo: { remote: "https://example.com/repo" } } };
+	revision = "external";
+	await config.reload();
+	expect(receive).toHaveBeenCalledTimes(3);
+	value = {};
+	revision = "invalid";
+	await config.reload();
+	expect(receive).toHaveBeenCalledTimes(3);
+});
+
+test("completed configuration/log redaction masks URL credentials before overlapping known secrets change URL syntax", async () => {
+	const config = createTestPaasConfig(async () => JSON.stringify(testConfigValue()));
+	await config.load();
+	expect(config.redact("https://alice:password@host/path\n", ["http"])).not.toContain("password");
+	expect(config.redact("plain ending h", ["http"])).toBe("plain ending h");
+	expect(config.redact("http://alpha:p@ss@host/path?q=public@value")).toBe(
+		"http://[redacted]@host/path?q=public@value",
+	);
+});
 
 test("service token edits preserve redacted tokens, support replacement and removal, and remain editable", async () => {
 	const f = await fixture();

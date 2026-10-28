@@ -1,6 +1,7 @@
 import type { ServiceDescriptor, WebResource, WorkerResource, UiServiceEvent } from "@homelab-paas/shared-contracts";
 
 import type { IPaasConfig } from "../config/paas-config.ts";
+import type { IChangeBus } from "../events/change-bus.ts";
 import type { IGitService } from "../git/git-service.ts";
 import type { GitFileSource } from "../git/types.ts";
 import { createLogger } from "../util/logger.ts";
@@ -28,6 +29,7 @@ export class ReconcilerService implements IReconcilerService {
 		private readonly environment: IEnvironmentResolver,
 		private readonly worker: IWorkerResourceReconciler,
 		private readonly events: IServiceEventStore,
+		private readonly changes?: IChangeBus,
 	) {}
 
 	reconcile(): Promise<void> {
@@ -86,11 +88,24 @@ export class ReconcilerService implements IReconcilerService {
 			await this.state.write(serviceId, {
 				desiredRevision,
 				activeRevision: previous?.activeRevision,
-				phase: "deploying",
+				phase:
+					previous?.phase === "ready" && previous.activeRevision === desiredRevision ? "ready" : "deploying",
 				deploymentStartedAt,
 				failures: previous?.desiredRevision === desiredRevision ? previous.failures : undefined,
 				retryAt: previous?.retryAt,
 			});
+			this.changes?.publish({ serviceId });
+			if (
+				(previous?.activeRevision !== desiredRevision && previous?.deploymentStartedAt === undefined)
+				|| previous?.desiredRevision !== desiredRevision
+			)
+				await this.recordEvent(serviceId, {
+					timestamp: this.now(),
+					level: "info",
+					event: "deployment.started",
+					message: serviceEventMessages.started,
+					revision: desiredRevision,
+				});
 			for (const [id, resource] of resources) {
 				resourceId = id;
 				if (resource.type === "web") {
@@ -104,6 +119,7 @@ export class ReconcilerService implements IReconcilerService {
 			resourceId = undefined;
 			message = serviceEventMessages.state;
 			await this.state.write(serviceId, { desiredRevision, activeRevision: desiredRevision, phase: "ready" });
+			this.changes?.publish({ serviceId });
 			const recovered = (previous?.failures ?? 0) > 0 || previous?.phase === "failed";
 			if (recovered || previous?.activeRevision !== desiredRevision)
 				await this.recordEvent(serviceId, {
@@ -162,12 +178,15 @@ export class ReconcilerService implements IReconcilerService {
 				failures,
 				retryAt,
 			});
+			this.changes?.publish({ serviceId });
 		}
 	}
 
 	private async recordEvent(serviceId: string, event: UiServiceEvent): Promise<void> {
+		this.changes?.publish({ serviceId, event });
 		try {
 			await this.events.append(serviceId, event);
+			this.changes?.publish({ serviceId });
 		} catch (error) {
 			this.log.error(
 				{ event: "service-events.append-failed", serviceId, err: error },

@@ -1,7 +1,10 @@
 import type { ResourceDevice, ResourceHostPort, ResourceLimits, ResourceVolume } from "@homelab-paas/shared-contracts";
 import { z } from "zod";
 
+import { DockerLogDecoder } from "./docker-log-decoder.ts";
 import type { IDockerTransport } from "./docker-transport.ts";
+import { DockerClientError } from "./errors.ts";
+export { DockerClientError } from "./errors.ts";
 import type { DockerContainer, DockerContainerDetails, DockerNetwork, Labels } from "./types.ts";
 
 export interface CreateContainerOptions {
@@ -32,7 +35,7 @@ export interface IDockerClient {
 	removeNetwork(id: string): Promise<void>;
 	listContainers(options?: { all?: boolean; labels?: Labels }): Promise<DockerContainer[]>;
 	inspectContainer(id: string): Promise<DockerContainerDetails | null>;
-	/** Returns the last 200 timestamped stdout/stderr lines. No streaming. */
+	/** Returns a completed tail; live follows use IDockerLogClient. */
 	readContainerLogs(id: string): Promise<string>;
 	/** Bind mounts use shared SELinux labels; Docker creates missing source directories on start. */
 	createContainer(options: CreateContainerOptions): Promise<string>;
@@ -42,16 +45,6 @@ export interface IDockerClient {
 	removeContainer(id: string): Promise<void>;
 	inspectImage(reference: string): Promise<{ id: string } | null>;
 	pullImage(reference: string): Promise<void>;
-}
-
-export class DockerClientError extends Error {
-	override readonly name = "DockerClientError";
-	constructor(
-		public readonly kind: "not-found" | "conflict" | "unavailable" | "invalid-response",
-		options?: ErrorOptions,
-	) {
-		super(`Docker operation failed (${kind})`, options);
-	}
 }
 
 /** Docker Engine adapter; naming, ownership and deployment policy belong to callers. */
@@ -98,26 +91,8 @@ export class DockerClient implements IDockerClient {
 			[200],
 		);
 		if (!response.bytes) throw new DockerClientError("invalid-response");
-		const bytes = Buffer.from(response.bytes);
-		if (bytes.length === 0) return "";
-		// TTY containers use plain output; other containers use Docker's 8-byte framing.
-		if (bytes.at(0) !== 1 && bytes.at(0) !== 2) return bytes.toString("utf8");
-		const chunks: Buffer[] = [];
-		let offset = 0;
-		while (offset < bytes.length) {
-			if (
-				offset + 8 > bytes.length
-				|| ![1, 2].includes(bytes.at(offset) ?? 0)
-				|| bytes.subarray(offset + 1, offset + 4).some((value) => value !== 0)
-			)
-				throw new DockerClientError("invalid-response");
-			const length = bytes.readUInt32BE(offset + 4);
-			offset += 8;
-			if (offset + length > bytes.length) throw new DockerClientError("invalid-response");
-			chunks.push(bytes.subarray(offset, offset + length));
-			offset += length;
-		}
-		return Buffer.concat(chunks).toString("utf8");
+		const decoder = new DockerLogDecoder(16 * 1024 * 1024);
+		return decoder.push(response.bytes) + decoder.end();
 	}
 
 	async inspectNetwork(id: string): Promise<DockerNetwork | null> {

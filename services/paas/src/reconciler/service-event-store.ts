@@ -55,6 +55,7 @@ const eventSchema = z.strictObject({
 	timestamp: z.number().finite().nonnegative(),
 	level: z.enum(["info", "error"]),
 	event: z.enum([
+		"deployment.started",
 		"reconciliation.failed",
 		"reconciliation.state-failed",
 		"reconciliation.recovered",

@@ -24,8 +24,7 @@ tls:
         credentials:
             apiToken: replace-with-digitalocean-api-token
 git:
-    pollIntervalSeconds: 120
-    fetchIntervalSeconds: 300
+    pollIntervalSeconds: 300
     operationTimeoutSeconds: 60
 reconciliation:
     retryBackoffSeconds: 10

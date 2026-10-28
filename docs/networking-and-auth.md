@@ -1,5 +1,7 @@
 # Networking and authentication
 
+Management WebSocket upgrades are restricted to `/api/ui/live`, preserve the existing session authorization/cookies and disable route request/idle timeouts for long-lived streams. Workload routes do not enable upgrades. The protocol, direct-upgrade protection and open-session revalidation are defined in [live management subscriptions](management-ui.md#live-subscriptions).
+
 The [deployment runtime](configuration.md#implemented-deployment-mvp) supports public HTTP for local development and authenticated HTTPS when auth/TLS are configured. The internal listener and inter-service discovery remain deferred. The control plane and Envoy attach to each service's dedicated Docker network. Workloads publish no host ports by default; explicit [host ports](configuration.md#host-ports) connect directly to web or worker applications outside Envoy's authentication, TLS and readiness controls. Bootstrap containers must carry `homelab-paas.cluster={clusterId}` and `homelab-paas.role=control-plane` or `envoy` labels so the control plane can discover them. Envoy loads generated filesystem xDS from the shared platform state directory. Its administration/configuration interfaces have no published ports. Later sections also describe intended capabilities beyond this runtime.
 
 ## Networking

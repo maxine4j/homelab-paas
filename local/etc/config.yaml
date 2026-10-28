@@ -25,8 +25,7 @@ tls:
         credentials:
             apiToken: ""
 git:
-    pollIntervalSeconds: 5
-    fetchIntervalSeconds: 300
+    pollIntervalSeconds: 300
     operationTimeoutSeconds: 60
 reconciliation:
     retryBackoffSeconds: 5

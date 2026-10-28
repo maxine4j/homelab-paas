@@ -72,6 +72,7 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 		expect(await paas.checkpoints.read("demo")).toMatchObject({ phase: "ready", activeRevision: first });
 		expect(await paas.events.list("demo")).toEqual([
 			expect.objectContaining({ event: "deployment.succeeded", revision: first }),
+			expect.objectContaining({ event: "deployment.started", revision: first }),
 		]);
 		const original = [...docker.containers.values()].find(
 			(c) => c.Config.Labels["homelab-paas.service"] === "demo",

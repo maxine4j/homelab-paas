@@ -2,6 +2,7 @@ import type { UiServiceEvent } from "@homelab-paas/shared-contracts";
 import { expect, test, vi } from "vitest";
 
 import { decodeDescriptorYaml } from "../config/paas-config.ts";
+import { ChangeBus } from "../events/change-bus.ts";
 import type { GitFile } from "../git/types.ts";
 import { testConfig } from "../util/test/config.ts";
 import { captureLogs } from "../util/test/logs.ts";
@@ -24,6 +25,7 @@ function fixture() {
 	const reconcileWorker = vi.fn(async () => {});
 	const readSecrets = vi.fn(async (): Promise<string | undefined> => undefined);
 	const appendEvent = vi.fn(async (_serviceId: string, _event: UiServiceEvent) => {});
+	const bus = new ChangeBus();
 	const resolveHostPath = vi.fn(async (): Promise<string | undefined> => undefined);
 	const deps = {
 		services: { demo: { remote: "local", descriptorPath: "/repo/demo.sd.yaml" } },
@@ -56,9 +58,11 @@ function fixture() {
 			new EnvironmentResolver("/etc/homelab-paas/env", readSecrets, { resolve: resolveHostPath }),
 			{ type: "worker", lifecycle: "deployment", reconcile: reconcileWorker },
 			{ append: appendEvent, list: async () => [] },
+			bus,
 		);
 	return {
 		deps,
+		bus,
 		states,
 		fetchFile,
 		reconcile,
@@ -73,6 +77,27 @@ function fixture() {
 		},
 	};
 }
+
+test("publishes deployment start before readiness waits; unchanged health passes do not claim another deployment", async () => {
+	const f = fixture();
+	const changes: unknown[] = [];
+	let startedBeforeReadiness = false;
+	f.bus.subscribe((change) => changes.push(change));
+	f.reconcile.mockImplementationOnce(async () => {
+		startedBeforeReadiness = changes.some(
+			(change) => (change as { event?: UiServiceEvent }).event?.event === "deployment.started",
+		);
+	});
+	await f.service.reconcile();
+	expect(startedBeforeReadiness).toBe(true);
+	const started = changes.filter(
+		(change) => (change as { event?: UiServiceEvent }).event?.event === "deployment.started",
+	).length;
+	await f.service.reconcile();
+	expect(
+		changes.filter((change) => (change as { event?: UiServiceEvent }).event?.event === "deployment.started"),
+	).toHaveLength(started);
+});
 
 test("deploys web and worker tags from each fetched descriptor commit", async () => {
 	const f = fixture();
@@ -208,12 +233,13 @@ test.each(["fetch", "descriptor", "capabilities", "secrets", "web", "worker"] as
 				retryAt: 1000,
 			}),
 		);
-		const [, failure] = f.appendEvent.mock.calls.at(0) ?? [];
+		const [, failure] = f.appendEvent.mock.calls.find(([, event]) => event.event === "reconciliation.failed") ?? [];
 		expect(failure?.message).toBe(serviceEventMessages[stage]);
 		expect(JSON.stringify(failure)).not.toContain("raw-secret");
 		if (["secrets", "web", "worker"].includes(stage)) expect(failure).toMatchObject({ resourceId: "app" });
+		const callsBeforeRetry = f.appendEvent.mock.calls.length;
 		await f.service.reconcile();
-		expect(f.appendEvent).toHaveBeenCalledTimes(1);
+		expect(f.appendEvent).toHaveBeenCalledTimes(callsBeforeRetry);
 		f.advance(1000);
 		await f.service.reconcile();
 		expect(f.appendEvent).toHaveBeenLastCalledWith(

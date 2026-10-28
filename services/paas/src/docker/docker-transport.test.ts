@@ -8,6 +8,7 @@ import { expect, test } from "vitest";
 import { mkdtemp, rm } from "../util/file.ts";
 import { sleep } from "../util/sleep.ts";
 import { DockerClient } from "./docker-client.ts";
+import { DockerLogClient } from "./docker-log-client.ts";
 import { NodeDockerTransport } from "./docker-transport.ts";
 
 test("uses the injected deadline and cancels it when the request closes", async () => {
@@ -27,6 +28,58 @@ test("uses the injected deadline and cancels it when the request closes", async 
 	if (!signal) throw new Error("Deadline cancellation signal was not supplied");
 	if (!signal.aborted) await once(signal, "abort");
 	expect(signal.aborted).toBe(true);
+});
+
+test("follows a real Unix-socket response and abort closes the underlying Engine connection", async () => {
+	let closed: Promise<unknown> = Promise.resolve();
+	let path: string | undefined;
+	await withServer(
+		(req, res) => {
+			path = req.url;
+			closed = once(res, "close");
+			res.write("live line\n");
+		},
+		async (socketPath) => {
+			const controller = new AbortController();
+			const client = new DockerLogClient(
+				new NodeDockerTransport({ socketPath, timeoutMs: 1000, maxResponseBytes: 1024 }, sleep),
+			);
+			const output: string[] = [];
+			await client.follow(
+				"container",
+				(text) => {
+					output.push(text);
+					controller.abort();
+				},
+				controller.signal,
+			);
+			await closed;
+			expect(output).toEqual(["live line\n"]);
+		},
+	);
+	expect(path).toBe("/v1.48/containers/container/logs?stdout=true&stderr=true&timestamps=true&tail=200&follow=true");
+});
+
+test("stream header deadlines, HTTP failures and incomplete bodies retain safe client failures", async () => {
+	for (const mode of ["deadline", "status", "disconnect"] as const) {
+		await withServer(
+			(_req, res) => {
+				if (mode === "status") res.writeHead(500).end("private Engine error");
+				if (mode === "disconnect") {
+					res.write("some output");
+					res.destroy(new Error("private transport cause"));
+				}
+			},
+			async (socketPath) => {
+				const client = new DockerLogClient(
+					new NodeDockerTransport({ socketPath, timeoutMs: 30, maxResponseBytes: 1024 }, sleep),
+				);
+				await expect(client.follow("container", () => {}, new AbortController().signal)).rejects.toMatchObject({
+					message: "Docker operation failed (unavailable)",
+				});
+			},
+		);
+	}
 });
 
 async function withServer(listener: RequestListener, run: (socketPath: string) => Promise<void>) {

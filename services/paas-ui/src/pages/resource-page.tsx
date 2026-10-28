@@ -1,5 +1,6 @@
 import type { UiLogs, UiResource } from "@homelab-paas/shared-contracts";
 
+import { ContainerLogs } from "../components/container-logs.tsx";
 import { ResourceConfiguration } from "../components/resource-configuration.tsx";
 import { ResourceState } from "../components/resource-state.tsx";
 import type { ResourceTab } from "../types.ts";
@@ -29,7 +30,7 @@ export const ResourcePage = ({
 				<div>
 					<p className='eyebrow'>{resource.type} resource</p>
 					<h1>{resource.resourceId}</h1>
-					<p>{resource.containers.length} observed containers · snapshots refresh every 5 seconds</p>
+					<p>{resource.containers.length} observed containers · live updates</p>
 					{resource.url && (
 						<p>
 							<a href={resource.url}>Open resource</a>
@@ -92,9 +93,10 @@ export const ResourcePage = ({
 					) : !containerId ? (
 						<p className='empty'>Select a container to inspect its logs.</p>
 					) : (
-						<pre className='code-view logs' tabIndex={0} aria-label='Container logs'>
-							{logs ? logs.content || "No log output yet." : "Loading logs…"}
-						</pre>
+						<ContainerLogs
+							key={`${serviceId}/${resource.resourceId}/${containerId}`}
+							content={logs?.content}
+						/>
 					)}
 				</>
 			)}

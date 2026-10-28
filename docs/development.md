@@ -53,7 +53,9 @@ For the production installer and [upgrade helper](../prod/upgrade.md), run `bash
 
 On macOS, `./scripts/bootstrap.sh` installs the tools in `Brewfile` and the pinned workspace dependencies. Add Homebrew's `node@24/bin` directory to your shell `PATH` and start Docker Desktop before running container commands. Kubernetes and appliance packaging scripts are no longer used.
 
-For UI design with mock data, run `pnpm --filter @homelab-paas/ui dev --mode mock` and open the Vite URL. This opts into a read-only mock API in the development server with Paperless resource, container, event and log fixtures. Normal development still proxies to the control plane; production builds do not serve mock API routes.
+For UI design with mock data, run `pnpm --filter @homelab-paas/ui dev --mode mock` and open the Vite URL. This opts into static read-only HTTP snapshots in the development server with Paperless resource, container, event and log fixtures. Normal development proxies HTTP and WebSocket upgrades to the control plane; production uses the [live management protocol](management-ui.md#live-subscriptions). Production builds do not serve mock API routes.
+
+Proxying does not bypass management authentication or origin checks: live connections and mutations require the browser origin to match the configured management origin. Use mock mode for isolated UI design, or the configured management hostname through Envoy for authenticated end-to-end development.
 
 ## Backend infrastructure boundaries
 
@@ -147,7 +149,7 @@ Local ingress uses `local.maxine4j.com` with HTTPS on port 443. Register `https:
 - Envoy's admin listener uses container port 9901 for configuration acceptance checks. It has no host port publication. Restart Envoy after changing its bootstrap configuration.
 - Envoy retains UID 0 via `ENVOY_UID` to read the control plane's root-owned, restricted state and certificate files.
 
-The control plane reads platform configuration at startup and [reloads it every minute](configuration.md#platform-configuration-reload), serves `/health` internally on port 8080, and runs the [deployment MVP](configuration.md#implemented-deployment-mvp). Health, secrets and retry reconciliation run every five seconds in the checked-in local configuration. Remote Git refresh defaults to five minutes; local Git sources continue reading committed refs on each reconciliation pass. The fixture descriptor already matches the MVP schema and explicitly uses `/health`. Local configuration enables GitHub auth and DigitalOcean TLS; advanced resources are omitted.
+The control plane reads platform configuration at startup and [reloads it every minute](configuration.md#platform-configuration-reload), serves `/health` internally on port 8080, and runs the [deployment MVP](configuration.md#implemented-deployment-mvp). Health, secrets and retry reconciliation always run every five seconds. Remote Git refresh uses the single `git.pollIntervalSeconds` setting, defaulting to five minutes; local Git sources continue reading committed refs on each reconciliation pass. The fixture descriptor already matches the MVP schema and explicitly uses `/health`. Local configuration enables GitHub auth and DigitalOcean TLS; advanced resources are omitted.
 
 Check the control plane inside its container and the public deployed service through Envoy:
 

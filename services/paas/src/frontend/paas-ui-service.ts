@@ -12,6 +12,7 @@ import type {
 } from "@homelab-paas/shared-contracts";
 
 import type { IPaasConfig } from "../config/paas-config.ts";
+import type { IDockerLogService } from "../docker/docker-log-service.ts";
 import type { IGitRevisionService } from "../git/git-service.ts";
 import type { IServiceEventStore } from "../reconciler/service-event-store.ts";
 import type { DescriptorDecoder, IReconciliationStateStore } from "../reconciler/types.ts";
@@ -33,6 +34,16 @@ export interface IPaasUiService {
 	getLogs(serviceId: string, resourceId: string, containerId: string): Promise<UiLogs>;
 }
 
+export interface IPaasUiLogService {
+	followLogs(
+		serviceId: string,
+		resourceId: string,
+		containerId: string,
+		receive: (logs: UiLogs) => void,
+		signal: AbortSignal,
+	): Promise<void>;
+}
+
 export class PaasUiError extends Error {
 	constructor(
 		public readonly kind: "not-found" | "unavailable",
@@ -45,7 +56,7 @@ export class PaasUiError extends Error {
 	}
 }
 
-export class PaasUiService implements IPaasUiService {
+export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 	private readonly log = createLogger(PaasUiService.name);
 	constructor(
 		private readonly config: IPaasConfig,
@@ -54,7 +65,36 @@ export class PaasUiService implements IPaasUiService {
 		private readonly docker: UiDocker,
 		private readonly state: IReconciliationStateStore,
 		private readonly events: IServiceEventStore,
+		private readonly logs?: IDockerLogService,
 	) {}
+
+	async followLogs(
+		serviceId: string,
+		resourceId: string,
+		containerId: string,
+		receive: (logs: UiLogs) => void,
+		signal: AbortSignal,
+	): Promise<void> {
+		this.assertService(serviceId);
+		try {
+			const containers = await this.docker.listServiceContainers(serviceId, resourceId);
+			if (!containers.some((container) => container.id === containerId && container.resourceId === resourceId))
+				throw new PaasUiError("not-found");
+			const file = await this.descriptor(serviceId);
+			if (!file || !this.logs) throw new PaasUiError("unavailable");
+			await this.logs.follow(
+				serviceId,
+				containerId,
+				this.secrets(file.descriptor),
+				(content) => receive({ containerId, content, tail: 200 }),
+				signal,
+			);
+		} catch (cause) {
+			if (signal.aborted) return;
+			if (cause instanceof PaasUiError) throw cause;
+			throw new PaasUiError("unavailable", { cause });
+		}
+	}
 
 	async getCluster(): Promise<UiCluster> {
 		return {

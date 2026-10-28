@@ -5,6 +5,29 @@ import { EnvoyService } from "./envoy-service.ts";
 import { EnvoyClientError, type EnvoyConfiguration } from "./types.ts";
 
 test.each([undefined, 443])(
+	"only the management live route enables WebSocket upgrades with long-lived timeouts (HTTPS %s)",
+	async (httpsPort) => {
+		let configuration: EnvoyConfiguration | undefined;
+		await new EnvoyService(
+			{
+				bootstrap: async () => {},
+				apply: async (value) => {
+					configuration = value;
+				},
+			},
+			testConfig({ ingress: { baseDomain: "example.test", httpPort: 80, httpsPort } }),
+		).configureRoutes({ demo: { address: "10.0.0.2", port: 8080, healthcheckPath: "/health", public: true } });
+		const text = JSON.stringify(configuration?.listeners);
+		expect(text.match(/"upgrade_type":"websocket","enabled":true/g)).toHaveLength(1);
+		expect(text).toContain(
+			'"match":{"path":"/api/ui/live"},"route":{"cluster":"paas","timeout":"0s","idle_timeout":"0s","upgrade_configs":[{"upgrade_type":"websocket","enabled":true}]}',
+		);
+		expect(text).toContain('"upgrade_type":"websocket","enabled":false');
+		if (httpsPort) expect(text).toContain("envoy.filters.http.ext_authz");
+	},
+);
+
+test.each([undefined, 443])(
 	"routes independent resource hosts with one primary alias, HTTPS port %s",
 	async (httpsPort) => {
 		let configuration: EnvoyConfiguration | undefined;

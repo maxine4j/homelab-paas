@@ -8,11 +8,14 @@ import type {
 import { parseDescriptor } from "@homelab-paas/shared-contracts";
 import { z } from "zod";
 
+import type { IChangeBus } from "../events/change-bus.ts";
 import type { GitFileSource } from "../git/types.ts";
 import { createLogger } from "../util/logger.ts";
 import { parseYaml } from "../util/yaml.ts";
 import type { IConfigStore } from "./config-store.ts";
 import { resolveImageTag } from "./image-tag-resolver.ts";
+import { LogRedactor, type ILogRedactor } from "./log-redactor.ts";
+import { redactSecrets } from "./secret-redaction.ts";
 import type { ConfigDocument, PlatformConfig } from "./types.ts";
 
 const environmentFields: Record<string, string> = {
@@ -25,11 +28,12 @@ const environmentFields: Record<string, string> = {
 const secretFields = new Set(["auth.github.clientSecret", "auth.session.signingKey", "tls.dns.credentials.apiToken"]);
 
 export interface IPaasConfig {
+	createLogRedactor(additionalSecrets?: string[]): ILogRedactor;
 	getClusterId(): string;
 	getIngressConfig(): PlatformConfig["ingress"];
 	getAuthConfig(): PlatformConfig["auth"];
 	getTlsConfig(): PlatformConfig["tls"];
-	getGitConfig(): PlatformConfig["git"] & { fetchIntervalSeconds: number };
+	getGitConfig(): PlatformConfig["git"];
 	getGitEnvironment(): Readonly<Record<string, string | undefined>>;
 	getReconciliationConfig(): PlatformConfig["reconciliation"];
 	getServices(): PlatformConfig["services"];
@@ -67,14 +71,17 @@ export class PaasConfig implements IPaasConfig {
 	constructor(
 		private readonly store: IConfigStore,
 		private readonly environment: Readonly<Record<string, string | undefined>> = {},
+		private readonly changes?: IChangeBus,
 	) {}
 	async load(): Promise<PlatformConfig> {
 		return this.serial(async () => {
 			const document = await this.store.read();
 			const next = this.parseDocument(document.value);
 			this.assertCompatible(next);
+			const changed = this.document?.revision !== document.revision;
 			this.current = next;
 			this.document = document;
+			if (changed) this.changes?.publish({});
 			return structuredClone(next);
 		});
 	}
@@ -103,8 +110,8 @@ export class PaasConfig implements IPaasConfig {
 	getTlsConfig(): PlatformConfig["tls"] {
 		return structuredClone(this.requireConfig().tls);
 	}
-	getGitConfig(): PlatformConfig["git"] & { fetchIntervalSeconds: number } {
-		return { fetchIntervalSeconds: 300, ...structuredClone(this.requireConfig().git) };
+	getGitConfig(): PlatformConfig["git"] {
+		return structuredClone(this.requireConfig().git);
 	}
 	getGitEnvironment(): Readonly<Record<string, string | undefined>> {
 		return { ...this.environment };
@@ -220,6 +227,7 @@ export class PaasConfig implements IPaasConfig {
 				const saved = await this.store.write(candidate);
 				this.document = saved;
 				this.current = next;
+				this.changes?.publish({});
 				return this.getEditableConfig();
 			} catch (cause) {
 				if (cause instanceof ConfigEditError) throw cause;
@@ -229,6 +237,14 @@ export class PaasConfig implements IPaasConfig {
 	}
 
 	redact(value: string, additionalSecrets: string[] = []): string {
+		return redactSecrets(value, this.logSecrets(additionalSecrets));
+	}
+
+	createLogRedactor(additionalSecrets: string[] = []): ILogRedactor {
+		return new LogRedactor(this.logSecrets(additionalSecrets));
+	}
+
+	private logSecrets(additionalSecrets: string[]): string[] {
 		const current = this.requireConfig();
 		const secrets = [
 			current.auth?.github.clientSecret,
@@ -239,9 +255,7 @@ export class PaasConfig implements IPaasConfig {
 		]
 			.filter((entry): entry is string => Boolean(entry))
 			.sort((a, b) => b.length - a.length);
-		let text = value;
-		for (const secret of secrets) text = text.replaceAll(secret, "[redacted]");
-		return text.replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/g, "$1[redacted]@");
+		return secrets;
 	}
 
 	sanitize(value: unknown, additionalSecrets: string[] = []): JsonValue {
@@ -399,9 +413,8 @@ const config = z.strictObject({
 	auth: auth.optional(),
 	tls: tls.optional(),
 	git: z.strictObject({
-		pollIntervalSeconds: positive,
+		pollIntervalSeconds: positive.default(300),
 		operationTimeoutSeconds: positive,
-		fetchIntervalSeconds: positive.default(300),
 	}),
 	reconciliation: z.strictObject({ retryBackoffSeconds: positive, maxRetryBackoffSeconds: positive }),
 	services: z.record(id, source),

@@ -24,7 +24,6 @@ tls:
             apiToken: unused-test-token
 git:
     pollIntervalSeconds: 1
-    fetchIntervalSeconds: 1
     operationTimeoutSeconds: 5
 reconciliation:
     retryBackoffSeconds: 1

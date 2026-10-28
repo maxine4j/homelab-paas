@@ -2,6 +2,7 @@ import type { IDockerService } from "../../docker/docker-service.ts";
 import type { HttpProbe } from "../../util/healthcheck.ts";
 import { createLogger } from "../../util/logger.ts";
 import type { ISleep } from "../../util/sleep.ts";
+import type { IDeploymentProgress } from "../deployment-progress.ts";
 import type { WorkerDeploymentRequest } from "./types.ts";
 
 export interface IWorkerDeploymentService {
@@ -19,6 +20,7 @@ export class WorkerDeploymentService implements IWorkerDeploymentService {
 		private readonly probe: HttpProbe,
 		private readonly sleep: ISleep,
 		private readonly generateInstanceId: () => string,
+		private readonly progress?: IDeploymentProgress,
 	) {}
 
 	async deploy(request: WorkerDeploymentRequest): Promise<void> {
@@ -30,7 +32,9 @@ export class WorkerDeploymentService implements IWorkerDeploymentService {
 		};
 		this.log.info({ ...fields, event: "deployment.started" }, "Deploying worker replicas");
 		try {
+			await this.progress?.started(request.serviceId, request.resourceId, request.revision);
 			await this.deployReplicas(request);
+			await this.progress?.succeeded(request.serviceId, request.resourceId, request.revision);
 			this.log.info(
 				{ ...fields, event: "deployment.completed" },
 				"Worker replicas ready; previous containers retired",

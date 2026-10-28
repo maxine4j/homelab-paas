@@ -7,6 +7,7 @@ export type Route =
 	| { page: "events"; serviceId: string }
 	| { page: "resource"; serviceId: string; resourceId: string; tab: ResourceTab; containerId?: string };
 export interface ApiResult<T> {
+	connected?: boolean;
 	data?: T;
 	error?: string;
 }

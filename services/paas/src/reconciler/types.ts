@@ -1,6 +1,7 @@
 import type { ServiceDescriptor } from "@homelab-paas/shared-contracts";
 
 export const serviceEventMessages = {
+	started: "Deployment started; reconciling resources",
 	fetch: "Cannot fetch descriptor; check repository, branch and committed file path",
 	descriptor: "Invalid descriptor; check service identity and supported resource fields",
 	capabilities:

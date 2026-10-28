@@ -10,16 +10,21 @@ import { FileConfigStore } from "./config/config-store.ts";
 import { PaasConfig, decodeDescriptorYaml } from "./config/paas-config.ts";
 import { DockerClient } from "./docker/docker-client.ts";
 import { DockerHostPathResolver } from "./docker/docker-host-path-resolver.ts";
+import { DockerLogClient } from "./docker/docker-log-client.ts";
+import { DockerLogService } from "./docker/docker-log-service.ts";
 import { DockerService } from "./docker/docker-service.ts";
 import { NodeDockerTransport } from "./docker/docker-transport.ts";
 import { EnvoyClient } from "./envoy/envoy-client.ts";
 import { EnvoyService } from "./envoy/envoy-service.ts";
 import { NodeEnvoyTransport } from "./envoy/envoy-transport.ts";
+import { ChangeBus } from "./events/change-bus.ts";
 import { createFrontendRouter } from "./frontend/frontend-router.ts";
 import { FrontendService } from "./frontend/frontend-service.ts";
 import { DirectoryUiFiles } from "./frontend/frontend-store.ts";
 import { createPaasUiRouter } from "./frontend/paas-ui-router.ts";
 import { PaasUiService } from "./frontend/paas-ui-service.ts";
+import { UiLiveService } from "./frontend/ui-live-service.ts";
+import { UiWebSocket } from "./frontend/ui-websocket.ts";
 import { GitClient } from "./git/git-client.ts";
 import { GitRefreshService } from "./git/git-refresh-service.ts";
 import { GitService } from "./git/git-service.ts";
@@ -34,6 +39,7 @@ import { TlsCertProvisionService } from "./ingress/tls/cert-provision-service.ts
 import { TlsCertRenewalTask } from "./ingress/tls/cert-renewal-task.ts";
 import { FileCertificateStore } from "./ingress/tls/certificate-store.ts";
 import { DigitalOceanDnsAcmeChallengeProvider } from "./ingress/tls/dns-challenge/digitalocean-dns-challenge-provider.ts";
+import { DeploymentProgress } from "./reconciler/deployment-progress.ts";
 import { DeploymentService } from "./reconciler/deployment/deployment-service.ts";
 import { RecreateDeploymentStrategy } from "./reconciler/deployment/strategy/recreate-deployment-strategy.ts";
 import { SurgeDeploymentStrategy } from "./reconciler/deployment/strategy/surge-deployment-strategy.ts";
@@ -59,7 +65,8 @@ import { sleep } from "./util/sleep.ts";
 const STATE_DIRECTORY = "/var/homelab-paas/_paas";
 
 export async function start(lifecycle: Lifecycle, options: StartOptions = {}): Promise<void> {
-	const config = new PaasConfig(new FileConfigStore(readFile, atomicWriteFile), process.env);
+	const changes = new ChangeBus();
+	const config = new PaasConfig(new FileConfigStore(readFile, atomicWriteFile), process.env, changes);
 	await config.load();
 	const secureWrite: FileWriter = async (path, content) => {
 		await mkdir(STATE_DIRECTORY, { recursive: true, mode: 0o700 });
@@ -72,17 +79,17 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const store = new ReconciliationStore(state);
 	const events = new ServiceEventStore(state);
 	const endpoints = new EndpointsStore(state);
-	const dockerClient = new DockerClient(
-		new NodeDockerTransport(
-			{
-				socketPath: "/var/run/docker.sock",
-				timeoutMs: 120_000,
-				maxResponseBytes: 16 * 1024 * 1024,
-			},
-			sleep,
-		),
+	const dockerTransport = new NodeDockerTransport(
+		{
+			socketPath: "/var/run/docker.sock",
+			timeoutMs: 120_000,
+			maxResponseBytes: 16 * 1024 * 1024,
+		},
+		sleep,
 	);
+	const dockerClient = new DockerClient(dockerTransport);
 	const docker = new DockerService(dockerClient, config);
+	const dockerLogs = new DockerLogService(docker, new DockerLogClient(dockerTransport), config);
 	const envoy = new EnvoyService(
 		new EnvoyClient(
 			new NodeEnvoyTransport({
@@ -98,10 +105,14 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	);
 	await envoy.bootstrap();
 	const networking = new NetworkingService(endpoints, envoy);
-	const deployment = new DeploymentService([
-		new RecreateDeploymentStrategy(docker, networking, probe, sleep),
-		new SurgeDeploymentStrategy(docker, networking, probe, sleep, () => nanoid(10)),
-	]);
+	const progress = new DeploymentProgress(store, events, changes, Date.now);
+	const deployment = new DeploymentService(
+		[
+			new RecreateDeploymentStrategy(docker, networking, probe, sleep),
+			new SurgeDeploymentStrategy(docker, networking, probe, sleep, () => nanoid(10)),
+		],
+		progress,
+	);
 	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/git`);
 	const reconciler = new ReconcilerService(
 		config,
@@ -117,12 +128,13 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		),
 		new WorkerResourceReconciler(
 			docker,
-			new WorkerDeploymentService(docker, probe, sleep, () => nanoid(10)),
+			new WorkerDeploymentService(docker, probe, sleep, () => nanoid(10), progress),
 			probe,
 		),
 		events,
+		changes,
 	);
-	const gitRefresh = new GitRefreshService(config, git, reconciler);
+	const gitRefresh = new GitRefreshService(config, git, reconciler, changes);
 	const abort = new AbortController();
 	const pause = async (ms: number): Promise<void> => {
 		try {
@@ -133,7 +145,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	};
 	const runner = new PeriodicTaskRunner({
 		lifecycle,
-		periodMs: () => config.getGitConfig().pollIntervalSeconds * 1000,
+		periodMs: 5000,
 		taskName: "reconciliation",
 		generateTaskId: nanoid,
 		task: new ReconcilerTask(reconciler),
@@ -176,16 +188,13 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 			() => provisioner.requiredDomains(),
 		);
 	}
-	const ui = createPaasUiRouter(
-		new PaasUiService(config, git, decodeDescriptorYaml, docker, store, events),
-		gitRefresh,
-		sessions,
-		() => {
-			const { baseDomain, httpPort, httpsPort } = config.getIngressConfig();
-			const port = httpsPort ?? httpPort;
-			return `${httpsPort ? "https" : "http"}://${baseDomain}${port === (httpsPort ? 443 : 80) ? "" : `:${port}`}`;
-		},
-	);
+	const uiService = new PaasUiService(config, git, decodeDescriptorYaml, docker, store, events, dockerLogs);
+	const managementOrigin = (): string => {
+		const { baseDomain, httpPort, httpsPort } = config.getIngressConfig();
+		const port = httpsPort ?? httpPort;
+		return `${httpsPort ? "https" : "http"}://${baseDomain}${port === (httpsPort ? 443 : 80) ? "" : `:${port}`}`;
+	};
+	const ui = createPaasUiRouter(uiService, gitRefresh, sessions, managementOrigin);
 	app.use(ui.routes()).use(ui.allowedMethods());
 	app.use(
 		createFrontendRouter(
@@ -199,12 +208,15 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		).routes(),
 	);
 	const server = app.listen(8080, "0.0.0.0");
+	const live = new UiWebSocket(new UiLiveService(uiService, uiService, changes), managementOrigin, sessions, sleep);
+	live.attach(server);
 	lifecycle.registerShutdownHandler(
 		() =>
 			new Promise<void>((resolve, reject) =>
 				server.close((error: unknown) => (error ? reject(error) : resolve())),
 			),
 	);
+	lifecycle.registerShutdownHandler(() => live.close());
 	await once(server, "listening");
 	if (renewal) {
 		try {
@@ -229,7 +241,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		runner,
 		new PeriodicTaskRunner({
 			lifecycle,
-			periodMs: () => config.getGitConfig().fetchIntervalSeconds * 1000,
+			periodMs: () => config.getGitConfig().pollIntervalSeconds * 1000,
 			taskName: "git-refresh",
 			generateTaskId: nanoid,
 			task: {

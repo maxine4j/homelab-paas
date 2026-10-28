@@ -105,12 +105,7 @@ export class DockerService implements IDockerService {
 	async readServiceContainerLogs(serviceId: string, containerId: string): Promise<string> {
 		const container = await this.inspectServiceContainer(serviceId, containerId);
 		if (!container) throw new DockerServiceError("not-found");
-		let content = await this.client.readContainerLogs(containerId);
-		for (const value of Object.values(container.env ?? {})
-			.filter(Boolean)
-			.sort((a, b) => b.length - a.length))
-			content = content.replaceAll(value, "[redacted]");
-		return content;
+		return this.config.redact(await this.client.readContainerLogs(containerId), Object.values(container.env ?? {}));
 	}
 
 	async prepareServiceNetwork(serviceId: string): Promise<void> {

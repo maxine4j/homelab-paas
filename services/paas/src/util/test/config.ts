@@ -1,8 +1,10 @@
 import type { JsonValue } from "@homelab-paas/shared-contracts";
 
 import { FileConfigStore } from "../../config/config-store.ts";
+import { LogRedactor } from "../../config/log-redactor.ts";
 import type { IPaasConfig } from "../../config/paas-config.ts";
 import { PaasConfig } from "../../config/paas-config.ts";
+import { redactSecrets } from "../../config/secret-redaction.ts";
 import type { PlatformConfig } from "../../config/types.ts";
 import type { FileReader, FileWriter } from "../file.ts";
 
@@ -55,16 +57,15 @@ export const testConfig = (
 ): IPaasConfig => {
 	const value = testConfigValue(overrides);
 	const redact = (text: string, additional: string[] = []): string => {
-		for (const secret of [
-			value.auth?.github.clientSecret,
-			value.auth?.session.signingKey,
-			value.tls?.dns.credentials.apiToken,
-			...additional,
-		]
-			.filter((entry): entry is string => Boolean(entry))
-			.sort((a, b) => b.length - a.length))
-			text = text.replaceAll(secret, "[redacted]");
-		return text.replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/g, "$1[redacted]@");
+		return redactSecrets(
+			text,
+			[
+				value.auth?.github.clientSecret,
+				value.auth?.session.signingKey,
+				value.tls?.dns.credentials.apiToken,
+				...additional,
+			].filter((entry): entry is string => Boolean(entry)),
+		);
 	};
 	const sanitize = (entry: unknown, secrets: string[] = [], key = ""): JsonValue => {
 		if (/secret|password|token|signingkey|command|credentials/i.test(key)) return "[redacted]";
@@ -80,11 +81,18 @@ export const testConfig = (
 		return null;
 	};
 	const source: IPaasConfig = {
+		createLogRedactor: (additional = []) =>
+			new LogRedactor([
+				value.auth?.github.clientSecret ?? "",
+				value.auth?.session.signingKey ?? "",
+				value.tls?.dns.credentials.apiToken ?? "",
+				...additional,
+			]),
 		getClusterId: () => value.metadata.clusterId,
 		getIngressConfig: () => value.ingress,
 		getAuthConfig: () => value.auth,
 		getTlsConfig: () => value.tls,
-		getGitConfig: () => ({ fetchIntervalSeconds: 300, ...value.git }),
+		getGitConfig: () => value.git,
 		getGitEnvironment: () => environment,
 		getReconciliationConfig: () => value.reconciliation,
 		getServices: () => value.services,

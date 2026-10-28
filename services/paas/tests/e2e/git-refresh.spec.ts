@@ -8,7 +8,7 @@ test("manual refresh fetches one service independently and all services on deman
 	await page.goto(env.url("", "/#/cluster"));
 	await page
 		.getByRole("region", { name: "git", exact: true })
-		.getByLabel("fetchIntervalSeconds", { exact: true })
+		.getByLabel("pollIntervalSeconds", { exact: true })
 		.fill("3600");
 	await page.getByRole("button", { name: "Save configuration" }).click();
 	await expect(page.getByRole("status")).toHaveText("Configuration saved");

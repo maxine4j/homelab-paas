@@ -40,6 +40,17 @@ const fixture = () => {
 		{ id: "orphan", resourceId: "old", imageId: "sha256:b", revision: "old", spec: "s", state: "exited" },
 	]);
 	const readServiceContainerLogs = vi.fn(async () => "hello env-canary\n");
+	const followLogs = vi.fn(
+		async (
+			_serviceId: string,
+			_containerId: string,
+			_secrets: string[],
+			receive: (content: string) => void,
+			_signal: AbortSignal,
+		) => {
+			receive("safe tail");
+		},
+	);
 	const listEvents = vi.fn(async () => [
 		{
 			timestamp: 100,
@@ -83,9 +94,43 @@ const fixture = () => {
 			async write() {},
 		},
 		{ list: listEvents, append: async () => {} },
+		{ follow: followLogs },
 	);
-	return { service, config, fetchFile, readCommit, listServiceContainers, readServiceContainerLogs, listEvents };
+	return {
+		service,
+		config,
+		fetchFile,
+		readCommit,
+		listServiceContainers,
+		readServiceContainerLogs,
+		listEvents,
+		followLogs,
+	};
 };
+
+test("live logs verify configured service/resource/container and require descriptor redaction before opening a follow", async () => {
+	const f = fixture();
+	const receive = vi.fn();
+	const signal = new AbortController().signal;
+	await f.service.followLogs("demo", "app", "c", receive, signal);
+	expect(f.followLogs).toHaveBeenCalledWith("demo", "c", ["env-canary"], expect.any(Function), signal);
+	expect(receive).toHaveBeenCalledWith({ containerId: "c", content: "safe tail", tail: 200 });
+	f.followLogs.mockClear();
+	for (const [service, resource, container] of [
+		["missing", "app", "c"],
+		["demo", "db", "c"],
+		["demo", "app", "orphan"],
+	])
+		await expect(f.service.followLogs(service!, resource!, container!, receive, signal)).rejects.toMatchObject({
+			kind: "not-found",
+		});
+	expect(f.followLogs).not.toHaveBeenCalled();
+	f.fetchFile.mockRejectedValue(new Error("private Git error"));
+	await expect(f.service.followLogs("demo", "app", "c", receive, signal)).rejects.toMatchObject({
+		kind: "unavailable",
+	});
+	expect(f.followLogs).not.toHaveBeenCalled();
+});
 
 test("service detail reads metadata for each exact revision and redacts known secrets", async () => {
 	const f = fixture();

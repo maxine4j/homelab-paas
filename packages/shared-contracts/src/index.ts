@@ -1,4 +1,5 @@
 export { parseDescriptor, serviceDescriptorSchema } from "./service-descriptor.ts";
+export { uiLiveTargetSchema, uiLiveClientSchema, uiLiveServerSchema, uiLiveTargetFromPath } from "./ui-live.ts";
 export type {
 	ServiceDescriptor,
 	Resource,
@@ -14,6 +15,9 @@ export type {
 } from "./service-descriptor.ts";
 export type {
 	JsonValue,
+	UiLiveTarget,
+	UiLiveData,
+	UiLiveServerMessage,
 	UiCluster,
 	UiServiceSummary,
 	UiServiceEvent,

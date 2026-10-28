@@ -1,4 +1,5 @@
 import { createLogger } from "../../util/logger.ts";
+import type { IDeploymentProgress } from "../deployment-progress.ts";
 import type { DeploymentRequest, DeploymentStrategy } from "./strategy/types.ts";
 
 export interface IDeploymentService {
@@ -10,7 +11,10 @@ export class DeploymentService implements IDeploymentService {
 	private readonly log = createLogger(DeploymentService.name);
 	private readonly strategies = new Map<string, DeploymentStrategy>();
 
-	constructor(strategies: readonly DeploymentStrategy[]) {
+	constructor(
+		strategies: readonly DeploymentStrategy[],
+		private readonly progress?: IDeploymentProgress,
+	) {
 		for (const strategy of strategies) {
 			if (this.strategies.has(strategy.name)) throw new Error("Duplicate deployment strategy");
 			this.strategies.set(strategy.name, strategy);
@@ -31,7 +35,9 @@ export class DeploymentService implements IDeploymentService {
 			"Deploying replacement; resolving image and preparing service network",
 		);
 		try {
+			await this.progress?.started(request.serviceId, request.resourceId, request.revision);
 			await strategy.deploy(request);
+			await this.progress?.succeeded(request.serviceId, request.resourceId, request.revision);
 			this.log.info(
 				{ ...fields, event: "deployment.completed" },
 				"Deployment ready; route accepted and previous containers retired",

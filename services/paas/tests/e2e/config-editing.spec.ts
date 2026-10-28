@@ -23,10 +23,17 @@ test("browser edits configuration on the host and consumers immediately see save
 		.getByRole("region", { name: "git", exact: true })
 		.getByLabel("pollIntervalSeconds", { exact: true });
 	await poll.fill("7");
-	// An automatic snapshot refresh must not discard a dirty draft.
-	const refreshed = page.waitForResponse((response) => response.url().endsWith("/api/ui/cluster"));
+	// A fresh WebSocket subscription must not discard a dirty draft.
+	const refreshed = page.waitForEvent("websocket").then((socket) =>
+		socket.waitForEvent("framereceived", {
+			predicate: ({ payload }) => {
+				const message = JSON.parse(String(payload)) as { type: string; target?: { kind: string } };
+				return message.type === "snapshot" && message.target?.kind === "cluster";
+			},
+		}),
+	);
 	await page.getByRole("button", { name: "Refresh", exact: false }).click();
-	expect((await refreshed).status()).toBe(200);
+	await refreshed;
 	await expect(poll).toHaveValue("7");
 	await page.getByRole("button", { name: "Save configuration" }).click();
 	await expect(page.getByRole("status")).toHaveText("Configuration saved");

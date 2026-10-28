@@ -47,6 +47,7 @@ export interface UiServiceEvent {
 	timestamp: number;
 	level: "info" | "error";
 	event:
+		| "deployment.started"
 		| "reconciliation.failed"
 		| "reconciliation.state-failed"
 		| "reconciliation.recovered"
@@ -114,3 +115,18 @@ export interface UiLogs {
 	content: string;
 	tail: 200;
 }
+
+export type UiLiveTarget =
+	| { kind: "cluster" | "services" }
+	| { kind: "service" | "events"; serviceId: string }
+	| { kind: "resource"; serviceId: string; resourceId: string }
+	| { kind: "logs"; serviceId: string; resourceId: string; containerId: string };
+export type UiLiveData = UiCluster | UiServiceSummary[] | UiService | UiServiceEvent[] | UiResource | UiLogs;
+export type UiLiveServerMessage =
+	| { type: "snapshot"; id: string; target: UiLiveTarget; data: UiLiveData }
+	| {
+			type: "error";
+			id: string;
+			message: "Requested item was not found" | "Cluster data is unavailable; retry shortly";
+	  }
+	| { type: "event"; serviceId: string; event: UiServiceEvent };

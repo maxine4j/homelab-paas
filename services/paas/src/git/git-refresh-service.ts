@@ -1,4 +1,5 @@
 import type { IPaasConfig } from "../config/paas-config.ts";
+import type { IChangeBus } from "../events/change-bus.ts";
 import type { IReconcilerService } from "../reconciler/types.ts";
 import { createLogger } from "../util/logger.ts";
 import type { GitFile, GitFileSource, GitRefreshResult } from "./types.ts";
@@ -34,6 +35,7 @@ export class GitRefreshService implements IGitRefreshService {
 		private readonly config: IPaasConfig,
 		private readonly cache: IGitRefreshCache,
 		private readonly reconciler: IReconcilerService,
+		private readonly changes?: IChangeBus,
 	) {}
 
 	async refreshOne(serviceId: string): Promise<void> {
@@ -42,6 +44,7 @@ export class GitRefreshService implements IGitRefreshService {
 		const source = sources[serviceId]!;
 		try {
 			await this.cache.refreshFile(serviceId, source);
+			this.changes?.publish({ serviceId, refreshLogs: true });
 			await this.reconciler.reconcile();
 		} catch (cause) {
 			throw new GitRefreshError("unavailable", { cause });
@@ -53,6 +56,7 @@ export class GitRefreshService implements IGitRefreshService {
 			Object.entries(this.config.getServices()).map(async ([serviceId, source]) => {
 				try {
 					await this.cache.refreshFile(serviceId, source);
+					this.changes?.publish({ serviceId, refreshLogs: true });
 					return { serviceId, refreshed: true };
 				} catch (err) {
 					this.log.error({ err, serviceId }, "Git refresh failed; retaining the last committed descriptor");
