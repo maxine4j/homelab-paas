@@ -4,6 +4,7 @@ import { parseConfig, decodeDescriptorYaml } from "../config/paas-config.ts";
 import { testConfig } from "../util/test/config.ts";
 import { captureLogs } from "../util/test/logs.ts";
 import { parseYaml } from "../util/yaml.ts";
+import { PaasUiGitCache } from "./paas-ui-git-cache.ts";
 import { PaasUiService } from "./paas-ui-service.ts";
 
 const descriptor = {
@@ -20,7 +21,8 @@ const descriptor = {
 		db: { type: "postgres", image: "postgres:17" },
 	},
 };
-const fixture = () => {
+const fixture = (cached = false) => {
+	let now = 0;
 	const config = parseConfig({
 		version: 1,
 		metadata: { clusterId: "local" },
@@ -53,7 +55,7 @@ const fixture = () => {
 	]);
 	const service = new PaasUiService(
 		testConfig(config),
-		{ fetchFile, readCommit },
+		cached ? new PaasUiGitCache({ fetchFile, readCommit }, () => now) : { fetchFile, readCommit },
 		decodeDescriptorYaml,
 		{
 			listServiceContainers,
@@ -84,8 +86,68 @@ const fixture = () => {
 		},
 		{ list: listEvents, append: async () => {} },
 	);
-	return { service, config, fetchFile, readCommit, listServiceContainers, readServiceContainerLogs, listEvents };
+	return {
+		service,
+		config,
+		fetchFile,
+		readCommit,
+		listServiceContainers,
+		readServiceContainerLogs,
+		listEvents,
+		advance: () => {
+			now += 60_000;
+		},
+	};
 };
+
+test("cold Git cache serves deployment and live state without waiting or logging normal cache misses", async () => {
+	const f = fixture(true);
+	const pending = Promise.withResolvers<{ revision: string; content: string }>();
+	f.fetchFile.mockReturnValue(pending.promise);
+	const capture = captureLogs();
+	try {
+		expect(await f.service.getService("demo")).toMatchObject({
+			phase: "failed",
+			activeRevision: "old",
+			descriptorStatus: "unavailable",
+			resources: [{ resourceId: "app" }, { resourceId: "old" }],
+		});
+		expect(await f.service.listServices()).toMatchObject([{ serviceId: "demo", phase: "failed" }]);
+		await expect(f.service.getLogs("demo", "app", "c")).rejects.toMatchObject({ kind: "unavailable" });
+		expect(f.readServiceContainerLogs).not.toHaveBeenCalled();
+		expect(capture.lines).toEqual([]);
+	} finally {
+		capture.restore();
+		pending.resolve({ revision: "new", content: JSON.stringify(descriptor) });
+	}
+});
+
+test("UI endpoints share stale Git values while refresh is pending and still redact responses", async () => {
+	const f = fixture(true);
+	await f.service.getService("demo");
+	await vi.waitFor(async () =>
+		expect(await f.service.getService("demo")).toMatchObject({
+			descriptorRevision: "new",
+			activeRevisionMetadata: { authorName: "Alex" },
+			descriptorRevisionMetadata: { authorName: "Alex" },
+		}),
+	);
+	f.advance();
+	const pending = Promise.withResolvers<{ revision: string; content: string }>();
+	f.fetchFile.mockReturnValue(pending.promise);
+	try {
+		expect(await f.service.getService("demo")).toMatchObject({ descriptorRevision: "new" });
+		expect(await f.service.listServices()).toMatchObject([{ activeRevisionMetadata: { authorName: "Alex" } }]);
+		expect(await f.service.getResource("demo", "app")).toMatchObject({ config: { image: "app:1" } });
+		expect(await f.service.getLogs("demo", "app", "c")).toMatchObject({ content: "hello [redacted]\n" });
+		expect(f.fetchFile).toHaveBeenCalledTimes(2);
+	} finally {
+		pending.resolve({ revision: "next", content: JSON.stringify(descriptor) });
+	}
+	await vi.waitFor(async () =>
+		expect(await f.service.getService("demo")).toMatchObject({ descriptorRevision: "next" }),
+	);
+});
 
 test("service detail reads metadata for each exact revision and redacts known secrets", async () => {
 	const f = fixture();
