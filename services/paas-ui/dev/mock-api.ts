@@ -104,6 +104,13 @@ egress:
 ];
 const service: UiService = {
 	serviceId: "paperless",
+	description: "Document management for the homelab, with searchable archives and automatic document processing",
+	primaryUrl: "https://paperless.example.test",
+	activeRevisionMetadata: {
+		message: "Improve document ingestion and resource configuration\n\nKeep searchable archives up to date.",
+		authorName: "Alex",
+		authoredAt: "2026-10-28T01:00:00Z",
+	},
 	phase: "ready",
 	activeRevision: revision,
 	desiredRevision: revision,

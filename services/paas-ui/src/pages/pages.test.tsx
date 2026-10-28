@@ -65,7 +65,7 @@ test.each([
 	expect(html).toContain(` ${label}`);
 });
 
-test("service cards keep identity and health above description, primary link and active revision", () => {
+test("service cards provide a full-card detail link, an independent web link, description and compact revision rows", () => {
 	const html = renderToStaticMarkup(
 		<ServicesPage
 			services={[
@@ -76,14 +76,24 @@ test("service cards keep identity and health above description, primary link and
 					desiredRevision: "desired456",
 					description: "Document <archive>",
 					primaryUrl: "https://demo.example.com",
+					activeRevisionMetadata: {
+						message: "Deploy <web>\n\nFull details",
+						authorName: "Alex",
+						authoredAt: "2026-10-26T00:00:00Z",
+					},
 				},
 			]}
 		/>,
 	);
-	expect(html).toMatch(/card-top[^]*<h2>[^]*demo[^]*<\/h2>[^]*badge-healthy/);
-	expect(html).toContain('href="#/services/demo"');
+	expect(html).toMatch(/service-card-heading[^]*<h2>[^]*demo[^]*<\/h2>[^]*primary-web-link[^]*badge-healthy/);
+	expect(html).toContain('class="service-card-link" href="#/services/demo"');
 	expect(html).toMatch(/href="https:\/\/demo.example.com" target="_blank" rel="noreferrer"/);
-	expect(html).toMatch(/service-card-info[^]*Document &lt;archive&gt;[^]*<dt>Revision<\/dt>[^]*active123/);
+	expect(html).toContain('class="service-description" title="Document &lt;archive&gt;">Document &lt;archive&gt;</p>');
+	expect(html).toMatch(/service-description[^]*Document &lt;archive&gt;[^]*<dt>Revision<\/dt>[^]*active123/);
+	expect(html).toContain('class="revision-summary"');
+	expect(html).toContain('title="Deploy &lt;web&gt;\n\nFull details"');
+	expect(html).toContain("Alex");
+	expect(html).toContain('dateTime="2026-10-26T00:00:00Z"');
 	expect(html).not.toContain("desired456");
 	expect(html).not.toContain("Desired revision");
 	expect(html).not.toMatch(/<a\s[^>]*>(?:(?!<\/a>)[^])*<a\s/);

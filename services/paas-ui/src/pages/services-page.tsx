@@ -20,37 +20,44 @@ export const ServicesPage = ({ services }: { services: UiServiceSummary[] }) => 
 			<div className='card-grid'>
 				{services.map((service) => (
 					<article className='card service-card' key={service.serviceId}>
-						<div className='card-top'>
+						<div className='service-card-heading'>
 							<h2>
-								<a href={`#/services/${service.serviceId}`}>{service.serviceId}</a>
+								<a
+									className='service-card-link'
+									href={`#/services/${service.serviceId}`}
+									title={service.serviceId}
+								>
+									{service.serviceId}
+								</a>
 							</h2>
+							{service.primaryUrl && (
+								<a
+									className='primary-web-link'
+									href={service.primaryUrl}
+									target='_blank'
+									rel='noreferrer'
+									title={service.primaryUrl}
+								>
+									<span className='service-hostname'>{new URL(service.primaryUrl).host}</span>
+									<span aria-hidden='true'>↗</span>
+								</a>
+							)}
 							<StatusBadge status={service.phase} />
 						</div>
-						<div className='service-card-bottom'>
-							<div className='service-card-info'>
-								{service.primaryUrl && (
-									<a
-										className='primary-web-link'
-										href={service.primaryUrl}
-										target='_blank'
-										rel='noreferrer'
-									>
-										{new URL(service.primaryUrl).host} <span aria-hidden='true'>↗</span>
-									</a>
-								)}
-								{service.description && <p>{service.description}</p>}
+						<p className='service-description' title={service.description}>
+							{service.description}
+						</p>
+						<dl className='service-revisions'>
+							<div>
+								<dt>Revision</dt>
+								<RevisionDetails
+									revision={service.activeRevision?.slice(0, 12)}
+									metadata={service.activeRevisionMetadata}
+									fallback='Not deployed'
+									compact
+								/>
 							</div>
-							<dl className='service-revisions'>
-								<div>
-									<dt>Revision</dt>
-									<RevisionDetails
-										revision={service.activeRevision?.slice(0, 12)}
-										metadata={service.activeRevisionMetadata}
-										fallback='Not deployed'
-									/>
-								</div>
-							</dl>
-						</div>
+						</dl>
 					</article>
 				))}
 			</div>
