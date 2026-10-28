@@ -140,13 +140,14 @@ export class ContainerEnvironment {
 
 	async checkpoint(
 		service: string,
-	): Promise<{ phase: string; activeRevision?: string; desiredRevision?: string } | undefined> {
+	): Promise<{ phase: string; activeRevision?: string; desiredRevision?: string; failures?: number } | undefined> {
 		const value = await readFile(`${this.directory}/var/_paas/${service}.state.yaml`);
 		return value
 			? (parseYaml(value, "test checkpoint") as {
 					phase: string;
 					activeRevision?: string;
 					desiredRevision?: string;
+					failures?: number;
 				})
 			: undefined;
 	}
@@ -166,15 +167,20 @@ export class ContainerEnvironment {
 	}
 
 	/** Verify the CA and original DNS hostname while connecting to loopback ingress. */
-	request(url: string, cookie = ""): Promise<Response> {
+	request(
+		url: string,
+		cookie = "",
+		options: { method?: "GET" | "POST"; headers?: Record<string, string> } = {},
+	): Promise<Response> {
 		return new Promise((resolve, reject) => {
 			const req = httpsRequest(
 				url,
 				{
 					ca: this.ca,
+					method: options.method ?? "GET",
 					family: 4,
 					lookup: (_host, _options, callback) => callback(null, "127.0.0.1", 4),
-					headers: { cookie },
+					headers: { cookie, ...options.headers },
 					timeout: 5000,
 				},
 				(res) => {

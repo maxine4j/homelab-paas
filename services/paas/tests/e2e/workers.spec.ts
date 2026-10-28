@@ -58,8 +58,16 @@ test("workers stay private through rollout, failed health checks, recovery and r
 	expect((await env.request(env.url("public", "/version"))).status).toBe(200);
 	const active = await env.workloadIds("workers");
 	expect(active.some((id) => original.includes(id))).toBe(false);
-	await env.git.commit({ "workers.sd.yaml": descriptor(worker("bad", false)) });
-	await waitFor("unhealthy worker surge rejected", async () => (await env.checkpoint("workers"))?.phase === "failed");
+	const unhealthy = await env.git.commit({ "workers.sd.yaml": descriptor(worker("bad", false)) });
+	await waitFor("unhealthy worker surge attempt during deployment grace", async () => {
+		const checkpoint = await env.checkpoint("workers");
+		return checkpoint?.desiredRevision === unhealthy && (checkpoint.failures ?? 0) > 0;
+	});
+	expect(await env.checkpoint("workers")).toMatchObject({
+		phase: "deploying",
+		activeRevision: update,
+		desiredRevision: unhealthy,
+	});
 	for (const id of active) expect(await env.workloadIds("workers")).toContain(id);
 	const revision = await env.git.commit({ "workers.sd.yaml": descriptor(worker("v3")) });
 	await waitFor("worker retry recovered", async () => (await env.checkpoint("workers"))?.activeRevision === revision);

@@ -50,8 +50,15 @@ test("failed surge readiness preserves the serving revision", async ({ environme
 	const previous = await env.workloadIds("public");
 	const active = (await env.checkpoint("public"))!.activeRevision;
 	const desired = await env.update("public", "unready", "surge", false);
-	await waitFor("failed surge checkpoint", async () => (await env.checkpoint("public"))?.phase === "failed");
-	expect(await env.checkpoint("public")).toMatchObject({ activeRevision: active, desiredRevision: desired });
+	await waitFor("failed surge attempt during deployment grace", async () => {
+		const checkpoint = await env.checkpoint("public");
+		return checkpoint?.desiredRevision === desired && (checkpoint.failures ?? 0) > 0;
+	});
+	expect(await env.checkpoint("public")).toMatchObject({
+		phase: "deploying",
+		activeRevision: active,
+		desiredRevision: desired,
+	});
 	expect(await env.workloadIds("public")).toContain(previous.at(0));
 	expect(await (await env.request(env.url("public", "/version"))).json()).toEqual({ version: "v1" });
 });
