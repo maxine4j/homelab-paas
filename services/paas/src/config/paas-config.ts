@@ -29,7 +29,7 @@ export interface IPaasConfig {
 	getIngressConfig(): PlatformConfig["ingress"];
 	getAuthConfig(): PlatformConfig["auth"];
 	getTlsConfig(): PlatformConfig["tls"];
-	getGitConfig(): PlatformConfig["git"];
+	getGitConfig(): PlatformConfig["git"] & { fetchIntervalSeconds: number };
 	getGitEnvironment(): Readonly<Record<string, string | undefined>>;
 	getReconciliationConfig(): PlatformConfig["reconciliation"];
 	getServices(): PlatformConfig["services"];
@@ -103,8 +103,8 @@ export class PaasConfig implements IPaasConfig {
 	getTlsConfig(): PlatformConfig["tls"] {
 		return structuredClone(this.requireConfig().tls);
 	}
-	getGitConfig(): PlatformConfig["git"] {
-		return structuredClone(this.requireConfig().git);
+	getGitConfig(): PlatformConfig["git"] & { fetchIntervalSeconds: number } {
+		return { fetchIntervalSeconds: 300, ...structuredClone(this.requireConfig().git) };
 	}
 	getGitEnvironment(): Readonly<Record<string, string | undefined>> {
 		return { ...this.environment };
@@ -398,7 +398,11 @@ const config = z.strictObject({
 	}),
 	auth: auth.optional(),
 	tls: tls.optional(),
-	git: z.strictObject({ pollIntervalSeconds: positive, operationTimeoutSeconds: positive }),
+	git: z.strictObject({
+		pollIntervalSeconds: positive,
+		operationTimeoutSeconds: positive,
+		fetchIntervalSeconds: positive.default(300),
+	}),
 	reconciliation: z.strictObject({ retryBackoffSeconds: positive, maxRetryBackoffSeconds: positive }),
 	services: z.record(id, source),
 });

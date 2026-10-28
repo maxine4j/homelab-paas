@@ -7,6 +7,7 @@ import { EnvoyClient } from "../../src/envoy/envoy-client.ts";
 import { EnvoyService } from "../../src/envoy/envoy-service.ts";
 import { NodeEnvoyTransport } from "../../src/envoy/envoy-transport.ts";
 import { GitClient } from "../../src/git/git-client.ts";
+import { GitRefreshService } from "../../src/git/git-refresh-service.ts";
 import { GitService } from "../../src/git/git-service.ts";
 import { NodeGitTransport } from "../../src/git/git-transport.ts";
 import { DeploymentService } from "../../src/reconciler/deployment/deployment-service.ts";
@@ -71,9 +72,10 @@ export const inProcessPaas = async (
 		new RecreateDeploymentStrategy(docker, networking, probe, pause),
 		new SurgeDeploymentStrategy(docker, networking, probe, pause, generateInstanceId),
 	]);
+	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${directory}/git`);
 	const reconciler = new ReconcilerService(
 		config,
-		new GitService(new GitClient(new NodeGitTransport(config)), `${directory}/git`),
+		git,
 		decodeDescriptorYaml,
 		new WebResourceReconciler(docker, deployments, networking, probe),
 		checkpoints,
@@ -86,5 +88,5 @@ export const inProcessPaas = async (
 		),
 		events,
 	);
-	return { reconciler, checkpoints, endpoints, events };
+	return { reconciler, git, refresh: new GitRefreshService(config, git, reconciler), checkpoints, endpoints, events };
 };

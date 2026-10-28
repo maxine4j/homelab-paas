@@ -10,6 +10,7 @@ export interface IGitClient {
 	fetch(directory: string, remote: string, branch: string, credentials?: GitCredentials): Promise<void>;
 	locateFile(path: string): Promise<{ directory: string; path: string }>;
 	resolveRevision(directory: string, ref: string): Promise<string>;
+	publishRevision(directory: string, revision: string): Promise<void>;
 	readFile(directory: string, revision: string, path: string): Promise<string>;
 	readCommit(directory: string, revision: string): Promise<GitCommit>;
 	fetchCommit(directory: string, remote: string, revision: string, credentials?: GitCredentials): Promise<void>;
@@ -69,6 +70,13 @@ export class GitClient implements IGitClient {
 		});
 	}
 
+	async publishRevision(directory: string, revision: string): Promise<void> {
+		await this.operation(() => {
+			if (!commitId.test(revision)) throw new GitClientError();
+			return this.transport.execute(directory, ["update-ref", "refs/paas/descriptor", revision]);
+		});
+	}
+
 	readCommit(directory: string, revision: string): Promise<GitCommit> {
 		return this.operation(async () => {
 			if (!commitId.test(revision)) throw new GitClientError();
@@ -102,7 +110,7 @@ export class GitClient implements IGitClient {
 			if (!commitId.test(revision)) throw new GitClientError();
 			return this.transport.execute(
 				directory,
-				["fetch", "--depth=1", "--", remote, revision],
+				["fetch", "--depth=1", "--no-write-fetch-head", "--", remote, revision],
 				...this.authentication(directory, remote, credentials),
 			);
 		});

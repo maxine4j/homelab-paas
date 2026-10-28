@@ -21,6 +21,7 @@ import { DirectoryUiFiles } from "./frontend/frontend-store.ts";
 import { createPaasUiRouter } from "./frontend/paas-ui-router.ts";
 import { PaasUiService } from "./frontend/paas-ui-service.ts";
 import { GitClient } from "./git/git-client.ts";
+import { GitRefreshService } from "./git/git-refresh-service.ts";
 import { GitService } from "./git/git-service.ts";
 import { NodeGitTransport } from "./git/git-transport.ts";
 import { createAuthRouter } from "./ingress/auth/auth-router.ts";
@@ -101,9 +102,10 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		new RecreateDeploymentStrategy(docker, networking, probe, sleep),
 		new SurgeDeploymentStrategy(docker, networking, probe, sleep, () => nanoid(10)),
 	]);
+	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/git`);
 	const reconciler = new ReconcilerService(
 		config,
-		new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/git`),
+		git,
 		decodeDescriptorYaml,
 		new WebResourceReconciler(docker, deployment, networking, probe),
 		store,
@@ -120,6 +122,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		),
 		events,
 	);
+	const gitRefresh = new GitRefreshService(config, git, reconciler);
 	const abort = new AbortController();
 	const pause = async (ms: number): Promise<void> => {
 		try {
@@ -174,14 +177,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		);
 	}
 	const ui = createPaasUiRouter(
-		new PaasUiService(
-			config,
-			new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/ui-git`),
-			decodeDescriptorYaml,
-			docker,
-			store,
-			events,
-		),
+		new PaasUiService(config, git, decodeDescriptorYaml, docker, store, events),
 		sessions,
 		() => {
 			const { baseDomain, httpPort, httpsPort } = config.getIngressConfig();
@@ -230,6 +226,19 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	if (!lifecycle.isOpen()) return;
 	const runners = [
 		runner,
+		new PeriodicTaskRunner({
+			lifecycle,
+			periodMs: () => config.getGitConfig().fetchIntervalSeconds * 1000,
+			taskName: "git-refresh",
+			generateTaskId: nanoid,
+			task: {
+				run: async () => {
+					await gitRefresh.refreshAll();
+				},
+			},
+			pause,
+			report: (err) => logger.error({ err }, "Git refresh task failed; retaining cached descriptors"),
+		}),
 		new PeriodicTaskRunner({
 			lifecycle,
 			periodMs: 60_000,

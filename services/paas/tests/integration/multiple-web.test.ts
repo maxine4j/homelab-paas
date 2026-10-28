@@ -81,7 +81,7 @@ test.each([false, true])(
 			expect(await auth.authorize("demo", undefined)).toBe("allowed");
 			expect(await auth.authorize("admin.demo", undefined)).toBe("login");
 			await git.commit({ "demo.sd.yaml": descriptor("admin") });
-			await paas.reconciler.reconcile();
+			await paas.refresh.refreshAll();
 			expect(await paas.checkpoints.read("demo")).toMatchObject({ phase: "ready" });
 			expect(workloadIds()).toEqual(ids);
 			expect(await auth.authorize("demo", undefined)).toBe("login");

@@ -47,8 +47,6 @@ export class PaasUiError extends Error {
 
 export class PaasUiService implements IPaasUiService {
 	private readonly log = createLogger(PaasUiService.name);
-	// The UI has its own Git cache; serialize its fetches to protect FETCH_HEAD.
-	private pending: Promise<unknown> = Promise.resolve();
 	constructor(
 		private readonly config: IPaasConfig,
 		private readonly git: IGitRevisionService,
@@ -247,48 +245,38 @@ export class PaasUiService implements IPaasUiService {
 		return `${secure ? "https" : "http"}://${identity}.${baseDomain}${port === (secure ? 443 : 80) ? "" : `:${port}`}`;
 	}
 
-	private descriptor(serviceId: string): Promise<{ revision: string; descriptor: ServiceDescriptor } | undefined> {
-		const result = this.pending.then(async () => {
-			try {
-				const file = await this.git.fetchFile(serviceId, this.config.getServices()[serviceId]!);
-				return { revision: file.revision, descriptor: this.decode(file.content, serviceId, file.revision) };
-			} catch (err) {
-				this.log.error({ err, serviceId }, "Cannot load management UI descriptor");
-				return undefined;
-			}
-		});
-		this.pending = result;
-		return result;
+	private async descriptor(
+		serviceId: string,
+	): Promise<{ revision: string; descriptor: ServiceDescriptor } | undefined> {
+		try {
+			const file = await this.git.fetchFile(serviceId, this.config.getServices()[serviceId]!);
+			return { revision: file.revision, descriptor: this.decode(file.content, serviceId, file.revision) };
+		} catch (err) {
+			this.log.error({ err, serviceId }, "Cannot load management UI descriptor");
+			return undefined;
+		}
 	}
 
-	private revisionMetadata(
+	private async revisionMetadata(
 		serviceId: string,
 		revisions: (string | undefined)[],
 		secrets: string[],
 	): Promise<Map<string, UiRevisionMetadata>> {
-		const result = this.pending.then(async () => {
-			const metadata = new Map<string, UiRevisionMetadata>();
-			for (const revision of new Set(revisions)) {
-				if (!revision) continue;
-				try {
-					const commit = await this.git.readCommit(
-						serviceId,
-						this.config.getServices()[serviceId]!,
-						revision,
-					);
-					metadata.set(revision, {
-						authorName: this.config.redact(commit.authorName, secrets),
-						authoredAt: commit.authoredAt,
-						message: this.config.redact(commit.message, secrets),
-					});
-				} catch (err) {
-					this.log.error({ err, serviceId, revision }, "Cannot load management UI revision metadata");
-				}
+		const metadata = new Map<string, UiRevisionMetadata>();
+		for (const revision of new Set(revisions)) {
+			if (!revision) continue;
+			try {
+				const commit = await this.git.readCommit(serviceId, this.config.getServices()[serviceId]!, revision);
+				metadata.set(revision, {
+					authorName: this.config.redact(commit.authorName, secrets),
+					authoredAt: commit.authoredAt,
+					message: this.config.redact(commit.message, secrets),
+				});
+			} catch (err) {
+				this.log.error({ err, serviceId, revision }, "Cannot load management UI revision metadata");
 			}
-			return metadata;
-		});
-		this.pending = result;
-		return result;
+		}
+		return metadata;
 	}
 
 	private secrets(descriptor?: ServiceDescriptor): string[] {

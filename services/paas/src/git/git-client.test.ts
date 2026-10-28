@@ -51,7 +51,20 @@ test("reads author, author date and full message from an exact commit without em
 test("fetches an exact missing commit for a shallow repository", async () => {
 	const { client, transport } = fixture();
 	await client.fetchCommit("/repo", "remote", revision);
-	expect(transport.execute).toHaveBeenCalledWith("/repo", ["fetch", "--depth=1", "--", "remote", revision]);
+	expect(transport.execute).toHaveBeenCalledWith("/repo", [
+		"fetch",
+		"--depth=1",
+		"--no-write-fetch-head",
+		"--",
+		"remote",
+		revision,
+	]);
+});
+
+test("publishes the last successfully read descriptor under a durable ref", async () => {
+	const { client, transport } = fixture();
+	await client.publishRevision("/repo", revision);
+	expect(transport.execute).toHaveBeenCalledWith("/repo", ["update-ref", "refs/paas/descriptor", revision]);
 });
 
 test.each(["HEAD", "--output=/tmp/escape"])(

@@ -8,7 +8,7 @@ import { MockHttpServer } from "../util/http-server.ts";
 import { inProcessPaas } from "../util/in-process-paas.ts";
 
 test("worker-only reconciliation probes replicas without publishing routes and retries failed surge", async () => {
-	const directory = await artifactDirectory("worker-integration");
+	const directory = await artifactDirectory("worker");
 	const git = new TestGit(directory);
 	await git.init();
 	const journal: string[] = [];
@@ -71,7 +71,7 @@ test("worker-only reconciliation probes replicas without publishing routes and r
 		expect(ids()).toEqual(original);
 		healthy = false;
 		await git.commit({ "jobs.sd.yaml": descriptor("v2") });
-		await paas.reconciler.reconcile();
+		await paas.refresh.refreshAll();
 		expect(await paas.checkpoints.read("jobs")).toMatchObject({
 			phase: "deploying",
 			failures: 1,

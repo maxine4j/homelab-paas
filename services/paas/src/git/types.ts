@@ -9,6 +9,11 @@ export interface GitFile {
 	content: string;
 }
 
+export interface GitRefreshResult {
+	serviceId: string;
+	refreshed: boolean;
+}
+
 export interface GitCredentials {
 	privateKeyPath?: string;
 	accessToken?: string;

@@ -62,14 +62,15 @@ test("Node transport creates directories, resolves symlinks and preserves Git ou
 });
 
 test("remote workflows reuse their bare repository and fetch defaults, updates and explicit branches", async () => {
-	const { root, repo, git, service } = await fixture();
+	const { root, repo, git, service, client } = await fixture();
 	const source = { remote: repo, descriptorPath: "nested/file.yaml" };
 	const initial = await git("rev-parse", "HEAD");
 	expect(await service.fetchFile("demo", source)).toEqual({ revision: initial, content: "committed\n" });
 	await git("branch", "release");
 	await writeFile(join(repo, "nested/file.yaml"), "updated\n");
 	await git("commit", "-am", "update");
-	expect(await service.fetchFile("demo", source)).toEqual({
+	expect(await service.fetchFile("demo", source)).toEqual({ revision: initial, content: "committed\n" });
+	expect(await service.refreshFile("demo", source)).toEqual({
 		revision: await git("rev-parse", "HEAD"),
 		content: "updated\n",
 	});
@@ -77,9 +78,12 @@ test("remote workflows reuse their bare repository and fetch defaults, updates a
 		revision: initial,
 		content: "committed\n",
 	});
-	expect(
-		(await execute("git", ["-C", join(root, "cache/demo"), "rev-parse", "--is-bare-repository"])).stdout.trim(),
-	).toBe("true");
+	await service.readCommit("demo", source, initial);
+	const restarted = new GitService(client, join(root, "cache"));
+	expect(await restarted.fetchFile("demo", source)).toEqual({
+		revision: await git("rev-parse", "HEAD"),
+		content: "updated\n",
+	});
 	await expect(service.fetchFile("demo", { ...source, branch: "missing" })).rejects.toBeInstanceOf(GitClientError);
 	await expect(service.fetchFile("demo", { ...source, descriptorPath: "missing.yaml" })).rejects.toBeInstanceOf(
 		GitClientError,

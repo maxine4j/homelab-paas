@@ -10,6 +10,20 @@ const descriptor = {
 	resources: { app: { type: "web", image: "test-service:local", ingress: { public: true, port: 8080 } } },
 };
 
+test("remote fetch schedule defaults to five minutes independently of reconciliation polling", () => {
+	const base = {
+		version: 1,
+		metadata: { clusterId: "local" },
+		ingress: { baseDomain: "localhost" },
+		git: { pollIntervalSeconds: 5, operationTimeoutSeconds: 60 },
+		reconciliation: { retryBackoffSeconds: 5, maxRetryBackoffSeconds: 60 },
+		services: {},
+	};
+	expect(parseConfig(base).git).toMatchObject({ pollIntervalSeconds: 5, fetchIntervalSeconds: 300 });
+	expect(parseConfig({ ...base, git: { ...base.git, fetchIntervalSeconds: 60 } }).git.fetchIntervalSeconds).toBe(60);
+	expect(() => parseConfig({ ...base, git: { ...base.git, fetchIntervalSeconds: 0 } })).toThrow();
+});
+
 test("repository credentials are optional and must match the remote protocol", () => {
 	const base = {
 		version: 1,

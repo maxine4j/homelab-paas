@@ -91,8 +91,10 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 		await paas.reconciler.reconcile();
 		expect(docker.containers.has(original.Id)).toBe(true);
 		const second = await git.commit({ "demo.sd.yaml": descriptor("demo", "v2") });
-		journal.length = 0;
 		await paas.reconciler.reconcile();
+		expect(await paas.checkpoints.read("demo")).toMatchObject({ activeRevision: first });
+		journal.length = 0;
+		await paas.refresh.refreshAll();
 		expect(await paas.checkpoints.read("demo")).toMatchObject({ phase: "ready", activeRevision: second });
 		expect(journal.indexOf("POST /containers/create")).toBeLessThan(
 			journal.indexOf(`POST /containers/${original.Id}/stop`),
@@ -106,7 +108,7 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 			"demo.sd.yaml": descriptor("demo", "bad", "/unready"),
 			"other.sd.yaml": descriptor("other", "v2"),
 		});
-		await paas.reconciler.reconcile();
+		await paas.refresh.refreshAll();
 		expect(await paas.checkpoints.read("demo")).toMatchObject({
 			phase: "deploying",
 			deploymentStartedAt: now,
@@ -117,7 +119,7 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 		expect(docker.containers.has(active.Id)).toBe(true);
 		expect(await paas.checkpoints.read("other")).toMatchObject({ phase: "ready" });
 		await git.commit({ "demo.sd.yaml": descriptor("demo", "v3") });
-		await paas.reconciler.reconcile();
+		await paas.refresh.refreshAll();
 		expect(docker.containers.has(active.Id)).toBe(true);
 		now += 1000;
 		await paas.reconciler.reconcile();
@@ -125,12 +127,12 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 		expect(docker.containers.has(active.Id)).toBe(false);
 		const routes = await readFile(`${directory}/state/routes.yaml`);
 		await git.commit({ "demo.sd.yaml": "invalid: descriptor" });
-		await paas.reconciler.reconcile();
+		await paas.refresh.refreshAll();
 		expect(await readFile(`${directory}/state/routes.yaml`)).toBe(routes);
 		envoy.reject = true;
 		now += 1000;
 		await git.commit({ "demo.sd.yaml": descriptor("demo", "v4") });
-		await paas.reconciler.reconcile();
+		await paas.refresh.refreshAll();
 		expect(await paas.checkpoints.read("demo")).toMatchObject({ phase: "deploying", deploymentStartedAt: now });
 		expect((await paas.events.list("demo")).at(0)).toMatchObject({
 			event: "reconciliation.failed",
@@ -148,7 +150,7 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 		];
 		await git.commit({ "demo.sd.yaml": JSON.stringify(missingSecrets) });
 		now += config.getReconciliationConfig().maxRetryBackoffSeconds * 1000;
-		await paas.reconciler.reconcile();
+		await paas.refresh.refreshAll();
 		expect((await paas.events.list("demo")).at(0)).toMatchObject({
 			event: "reconciliation.failed",
 			resourceId: "app",
