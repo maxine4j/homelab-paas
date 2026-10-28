@@ -1,8 +1,10 @@
+import type { UiGitRefresh } from "@homelab-paas/shared-contracts";
 import { bodyParser } from "@koa/bodyparser";
 import Router from "@koa/router";
 import { z } from "zod";
 
 import { ConfigEditError } from "../config/paas-config.ts";
+import { GitRefreshError, type IGitRefreshService } from "../git/git-refresh-service.ts";
 import type { AuthedUserDetails } from "../ingress/auth/types.ts";
 import { logger } from "../util/logger.ts";
 import { PaasUiError, type IPaasUiService } from "./paas-ui-service.ts";
@@ -23,6 +25,7 @@ class UiRequestError extends Error {
 /** Management API; configured sessions are verified even behind Envoy. */
 export const createPaasUiRouter = (
 	service: IPaasUiService,
+	gitRefresh: IGitRefreshService,
 	sessions?: UiSessionVerifier,
 	managementOrigin?: () => string,
 ): Router => {
@@ -53,17 +56,40 @@ export const createPaasUiRouter = (
 							: error.kind === "conflict"
 								? 409
 								: 503
-						: error instanceof PaasUiError && error.kind === "not-found"
+						: (error instanceof PaasUiError || error instanceof GitRefreshError)
+							  && error.kind === "not-found"
 							? 404
 							: 503;
 			context.body = {
 				message:
-					error instanceof UiRequestError || error instanceof PaasUiError || error instanceof ConfigEditError
+					error instanceof UiRequestError
+					|| error instanceof PaasUiError
+					|| error instanceof ConfigEditError
+					|| error instanceof GitRefreshError
 						? error.message
 						: "Cluster data is unavailable; retry shortly",
 			};
 		}
 	});
+	for (const path of ["/services/refresh", "/services/:serviceId/refresh"]) {
+		router.post(path, async (context) => {
+			if (
+				context.get("origin") !== (managementOrigin?.() ?? `${context.protocol}://${context.host}`)
+				|| context.get("x-paas-refresh") !== "1"
+			) {
+				context.status = 403;
+				context.body = { message: "Git refresh requires a same-origin request" };
+				return;
+			}
+			const serviceId = context.params["serviceId"];
+			if (serviceId) {
+				await gitRefresh.refreshOne(serviceId);
+				context.body = { results: [{ serviceId, refreshed: true }] } satisfies UiGitRefresh;
+			} else {
+				context.body = { results: await gitRefresh.refreshAll() } satisfies UiGitRefresh;
+			}
+		});
+	}
 	router.get("/cluster", async (context) => {
 		context.body = await service.getCluster();
 	});

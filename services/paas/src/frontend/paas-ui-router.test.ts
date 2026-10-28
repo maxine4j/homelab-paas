@@ -2,6 +2,7 @@ import Koa from "koa";
 import { expect, test, vi } from "vitest";
 
 import { ConfigEditError } from "../config/paas-config.ts";
+import { GitRefreshError } from "../git/git-refresh-service.ts";
 import { captureLogs } from "../util/test/logs.ts";
 import { startTestApi } from "../util/test/router.ts";
 import { createPaasUiRouter } from "./paas-ui-router.ts";
@@ -45,10 +46,63 @@ const fixture = async (authenticated = true) => {
 		},
 	};
 	const verifyAuthCookie = vi.fn(() => (authenticated ? { userId: "owner" } : undefined));
-	const router = createPaasUiRouter(service, { verifyAuthCookie });
+	const refreshOne = vi.fn(async (_id: string) => {});
+	const refreshAll = vi.fn(async () => [
+		{ serviceId: "demo", refreshed: true },
+		{ serviceId: "broken", refreshed: false },
+	]);
+	const router = createPaasUiRouter(service, { refreshOne, refreshAll }, { verifyAuthCookie });
 	const server = await startTestApi(new Koa().use(router.routes()).use(router.allowedMethods()));
-	return { ...server, calls, verifyAuthCookie, updateConfig };
+	return { ...server, calls, verifyAuthCookie, updateConfig, refreshOne, refreshAll };
 };
+
+test("manual Git refresh requires session and same-origin intent, delegates scope and sanitizes failures", async () => {
+	const f = await fixture();
+	const send = (path = "/services/refresh", headers: Record<string, string> = {}) =>
+		fetch(`${f.origin}/api/ui${path}`, {
+			method: "POST",
+			headers: { origin: f.origin, "x-paas-refresh": "1", ...headers },
+		});
+	try {
+		const all = await send();
+		expect(all.status).toBe(200);
+		expect(all.headers.get("cache-control")).toBe("no-store");
+		expect(await all.json()).toEqual({
+			results: [
+				{ serviceId: "demo", refreshed: true },
+				{ serviceId: "broken", refreshed: false },
+			],
+		});
+		expect(f.refreshAll).toHaveBeenCalledTimes(1);
+		expect(await (await send("/services/demo/refresh")).json()).toEqual({
+			results: [{ serviceId: "demo", refreshed: true }],
+		});
+		expect(f.refreshOne).toHaveBeenCalledWith("demo");
+		const rejectedHeaders: Record<string, string>[] = [
+			{ origin: "https://evil.test" },
+			{ origin: "" },
+			{ "x-paas-refresh": "" },
+		];
+		for (const headers of rejectedHeaders) {
+			expect((await send(undefined, headers)).status).toBe(403);
+		}
+		f.verifyAuthCookie.mockReturnValueOnce(undefined);
+		expect((await send()).status).toBe(401);
+		expect(f.refreshAll).toHaveBeenCalledTimes(1);
+		for (const [kind, status] of [
+			["not-found", 404],
+			["unavailable", 503],
+		] as const) {
+			f.refreshOne.mockRejectedValueOnce(new GitRefreshError(kind, { cause: new Error("secret-canary") }));
+			const response = await send("/services/missing/refresh");
+			expect(response.status).toBe(status);
+			expect(await response.text()).not.toContain("secret-canary");
+		}
+		expect((await fetch(`${f.origin}/api/ui/services/demo/refresh`)).status).toBe(405);
+	} finally {
+		await f.close();
+	}
+});
 
 test("service events support authenticated GET and HEAD, no-store and missing services", async () => {
 	const f = await fixture();

@@ -35,12 +35,16 @@ test("authenticated config edits persist on disk and update existing JWT and ser
 		{ read: async () => undefined, write: vi.fn() },
 		{ append: async () => {}, list: async () => [] },
 	);
-	const router = createPaasUiRouter(ui, {
-		verifyAuthCookie: (token) => {
-			const userId = tokens.verify(token ?? "", "session")?.userId;
-			return userId ? { userId } : undefined;
+	const router = createPaasUiRouter(
+		ui,
+		{ refreshOne: vi.fn(), refreshAll: vi.fn() },
+		{
+			verifyAuthCookie: (token) => {
+				const userId = tokens.verify(token ?? "", "session")?.userId;
+				return userId ? { userId } : undefined;
+			},
 		},
-	});
+	);
 	const server = await startTestApi(new Koa().use(router.routes()).use(router.allowedMethods()));
 	try {
 		const snapshot = config.getEditableConfig();

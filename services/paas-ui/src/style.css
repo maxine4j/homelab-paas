@@ -236,6 +236,20 @@ main {
 	gap: 20px;
 	margin-bottom: 32px;
 }
+.git-refresh {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 24px;
+}
+.git-refresh p {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+.git-refresh [role="alert"] {
+	color: #fca5a5;
+}
 .service-heading-content {
 	width: 100%;
 	min-width: 0;

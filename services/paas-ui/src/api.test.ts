@@ -1,6 +1,33 @@
 import { expect, test, vi } from "vitest";
 
-import { fetchUi, pollUi, saveConfig } from "./api.ts";
+import { fetchUi, pollUi, saveConfig, refreshGit } from "./api.ts";
+
+test("Git refresh posts explicit intent for all or one service, preserves partial results and cancellation", async () => {
+	const results = [
+		{ serviceId: "demo", refreshed: true },
+		{ serviceId: "broken", refreshed: false },
+	];
+	const request = vi.fn<typeof fetch>(async () => Response.json({ results }));
+	const controller = new AbortController();
+	expect(await refreshGit(undefined, controller.signal, request)).toEqual({ results });
+	expect(request).toHaveBeenLastCalledWith(
+		"/api/ui/services/refresh",
+		expect.objectContaining({ method: "POST", credentials: "same-origin", headers: { "x-paas-refresh": "1" } }),
+	);
+	await refreshGit("demo", controller.signal, request);
+	expect(request.mock.calls.at(-1)?.at(0)).toBe("/api/ui/services/demo/refresh");
+	controller.abort();
+	expect(request.mock.calls.at(-1)?.at(1)).toMatchObject({ signal: expect.objectContaining({ aborted: true }) });
+	for (const [status, message] of [
+		[401, "session"],
+		[404, "not configured"],
+		[503, "Cannot refresh"],
+	] as const) {
+		await expect(
+			refreshGit("demo", new AbortController().signal, async () => new Response("secret-canary", { status })),
+		).rejects.toThrow(message);
+	}
+});
 
 test("configuration saves send only edits and distinguish conflicts from validation failures", async () => {
 	const update = { revision: "r1", changes: [{ path: "git.pollIntervalSeconds", value: 9 }] };

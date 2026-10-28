@@ -1,4 +1,28 @@
-import type { UiConfigUpdate, UiEditableConfig } from "@homelab-paas/shared-contracts";
+import type { UiConfigUpdate, UiEditableConfig, UiGitRefresh } from "@homelab-paas/shared-contracts";
+
+/** Explicit Git refresh; cancellation stops waiting, but server work may finish. */
+export async function refreshGit(
+	serviceId: string | undefined,
+	signal: AbortSignal,
+	request: typeof fetch = fetch,
+): Promise<UiGitRefresh> {
+	const response = await request(`/api/ui/services/${serviceId ? `${encodeURIComponent(serviceId)}/` : ""}refresh`, {
+		method: "POST",
+		cache: "no-store",
+		credentials: "same-origin",
+		headers: { "x-paas-refresh": "1" },
+		signal,
+	});
+	if (!response.ok)
+		throw new Error(
+			response.status === 401
+				? "A platform session is required. Sign in again."
+				: response.status === 404
+					? "Service is not configured. Reload the service list."
+					: "Cannot refresh Git. Check repository access and retry. The request may have completed; refresh the snapshot to check.",
+		);
+	return response.json();
+}
 
 export async function saveConfig(
 	update: UiConfigUpdate,
