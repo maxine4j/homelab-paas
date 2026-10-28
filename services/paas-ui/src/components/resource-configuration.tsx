@@ -1,5 +1,7 @@
 import type { JsonValue } from "@homelab-paas/shared-contracts";
 
+import { InspectionPanel } from "./inspection-panel.tsx";
+
 const labels: Record<string, string> = {
 	cpus: "CPU cores",
 	memoryMiB: "Memory (MiB)",
@@ -14,7 +16,7 @@ const labels: Record<string, string> = {
 const label = (key: string): string =>
 	labels[key] ?? key.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase());
 
-const SettingValue = ({ value }: { value: JsonValue }) => {
+const SettingValue = ({ value, className = "settings inline-settings" }: { value: JsonValue; className?: string }) => {
 	if (value === null) return <span className='muted'>Not configured</span>;
 	if (Array.isArray(value))
 		return value.length ? (
@@ -30,7 +32,7 @@ const SettingValue = ({ value }: { value: JsonValue }) => {
 		);
 	if (typeof value === "object")
 		return (
-			<dl className='settings inline-settings'>
+			<dl className={className}>
 				{Object.entries(value).map(([key, item]) => (
 					<div key={key}>
 						<dt>{label(key)}</dt>
@@ -85,45 +87,61 @@ const Environment = ({ value }: { value: JsonValue }) => {
 	);
 };
 
+const Volumes = ({ fields }: { fields: Record<string, JsonValue> }) => (
+	<div className='volume-settings'>
+		{Object.entries(fields).map(([key, value]) => (
+			<div key={key}>
+				<SettingValue value={key === "supplementaryGroups" ? { [key]: value } : value} />
+			</div>
+		))}
+	</div>
+);
+
 export const ResourceConfiguration = ({ config, configYaml }: { config?: JsonValue; configYaml?: string }) => {
 	if (!config || typeof config !== "object" || Array.isArray(config))
-		return <p className='empty'>Configuration unavailable.</p>;
+		return (
+			<InspectionPanel title='Configuration'>
+				<p className='empty'>Configuration unavailable.</p>
+			</InspectionPanel>
+		);
 	const groups = [
-		["Image", ["image", "type", "command"]],
+		["Image", ["image", "command"]],
 		["Deployment strategy", ["rolloutStrategy", "replicas", "termination"]],
 		["Networking", ["primary", "ingress", "healthcheckUrl", "healthcheckPort", "egress", "hostPorts"]],
 		["Environment", ["env"]],
-		["Storage & devices", ["volumes", "devices", "supplementaryGroups"]],
+		["Volumes", ["volumes", "devices", "supplementaryGroups"]],
 		["Resource limits", ["limits"]],
 	] as const;
-	const known = new Set<string>(groups.flatMap(([, keys]) => [...keys]));
+	const known = new Set<string>(["type", ...groups.flatMap(([, keys]) => [...keys])]);
 	const extra = Object.fromEntries(Object.entries(config).filter(([key]) => !known.has(key)));
 	return (
-		<>
+		<InspectionPanel title='Configuration'>
 			<p>Desired descriptor configuration. Secrets and commands are redacted.</p>
-			<div className='inspection-grid resource-configuration'>
+			<div className='resource-configuration'>
 				{groups.map(([title, keys]) => {
 					const fields = Object.fromEntries(
 						keys.filter((key) => config[key] !== undefined).map((key) => [key, config[key]!]),
 					);
 					return Object.keys(fields).length ? (
 						<section
-							className={`inspection-panel${title === "Environment" ? " environment-panel" : ""}`}
+							className={`inspection-section${title === "Environment" || title === "Volumes" ? " configuration-section-wide" : ""}`}
 							key={title}
 						>
-							<h2>{title}</h2>
+							<h3>{title}</h3>
 							{title === "Environment" ? (
 								<Environment value={config["env"]!} />
+							) : title === "Volumes" ? (
+								<Volumes fields={fields} />
 							) : (
-								<SettingValue value={fields} />
+								<SettingValue value={fields} className='settings inspection-settings' />
 							)}
 						</section>
 					) : undefined;
 				})}
 				{Object.keys(extra).length > 0 && (
-					<section className='inspection-panel'>
-						<h2>Additional settings</h2>
-						<SettingValue value={extra} />
+					<section className='inspection-section'>
+						<h3>Additional settings</h3>
+						<SettingValue value={extra} className='settings inspection-settings' />
 					</section>
 				)}
 			</div>
@@ -133,6 +151,6 @@ export const ResourceConfiguration = ({ config, configYaml }: { config?: JsonVal
 					{configYaml ?? "Descriptor unavailable."}
 				</pre>
 			</details>
-		</>
+		</InspectionPanel>
 	);
 };

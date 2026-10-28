@@ -1,6 +1,7 @@
 import type { UiContainer } from "@homelab-paas/shared-contracts";
 
 import { ConfigView } from "./config-view.tsx";
+import { InspectionPanel } from "./inspection-panel.tsx";
 
 export const ResourceState = ({
 	serviceId,
@@ -11,20 +12,20 @@ export const ResourceState = ({
 	resourceId: string;
 	containers: UiContainer[];
 }) => (
-	<>
+	<InspectionPanel title='Live state'>
 		{containers.length ? (
 			<div className='container-list'>
 				{containers.map((container) => (
-					<section className='inspection-panel' key={container.id}>
+					<section className='inspection-section' key={container.id}>
 						<div className='section-heading'>
-							<h2 title={container.id}>Container {container.id.slice(0, 12)}</h2>
+							<h3 title={container.id}>Container {container.id.slice(0, 12)}</h3>
 							<span
 								className={`badge ${container.running === true ? "badge-running" : container.running === false ? "badge-exited" : ""}`}
 							>
 								{container.state}
 							</span>
 						</div>
-						<dl className='settings container-settings'>
+						<dl className='settings inspection-settings'>
 							<div>
 								<dt>Container ID</dt>
 								<dd>{container.id}</dd>
@@ -44,7 +45,7 @@ export const ResourceState = ({
 								<dd>{container.revision}</dd>
 							</div>
 						</dl>
-						<h3>Networks</h3>
+						<h4>Networks</h4>
 						{container.networks === undefined ? (
 							<p>Network snapshot unavailable.</p>
 						) : Object.keys(container.networks).length ? (
@@ -87,5 +88,5 @@ export const ResourceState = ({
 			<summary>Live state JSON</summary>
 			<ConfigView value={containers} label='Live container state' />
 		</details>
-	</>
+	</InspectionPanel>
 );

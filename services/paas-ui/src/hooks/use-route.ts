@@ -20,7 +20,7 @@ export const parseRoute = (hash: string): Route => {
 		page: "resource",
 		serviceId,
 		resourceId,
-		tab: tab as "config" | "state" | "logs",
+		tab: tab === "logs" ? "logs" : "config",
 		...(parts.at(5) ? { containerId: parts.at(5) } : {}),
 	};
 };

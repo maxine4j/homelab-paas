@@ -392,7 +392,7 @@ test("resource inspection renders configuration, state and escaped log output", 
 		configYaml: "image: app:1\n",
 		containers: [{ id: "c", resourceId: "app", state: "running", imageId: "sha256:a", revision: "rev" }],
 	};
-	for (const tab of ["config", "state", "logs"] as const) {
+	for (const tab of ["config", "logs"] as const) {
 		const html = renderToStaticMarkup(
 			<ResourcePage
 				serviceId='demo'
@@ -406,8 +406,12 @@ test("resource inspection renders configuration, state and escaped log output", 
 		if (tab === "config") {
 			expect(html).toContain("image: app:1\n");
 			expect(html).not.toContain("Descriptor unavailable.");
+			expect(html).toContain("<h2>Configuration</h2>");
+			expect(html).toContain("<h2>Live state</h2>");
+			expect(html.indexOf("<h2>Configuration</h2>")).toBeLessThan(html.indexOf("<h2>Live state</h2>"));
+			expect(html).toContain("running");
+			expect(html).not.toContain('href="#/services/demo/resources/app/state"');
 		}
-		if (tab === "state") expect(html).toContain("running");
 		if (tab === "logs") {
 			expect(html).toContain("&lt;script&gt;");
 			expect(html).not.toContain("<script>");
@@ -441,6 +445,12 @@ test("logs select the first observed container by default and preserve an explic
 });
 
 test("routes distinguish service/resource inspection and reject unsupported navigation", () => {
+	expect(parseRoute("#/services/demo/resources/app/state")).toEqual({
+		page: "resource",
+		serviceId: "demo",
+		resourceId: "app",
+		tab: "config",
+	});
 	expect(parseRoute("#/services/demo/resources/app/logs/c")).toEqual({
 		page: "resource",
 		serviceId: "demo",

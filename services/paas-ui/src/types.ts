@@ -1,4 +1,4 @@
-export type ResourceTab = "config" | "state" | "logs";
+export type ResourceTab = "config" | "logs";
 export type Route =
 	| { page: "services" }
 	| { page: "cluster" }

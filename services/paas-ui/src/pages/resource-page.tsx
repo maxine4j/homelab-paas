@@ -44,19 +44,21 @@ export const ResourcePage = ({
 				</div>
 			</div>
 			<nav className='tabs' aria-label='Resource inspection'>
-				{(["config", "state", "logs"] as const).map((value) => (
+				{(["config", "logs"] as const).map((value) => (
 					<a key={value} href={`${base}/${value}`} aria-current={value === tab ? "page" : undefined}>
-						{value === "config" ? "Configuration" : value === "state" ? "Live state" : "Logs"}
+						{value === "config" ? "Overview" : "Logs"}
 					</a>
 				))}
 			</nav>
-			{tab === "config" && <ResourceConfiguration config={resource.config} configYaml={resource.configYaml} />}
-			{tab === "state" && (
-				<ResourceState
-					serviceId={serviceId}
-					resourceId={resource.resourceId}
-					containers={resource.containers}
-				/>
+			{tab === "config" && (
+				<div className='resource-overview'>
+					<ResourceConfiguration config={resource.config} configYaml={resource.configYaml} />
+					<ResourceState
+						serviceId={serviceId}
+						resourceId={resource.resourceId}
+						containers={resource.containers}
+					/>
+				</div>
 			)}
 			{tab === "logs" && (
 				<>
