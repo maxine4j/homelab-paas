@@ -178,6 +178,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	}
 	const ui = createPaasUiRouter(
 		new PaasUiService(config, git, decodeDescriptorYaml, docker, store, events),
+		gitRefresh,
 		sessions,
 		() => {
 			const { baseDomain, httpPort, httpsPort } = config.getIngressConfig();

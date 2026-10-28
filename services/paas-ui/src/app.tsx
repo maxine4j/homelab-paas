@@ -7,6 +7,7 @@ import type {
 	UiServiceEvent,
 } from "@homelab-paas/shared-contracts";
 
+import { GitRefreshControl } from "./components/git-refresh.tsx";
 import { useApi } from "./hooks/use-api.ts";
 import { useRoute } from "./hooks/use-route.ts";
 import { ClusterPage } from "./pages/cluster-page.tsx";
@@ -106,10 +107,20 @@ export const App = () => {
 							events.refresh();
 						}}
 					>
-						↻ Refresh
+						↻ Refresh snapshot
 					</button>
 				</header>
 				<main id='main-content'>
+					{(route.page === "services" || route.page === "service") && (
+						<GitRefreshControl
+							key={path}
+							serviceId={route.page === "service" ? route.serviceId : undefined}
+							onComplete={() => {
+								snapshot.refresh();
+								events.refresh();
+							}}
+						/>
+					)}
 					{route.page === "events" ? (
 						<ServiceEventsPage serviceId={route.serviceId} events={events.data} error={events.error} />
 					) : snapshot.error ? (

@@ -19,3 +19,8 @@ export interface ServiceSourceDraft {
 	branch: string;
 	descriptorPath: string;
 }
+export interface GitRefreshState {
+	pending: boolean;
+	message?: string;
+	error?: string;
+}

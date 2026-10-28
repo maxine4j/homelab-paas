@@ -38,6 +38,11 @@ export interface UiServiceSummary {
 	retryAt?: number;
 }
 
+/** Git fetch outcomes only; deployment readiness remains in service snapshots and events. */
+export interface UiGitRefresh {
+	results: { serviceId: string; refreshed: boolean }[];
+}
+
 export interface UiServiceEvent {
 	timestamp: number;
 	level: "info" | "error";

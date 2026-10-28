@@ -26,4 +26,5 @@ export type {
 	UiEditableConfig,
 	UiConfigField,
 	UiConfigUpdate,
+	UiGitRefresh,
 } from "./types.ts";
