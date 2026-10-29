@@ -46,7 +46,7 @@ export const GitRefreshFeedback = ({
 }) => (
 	<div className='git-refresh'>
 		<button type='button' disabled={pending} onClick={onRefresh}>
-			{pending ? "Refreshing Git…" : serviceId ? "Refresh service from Git" : "Refresh all services from Git"}
+			{pending ? "Refreshing Git…" : serviceId ? "Refresh service from Git" : "Refresh all"}
 		</button>
 		{message && <p role='status'>{message}</p>}
 		{error && <p role='alert'>{error}</p>}

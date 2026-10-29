@@ -5,7 +5,7 @@ import { GitRefreshFeedback, runGitRefresh } from "./git-refresh.tsx";
 
 test("refresh feedback distinguishes scope, progress and safe failures", () => {
 	const idle = renderToStaticMarkup(<GitRefreshFeedback onRefresh={() => {}} />);
-	expect(idle).toContain("Refresh all services from Git");
+	expect(idle).toContain("Refresh all</button>");
 	const pending = renderToStaticMarkup(
 		<GitRefreshFeedback serviceId='demo' pending message='Fetching Git and reconciling…' onRefresh={() => {}} />,
 	);
