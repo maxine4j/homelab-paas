@@ -864,7 +864,7 @@ summary {
 }
 footer {
 	display: flex;
-	justify-content: flex-end;
+	justify-content: space-between;
 	gap: 16px;
 	padding: 20px 40px;
 	border-top: 1px solid #252c36;

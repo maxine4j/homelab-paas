@@ -73,7 +73,7 @@ jobs:
             - name: Build image
               env:
                   DOCKERFILE: ${{ matrix.dockerfile }}
-              run: docker buildx build --platform linux/amd64 --file "$DOCKERFILE" --load .
+              run: docker buildx build --platform linux/amd64 --file "$DOCKERFILE" --build-arg "BUILD_SHA=$GITHUB_SHA" --load .
     integration:
         name: Integration tests
         runs-on: ubuntu-24.04
@@ -117,6 +117,7 @@ jobs:
               run: >-
                   docker buildx build --builder homelab-paas-build --platform linux/amd64
                   --file services/paas/Dockerfile --tag "$IMAGE_REF"
+                  --build-arg "BUILD_SHA=$GITHUB_SHA"
                   --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY"
                   --label "org.opencontainers.image.revision=$GITHUB_SHA" --load .
             - name: Build test-service image
@@ -178,6 +179,7 @@ jobs:
               run: >-
                   docker buildx build --platform linux/amd64
                   --file services/paas/Dockerfile --tag "$IMAGE_REF"
+                  --build-arg "BUILD_SHA=$GITHUB_SHA"
                   --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY"
                   --label "org.opencontainers.image.revision=$GITHUB_SHA" --push .
             - name: Build and publish test-service image

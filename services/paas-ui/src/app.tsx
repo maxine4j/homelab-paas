@@ -17,6 +17,7 @@ import { ServicePage } from "./pages/service-page.tsx";
 import { ServicesPage } from "./pages/services-page.tsx";
 
 export const App = () => {
+	const buildSha = import.meta.env["VITE_BUILD_SHA"] || "unknown";
 	const route = useRoute();
 	const path =
 		route.page === "cluster"
@@ -157,6 +158,7 @@ export const App = () => {
 					)}
 				</main>
 				<footer>
+					<span title={buildSha}>Build {buildSha.slice(0, 7)}</span>
 					<span aria-live='polite'>
 						{import.meta.env.MODE === "mock"
 							? "Mock snapshots"

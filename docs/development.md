@@ -57,6 +57,12 @@ For UI design with mock data, run `pnpm --filter @homelab-paas/ui dev --mode moc
 
 Proxying does not bypass management authentication or origin checks: live connections and mutations require the browser origin to match the configured management origin. Use mock mode for isolated UI design, or the configured management hostname through Envoy for authenticated end-to-end development.
 
+## Build metadata
+
+The management UI embeds `BUILD_SHA` during the Vite build and displays it in its footer. CI supplies the full `GITHUB_SHA` through the control-plane Docker build argument `BUILD_SHA`, including when publishing images from `main` or release tags. This identifies the source commit independently of the image tag and requires no runtime environment variable or API call. The Docker build context excludes `.git`.
+
+For a local image with revision metadata, run `docker build --build-arg BUILD_SHA="$(git rev-parse HEAD)" -f services/paas/Dockerfile -t homelab-paas/paas:dev .`. For a local UI build or dev server, prefix its pnpm command with `BUILD_SHA="$(git rev-parse HEAD)"`. Omitted or empty metadata displays `Build unknown`.
+
 ## Backend infrastructure boundaries
 
 Backend filesystem operations go through `services/paas/src/util/file.ts`, including Git and Envoy transports, stores, and startup wiring. Optional text reads return absence only for `ENOENT`; permission and other I/O failures propagate to the owning adapter for contextual error translation with the original `cause`. Binary reads preserve bytes. Atomic writes use an exclusively created, restricted, unique sibling file and rename, cleaning up temporary files after failure. Exclusive create-if-missing preserves existing discovery files. Callers create private directories with mode `0700`; private files default to `0600`. Existing files are not rewritten merely to initialize them.

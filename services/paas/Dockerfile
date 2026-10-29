@@ -16,9 +16,10 @@ COPY packages/shared-contracts packages/shared-contracts
 COPY services/paas/tsconfig*.json services/paas/
 COPY services/paas/src services/paas/src
 COPY services/paas-ui services/paas-ui
+ARG BUILD_SHA=unknown
 RUN pnpm --filter @homelab-paas/shared-contracts build \
     && pnpm --filter @homelab-paas/paas build \
-    && pnpm --filter @homelab-paas/ui build
+    && BUILD_SHA="$BUILD_SHA" pnpm --filter @homelab-paas/ui build
 
 FROM manifests AS installer
 RUN --mount=type=cache,id=homelab-paas-pnpm,target=/pnpm/store \
