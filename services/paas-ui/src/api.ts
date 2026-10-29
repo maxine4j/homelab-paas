@@ -19,7 +19,7 @@ export async function refreshGit(
 				? "A platform session is required. Sign in again."
 				: response.status === 404
 					? "Service is not configured. Reload the service list."
-					: "Cannot refresh Git. Check repository access and retry. The request may have completed; refresh the snapshot to check.",
+					: "Cannot refresh Git. Check repository access and retry. The request may have completed; reload the page to check.",
 		);
 	return response.json();
 }

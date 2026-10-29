@@ -2,6 +2,12 @@ import { expect, test, vi } from "vitest";
 
 import { fetchUi, saveConfig, refreshGit } from "./api.ts";
 
+test("Git refresh failures direct users to reload the page to check whether work completed", async () => {
+	await expect(
+		refreshGit(undefined, new AbortController().signal, async () => new Response(null, { status: 503 })),
+	).rejects.toThrow("The request may have completed; reload the page to check.");
+});
+
 test("Git refresh posts explicit intent for all or one service, preserves partial results and cancellation", async () => {
 	const results = [
 		{ serviceId: "demo", refreshed: true },

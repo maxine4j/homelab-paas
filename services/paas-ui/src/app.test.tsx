@@ -5,6 +5,16 @@ import { App } from "./app.tsx";
 
 afterEach(() => vi.unstubAllEnvs());
 
+test("topbar offers Git refresh beside breadcrumbs without a snapshot refresh button", () => {
+	const html = renderToStaticMarkup(<App />);
+	expect(html).toMatch(
+		/<header class="topbar"><nav class="breadcrumbs".*?<\/nav><div class="git-refresh"><button type="button">Refresh all services from Git<\/button><\/div><\/header>/,
+	);
+	expect(html).not.toContain("Refresh snapshot");
+	expect(html.match(/Refresh all services from Git/g)).toHaveLength(1);
+	expect(html).not.toMatch(/<main[^>]*>.*Refresh all services from Git/);
+});
+
 test("footer identifies the platform build with a short revision and full revision tooltip", () => {
 	vi.stubEnv("VITE_BUILD_SHA", "1234567890abcdef1234567890abcdef12345678");
 	const html = renderToStaticMarkup(<App />);

@@ -101,17 +101,6 @@ export const App = () => {
 							</>
 						)}
 					</nav>
-					<button
-						onClick={() => {
-							snapshot.refresh();
-							logs.refresh();
-							events.refresh();
-						}}
-					>
-						↻ Refresh snapshot
-					</button>
-				</header>
-				<main id='main-content'>
 					{(route.page === "services" || route.page === "service") && (
 						<GitRefreshControl
 							key={path}
@@ -122,6 +111,8 @@ export const App = () => {
 							}}
 						/>
 					)}
+				</header>
+				<main id='main-content'>
 					{route.page === "events" ? (
 						<ServiceEventsPage serviceId={route.serviceId} events={events.data} error={events.error} />
 					) : snapshot.error ? (
