@@ -40,6 +40,7 @@ export class WorkerDeploymentService implements IWorkerDeploymentService {
 				"Worker replicas ready; previous containers retired",
 			);
 		} catch (err) {
+			await this.progress?.failed(request.serviceId, request.resourceId, request.revision);
 			this.log.error(
 				{ ...fields, event: "deployment.failed", err },
 				"Worker deployment failed; reconciliation will retry",

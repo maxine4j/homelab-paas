@@ -1,7 +1,6 @@
 import type { UiService, UiServiceEvent } from "@homelab-paas/shared-contracts";
 
 import { gitCommitLink, gitSourceLink } from "../components/git-source-link.ts";
-import { resourceStatus } from "../components/resource-status.ts";
 import { ServiceEvents } from "../components/service-events.tsx";
 import { ServiceRevision } from "../components/service-revision.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
@@ -91,7 +90,7 @@ export const ServicePage = ({
 					>
 						<div className='card-top'>
 							<span className='eyebrow'>{resource.type}</span>
-							<StatusBadge status={resourceStatus(resource)} />
+							<StatusBadge status={resource.health} />
 						</div>
 						<h3>{resource.resourceId}</h3>
 					</a>

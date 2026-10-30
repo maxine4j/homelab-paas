@@ -1,4 +1,5 @@
 import type { IChangeBus } from "../events/change-bus.ts";
+import type { IResourceHealthProgress } from "../health/resource-health-service.ts";
 import { createLogger } from "../util/logger.ts";
 import type { IServiceEventStore } from "./service-event-store.ts";
 import { serviceEventMessages, type IReconciliationStateStore } from "./types.ts";
@@ -6,6 +7,7 @@ import { serviceEventMessages, type IReconciliationStateStore } from "./types.ts
 export interface IDeploymentProgress {
 	started(serviceId: string, resourceId: string, revision: string): Promise<void>;
 	succeeded(serviceId: string, resourceId: string, revision: string): Promise<void>;
+	failed(serviceId: string, resourceId: string, revision: string): Promise<void>;
 }
 
 /** Adds progress for actual drift rollouts of an already active revision. New revisions are owned by reconciliation. */
@@ -17,8 +19,10 @@ export class DeploymentProgress implements IDeploymentProgress {
 		private readonly events: IServiceEventStore,
 		private readonly changes: IChangeBus,
 		private readonly now: () => number,
+		private readonly health?: IResourceHealthProgress,
 	) {}
 	async started(serviceId: string, resourceId: string, revision: string): Promise<void> {
+		this.health?.started(serviceId, resourceId);
 		const previous = await this.state.read(serviceId);
 		if (previous?.activeRevision !== revision || previous.phase === "deploying") return;
 		await this.state.write(serviceId, { ...previous, phase: "deploying", deploymentStartedAt: this.now() });
@@ -26,8 +30,13 @@ export class DeploymentProgress implements IDeploymentProgress {
 		await this.publish(serviceId, resourceId, revision, "deployment.started");
 	}
 	async succeeded(serviceId: string, resourceId: string, revision: string): Promise<void> {
+		this.health?.finished(serviceId, resourceId);
 		if (!this.drift.delete(`${serviceId}/${resourceId}/${revision}`)) return;
 		await this.publish(serviceId, resourceId, revision, "deployment.succeeded");
+	}
+	async failed(serviceId: string, resourceId: string, revision: string): Promise<void> {
+		this.health?.finished(serviceId, resourceId);
+		this.drift.delete(`${serviceId}/${resourceId}/${revision}`);
 	}
 	private async publish(
 		serviceId: string,

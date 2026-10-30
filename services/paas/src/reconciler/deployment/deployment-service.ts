@@ -43,6 +43,7 @@ export class DeploymentService implements IDeploymentService {
 				"Deployment ready; route accepted and previous containers retired",
 			);
 		} catch (error) {
+			await this.progress?.failed(request.serviceId, request.resourceId, request.revision);
 			this.log.error(
 				{ ...fields, event: "deployment.failed", err: error },
 				"Deployment failed; reconciliation will retry from observed state",

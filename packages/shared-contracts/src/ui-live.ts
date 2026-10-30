@@ -41,6 +41,7 @@ const summary = z.object({
 });
 const resource = z.object({
 	resourceId: identity,
+	health: z.enum(["deploying", "missing", "healthy", "unhealthy"]),
 	type: z.string(),
 	url: z.string().optional(),
 	primaryUrl: z.string().optional(),

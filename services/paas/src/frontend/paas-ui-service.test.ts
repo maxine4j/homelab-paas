@@ -1,6 +1,8 @@
+import type { ResourceHealth } from "@homelab-paas/shared-contracts";
 import { expect, test, vi } from "vitest";
 
 import { parseConfig, decodeDescriptorYaml } from "../config/paas-config.ts";
+import type { DockerContainerDetails } from "../docker/types.ts";
 import { testConfig } from "../util/test/config.ts";
 import { captureLogs } from "../util/test/logs.ts";
 import { parseYaml } from "../util/yaml.ts";
@@ -20,7 +22,7 @@ const descriptor = {
 		db: { type: "postgres", image: "postgres:17" },
 	},
 };
-const fixture = () => {
+const fixture = (health: ResourceHealth = "unhealthy") => {
 	const config = parseConfig({
 		version: 1,
 		metadata: { clusterId: "local" },
@@ -40,6 +42,14 @@ const fixture = () => {
 		{ id: "orphan", resourceId: "old", imageId: "sha256:b", revision: "old", spec: "s", state: "exited" },
 	]);
 	const readServiceContainerLogs = vi.fn(async () => "hello env-canary\n");
+	const inspectServiceContainer = vi.fn(async (): Promise<DockerContainerDetails | null> => ({
+		id: "c",
+		imageId: "sha256:a",
+		running: true,
+		labels: {},
+		env: { TOKEN: "actual-secret-canary" },
+		networks: { demo: { address: "172.1.0.2", aliases: ["app"] } },
+	}));
 	const followLogs = vi.fn(
 		async (
 			_serviceId: string,
@@ -68,16 +78,7 @@ const fixture = () => {
 		decodeDescriptorYaml,
 		{
 			listServiceContainers,
-			async inspectServiceContainer() {
-				return {
-					id: "c",
-					imageId: "sha256:a",
-					running: true,
-					labels: {},
-					env: { TOKEN: "actual-secret-canary" },
-					networks: { demo: { address: "172.1.0.2", aliases: ["app"] } },
-				};
-			},
+			inspectServiceContainer,
 			readServiceContainerLogs,
 		},
 		{
@@ -94,6 +95,7 @@ const fixture = () => {
 			async write() {},
 		},
 		{ list: listEvents, append: async () => {} },
+		{ getStatus: (_serviceId, _resourceId, containers) => (containers.length ? health : "missing") },
 		{ follow: followLogs },
 	);
 	return {
@@ -102,11 +104,46 @@ const fixture = () => {
 		fetchFile,
 		readCommit,
 		listServiceContainers,
+		inspectServiceContainer,
 		readServiceContainerLogs,
 		listEvents,
 		followLogs,
 	};
 };
+
+test.each(["deploying", "missing", "healthy", "unhealthy"] as const)(
+	"service and resource snapshots expose %s resource health independently of container state",
+	async (health) => {
+		const f = fixture(health);
+		expect(
+			(await f.service.getService("demo")).resources.find(({ resourceId }) => resourceId === "app"),
+		).toMatchObject({ health, containers: [{ state: "running" }] });
+		expect(await f.service.getResource("demo", "app")).toMatchObject({
+			health,
+			containers: [{ state: "running", running: true }],
+		});
+	},
+);
+
+test("resource inspection cannot retain healthy status after its container disappears or stops", async () => {
+	const f = fixture("healthy");
+	f.inspectServiceContainer.mockResolvedValueOnce(null);
+	expect(await f.service.getResource("demo", "app")).toMatchObject({
+		health: "missing",
+		containers: [{ state: "missing" }],
+	});
+	f.inspectServiceContainer.mockResolvedValueOnce({
+		id: "c",
+		imageId: "image",
+		running: false,
+		labels: {},
+		networks: {},
+	});
+	expect(await f.service.getResource("demo", "app")).toMatchObject({
+		health: "unhealthy",
+		containers: [{ running: false }],
+	});
+});
 
 test("live logs verify configured service/resource/container and require descriptor redaction before opening a follow", async () => {
 	const f = fixture();
@@ -374,6 +411,7 @@ test("cluster inspection and edits delegate configuration policy to the config s
 		{ listServiceContainers: vi.fn(), inspectServiceContainer: vi.fn(), readServiceContainerLogs: vi.fn() },
 		{ read: vi.fn(), write: vi.fn() },
 		{ append: async () => {}, list: async () => [] },
+		{ getStatus: vi.fn() },
 	);
 	expect(await service.getCluster()).toEqual({ clusterId: "local", ...snapshot });
 	const update = { revision: "r1", changes: [{ path: "git.pollIntervalSeconds", value: 9 }] };

@@ -24,6 +24,7 @@ export type {
 	UiSecretFailure,
 	UiContainer,
 	UiResource,
+	ResourceHealth,
 	UiService,
 	UiRevisionMetadata,
 	UiLogs,

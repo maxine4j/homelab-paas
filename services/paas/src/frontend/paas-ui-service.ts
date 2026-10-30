@@ -14,6 +14,7 @@ import type {
 import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IDockerLogService } from "../docker/docker-log-service.ts";
 import type { IGitRevisionService } from "../git/git-service.ts";
+import type { IResourceHealthReader } from "../health/resource-health-service.ts";
 import type { IServiceEventStore } from "../reconciler/service-event-store.ts";
 import type { DescriptorDecoder, IReconciliationStateStore } from "../reconciler/types.ts";
 import { createLogger } from "../util/logger.ts";
@@ -65,6 +66,7 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 		private readonly docker: UiDocker,
 		private readonly state: IReconciliationStateStore,
 		private readonly events: IServiceEventStore,
+		private readonly health: IResourceHealthReader,
 		private readonly logs?: IDockerLogService,
 	) {}
 
@@ -172,20 +174,26 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 		);
 		if (!resource) throw new PaasUiError("not-found");
 		try {
-			return {
-				...resource,
-				containers: await Promise.all(
-					resource.containers.map(async (container) => {
-						const details = await this.docker.inspectServiceContainer(serviceId, container.id);
-						return {
-							...container,
-							state: details ? container.state : "missing",
-							running: details?.running,
-							networks: details?.networks,
-						};
-					}),
-				),
-			};
+			const containers = await Promise.all(
+				resource.containers.map(async (container) => {
+					const details = await this.docker.inspectServiceContainer(serviceId, container.id);
+					return {
+						...container,
+						state: details ? container.state : "missing",
+						running: details?.running,
+						networks: details?.networks,
+					};
+				}),
+			);
+			const health =
+				resource.health === "deploying"
+					? "deploying"
+					: !containers.length || containers.every(({ state }) => state === "missing")
+						? "missing"
+						: containers.some(({ running }) => !running)
+							? "unhealthy"
+							: resource.health;
+			return { ...resource, health, containers };
 		} catch (cause) {
 			throw new PaasUiError("unavailable", { cause });
 		}
@@ -243,6 +251,11 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 				descriptorYaml: file ? stringifyYaml(this.config.sanitize(file.descriptor)) : undefined,
 				resources: ids.map((resourceId) => ({
 					resourceId,
+					health: this.health.getStatus(
+						serviceId,
+						resourceId,
+						containers.filter((container) => container.resourceId === resourceId),
+					),
 					url:
 						resources[resourceId]?.type === "web"
 							? this.ingressUrl(`${resourceId}.${serviceId}`)

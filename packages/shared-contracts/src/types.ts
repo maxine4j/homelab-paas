@@ -80,8 +80,11 @@ export interface UiContainer {
 	networks?: Record<string, { address: string; aliases: string[] }>;
 }
 
+export type ResourceHealth = "deploying" | "missing" | "healthy" | "unhealthy";
+
 export interface UiResource {
 	resourceId: string;
+	health: ResourceHealth;
 	type: string;
 	/** Desired web ingress URLs; presence does not imply readiness. */
 	url?: string;

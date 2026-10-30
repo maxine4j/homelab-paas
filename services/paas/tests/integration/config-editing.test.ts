@@ -34,6 +34,7 @@ test("authenticated config edits persist on disk and update existing JWT and ser
 		{ listServiceContainers: vi.fn(), inspectServiceContainer: vi.fn(), readServiceContainerLogs: vi.fn() },
 		{ read: async () => undefined, write: vi.fn() },
 		{ append: async () => {}, list: async () => [] },
+		{ getStatus: vi.fn() },
 	);
 	const router = createPaasUiRouter(
 		ui,

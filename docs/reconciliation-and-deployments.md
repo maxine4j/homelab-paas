@@ -36,6 +36,21 @@ Docker event subscriptions, resource/service removal, managed resources, egress 
 
 Persistence adapters retain existing filenames and YAML shapes, including `{serviceId}.state.yaml`, `routes.yaml` and certificate metadata; ACME account material remains PEM. Domain stores validate decoded values and sanitize failures over injected generic key-value stores. Missing files are absent state; unreadable, malformed, warning-producing or schema-invalid files fail instead of silently becoming empty state. Legacy routes without an explicit `public` field still require the [documented repair](development.md#local-startup-troubleshooting). In-memory and persistent adapters enforce the same domain validation.
 
+## Resource health
+
+`ResourceHealthService` independently polls web and worker containers at startup and every five seconds, using cached committed descriptors and the existing two-second HTTP probe. Deployment retry backoff and long-running rollouts do not delay this polling. Health changes invalidate management snapshots through the existing change bus; the browser does not poll HTTP. This observation does not restart workloads or change service deployment checkpoints.
+
+Each resource has one health status:
+
+- `deploying`: its rollout is in progress, including startup readiness. This takes precedence over missing containers during recreate. It ends on rollout success or failure; other resources retain their own health.
+- `missing`: no containers are observed outside an active rollout.
+- `healthy`: exactly the expected number of replicas are running, attached to the service network with addresses, and every configured health endpoint returns HTTP `200`.
+- `unhealthy`: containers exist but readiness fails, expected replicas are missing, a container is stopped/disconnected, or health cannot be determined.
+
+Web checks use the ingress port; worker checks use `healthcheckPort`. Both use `healthcheckUrl`, defaulting to `/healthcheck`. Health observations live in memory and apply only to the observed container identities and states. Existing containers remain unhealthy until first checked after startup, replacement or rollout completion. Stale probes overlapping a rollout cannot restore old health. Inspection failures invalidate previous healthy observations and do not prevent other resources or services from being checked. Observed-only resources and unsupported managed resources cannot report healthy solely from Docker lifecycle state.
+
+Service health still represents its persisted reconciliation phase, including the deployment grace window above. Resource health represents live readiness. See [management UI](management-ui.md) for badges, placement and API representation.
+
 ## Service events
 
 `ReconcilerService` appends every reconciliation failure, including Git, descriptor, capability, secret-resolution, web/worker deployment and checkpoint failures, to an injected service-event store. Failures record a timestamp, severity, operation, fixed actionable message, revision, resource identity when known, retry count and scheduled retry time when available. Each eligible failed retry adds an event; polling during backoff adds none. Initial deployments, changed active revisions and recovery also add events; successful unchanged polling stays silent.

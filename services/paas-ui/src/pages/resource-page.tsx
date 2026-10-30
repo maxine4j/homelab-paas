@@ -3,6 +3,7 @@ import type { UiLogs, UiResource } from "@homelab-paas/shared-contracts";
 import { ContainerLogs } from "../components/container-logs.tsx";
 import { ResourceConfiguration } from "../components/resource-configuration.tsx";
 import { ResourceState } from "../components/resource-state.tsx";
+import { StatusBadge } from "../components/status-badge.tsx";
 import type { ResourceTab } from "../types.ts";
 
 export const ResourcePage = ({
@@ -29,7 +30,10 @@ export const ResourcePage = ({
 			<div className='page-heading'>
 				<div>
 					<p className='eyebrow'>{resource.type} resource</p>
-					<h1>{resource.resourceId}</h1>
+					<div className='service-identity'>
+						<h1>{resource.resourceId}</h1>
+						<StatusBadge status={resource.health} />
+					</div>
 					<p>{resource.containers.length} observed containers · live updates</p>
 					{resource.url && (
 						<p>

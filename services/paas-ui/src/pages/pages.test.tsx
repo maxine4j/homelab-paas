@@ -10,6 +10,37 @@ import { ServiceEventsPage } from "./service-events-page.tsx";
 import { ServicePage } from "./service-page.tsx";
 import { ServicesPage } from "./services-page.tsx";
 
+test.each(["deploying", "missing", "healthy", "unhealthy"] as const)(
+	"resource %s health sits beside its heading and replaces card container status",
+	(health) => {
+		const resource = {
+			resourceId: "app",
+			type: "web",
+			health,
+			containers: [
+				{ id: "c", resourceId: "app", imageId: "image", revision: "rev", state: "running", running: true },
+			],
+		};
+		const html = renderToStaticMarkup(<ResourcePage serviceId='demo' resource={resource} tab='config' />);
+		expect(html).toMatch(new RegExp(`class="service-identity"><h1>app</h1>[^]*?badge-${health}`));
+		expect(html).toContain("badge-running");
+		expect(html).toContain("running");
+		const cards = renderToStaticMarkup(
+			<ServicePage
+				service={{
+					serviceId: "demo",
+					phase: "ready",
+					source: {},
+					descriptorStatus: "available",
+					resources: [resource],
+				}}
+			/>,
+		);
+		expect(cards).toMatch(new RegExp(`card resource-link[^]*?badge-${health}`));
+		expect(cards).not.toContain("badge-running");
+	},
+);
+
 test("web inspection links to the resource host and primary service alias", () => {
 	const html = renderToStaticMarkup(
 		<ResourcePage
@@ -17,6 +48,7 @@ test("web inspection links to the resource host and primary service alias", () =
 			tab='config'
 			resource={{
 				resourceId: "app",
+				health: "missing",
 				type: "web",
 				containers: [],
 				url: "https://app.demo.example.test",
@@ -45,7 +77,7 @@ test("cluster and service pages expose configuration, deployment status and reso
 				phase: "ready",
 				source: {},
 				descriptorStatus: "unavailable",
-				resources: [{ resourceId: "app", type: "web", containers: [] }],
+				resources: [{ resourceId: "app", type: "web", health: "missing", containers: [] }],
 			}}
 		/>,
 	);
@@ -238,7 +270,13 @@ test("service details show two recent events above resources and collapse the co
 					resources: { app: { type: "web", image: "app:1" } },
 				},
 				resources: [
-					{ resourceId: "app", type: "web", primaryUrl: "https://demo.example.test", containers: [] },
+					{
+						resourceId: "app",
+						type: "web",
+						health: "missing",
+						primaryUrl: "https://demo.example.test",
+						containers: [],
+					},
 				],
 			}}
 			events={[
@@ -406,6 +444,7 @@ test("cluster presents identity and ingress above an editor limited to Git, reco
 
 test("resource inspection renders configuration, state and escaped log output", () => {
 	const resource = {
+		health: "healthy" as const,
 		resourceId: "app",
 		type: "web",
 		config: { image: "app:1" },
@@ -441,6 +480,7 @@ test("resource inspection renders configuration, state and escaped log output", 
 
 test("logs select the first observed container by default and preserve an explicit selection", () => {
 	const resource = {
+		health: "healthy" as const,
 		resourceId: "app",
 		type: "web",
 		containers: ["first", "second"].map((id) => ({

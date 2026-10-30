@@ -26,6 +26,15 @@ const request: WorkerDeploymentRequest = {
 	},
 };
 
+test("failed worker rollout clears deploying health", async () => {
+	const f = fixture();
+	const progress = { started: vi.fn(), succeeded: vi.fn(), failed: vi.fn() };
+	vi.mocked(f.docker.resolveImage).mockRejectedValue(new Error("pull failed"));
+	const service = new WorkerDeploymentService(f.docker, f.probe, f.sleep, () => "id", progress);
+	await expect(service.deploy(request)).rejects.toThrow("pull failed");
+	expect(progress.failed).toHaveBeenCalledWith("demo", "jobs", "rev2");
+});
+
 test.each(["recreate", "surge"] as const)(
 	"forced %s replaces every healthy replica and retains mounts",
 	async (rolloutStrategy) => {

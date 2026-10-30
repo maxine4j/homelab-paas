@@ -122,6 +122,7 @@ test("existing reconciler and UI discover reloaded service sources and retry bou
 		},
 		state,
 		{ append: async () => {}, list: async () => [] },
+		{ getStatus: () => "missing" },
 	);
 	await service.reconcile();
 	expect(fetchFile).not.toHaveBeenCalled();

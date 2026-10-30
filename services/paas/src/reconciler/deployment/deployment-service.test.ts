@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import { DeploymentService } from "./deployment-service.ts";
 import type { DeploymentRequest, DeploymentStrategy } from "./strategy/types.ts";
@@ -10,6 +10,24 @@ const request: DeploymentRequest = {
 	spec: "spec",
 	resource: { type: "web", image: "app:1", ingress: { public: true, port: 8080 } },
 };
+
+test("failed rollouts clear deploying health while preserving the deployment failure", async () => {
+	const progress = { started: vi.fn(), succeeded: vi.fn(), failed: vi.fn() };
+	const service = new DeploymentService(
+		[
+			{
+				name: "recreate",
+				deploy: async () => {
+					throw new Error("rollout failed");
+				},
+			},
+		],
+		progress,
+	);
+	await expect(service.deploy(request)).rejects.toThrow("rollout failed");
+	expect(progress.failed).toHaveBeenCalledWith("demo", "app", "rev");
+	expect(progress.succeeded).not.toHaveBeenCalled();
+});
 
 test("selects recreate for omitted or explicit rollout strategy", async () => {
 	const calls: DeploymentRequest[] = [];

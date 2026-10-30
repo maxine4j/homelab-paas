@@ -29,6 +29,7 @@ import { GitClient } from "./git/git-client.ts";
 import { GitRefreshService } from "./git/git-refresh-service.ts";
 import { GitService } from "./git/git-service.ts";
 import { NodeGitTransport } from "./git/git-transport.ts";
+import { ResourceHealthService } from "./health/resource-health-service.ts";
 import { createAuthRouter } from "./ingress/auth/auth-router.ts";
 import { AuthService } from "./ingress/auth/auth-service.ts";
 import { JwtClient } from "./ingress/auth/jwt-client.ts";
@@ -105,7 +106,9 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	);
 	await envoy.bootstrap();
 	const networking = new NetworkingService(endpoints, envoy);
-	const progress = new DeploymentProgress(store, events, changes, Date.now);
+	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/git`);
+	const health = new ResourceHealthService(config, git, decodeDescriptorYaml, docker, probe, changes);
+	const progress = new DeploymentProgress(store, events, changes, Date.now, health);
 	const deployment = new DeploymentService(
 		[
 			new RecreateDeploymentStrategy(docker, networking, probe, sleep),
@@ -113,7 +116,6 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		],
 		progress,
 	);
-	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/git`);
 	const reconciler = new ReconcilerService(
 		config,
 		git,
@@ -188,7 +190,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 			() => provisioner.requiredDomains(),
 		);
 	}
-	const uiService = new PaasUiService(config, git, decodeDescriptorYaml, docker, store, events, dockerLogs);
+	const uiService = new PaasUiService(config, git, decodeDescriptorYaml, docker, store, events, health, dockerLogs);
 	const managementOrigin = (): string => {
 		const { baseDomain, httpPort, httpsPort } = config.getIngressConfig();
 		const port = httpsPort ?? httpPort;
@@ -239,6 +241,15 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	if (!lifecycle.isOpen()) return;
 	const runners = [
 		runner,
+		new PeriodicTaskRunner({
+			lifecycle,
+			periodMs: 5000,
+			taskName: "resource-health",
+			generateTaskId: nanoid,
+			task: health,
+			pause,
+			report: (err) => logger.error({ err }, "Resource health polling failed; check Docker access"),
+		}),
 		new PeriodicTaskRunner({
 			lifecycle,
 			periodMs: () => config.getGitConfig().pollIntervalSeconds * 1000,

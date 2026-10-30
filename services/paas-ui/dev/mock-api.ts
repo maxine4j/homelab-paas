@@ -5,6 +5,7 @@ const revision = "b7e92a43c0d851fa6e129b0d2c7a8e5409631fba";
 const resources: UiResource[] = [
 	{
 		resourceId: "web",
+		health: "healthy",
 		type: "web",
 		url: "https://web.paperless.example.test",
 		primaryUrl: "https://paperless.example.test",
@@ -69,6 +70,7 @@ egress:
 	},
 	{
 		resourceId: "database",
+		health: "healthy",
 		type: "postgres",
 		configYaml: "type: postgres\nimage: postgres:17\nlimits:\n  cpus: 1\n  memoryMiB: 1024\n",
 		config: { type: "postgres", image: "postgres:17", limits: { cpus: 1, memoryMiB: 1024 } },
@@ -86,6 +88,7 @@ egress:
 	},
 	{
 		resourceId: "broker",
+		health: "healthy",
 		type: "rabbitmq",
 		configYaml: "type: rabbitmq\nimage: rabbitmq:4\nlimits:\n  memoryMiB: 512\n",
 		config: { type: "rabbitmq", image: "rabbitmq:4", limits: { memoryMiB: 512 } },
