@@ -52,8 +52,15 @@ export interface IDockerClient {
 	pullImage(reference: string): Promise<void>;
 }
 
+export interface IDockerPruneClient {
+	/** Host-wide equivalent of system prune --all, excluding volumes. Returns reclaimed bytes.
+	 * Rejects with DockerClientError; earlier deletions remain if a later prune fails.
+	 */
+	pruneUnused(): Promise<number>;
+}
+
 /** Docker Engine adapter; naming, ownership and deployment policy belong to callers. */
-export class DockerClient implements IDockerClient {
+export class DockerClient implements IDockerClient, IDockerPruneClient {
 	constructor(private readonly transport: IDockerTransport) {}
 
 	private async request(
@@ -340,6 +347,28 @@ export class DockerClient implements IDockerClient {
 			if (event.error !== undefined || event.errorDetail !== undefined)
 				throw new DockerClientError("unavailable", { cause: new Error(`Docker image pull failed: ${line}`) });
 		}
+	}
+
+	async pruneUnused(): Promise<number> {
+		let reclaimedBytes = 0;
+		const imageFilters = encodeURIComponent(JSON.stringify({ dangling: ["false"] }));
+		for (const path of [
+			"/containers/prune",
+			"/networks/prune",
+			`/images/prune?filters=${imageFilters}`,
+			"/build/prune?all=true",
+		]) {
+			const response = await this.request("POST", path, undefined, [200]);
+			if (path === "/networks/prune") {
+				decode(z.object({ NetworksDeleted: z.array(z.string()).nullable() }), response.body);
+			} else {
+				reclaimedBytes += decode(
+					z.object({ SpaceReclaimed: z.number().int().nonnegative() }),
+					response.body,
+				).SpaceReclaimed;
+			}
+		}
+		return reclaimedBytes;
 	}
 }
 

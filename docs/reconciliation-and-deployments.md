@@ -174,6 +174,12 @@ Images are pulled when first creating a resource or deploying a changed image re
 
 Periodic detection of changed content behind an unchanged image tag is not required. Image tagging policy belongs to each service.
 
+### Docker disk cleanup
+
+The control plane runs host-wide Docker cleanup at startup and every six hours after the previous run completes, equivalent to `docker system prune --all` without `--volumes`. It removes all stopped containers, unused networks, all images without an associated container (including tagged images), and unused build cache. This includes Docker resources outside the platform's labels. Docker volumes, persistent host storage and generated credentials are retained.
+
+Cleanup runs independently of deployments; a rare race can remove a newly pulled image or a newly created stopped container before deployment uses it. Normal reconciliation retries recover these failures. Unused local-only images can also be removed and must be reloaded before later deployments. Cleanup does not overlap itself. Failures are logged and retried on the next six-hour run; shutdown waits for an in-flight cleanup. Successful runs log reclaimed bytes. Cleanup reclaims unused Docker data but does not bound application logs or persistent storage growth.
+
 ### Removal
 
 Removing a resource stops and removes its containers. Removing a service stops and removes all its resource containers.

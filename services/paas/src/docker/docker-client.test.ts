@@ -3,6 +3,58 @@ import { expect, test } from "vitest";
 import { DockerClient, DockerClientError } from "./docker-client.ts";
 import type { IDockerTransport } from "./docker-transport.ts";
 
+test("prunes host-wide unused containers, networks, all images and build cache without removing volumes", async () => {
+	const calls: { method: string; path: string; body: unknown }[] = [];
+	const client = new DockerClient({
+		async request(method, path, body) {
+			calls.push({ method, path, body });
+			return {
+				status: 200,
+				body: JSON.stringify(path === "/networks/prune" ? { NetworksDeleted: null } : { SpaceReclaimed: 100 }),
+			};
+		},
+	});
+	expect(await client.pruneUnused()).toBe(300);
+	expect(calls).toEqual([
+		{ method: "POST", path: "/containers/prune", body: undefined },
+		{ method: "POST", path: "/networks/prune", body: undefined },
+		{
+			method: "POST",
+			path: `/images/prune?filters=${encodeURIComponent(JSON.stringify({ dangling: ["false"] }))}`,
+			body: undefined,
+		},
+		{ method: "POST", path: "/build/prune?all=true", body: undefined },
+	]);
+});
+
+test.each(["/containers/prune", "/networks/prune", "/images/prune", "/build/prune"])(
+	"reports prune failures at %s and permits a subsequent retry",
+	async (failedPath) => {
+		let fail = true;
+		const client = new DockerClient({
+			async request(_method, path) {
+				if (fail && path.startsWith(failedPath)) return { status: 500, body: "prune failed" };
+				return {
+					status: 200,
+					body: JSON.stringify(path === "/networks/prune" ? { NetworksDeleted: [] } : { SpaceReclaimed: 0 }),
+				};
+			},
+		});
+		await expect(client.pruneUnused()).rejects.toMatchObject({ kind: "unavailable" });
+		fail = false;
+		expect(await client.pruneUnused()).toBe(0);
+	},
+);
+
+test.each(["not json", "{}", '{"SpaceReclaimed":-1}', '{"SpaceReclaimed":"100"}'])(
+	"rejects malformed prune responses: %s",
+	async (raw) => {
+		await expect(fixture(200, undefined, raw).client.pruneUnused()).rejects.toMatchObject({
+			kind: "invalid-response",
+		});
+	},
+);
+
 test.each([0, 1])("prepares host mount roots through an isolated helper and cleans up: exit %s", async (exitCode) => {
 	const calls: { method: string; path: string; body: unknown }[] = [];
 	const client = new DockerClient({

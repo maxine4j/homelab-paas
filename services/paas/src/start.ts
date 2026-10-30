@@ -245,6 +245,21 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		runner,
 		new PeriodicTaskRunner({
 			lifecycle,
+			periodMs: 6 * 60 * 60 * 1000,
+			taskName: "docker-prune",
+			generateTaskId: nanoid,
+			task: {
+				run: async () => {
+					const reclaimedBytes = await dockerClient.pruneUnused();
+					logger.info({ reclaimedBytes }, "Docker cleanup completed");
+				},
+			},
+			pause,
+			report: (err) =>
+				logger.error({ err }, "Docker cleanup failed; check Docker access; will retry in six hours"),
+		}),
+		new PeriodicTaskRunner({
+			lifecycle,
 			periodMs: 5000,
 			taskName: "resource-health",
 			generateTaskId: nanoid,
