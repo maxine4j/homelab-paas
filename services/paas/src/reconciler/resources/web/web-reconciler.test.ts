@@ -10,6 +10,19 @@ import { WebResourceReconciler } from "./web-reconciler.ts";
 const resource: DeploymentWebResource = { type: "web", image: "app:1", ingress: { public: true, port: 8080 } };
 const input = { serviceId: "demo", resourceId: "app", revision: "rev", resource };
 
+test("volume ownership policy changes the web specification and ignores read-only ownership", async () => {
+	const f = fixture();
+	const hash = async (readOnly: boolean, ownership?: false) => {
+		await f.reconciler.reconcile({
+			...input,
+			resource: { ...resource, volumes: [{ hostPath: "/srv/data", mountPath: "/data", readOnly, ownership }] },
+		});
+		return f.requests.at(-1)!.spec;
+	};
+	expect(await hash(false)).not.toBe(await hash(false, false));
+	expect(await hash(true)).toBe(await hash(true, false));
+});
+
 test("forced reconciliation replaces a healthy unchanged web container", async () => {
 	const f = fixture();
 	const containers = await f.converge();

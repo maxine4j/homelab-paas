@@ -37,6 +37,11 @@ export interface IDockerClient {
 	inspectContainer(id: string): Promise<DockerContainerDetails | null>;
 	/** Returns a completed tail; live follows use IDockerLogClient. */
 	readContainerLogs(id: string): Promise<string>;
+	/** Nonrecursively assigns source roots to 1000:1000 using a short-lived helper.
+	 * The caller supplies a trusted control-plane image and writable source paths.
+	 * Rejects on helper failure; cleanup is attempted even after start/wait failure.
+	 */
+	prepareVolumeOwnership(image: string, hostPaths: string[], labels: Labels): Promise<void>;
 	/** Bind mounts use shared SELinux labels; Docker creates missing source directories on start. */
 	createContainer(options: CreateContainerOptions): Promise<string>;
 	startContainer(id: string): Promise<void>;
@@ -223,6 +228,76 @@ export class DockerClient implements IDockerClient {
 			[201],
 		);
 		return decode(identity, response.body).Id;
+	}
+
+	async prepareVolumeOwnership(image: string, hostPaths: string[], labels: Labels): Promise<void> {
+		if (!hostPaths.length) return;
+		const response = await this.request(
+			"POST",
+			"/containers/create",
+			{
+				Image: image,
+				User: "0:0",
+				Entrypoint: ["chown"],
+				Cmd: ["-h", "1000:1000", ...hostPaths.map((_path, index) => `/volumes/${index}`)],
+				Labels: labels,
+				HostConfig: {
+					Binds: hostPaths.map((hostPath, index) => `${hostPath}:/volumes/${index}:rw,z`),
+					NetworkMode: "none",
+					ReadonlyRootfs: true,
+					CapDrop: ["ALL"],
+					CapAdd: ["CHOWN", "DAC_OVERRIDE"],
+					SecurityOpt: ["no-new-privileges:true"],
+				},
+			},
+			[201],
+		);
+		const id = decode(identity, response.body).Id;
+		let failure: unknown;
+		try {
+			await this.startContainer(id);
+			const completion = await this.request(
+				"POST",
+				`/containers/${encodeURIComponent(id)}/wait?condition=not-running`,
+				undefined,
+				[200],
+				30000,
+			);
+			const result = decode(
+				z.object({ StatusCode: z.number().int(), Error: z.object({ Message: z.string() }).optional() }),
+				completion.body,
+			);
+			if (result.StatusCode !== 0 || result.Error?.Message) {
+				let diagnostics: string;
+				try {
+					diagnostics = await this.readContainerLogs(id);
+				} catch (cause) {
+					throw new DockerClientError("unavailable", {
+						cause: new Error(
+							`Volume ownership helper failed: exit ${result.StatusCode}; could not read helper diagnostics`,
+							{ cause },
+						),
+					});
+				}
+				throw new DockerClientError("unavailable", {
+					cause: new Error(
+						`Volume ownership helper failed: exit ${result.StatusCode}: ${result.Error?.Message ?? ""}\n${diagnostics}`,
+					),
+				});
+			}
+		} catch (cause) {
+			failure = cause;
+		}
+		try {
+			await this.request("DELETE", `/containers/${encodeURIComponent(id)}?force=true`, undefined, [204, 404]);
+		} catch (cause) {
+			throw failure
+				? new DockerClientError("unavailable", {
+						cause: new AggregateError([failure, cause], "Volume helper execution and cleanup failed"),
+					})
+				: cause;
+		}
+		if (failure) throw failure;
 	}
 
 	async startContainer(id: string): Promise<void> {

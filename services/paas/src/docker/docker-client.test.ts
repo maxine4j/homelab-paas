@@ -3,6 +3,83 @@ import { expect, test } from "vitest";
 import { DockerClient, DockerClientError } from "./docker-client.ts";
 import type { IDockerTransport } from "./docker-transport.ts";
 
+test.each([0, 1])("prepares host mount roots through an isolated helper and cleans up: exit %s", async (exitCode) => {
+	const calls: { method: string; path: string; body: unknown }[] = [];
+	const client = new DockerClient({
+		async request(method, path, body) {
+			calls.push({ method, path, body });
+			if (path === "/containers/create") return { status: 201, body: JSON.stringify({ Id: "helper" }) };
+			if (path.endsWith("/wait?condition=not-running"))
+				return { status: 200, body: JSON.stringify({ StatusCode: exitCode }) };
+			if (path.includes("/logs?"))
+				return { status: 200, body: "", bytes: new TextEncoder().encode("chown: permission denied") };
+			return { status: 204, body: "" };
+		},
+	});
+	const result = client.prepareVolumeOwnership("controller-image", ["/srv/data", "/srv/file with spaces"], {
+		"homelab-paas.role": "volume-init",
+	});
+	if (exitCode)
+		await expect(result).rejects.toMatchObject({
+			kind: "unavailable",
+			cause: expect.objectContaining({ message: expect.stringContaining("chown: permission denied") }),
+		});
+	else await result;
+	expect(calls.map(({ method, path }) => [method, path])).toEqual([
+		["POST", "/containers/create"],
+		["POST", "/containers/helper/start"],
+		["POST", "/containers/helper/wait?condition=not-running"],
+		...(exitCode
+			? [["GET", "/containers/helper/logs?stdout=true&stderr=true&timestamps=true&tail=200&follow=false"]]
+			: []),
+		["DELETE", "/containers/helper?force=true"],
+	]);
+	expect(calls.at(0)?.body).toMatchObject({
+		Image: "controller-image",
+		User: "0:0",
+		Entrypoint: ["chown"],
+		Cmd: ["-h", "1000:1000", "/volumes/0", "/volumes/1"],
+		HostConfig: {
+			NetworkMode: "none",
+			ReadonlyRootfs: true,
+			Binds: ["/srv/data:/volumes/0:rw,z", "/srv/file with spaces:/volumes/1:rw,z"],
+		},
+	});
+});
+
+test("preserves both helper and cleanup failures", async () => {
+	const client = new DockerClient({
+		async request(_method, path) {
+			if (path === "/containers/create") return { status: 201, body: '{"Id":"helper"}' };
+			throw new Error(path.endsWith("/start") ? "start failed" : "cleanup failed");
+		},
+	});
+	await expect(client.prepareVolumeOwnership("image", ["/srv/data"], {})).rejects.toMatchObject({
+		cause: {
+			errors: [
+				expect.objectContaining({ cause: new Error("start failed") }),
+				expect.objectContaining({ cause: new Error("cleanup failed") }),
+			],
+		},
+	});
+});
+
+test("cleans up a helper when startup fails", async () => {
+	const paths: string[] = [];
+	const client = new DockerClient({
+		async request(_method, path) {
+			paths.push(path);
+			if (path === "/containers/create") return { status: 201, body: '{"Id":"helper"}' };
+			if (path.endsWith("/start")) throw new Error("start failed");
+			return { status: 204, body: "" };
+		},
+	});
+	await expect(client.prepareVolumeOwnership("image", ["/srv/data"], {})).rejects.toMatchObject({
+		kind: "unavailable",
+	});
+	expect(paths.at(-1)).toBe("/containers/helper?force=true");
+});
+
 test("maps Docker mount metadata for host secret file discovery", async () => {
 	const f = fixture(200, {
 		Id: "controller",

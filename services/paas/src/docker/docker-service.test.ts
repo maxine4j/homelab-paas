@@ -8,6 +8,40 @@ import type { DockerContainer, DockerContainerDetails, DockerNetwork } from "./t
 
 const ownership = { "homelab-paas.cluster": "local", "homelab-paas.service": "demo" };
 
+test("prepares only writable opted-in mounts using the uniquely identified control-plane image before creating workloads", async () => {
+	const f = fixture({
+		async listContainers() {
+			return [
+				{
+					...container,
+					imageId: "controller-image",
+					labels: { "homelab-paas.cluster": "local", "homelab-paas.role": "control-plane" },
+				},
+			];
+		},
+	});
+	await f.service.createResourceContainer({
+		serviceId: "demo",
+		resourceId: "app",
+		revision: "rev",
+		spec: "spec",
+		imageId: "image",
+		volumes: [
+			{ hostPath: "/srv/data", mountPath: "/data" },
+			{ hostPath: "/srv/media", mountPath: "/media", readOnly: true },
+			{ hostPath: "/srv/custom", mountPath: "/custom", ownership: false },
+		],
+	});
+	expect(f.calls.filter(({ operation }) => operation !== "listContainers").map(({ operation }) => operation)).toEqual(
+		["prepareVolumeOwnership", "createContainer"],
+	);
+	expect(f.calls.find(({ operation }) => operation === "prepareVolumeOwnership")?.args).toEqual([
+		"controller-image",
+		["/srv/data"],
+		{ "homelab-paas.cluster": "local", "homelab-paas.owner-service": "demo", "homelab-paas.role": "volume-init" },
+	]);
+});
+
 test("preserves descriptor mounts and resource limits for the Docker adapter", async () => {
 	const f = fixture();
 	const volumes = [{ hostPath: "/mnt/external drive", mountPath: "/data", readOnly: true }];
@@ -65,6 +99,9 @@ function fixture(overrides: Partial<IDockerClient> = {}) {
 		calls.push({ operation, args });
 	}
 	const client: IDockerClient = {
+		async prepareVolumeOwnership(...args) {
+			record("prepareVolumeOwnership", ...args);
+		},
 		async readContainerLogs() {
 			return "";
 		},

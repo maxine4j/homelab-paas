@@ -21,6 +21,7 @@ const volume = z.strictObject({
 	hostPath: absolutePath,
 	mountPath: absolutePath.refine((path) => path !== "/"),
 	readOnly: z.boolean().optional(),
+	ownership: z.literal(false).optional(),
 });
 const devicePath = absolutePath.refine(
 	(path) =>

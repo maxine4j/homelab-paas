@@ -89,11 +89,12 @@ export class WorkerResourceReconciler implements IWorkerResourceReconciler {
 						command: resource.command ?? null,
 						env,
 						volumes:
-							resource.volumes?.map(({ hostPath, mountPath, readOnly }) => ({
+							resource.volumes?.map(({ hostPath, mountPath, readOnly, ownership }) => ({
 								hostPath,
 								mountPath,
 								readOnly: readOnly ?? false,
 								selinux: "z",
+								...(!readOnly && ownership !== false ? { ownership: "1000:1000" } : {}),
 							})) ?? [],
 						limits: { cpus: resource.limits?.cpus, memoryMiB: resource.limits?.memoryMiB },
 						replicas: resource.replicas ?? 1,

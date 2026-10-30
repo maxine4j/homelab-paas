@@ -10,6 +10,19 @@ import { WorkerResourceReconciler } from "./worker-reconciler.ts";
 const resource: DeploymentWorkerResource = { type: "worker", image: "jobs:1", healthcheckPort: 9090, replicas: 2 };
 const input = { serviceId: "demo", resourceId: "jobs", revision: "rev1", resource };
 
+test("volume ownership policy changes the worker specification and ignores read-only ownership", async () => {
+	const f = fixture();
+	const hash = async (readOnly: boolean, ownership?: false) => {
+		await f.reconciler.reconcile({
+			...input,
+			resource: { ...resource, volumes: [{ hostPath: "/srv/data", mountPath: "/data", readOnly, ownership }] },
+		});
+		return f.deploy.mock.calls.at(-1)!.at(0)!.spec;
+	};
+	expect(await hash(false)).not.toBe(await hash(false, false));
+	expect(await hash(true)).toBe(await hash(true, false));
+});
+
 test("forced reconciliation replaces healthy unchanged worker replicas", async () => {
 	const f = fixture();
 	await f.converge();

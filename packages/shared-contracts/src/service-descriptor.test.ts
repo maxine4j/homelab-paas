@@ -312,6 +312,23 @@ test.each([
 	).toThrow("Invalid service descriptor");
 });
 
+test("accepts opting out of application volume ownership", () => {
+	expect(
+		parseDescriptor(
+			{
+				...descriptor,
+				resources: {
+					app: {
+						...descriptor.resources.app,
+						volumes: [{ hostPath: "/srv/data", mountPath: "/data", ownership: false }],
+					},
+				},
+			},
+			"test-service",
+		).resources["app"],
+	).toMatchObject({ volumes: [{ ownership: false }] });
+});
+
 test.each(["/srv/media", "/mnt/other disk/data", "/etc/application.conf"])(
 	"accepts arbitrary absolute Docker host paths: %s",
 	(hostPath) => {

@@ -150,7 +150,30 @@ export class DockerService implements IDockerService {
 		return image.id;
 	}
 
-	createResourceContainer(options: CreateResourceContainerOptions): Promise<string> {
+	async createResourceContainer(options: CreateResourceContainerOptions): Promise<string> {
+		const hostPaths = [
+			...new Set(
+				options.volumes
+					?.filter(({ readOnly, ownership }) => !readOnly && ownership !== false)
+					.map(({ hostPath }) => hostPath),
+			),
+		];
+		if (hostPaths.length) {
+			const labels = { "homelab-paas.cluster": this.config.getClusterId(), "homelab-paas.role": "control-plane" };
+			const controllers = await this.client.listContainers({ all: false, labels });
+			const controller = controllers.at(0);
+			if (
+				controllers.length !== 1
+				|| !controller
+				|| Object.entries(labels).some(([key, value]) => controller.labels[key] !== value)
+			)
+				throw new DockerServiceError("infrastructure");
+			await this.client.prepareVolumeOwnership(controller.imageId, hostPaths, {
+				"homelab-paas.cluster": this.config.getClusterId(),
+				"homelab-paas.owner-service": options.serviceId,
+				"homelab-paas.role": "volume-init",
+			});
+		}
 		return this.client.createContainer({
 			name: `paas-${this.config.getClusterId()}-${options.serviceId}-${options.resourceId}-${options.spec.slice(0, 12)}${options.instanceId ? `-${options.instanceId}` : ""}`,
 			image: options.imageId,
