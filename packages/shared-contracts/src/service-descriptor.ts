@@ -121,7 +121,7 @@ const web = z.strictObject({
 	healthcheckUrl: z
 		.string()
 		.regex(/^\/(?!\/)[^\s]*$/)
-		.default("/healthcheck"),
+		.nullish(),
 });
 const worker = z.strictObject({
 	...workload,

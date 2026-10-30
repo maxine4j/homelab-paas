@@ -26,6 +26,12 @@ const fileStore = (directory: string) =>
 	);
 
 const contract = (given: () => Promise<KeyValueStore<unknown>>) => {
+	test.each([undefined, null])("persists routes without HTTP checks: %s", async (healthcheckPath) => {
+		const values = await given();
+		const store = new EndpointsStore(values);
+		await store.set("demo", { ...endpoint, healthcheckPath });
+		expect((await new EndpointsStore(values).getAll())["demo"]?.healthcheckPath).toBe(healthcheckPath);
+	});
 	test("persists deployment start times across store recreation and validates timestamps", async () => {
 		const values = await given();
 		await new ReconciliationStore(values).write("demo", { phase: "deploying", deploymentStartedAt: 0 });

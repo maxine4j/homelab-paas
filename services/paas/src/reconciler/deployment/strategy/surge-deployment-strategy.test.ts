@@ -23,6 +23,16 @@ const request: DeploymentRequest = {
 	},
 };
 
+test.each([undefined, null])("surge publishes running containers without an HTTP check: %s", async (healthcheckUrl) => {
+	const f = fixture();
+	await f.strategy.deploy({ ...request, resource: { ...request.resource, healthcheckUrl } });
+	expect(f.calls.some(({ action }) => action === "probe")).toBe(false);
+	expect(f.calls.find(({ action }) => action === "route")?.args).toEqual([
+		"app.demo",
+		expect.objectContaining({ healthcheckPath: undefined }),
+	]);
+});
+
 test("publishes the selected resource with its primary policy", async () => {
 	const f = fixture();
 	await f.strategy.deploy({ ...request, resourceId: "admin", resource: { ...request.resource, primary: false } });
@@ -181,7 +191,7 @@ test("uses defaults and skips retirement on initial deployment", async () => {
 		...request,
 		resource: { type: "web", image: "app:2", ingress: { public: true, port: 8080 } },
 	});
-	expect(f.calls.find((c) => c.action === "probe")?.args).toEqual(["10.0.0.2", 8080, "/healthcheck"]);
+	expect(f.calls.some((c) => c.action === "probe")).toBe(false);
 	expect(f.calls.some((c) => ["sleep", "stop", "remove"].includes(c.action))).toBe(false);
 });
 

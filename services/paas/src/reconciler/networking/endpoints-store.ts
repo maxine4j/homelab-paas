@@ -55,7 +55,7 @@ const routesSchema = z.record(
 	z.strictObject({
 		address: z.union([z.ipv4(), z.ipv6()]),
 		port: z.number().int().min(1).max(65535),
-		healthcheckPath: z.string().startsWith("/").default("/healthcheck"),
+		healthcheckPath: z.string().startsWith("/").nullish(),
 		public: z.boolean(),
 		primary: z.boolean().optional(),
 	}),

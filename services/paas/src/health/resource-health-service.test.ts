@@ -6,7 +6,11 @@ import { ChangeBus } from "../events/change-bus.ts";
 import { testConfig } from "../util/test/config.ts";
 import { ResourceHealthService } from "./resource-health-service.ts";
 
-const fixture = (type: "web" | "worker" = "web", replicas = 1) => {
+const fixture = (
+	type: "web" | "worker" = "web",
+	replicas = 1,
+	healthcheck: { healthcheckUrl?: string | null } = { healthcheckUrl: "/ready" },
+) => {
 	const config = testConfig(
 		parseConfig({
 			version: 1,
@@ -28,8 +32,8 @@ const fixture = (type: "web" | "worker" = "web", replicas = 1) => {
 			resources: {
 				app:
 					type === "web"
-						? { type, image: "app:1", ingress: { port: 80, public: true }, healthcheckUrl: "/ready" }
-						: { type, image: "app:1", healthcheckPort: 9000, replicas },
+						? { type, image: "app:1", ingress: { port: 80, public: true }, ...healthcheck }
+						: { type, image: "app:1", healthcheckPort: 9000, replicas, ...healthcheck },
 			},
 		}),
 	}));
@@ -68,6 +72,19 @@ const fixture = (type: "web" | "worker" = "web", replicas = 1) => {
 	return { health, config, containers, probe, receive, fetchFile, listServiceContainers, inspectServiceContainer };
 };
 
+test.each(["web", "worker"] as const)("%s health uses running state when no URL is configured", async (type) => {
+	for (const healthcheckUrl of [undefined, null]) {
+		const f = fixture(type, 1, { healthcheckUrl });
+		f.probe.mockResolvedValue(false);
+		await f.health.run();
+		expect(f.health.getStatus("demo", "app", f.containers)).toBe("healthy");
+		expect(f.probe).not.toHaveBeenCalled();
+		f.containers[0]!.state = "exited";
+		await f.health.run();
+		expect(f.health.getStatus("demo", "app", f.containers)).toBe("unhealthy");
+	}
+});
+
 test("polls web readiness independently of reconciliation and pushes only changes", async () => {
 	const f = fixture();
 	expect(f.health.getStatus("demo", "app", [])).toBe("missing");
@@ -93,7 +110,7 @@ test("workers require all expected replicas to pass private health checks", asyn
 	expect(f.health.getStatus("demo", "app", f.containers)).toBe("unhealthy");
 	f.containers.push({ ...f.containers[0]!, id: "second" });
 	await f.health.run();
-	expect(f.probe).toHaveBeenCalledWith("172.1.0.2", 9000, "/healthcheck");
+	expect(f.probe).toHaveBeenCalledWith("172.1.0.2", 9000, "/ready");
 	expect(f.health.getStatus("demo", "app", f.containers)).toBe("healthy");
 	f.probe.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
 	await f.health.run();
@@ -172,8 +189,8 @@ test("one service or resource failure cannot hide another resource's health", as
 				version: 1,
 				metadata: { serviceId: "demo" },
 				resources: {
-					app: { type: "web", image: "app:1", ingress: { port: 80, public: true } },
-					jobs: { type: "worker", image: "jobs:1", healthcheckPort: 9000 },
+					app: { type: "web", image: "app:1", ingress: { port: 80, public: true }, healthcheckUrl: "/ready" },
+					jobs: { type: "worker", image: "jobs:1", healthcheckPort: 9000, healthcheckUrl: "/ready" },
 				},
 			}),
 		};

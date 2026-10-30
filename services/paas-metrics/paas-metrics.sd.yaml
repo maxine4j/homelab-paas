@@ -10,7 +10,6 @@ resources:
         ingress:
             public: false
             port: 3000
-        healthcheckUrl: /api/health
         env:
             - name: GF_AUTH_ANONYMOUS_ENABLED
               value: "true"

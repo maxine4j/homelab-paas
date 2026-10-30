@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { DockerContainerDetails, ServiceContainer } from "../../../docker/types.ts";
@@ -9,6 +9,32 @@ import { WebResourceReconciler } from "./web-reconciler.ts";
 
 const resource: DeploymentWebResource = { type: "web", image: "app:1", ingress: { public: true, port: 8080 } };
 const input = { serviceId: "demo", resourceId: "app", revision: "rev", resource };
+
+test.each([undefined, null])("unchanged web containers skip unconfigured HTTP checks: %s", async (healthcheckUrl) => {
+	const f = fixture();
+	await f.converge();
+	const probe = vi.fn(async () => false);
+	const reconciler = new WebResourceReconciler(
+		f.docker,
+		{
+			deploy: async () => {
+				throw new Error("unexpected deployment");
+			},
+		},
+		{ routeTo: async () => {}, withdraw: async () => {} },
+		probe,
+	);
+	await reconciler.reconcile({ ...input, resource: { ...resource, healthcheckUrl } });
+	expect(probe).not.toHaveBeenCalled();
+});
+
+test("enabling a web HTTP check changes its specification", async () => {
+	const f = fixture();
+	await f.converge();
+	const before = f.requests.length;
+	await f.reconciler.reconcile({ ...input, resource: { ...resource, healthcheckUrl: "/healthcheck" } });
+	expect(f.requests).toHaveLength(before + 1);
+});
 
 test("volume ownership policy changes the web specification and ignores read-only ownership", async () => {
 	const f = fixture();
@@ -263,7 +289,7 @@ test("equivalent defaults and environment ordering produce the same desired stat
 			replicas: 1,
 			rolloutStrategy: "recreate",
 			termination: { timeoutSeconds: 30 },
-			healthcheckUrl: "/healthcheck",
+			healthcheckUrl: null,
 			env: [
 				{ name: "A", value: "1" },
 				{ name: "B", value: "2" },
@@ -411,15 +437,19 @@ test("repairs network attachment and republishes ready unchanged endpoints witho
 	expect(f.requests).toEqual([]);
 	expect(f.queries).toContain("prepare-network");
 	expect(f.routes).toEqual([
-		["app.demo", { address: "10.0.0.2", port: 8080, healthcheckPath: "/healthcheck", public: true, primary: true }],
+		["app.demo", { address: "10.0.0.2", port: 8080, healthcheckPath: undefined, public: true, primary: true }],
 	]);
 });
 
 test("unhealthy unchanged containers do not receive newly published routes", async () => {
 	const f = fixture();
-	await f.converge();
+	const checked = { ...input, resource: { ...resource, healthcheckUrl: "/ready" } };
+	await f.reconciler.reconcile(checked);
+	const spec = f.requests.at(-1)!.spec;
+	f.setContainers([{ id: "c", imageId: "image", resourceId: "app", revision: "rev", spec, state: "running" }]);
+	f.requests.length = 0;
 	f.setHealthy(false);
-	await expect(f.reconciler.reconcile(input)).rejects.toThrow("readiness");
+	await expect(f.reconciler.reconcile(checked)).rejects.toThrow("readiness");
 	expect(f.routes).toEqual([]);
 	expect(f.requests).toEqual([]);
 });

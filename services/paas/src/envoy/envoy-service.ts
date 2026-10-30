@@ -32,7 +32,7 @@ export class EnvoyService implements IEnvoyService {
 				|| !Number.isInteger(endpoint.port)
 				|| endpoint.port < 1
 				|| endpoint.port > 65535
-				|| !endpoint.healthcheckPath.startsWith("/")
+				|| (endpoint.healthcheckPath != null && !endpoint.healthcheckPath.startsWith("/"))
 			)
 				throw new EnvoyClientError();
 		}
@@ -51,15 +51,19 @@ export class EnvoyService implements IEnvoyService {
 				connect_timeout: "2s",
 				common_lb_config: { healthy_panic_threshold: { value: 0 } },
 				load_assignment: assignment(`service-${id}`, endpoint.address, endpoint.port),
-				health_checks: [
-					{
-						timeout: "2s",
-						interval: "5s",
-						unhealthy_threshold: 1,
-						healthy_threshold: 1,
-						http_health_check: { path: endpoint.healthcheckPath },
-					},
-				],
+				...(endpoint.healthcheckPath
+					? {
+							health_checks: [
+								{
+									timeout: "2s",
+									interval: "5s",
+									unhealthy_threshold: 1,
+									healthy_threshold: 1,
+									http_health_check: { path: endpoint.healthcheckPath },
+								},
+							],
+						}
+					: {}),
 			})),
 		];
 		if (ingress.httpsPort) {

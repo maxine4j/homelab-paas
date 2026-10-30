@@ -107,11 +107,8 @@ export class WorkerDeploymentService implements IWorkerDeploymentService {
 			if (
 				container?.running
 				&& address
-				&& (await this.probe(
-					address,
-					request.resource.healthcheckPort,
-					request.resource.healthcheckUrl ?? "/healthcheck",
-				))
+				&& (!request.resource.healthcheckUrl
+					|| (await this.probe(address, request.resource.healthcheckPort, request.resource.healthcheckUrl)))
 			)
 				return;
 			if (attempt < 29) await this.sleep(1000);

@@ -10,7 +10,7 @@ import type { WorkerReconciliationRequest } from "./types.ts";
 export interface IWorkerResourceReconciler {
 	readonly type: "worker";
 	readonly lifecycle: "deployment";
-	/** Checks each replica's private HTTP readiness; delegates drift repair. Failures propagate. */
+	/** Checks running replicas and any configured private HTTP readiness; delegates drift repair. Failures propagate. */
 	reconcile(request: WorkerReconciliationRequest): Promise<void>;
 }
 
@@ -44,7 +44,10 @@ export class WorkerResourceReconciler implements IWorkerResourceReconciler {
 					connected = false;
 					break;
 				}
-				if (!(await this.probe(address, resource.healthcheckPort, resource.healthcheckUrl ?? "/healthcheck")))
+				if (
+					resource.healthcheckUrl
+					&& !(await this.probe(address, resource.healthcheckPort, resource.healthcheckUrl))
+				)
 					throw new Error("Worker readiness failed; check private health check");
 			}
 			if (connected) return;
@@ -102,7 +105,7 @@ export class WorkerResourceReconciler implements IWorkerResourceReconciler {
 						replicas: resource.replicas ?? 1,
 						rolloutStrategy: resource.rolloutStrategy ?? "recreate",
 						healthcheckPort: resource.healthcheckPort,
-						healthcheckUrl: resource.healthcheckUrl ?? "/healthcheck",
+						healthcheckUrl: resource.healthcheckUrl ?? null,
 						terminationTimeoutSeconds: resource.termination?.timeoutSeconds ?? 30,
 					},
 				]),

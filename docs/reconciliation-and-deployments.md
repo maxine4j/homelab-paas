@@ -44,10 +44,10 @@ Each resource has one health status:
 
 - `deploying`: its rollout is in progress, including startup readiness. This takes precedence over missing containers during recreate. It ends on rollout success or failure; other resources retain their own health.
 - `missing`: no containers are observed outside an active rollout.
-- `healthy`: exactly the expected number of replicas are running, attached to the service network with addresses, and every configured health endpoint returns HTTP `200`.
-- `unhealthy`: containers exist but readiness fails, expected replicas are missing, a container is stopped/disconnected, or health cannot be determined.
+- `healthy`: exactly the expected number of replicas are running. When an HTTP check is configured, each must also be attached to the service network with an address and return HTTP `200`.
+- `unhealthy`: containers exist but readiness fails, the replica count differs from the expected count, a container is stopped, a configured HTTP check cannot reach its container, or health cannot be determined.
 
-Web checks use the ingress port; worker checks use `healthcheckPort`. Both use `healthcheckUrl`, defaulting to `/healthcheck`. Health observations live in memory and apply only to the observed container identities and states. Existing containers remain unhealthy until first checked after startup, replacement or rollout completion. Stale probes overlapping a rollout cannot restore old health. Inspection failures invalidate previous healthy observations and do not prevent other resources or services from being checked. Observed-only resources and unsupported managed resources cannot report healthy solely from Docker lifecycle state.
+Web checks use the ingress port; worker checks use `healthcheckPort`. HTTP checks run only for an explicitly configured `healthcheckUrl`; see [health checks](#health-checks-and-termination). Health observations live in memory and apply only to the observed container identities and states. Existing containers remain unhealthy until first checked after startup, replacement or rollout completion. Stale probes overlapping a rollout cannot restore old health. Inspection failures invalidate previous healthy observations and do not prevent other resources or services from being checked. Observed-only resources and unsupported managed resources cannot report healthy solely from Docker lifecycle state.
 
 Service health still represents its persisted reconciliation phase, including the deployment grace window above. Resource health represents live readiness. See [management UI](management-ui.md) for badges, placement and API representation.
 
@@ -120,13 +120,15 @@ Web resources accept:
 healthcheckUrl: /healthcheck
 ```
 
-This defaults to `/healthcheck`, relative to the configured application port. Only HTTP `200` indicates readiness, matching Envoy's health checks.
+The URL is relative to the configured application port. Only an explicitly configured URL enables HTTP checks; only HTTP `200` indicates readiness, matching Envoy's health checks. Omitting `healthcheckUrl` or setting it to undefined or null disables startup and periodic HTTP probes and Envoy active health checks. Resource health then depends on the expected number of containers being running. Rollout readiness still requires a running container with a service-network address so web routing and worker connectivity can be established. Disabling checks allows traffic and surge predecessor retirement before the application begins accepting requests.
+
+This replaces the previous implicit `/healthcheck` default. Descriptors that relied on that default must explicitly set `healthcheckUrl: /healthcheck` to retain HTTP checks. Changing between disabled and enabled checks changes the resource specification and triggers replacement. Omission and null have the same specification identity. Persisted routes retain their existing explicit check paths until reconciliation republishes the resource endpoint; absent paths remain disabled when read from state.
 
 Health-check timing, startup allowance, and failure thresholds are managed by the platform.
 
 Only ready web containers receive Envoy traffic.
 
-Workers use the [private health-check fields](configuration.md#service-descriptors). PaaS requires a running container with a service-network address and an HTTP `200` response from every replica before reporting readiness. Startup allows 30 attempts per replica, one second apart, with the shared two-second HTTP timeout. Each eligible reconciliation pass probes unchanged workers again; failed health checks report failure and use the normal retry backoff. A health failure alone does not restart a running container. Envoy does not probe or route worker health endpoints. PostgreSQL and RabbitMQ use platform-managed health checks.
+Workers use the [private health-check fields](configuration.md#service-descriptors). With an explicit URL, PaaS requires a running container with a service-network address and an HTTP `200` response from every replica before reporting readiness. Startup allows 30 attempts per replica, one second apart, with the shared two-second HTTP timeout. Each eligible reconciliation pass probes unchanged workers with configured checks again; failed health checks report failure and use the normal retry backoff. A health failure alone does not restart a running container. Envoy does not probe or route worker health endpoints. PostgreSQL and RabbitMQ use platform-managed health checks.
 
 Resources may configure graceful termination:
 

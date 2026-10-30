@@ -11,7 +11,7 @@ import { createLogger } from "../util/logger.ts";
 import type { HealthDocker, HealthObservation } from "./types.ts";
 
 export interface IResourceHealthReader {
-	/** Returns latest probe health only for the same observed container identities and states. */
+	/** Returns latest health only for the same observed container identities and states. */
 	getStatus(serviceId: string, resourceId: string, containers: readonly ServiceContainer[]): ResourceHealth;
 }
 
@@ -121,6 +121,8 @@ export class ResourceHealthService implements IResourceHealthReader, IResourceHe
 		if (!resource || (resource.type !== "web" && resource.type !== "worker")) return "unhealthy";
 		if (containers.length !== (resource.replicas ?? 1) || containers.some(({ state }) => state !== "running"))
 			return "unhealthy";
+		if (!resource.healthcheckUrl) return "healthy";
+		const healthcheckUrl = resource.healthcheckUrl;
 		const network = await this.docker.inspectServiceNetwork(serviceId);
 		if (!network) return "unhealthy";
 		const results = await Promise.all(
@@ -134,7 +136,7 @@ export class ResourceHealthService implements IResourceHealthReader, IResourceHe
 					&& (await this.probe(
 						address,
 						resource.type === "web" ? resource.ingress.port : resource.healthcheckPort,
-						resource.healthcheckUrl ?? "/healthcheck",
+						healthcheckUrl,
 					)),
 				);
 			}),

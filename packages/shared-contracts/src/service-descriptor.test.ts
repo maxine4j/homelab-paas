@@ -218,8 +218,19 @@ test("validates a web descriptor and applies documented defaults", () => {
 	expect(parseDescriptor(descriptor, "test-service").resources["app"]).toMatchObject({
 		replicas: 1,
 		rolloutStrategy: "recreate",
-		healthcheckUrl: "/healthcheck",
 	});
+	expect(parseDescriptor(descriptor, "test-service").resources["app"]).not.toHaveProperty("healthcheckUrl");
+});
+
+test.each([undefined, null, "/ready"])("preserves explicit health check configuration %s", (healthcheckUrl) => {
+	const resources = {
+		app: { ...descriptor.resources.app, healthcheckUrl },
+		jobs: { type: "worker", image: "jobs:1", healthcheckPort: 9000, healthcheckUrl },
+	};
+	const parsed = parseDescriptor({ ...descriptor, resources }, "test-service");
+	for (const resource of Object.values(parsed.resources)) {
+		if (resource.type === "web" || resource.type === "worker") expect(resource.healthcheckUrl).toBe(healthcheckUrl);
+	}
 });
 
 test("multiple web resources require exactly one explicit primary", () => {
@@ -276,7 +287,6 @@ test("allows services without web resources and defaults workloads and private i
 		type: "worker",
 		image: "worker:1",
 		healthcheckPort: 8081,
-		healthcheckUrl: "/healthcheck",
 		replicas: 1,
 		rolloutStrategy: "recreate",
 	});

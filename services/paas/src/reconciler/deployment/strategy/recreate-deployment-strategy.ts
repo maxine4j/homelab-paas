@@ -6,7 +6,6 @@ import type { Endpoint } from "../../networking/types.ts";
 import type { DeploymentRequest, DeploymentStrategy } from "./types.ts";
 
 const DEFAULT_TERMINATION_TIMEOUT_SEC = 30;
-const DEFAULT_HEALTHCHECK_URL = "/healthcheck";
 const MAX_STARTUP_PROBE_ATTEMPTS = 30;
 
 /** Recreate owns replacement sequencing; callers own serialization and retries. */
@@ -86,11 +85,15 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 				const endpoint: Endpoint = {
 					address,
 					port: resource.ingress.port,
-					healthcheckPath: resource.healthcheckUrl ?? DEFAULT_HEALTHCHECK_URL,
+					healthcheckPath: resource.healthcheckUrl ?? undefined,
 					public: resource.ingress.public ?? false,
 					primary: resource.primary ?? true,
 				};
-				if (await this.probe(endpoint.address, endpoint.port, endpoint.healthcheckPath)) return endpoint;
+				if (
+					!endpoint.healthcheckPath
+					|| (await this.probe(endpoint.address, endpoint.port, endpoint.healthcheckPath))
+				)
+					return endpoint;
 			}
 			if (attempt < 29) await this.sleep(1000);
 		}

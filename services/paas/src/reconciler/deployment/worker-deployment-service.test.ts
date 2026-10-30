@@ -26,6 +26,15 @@ const request: WorkerDeploymentRequest = {
 	},
 };
 
+test.each([undefined, null])("workers become ready without HTTP checks: %s", async (healthcheckUrl) => {
+	const f = fixture();
+	f.probe.mockResolvedValue(false);
+	await f.service.deploy({ ...request, resource: { ...request.resource, healthcheckUrl } });
+	expect([...f.containers.values()].every(({ state }) => state === "running")).toBe(true);
+	expect(f.containers.size).toBe(2);
+	expect(f.probe).not.toHaveBeenCalled();
+});
+
 test("failed worker rollout clears deploying health", async () => {
 	const f = fixture();
 	const progress = { started: vi.fn(), succeeded: vi.fn(), failed: vi.fn() };
@@ -274,11 +283,11 @@ test.each(["recreate", "surge"] as const)(
 	},
 );
 
-test("default worker settings start one replica and use the default health path and stop timeout", async () => {
+test("default worker settings start one replica without HTTP checks and use the default stop timeout", async () => {
 	const f = fixture();
 	f.old();
 	await f.service.deploy({ ...request, resource: { type: "worker", image: "worker:1", healthcheckPort: 8080 } });
 	expect(f.docker.createResourceContainer).toHaveBeenCalledTimes(1);
-	expect(f.probe).toHaveBeenCalledWith("new-1", 8080, "/healthcheck");
+	expect(f.probe).not.toHaveBeenCalled();
 	expect(f.docker.stopServiceContainer).toHaveBeenCalledWith("demo", "old", 30);
 });

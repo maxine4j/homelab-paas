@@ -57,6 +57,21 @@ test.each([undefined, 443])(
 	},
 );
 
+test.each([undefined, null])("omits Envoy health checks without an explicit path: %s", async (healthcheckPath) => {
+	let configuration: EnvoyConfiguration | undefined;
+	const service = new EnvoyService(
+		{
+			bootstrap: async () => {},
+			apply: async (value) => {
+				configuration = value;
+			},
+		},
+		testConfig({ ingress: { baseDomain: "example.test", httpPort: 80 } }),
+	);
+	await service.configureRoutes({ demo: { address: "10.0.0.2", port: 8080, healthcheckPath, public: true } });
+	expect(configuration?.clusters.find(({ name }) => name === "service-demo")).not.toHaveProperty("health_checks");
+});
+
 test("bootstrap delegates discovery initialization to the client", async () => {
 	let initialized = false;
 	const service = new EnvoyService(

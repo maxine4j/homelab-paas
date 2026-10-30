@@ -7,8 +7,38 @@ import type { DeploymentWorkerResource } from "../../deployment/types.ts";
 import type { IWorkerDeploymentService } from "../../deployment/worker-deployment-service.ts";
 import { WorkerResourceReconciler } from "./worker-reconciler.ts";
 
-const resource: DeploymentWorkerResource = { type: "worker", image: "jobs:1", healthcheckPort: 9090, replicas: 2 };
+const resource: DeploymentWorkerResource = {
+	type: "worker",
+	image: "jobs:1",
+	healthcheckPort: 9090,
+	healthcheckUrl: "/healthcheck",
+	replicas: 2,
+};
 const input = { serviceId: "demo", resourceId: "jobs", revision: "rev1", resource };
+
+test.each([undefined, null])("unchanged workers skip unconfigured HTTP checks: %s", async (healthcheckUrl) => {
+	const f = fixture();
+	const request = { ...input, resource: { ...resource, healthcheckUrl } };
+	await f.reconciler.reconcile(request);
+	const spec = f.deploy.mock.calls.at(-1)!.at(0)!.spec;
+	f.setContainers(
+		["one", "two"].map((id) => ({
+			id,
+			spec,
+			state: "running",
+			resourceId: "jobs",
+			revision: "rev1",
+			imageId: "image",
+		})),
+	);
+	f.deploy.mockClear();
+	f.probe.mockResolvedValue(false);
+	await f.reconciler.reconcile(request);
+	expect(f.probe).not.toHaveBeenCalled();
+	expect(f.deploy).not.toHaveBeenCalled();
+	await f.reconciler.reconcile({ ...input, resource: { ...resource, healthcheckUrl: "/healthcheck" } });
+	expect(f.deploy).toHaveBeenCalledTimes(1);
+});
 
 test("volume ownership policy changes the worker specification and ignores read-only ownership", async () => {
 	const f = fixture();

@@ -52,11 +52,14 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 				const endpoint = {
 					address,
 					port: resource.ingress.port,
-					healthcheckPath: resource.healthcheckUrl ?? "/healthcheck",
+					healthcheckPath: resource.healthcheckUrl ?? undefined,
 					public: resource.ingress.public ?? false,
 					primary: resource.primary ?? true,
 				};
-				if (!(await this.probe(endpoint.address, endpoint.port, endpoint.healthcheckPath)))
+				if (
+					endpoint.healthcheckPath
+					&& !(await this.probe(endpoint.address, endpoint.port, endpoint.healthcheckPath))
+				)
 					throw new Error("Container readiness failed; check healthcheckUrl");
 				await this.networking.routeTo(`${resourceId}.${serviceId}`, endpoint);
 				return;
@@ -122,7 +125,7 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 						replicas: resource.replicas ?? 1,
 						rolloutStrategy: resource.rolloutStrategy ?? "recreate",
 						ingress: { public: resource.ingress.public, port: resource.ingress.port },
-						healthcheckUrl: resource.healthcheckUrl ?? "/healthcheck",
+						healthcheckUrl: resource.healthcheckUrl ?? null,
 						terminationTimeoutSeconds: resource.termination?.timeoutSeconds ?? 30,
 					},
 				]),

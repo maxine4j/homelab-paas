@@ -84,11 +84,12 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 				const endpoint: Endpoint = {
 					address,
 					port: resource.ingress.port,
-					healthcheckPath: resource.healthcheckUrl ?? "/healthcheck",
+					healthcheckPath: resource.healthcheckUrl ?? undefined,
 					public: resource.ingress.public ?? false,
 					primary: resource.primary ?? true,
 				};
-				if (await this.probe(address, endpoint.port, endpoint.healthcheckPath)) return endpoint;
+				if (!endpoint.healthcheckPath || (await this.probe(address, endpoint.port, endpoint.healthcheckPath)))
+					return endpoint;
 			}
 			if (attempt < 29) await this.sleep(1000);
 		}

@@ -149,7 +149,7 @@ test("recreate resolves first, withdraws routing, replaces scoped containers and
 	]);
 });
 
-test("uses descriptor defaults for termination and health checks", async () => {
+test("uses default termination and skips omitted health checks", async () => {
 	const f = fixture();
 	await f.strategy.deploy({
 		...request,
@@ -158,8 +158,16 @@ test("uses descriptor defaults for termination and health checks", async () => {
 	expect(f.calls.find((c) => c.action === "stop")?.args).toEqual(["demo", "old", 30]);
 	expect(f.calls.at(-1)?.args).toEqual([
 		"app.demo",
-		{ address: "10.0.0.2", port: 8080, healthcheckPath: "/healthcheck", public: true, primary: true },
+		{ address: "10.0.0.2", port: 8080, healthcheckPath: undefined, public: true, primary: true },
 	]);
+	expect(f.calls.some(({ action }) => action === "probe")).toBe(false);
+});
+
+test("null disables recreate readiness probes", async () => {
+	const f = fixture();
+	await f.strategy.deploy({ ...request, resource: { ...request.resource, healthcheckUrl: null } });
+	expect(f.calls.some(({ action }) => action === "probe")).toBe(false);
+	expect(f.calls.at(-1)?.action).toBe("route");
 });
 
 test("propagates resolved secrets, arbitrary host mounts and CPU/memory limits to the replacement", async () => {
