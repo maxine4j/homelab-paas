@@ -15,7 +15,7 @@ test("refresh feedback distinguishes scope, progress and safe failures", () => {
 	const failed = renderToStaticMarkup(
 		<GitRefreshFeedback serviceId='demo' error='Cannot refresh Git' onRefresh={() => {}} />,
 	);
-	expect(failed).toContain("Refresh service from Git");
+	expect(failed).toContain("Refresh</button>");
 	expect(failed).toContain('role="alert">Cannot refresh Git');
 });
 

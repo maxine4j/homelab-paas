@@ -1,6 +1,14 @@
 import { expect, test } from "vitest";
 
-import { gitSourceLink } from "./git-source-link.ts";
+import { gitCommitLink, gitSourceLink } from "./git-source-link.ts";
+
+test("commit links use the full revision and support HTTPS and SSH GitHub sources", () => {
+	for (const remote of ["https://github.com/owner/repo.git", "git@github.com:owner/repo.git"])
+		expect(gitCommitLink({ remote }, "abc1234def")).toBe("https://github.com/owner/repo/commit/abc1234def");
+	for (const remote of ["local", "https://token@github.com/owner/repo.git", "https://example.com/owner/repo.git"])
+		expect(gitCommitLink({ remote }, "abc1234def")).toBeUndefined();
+	expect(gitCommitLink({ remote: "https://github.com/owner/repo.git" })).toBeUndefined();
+});
 
 test("GitHub descriptor links pin the fetched revision and encode path segments", () => {
 	expect(

@@ -238,10 +238,16 @@ main {
 }
 .git-refresh {
 	display: flex;
-	flex-direction: column;
-	align-items: flex-end;
+	flex-direction: row;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	align-items: center;
 	gap: 12px;
 	min-width: 0;
+}
+.git-refresh button {
+	order: 1;
+	flex-shrink: 0;
 }
 .git-refresh p {
 	margin: 0;
@@ -258,9 +264,16 @@ main {
 }
 .service-heading-row {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	flex-wrap: wrap;
 	column-gap: 24px;
+	row-gap: 20px;
+}
+.service-commit-panels {
+	display: flex;
+	flex: 1 1 480px;
+	gap: 24px;
+	min-width: 0;
 }
 .service-identity {
 	display: flex;
@@ -276,6 +289,40 @@ main {
 }
 .service-heading-row .primary-web-link {
 	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.service-revision {
+	flex: 1 1 220px;
+	align-self: stretch;
+	min-width: 0;
+	padding: 12px 16px;
+	border: 1px solid #252c36;
+	border-radius: 10px;
+	font-size: 0.8rem;
+}
+.service-revision-heading {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 0.8rem;
+}
+.revision-link {
+	display: inline-flex;
+	align-items: center;
+	min-height: 44px;
+	padding: 8px;
+	color: #a8bce1;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	font-family: monospace;
+}
+.service-identity-block {
+	min-width: 0;
+	max-width: 100%;
+}
+.service-identity-block > .primary-web-link {
+	display: inline-block;
+	max-width: 100%;
 	overflow-wrap: anywhere;
 }
 h1 {
@@ -377,18 +424,23 @@ p {
 	border-color: #2b5648;
 }
 .badge-unhealthy,
+.badge-dead,
 .badge-error,
 .badge-exited {
 	color: #f4abb4;
 	background: #3a222b;
 	border-color: #62404a;
 }
+.badge-restarting,
 .badge-deploying,
 .badge-info {
 	color: #abcaff;
 	background: #1e304c;
 	border-color: #3d5b86;
 }
+.badge-paused,
+.badge-created,
+.badge-mixed,
 .badge-missing {
 	color: #b8c2ce;
 	background: #282e38;
@@ -874,6 +926,9 @@ footer {
 	font-size: 0.7rem;
 }
 @media (max-width: 1000px) {
+	.service-commit-panels {
+		flex-basis: 100%;
+	}
 	.resource-configuration {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
@@ -893,6 +948,13 @@ footer {
 	}
 }
 @media (max-width: 700px) {
+	.service-commit-panels {
+		flex-direction: column;
+		gap: 16px;
+	}
+	.service-revision {
+		flex-basis: auto;
+	}
 	.resource-configuration {
 		grid-template-columns: minmax(0, 1fr);
 	}

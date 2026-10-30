@@ -1,8 +1,9 @@
 import type { UiService, UiServiceEvent } from "@homelab-paas/shared-contracts";
 
-import { gitSourceLink } from "../components/git-source-link.ts";
-import { RevisionDetails } from "../components/revision-details.tsx";
+import { gitCommitLink, gitSourceLink } from "../components/git-source-link.ts";
+import { resourceStatus } from "../components/resource-status.ts";
 import { ServiceEvents } from "../components/service-events.tsx";
+import { ServiceRevision } from "../components/service-revision.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
 
 export const ServicePage = ({
@@ -25,15 +26,33 @@ export const ServicePage = ({
 				<div className='service-heading-content'>
 					<p className='eyebrow'>Service</p>
 					<div className='service-heading-row'>
-						<div className='service-identity'>
-							<h1>{service.serviceId}</h1>
-							<StatusBadge status={service.phase} />
+						<div className='service-identity-block'>
+							<div className='service-identity'>
+								<h1>{service.serviceId}</h1>
+								<StatusBadge status={service.phase} />
+							</div>
+							{primaryUrl && (
+								<a className='primary-web-link' href={primaryUrl} target='_blank' rel='noreferrer'>
+									{new URL(primaryUrl).host} <span aria-hidden='true'>↗</span>
+								</a>
+							)}
 						</div>
-						{primaryUrl && (
-							<a className='primary-web-link' href={primaryUrl} target='_blank' rel='noreferrer'>
-								{new URL(primaryUrl).host} <span aria-hidden='true'>↗</span>
-							</a>
-						)}
+						<div className='service-commit-panels'>
+							<ServiceRevision
+								label='Active revision'
+								revision={service.activeRevision}
+								href={gitCommitLink(service.source, service.activeRevision)}
+								metadata={service.activeRevisionMetadata}
+								fallback='Not deployed'
+							/>
+							<ServiceRevision
+								label='Desired revision'
+								revision={service.descriptorRevision}
+								href={gitCommitLink(service.source, service.descriptorRevision)}
+								metadata={service.descriptorRevisionMetadata}
+								fallback='Unavailable'
+							/>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -42,39 +61,23 @@ export const ServicePage = ({
 					Descriptor unavailable. Showing observed resources; desired configuration could not be loaded.
 				</p>
 			)}
-			<dl className='summary'>
-				<div>
-					<dt>Active revision</dt>
-					<RevisionDetails
-						revision={service.activeRevision}
-						metadata={service.activeRevisionMetadata}
-						fallback='Not deployed'
-					/>
-				</div>
-				<div>
-					<dt>Desired revision</dt>
-					<RevisionDetails
-						revision={service.descriptorRevision}
-						metadata={service.descriptorRevisionMetadata}
-						fallback='Unavailable'
-					/>
-				</div>
-				{service.retryAt && (
+			{service.retryAt && (
+				<dl className='summary'>
 					<div>
 						<dt>Next retry</dt>
 						<dd>{new Date(service.retryAt).toLocaleString()}</dd>
 					</div>
-				)}
-			</dl>
-			<section aria-label='Latest service event'>
+				</dl>
+			)}
+			<section aria-label='Recent service events'>
 				<div className='section-heading'>
-					<h2>Latest event</h2>
-					{events && events.length > 1 && (
-						<a href={`#/services/${service.serviceId}/events`}>{events.length - 1} more events...</a>
+					<h2>Recent events</h2>
+					{events && events.length > 2 && (
+						<a href={`#/services/${service.serviceId}/events`}>{events.length - 2} more events...</a>
 					)}
 					{eventError && <a href={`#/services/${service.serviceId}/events`}>Event history</a>}
 				</div>
-				<ServiceEvents events={events?.slice(0, 1)} error={eventError} />
+				<ServiceEvents events={events?.slice(0, 2)} error={eventError} />
 			</section>
 			<h2>
 				Resources <span className='count'>{service.resources.length}</span>
@@ -88,14 +91,9 @@ export const ServicePage = ({
 					>
 						<div className='card-top'>
 							<span className='eyebrow'>{resource.type}</span>
-							<span className='pill'>{resource.containers.length} containers</span>
+							<StatusBadge status={resourceStatus(resource)} />
 						</div>
 						<h3>{resource.resourceId}</h3>
-						<p>
-							{resource.containers.length
-								? resource.containers.map((container) => container.state).join(" · ")
-								: "No containers"}
-						</p>
 					</a>
 				))}
 			</div>

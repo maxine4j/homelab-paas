@@ -51,7 +51,8 @@ test("cluster and service pages expose configuration, deployment status and reso
 	);
 	expect(detail).toContain("#/services/demo/resources/app");
 	expect(detail).toContain("Descriptor unavailable");
-	expect(detail).toContain("No containers");
+	expect(detail).toContain("badge-missing");
+	expect(detail).not.toContain("No containers");
 });
 
 test.each([
@@ -101,11 +102,11 @@ test("service cards provide a full-card detail link, an independent web link, de
 	expect(html).not.toContain('eyebrow">Service</span>');
 });
 
-test("service revision metadata appears only in the first summary, with escaped multiline messages", () => {
+test("service revisions link their own GitHub commits beside the identity and retain commit metadata", () => {
 	const service = {
 		serviceId: "demo",
 		phase: "ready" as const,
-		source: {},
+		source: { remote: "https://github.com/owner/repo.git" },
 		descriptorStatus: "available" as const,
 		resources: [],
 		activeRevision: "active123",
@@ -122,17 +123,19 @@ test("service revision metadata appears only in the first summary, with escaped 
 		},
 	};
 	const html = renderToStaticMarkup(<ServicePage service={service} />);
-	const summary = html.slice(html.indexOf('<dl class="summary">'), html.indexOf("</dl>"));
-	expect(summary).toContain("active123");
-	expect(summary).toContain("descriptor456");
-	expect(summary).toContain("Desired revision");
-	expect(summary).not.toContain("Descriptor revision");
-	expect(summary).toContain("Alex &lt;admin&gt;");
-	expect(summary).toContain("Deploy &lt;script&gt;\n\nDetails");
-	expect(summary).toContain("Sam");
-	expect(summary).toContain("Update descriptor");
-	expect(summary).toContain('dateTime="2026-10-26T00:00:00Z"');
-	expect(html.slice(html.indexOf("</dl>"))).not.toContain("Update descriptor");
+	expect(html).toMatch(
+		/service-heading-row[^]*<h1>demo<\/h1>[^]*Active revision[^]*>active1<\/a>[^]*Desired revision[^]*>descrip<\/a>/,
+	);
+	expect(html).toContain('title="active123"');
+	expect(html).toContain('title="descriptor456"');
+	expect(html).toContain('href="https://github.com/owner/repo/commit/active123"');
+	expect(html).toContain('href="https://github.com/owner/repo/commit/descriptor456"');
+	expect(html).toContain("Update descriptor");
+	expect(html).toContain("Deploy &lt;script&gt;");
+	expect(html).toContain("Alex &lt;admin&gt;");
+	expect(html).toContain("Sam");
+	expect(html).toContain('dateTime="2026-10-26T00:00:00Z"');
+	expect(html).not.toContain('<dl class="summary">');
 	expect(html).not.toContain("Desired resources alongside observed containers.");
 	expect(renderToStaticMarkup(<ServicesPage services={[service]} />)).not.toContain("Update descriptor");
 });
@@ -153,6 +156,8 @@ test("service revision hashes stay visible when metadata is unavailable", () => 
 	);
 	expect(html).toContain("active123");
 	expect(html).toContain("descriptor456");
+	expect(html).toContain(">active1</span>");
+	expect(html).toContain(">descrip</span>");
 	expect(html.match(/Commit details unavailable/g)).toHaveLength(2);
 });
 
@@ -213,10 +218,10 @@ test("service details show recent failure events and link to service event histo
 		/>,
 	);
 	expect(html).toContain("Cannot resolve application secrets &lt;unsafe&gt;");
-	expect(html).toContain("Latest event");
+	expect(html).toContain("Recent events");
 });
 
-test("service details show one latest event above resources and collapse the complete descriptor", () => {
+test("service details show two recent events above resources and collapse the complete descriptor", () => {
 	const html = renderToStaticMarkup(
 		<ServicePage
 			service={{
@@ -236,13 +241,18 @@ test("service details show one latest event above resources and collapse the com
 					{ resourceId: "app", type: "web", primaryUrl: "https://demo.example.test", containers: [] },
 				],
 			}}
-			events={[...events, { ...events[0]!, timestamp: 500, message: "Earlier event" }]}
+			events={[
+				...events,
+				{ ...events[0]!, timestamp: 500, message: "Earlier event" },
+				{ ...events[0]!, timestamp: 100, message: "Oldest event" },
+			]}
 		/>,
 	);
-	expect(html.indexOf("Latest event")).toBeLessThan(html.indexOf("Resources"));
+	expect(html.indexOf("Recent events")).toBeLessThan(html.indexOf("Resources"));
 	expect(html.indexOf("Resources")).toBeLessThan(html.indexOf("Service descriptor"));
 	expect(html).toContain("1 more events...");
-	expect(html).not.toContain("Earlier event");
+	expect(html).toContain("Earlier event");
+	expect(html).not.toContain("Oldest event");
 	expect(html).not.toContain("Inspect resource");
 	expect(html).toContain('<details class="json-disclosure"><summary>Service descriptor YAML</summary>');
 	expect(html).toContain('aria-label="Service descriptor YAML"');
