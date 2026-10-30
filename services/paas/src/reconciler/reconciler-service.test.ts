@@ -7,6 +7,7 @@ import type { GitFile, GitFileSource } from "../git/types.ts";
 import { testConfig } from "../util/test/config.ts";
 import { captureLogs } from "../util/test/logs.ts";
 import { EnvironmentResolver } from "./environment-resolver.ts";
+import { EventDiagnostics } from "./event-diagnostics.ts";
 import { ReconcilerService } from "./reconciler-service.ts";
 import type { ReconciliationState } from "./types.ts";
 import { serviceEventMessages } from "./types.ts";
@@ -119,6 +120,7 @@ function fixture() {
 			new EnvironmentResolver("/etc/homelab-paas/env", readSecrets, { resolve: resolveHostPath }),
 			{ type: "worker", lifecycle: "deployment", reconcile: reconcileWorker },
 			{ append: appendEvent, list: async () => [] },
+			new EventDiagnostics(testConfig()),
 			bus,
 		);
 	return {
@@ -248,6 +250,43 @@ test("includes missing secret names and the actual host file in persisted failur
 	);
 	expect(JSON.stringify(f.appendEvent.mock.calls)).not.toContain("private-value");
 	expect(f.reconcile).not.toHaveBeenCalled();
+});
+
+test("records redacted deployment error context before persistence and live delivery", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "rev",
+		content: JSON.stringify({
+			...descriptor,
+			resources: { app: { ...descriptor.resources.app, env: [{ name: "TOKEN", secret: true }] } },
+		}),
+	});
+	f.readSecrets.mockResolvedValue("TOKEN=private-value");
+	f.reconcile.mockRejectedValue(
+		new Error("Cannot start private-value", { cause: new Error("Docker HTTP 500: permission denied") }),
+	);
+	const changes: unknown[] = [];
+	f.bus.subscribe((change) => {
+		changes.push(change);
+	});
+	await f.service.reconcile();
+	const failure = f.appendEvent.mock.calls.find(([, event]) => event.level === "error")?.[1];
+	expect(failure?.diagnostics).toContain("Docker HTTP 500: permission denied");
+	expect(failure?.diagnostics).toContain('"image": "app:1"');
+	expect(failure?.diagnostics).toContain('"operation": "web"');
+	expect(JSON.stringify([failure, changes])).not.toContain("private-value");
+});
+
+test("records useful early fetch failures while masking URL credentials and platform credentials", async () => {
+	const f = fixture();
+	f.fetchFile.mockRejectedValue(new Error("Git failed https://user:password@host/repo: HTTP 403 secret"));
+	await f.service.reconcile();
+	const event = f.appendEvent.mock.calls.at(-1)?.[1];
+	expect(event?.diagnostics).toContain("HTTP 403");
+	expect(event?.diagnostics).toContain("Git failed");
+	expect(event?.diagnostics).toContain("/repo/demo.sd.yaml");
+	expect(event?.diagnostics).not.toContain("user:password");
+	expect(event?.diagnostics).not.toContain("403 secret");
 });
 
 test.each(["fetch", "descriptor", "capabilities", "secrets", "web", "worker"] as const)(

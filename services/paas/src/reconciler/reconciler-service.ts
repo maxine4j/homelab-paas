@@ -9,6 +9,7 @@ import type { DeploymentWebResource } from "./deployment/strategy/types.ts";
 import type { DeploymentWorkerResource } from "./deployment/types.ts";
 import type { IEnvironmentResolver } from "./environment-resolver.ts";
 import { EnvironmentResolutionError } from "./environment-resolver.ts";
+import type { IEventDiagnostics } from "./event-diagnostics.ts";
 import type { IWebResourceReconciler } from "./resources/web/web-reconciler.ts";
 import type { IWorkerResourceReconciler } from "./resources/worker/worker-reconciler.ts";
 import type { IServiceEventStore } from "./service-event-store.ts";
@@ -48,6 +49,7 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 		private readonly environment: IEnvironmentResolver,
 		private readonly worker: IWorkerResourceReconciler,
 		private readonly events: IServiceEventStore,
+		private readonly diagnostics: IEventDiagnostics,
 		private readonly changes?: IChangeBus,
 	) {}
 
@@ -62,6 +64,7 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 						level: "error",
 						event: "reconciliation.state-failed",
 						message: serviceEventMessages.state,
+						diagnostics: this.diagnostics.describe(error, { operation: "state", serviceId }, []),
 					});
 					this.log.error(
 						{ event: "reconciliation.state-failed", serviceId, err: error },
@@ -95,6 +98,9 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 		let deploymentStartedAt = previous?.deploymentStartedAt;
 		let message: string = serviceEventMessages.fetch;
 		let resourceId: string | undefined;
+		let image: string | undefined;
+		let resourceContext: WebResource | WorkerResource | undefined;
+		const secrets: string[] = [];
 		try {
 			const file = await this.git.fetchFile(serviceId, source);
 			desiredRevision = file.revision;
@@ -107,10 +113,17 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 			const resources: [string, DeploymentWebResource | DeploymentWorkerResource][] = [];
 			for (const [id, resource] of desired) {
 				resourceId = id;
+				resourceContext = resource;
+				image = resource.image;
 				const env = await this.environment.resolve(serviceId, resource.env ?? []);
+				for (const entry of env)
+					if (resource.env?.some((declared) => declared.name === entry.name && "secret" in declared))
+						secrets.push(entry.value);
 				resources.push([id, { ...resource, env }]);
 			}
 			resourceId = undefined;
+			resourceContext = undefined;
+			image = undefined;
 			if (previous?.desiredRevision !== desiredRevision)
 				this.log.info(
 					{ event: "reconciliation.revision", serviceId, revision: desiredRevision },
@@ -141,6 +154,8 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 				});
 			for (const [id, resource] of resources) {
 				resourceId = id;
+				image = resource.image;
+				resourceContext = resource;
 				if (resource.type === "web") {
 					message = serviceEventMessages.web;
 					await this.web.reconcile({
@@ -162,6 +177,8 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 				}
 			}
 			resourceId = undefined;
+			resourceContext = undefined;
+			image = undefined;
 			message = serviceEventMessages.state;
 			await this.state.write(serviceId, { desiredRevision, activeRevision: desiredRevision, phase: "ready" });
 			this.changes?.publish({ serviceId });
@@ -196,6 +213,21 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 				level: "error",
 				event: "reconciliation.failed",
 				message,
+				diagnostics: this.diagnostics.describe(
+					error,
+					{
+						operation: Object.entries(serviceEventMessages).find(([, value]) => value === message)?.[0],
+						serviceId,
+						source,
+						resourceId,
+						revision: desiredRevision,
+						activeRevision: previous?.activeRevision,
+						image,
+						resource: resourceContext,
+						force,
+					},
+					secrets,
+				),
 				...(message === serviceEventMessages.secrets && error instanceof EnvironmentResolutionError
 					? { secretFailure: error.details }
 					: {}),

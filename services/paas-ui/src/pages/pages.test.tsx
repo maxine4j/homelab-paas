@@ -326,6 +326,16 @@ test("event views distinguish loading, unavailable and empty histories", () => {
 	expect(renderToStaticMarkup(<ServiceEvents error='History unavailable' />)).toContain("History unavailable");
 });
 
+test("events expose selectable error diagnostics in an escaped disclosure", () => {
+	const html = renderToStaticMarkup(
+		<ServiceEvents events={[{ ...events[0]!, diagnostics: "Error: <bind failed>\n at start" }]} />,
+	);
+	expect(html).toContain("<details");
+	expect(html).toContain("Error diagnostics");
+	expect(html).toContain("&lt;bind failed&gt;");
+	expect(html).toContain(" at start");
+});
+
 test("both service event views show missing names, host edit path and safe syntax location", () => {
 	const detailed = [
 		{

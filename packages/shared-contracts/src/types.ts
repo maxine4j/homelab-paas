@@ -53,6 +53,8 @@ export interface UiServiceEvent {
 		| "reconciliation.recovered"
 		| "deployment.succeeded";
 	message: string;
+	/** Redacted error chain, stack and operation context; JSON-encoded text is bounded to 32 KiB. */
+	diagnostics?: string;
 	resourceId?: string;
 	revision?: string;
 	failures?: number;

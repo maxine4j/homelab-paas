@@ -15,6 +15,7 @@ import { RecreateDeploymentStrategy } from "../../src/reconciler/deployment/stra
 import { SurgeDeploymentStrategy } from "../../src/reconciler/deployment/strategy/surge-deployment-strategy.ts";
 import { WorkerDeploymentService } from "../../src/reconciler/deployment/worker-deployment-service.ts";
 import { EnvironmentResolver } from "../../src/reconciler/environment-resolver.ts";
+import { EventDiagnostics } from "../../src/reconciler/event-diagnostics.ts";
 import { EndpointsStore } from "../../src/reconciler/networking/endpoints-store.ts";
 import { NetworkingService } from "../../src/reconciler/networking/networking-service.ts";
 import { ReconcilerService } from "../../src/reconciler/reconciler-service.ts";
@@ -87,6 +88,7 @@ export const inProcessPaas = async (
 			probe,
 		),
 		events,
+		new EventDiagnostics(config),
 	);
 	return { reconciler, git, refresh: new GitRefreshService(config, git, reconciler), checkpoints, endpoints, events };
 };

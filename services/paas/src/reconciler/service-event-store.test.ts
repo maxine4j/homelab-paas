@@ -76,3 +76,13 @@ test("retains structured secret diagnostics with legacy events and rejects raw f
 	]);
 	await expect(store.list("demo")).rejects.toThrow("Cannot read service events");
 });
+
+test("persists bounded redacted diagnostic text alongside legacy events", async () => {
+	const store = new ServiceEventStore(new InMemoryKeyValueStore<unknown>());
+	const detailed = { ...event(1), diagnostics: "Error: Docker HTTP 500: permission denied\n at deploy" };
+	await store.append("demo", detailed);
+	expect(await store.list("demo")).toEqual([detailed]);
+	await expect(store.append("demo", { ...event(2), diagnostics: "x".repeat(32769) })).rejects.toThrow(
+		"Cannot append service event",
+	);
+});

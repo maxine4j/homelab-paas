@@ -103,7 +103,7 @@ export class UiWebSocket {
 						return;
 					}
 					const payload = JSON.stringify(event);
-					if (Buffer.byteLength(payload) + ws.bufferedAmount > 1048576) {
+					if (Buffer.byteLength(payload) + ws.bufferedAmount > 16777216) {
 						close(1009, "Client cannot keep up");
 						return;
 					}
