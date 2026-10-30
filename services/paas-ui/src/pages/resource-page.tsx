@@ -68,24 +68,6 @@ export const ResourcePage = ({
 			{tab === "logs" && (
 				<>
 					<div className='log-toolbar'>
-						<label>
-							Container{" "}
-							<select
-								value={containerId ?? ""}
-								onChange={(event) => {
-									window.location.hash = `${base}/logs/${encodeURIComponent(event.target.value)}`;
-								}}
-							>
-								<option value='' disabled>
-									Select a container
-								</option>
-								{resource.containers.map((container) => (
-									<option key={container.id} value={container.id}>
-										{container.id.slice(0, 12)} · {container.state}
-									</option>
-								))}
-							</select>
-						</label>
 						<span className='muted'>Last 200 stdout / stderr lines</span>
 					</div>
 					{logError ? (

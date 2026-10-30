@@ -478,7 +478,7 @@ test("resource inspection renders configuration, state and escaped log output", 
 	}
 });
 
-test("logs select the first observed container by default and preserve an explicit selection", () => {
+test("logs open without a container dropdown for default and explicit container links", () => {
 	const resource = {
 		health: "healthy" as const,
 		resourceId: "app",
@@ -492,12 +492,14 @@ test("logs select the first observed container by default and preserve an explic
 		})),
 	};
 	const initial = renderToStaticMarkup(<ResourcePage serviceId='demo' resource={resource} tab='logs' />);
-	expect(initial).toContain('<option value="first" selected="">');
+	expect(initial).not.toContain("<select");
+	expect(initial).toContain("Last 200 stdout / stderr lines");
 	expect(initial).toContain("Loading logs");
 	const explicit = renderToStaticMarkup(
 		<ResourcePage serviceId='demo' resource={resource} tab='logs' containerId='second' />,
 	);
-	expect(explicit).toContain('<option value="second" selected="">');
+	expect(explicit).not.toContain("<select");
+	expect(explicit).toContain("Loading logs");
 	const empty = renderToStaticMarkup(
 		<ResourcePage serviceId='demo' resource={{ ...resource, containers: [] }} tab='logs' />,
 	);
