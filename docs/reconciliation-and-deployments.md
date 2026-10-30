@@ -48,6 +48,8 @@ Live notifications publish safe `deployment.started`, `deployment.succeeded`, re
 
 ## Deployments
 
+The management [manual redeploy API](management-ui.md#manual-redeploy) serializes a forced pass for one configured service with normal reconciliation. After validating the descriptor and resolving all secrets, it bypasses the unchanged-container fast paths for every web and worker resource, including healthy worker replicas. It preserves specification identities and follows configured rollout strategies, readiness, termination, route acceptance and persistent-volume semantics. The explicit attempt bypasses retry backoff; failures checkpoint and report through the normal reconciliation path, and subsequent periodic passes recover from observed Docker state. Replacement is resource-by-resource rather than an atomic service transaction. Unsupported managed-resource descriptors still fail capability validation before changes.
+
 Web and worker resources support:
 
 ```yaml

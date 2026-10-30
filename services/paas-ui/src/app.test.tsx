@@ -8,7 +8,7 @@ afterEach(() => vi.unstubAllEnvs());
 test("topbar offers Git refresh beside breadcrumbs without a snapshot refresh button", () => {
 	const html = renderToStaticMarkup(<App />);
 	expect(html).toMatch(
-		/<header class="topbar"><nav class="breadcrumbs".*?<\/nav><div class="git-refresh"><button type="button">Refresh all<\/button><\/div><\/header>/,
+		/<header class="topbar"><nav class="breadcrumbs".*?<\/nav><div class="git-refresh"><div class="service-actions"><button class="action-info" type="button">Refresh all<\/button><\/div><\/div><\/header>/,
 	);
 	expect(html).not.toContain("Refresh snapshot");
 	expect(html.match(/Refresh all/g)).toHaveLength(1);

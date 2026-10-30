@@ -57,7 +57,7 @@ export class WorkerDeploymentService implements IWorkerDeploymentService {
 		const retained = current
 			.filter(
 				({ id, spec, state }) =>
-					spec === request.spec && state === "running" && network.containerIds.includes(id),
+					!request.force && spec === request.spec && state === "running" && network.containerIds.includes(id),
 			)
 			.slice(0, resource.replicas ?? 1);
 		const retainedIds = new Set(retained.map(({ id }) => id));

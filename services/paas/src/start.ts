@@ -194,7 +194,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		const port = httpsPort ?? httpPort;
 		return `${httpsPort ? "https" : "http"}://${baseDomain}${port === (httpsPort ? 443 : 80) ? "" : `:${port}`}`;
 	};
-	const ui = createPaasUiRouter(uiService, gitRefresh, sessions, managementOrigin);
+	const ui = createPaasUiRouter(uiService, gitRefresh, sessions, managementOrigin, reconciler);
 	app.use(ui.routes()).use(ui.allowedMethods());
 	app.use(
 		createFrontendRouter(

@@ -1,6 +1,29 @@
 import { expect, test, vi } from "vitest";
 
-import { fetchUi, saveConfig, refreshGit } from "./api.ts";
+import { fetchUi, saveConfig, refreshGit, redeployService } from "./api.ts";
+
+test("redeploy sends same-origin intent, cancellation and safe errors", async () => {
+	const signal = new AbortController().signal;
+	const request = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+	await redeployService("demo/a", signal, request);
+	expect(request).toHaveBeenCalledWith(
+		"/api/ui/services/demo%2Fa/redeploy",
+		expect.objectContaining({
+			method: "POST",
+			credentials: "same-origin",
+			headers: { "x-paas-redeploy": "1" },
+			signal,
+		}),
+	);
+	for (const [status, message] of [
+		[401, "session"],
+		[404, "not configured"],
+		[503, "Cannot redeploy"],
+	] as const)
+		await expect(
+			redeployService("demo", signal, async () => new Response("secret-canary", { status })),
+		).rejects.toThrow(message);
+});
 
 test("Git refresh failures direct users to reload the page to check whether work completed", async () => {
 	await expect(

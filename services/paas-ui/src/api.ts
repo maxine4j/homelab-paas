@@ -1,5 +1,28 @@
 import type { UiConfigUpdate, UiEditableConfig, UiGitRefresh } from "@homelab-paas/shared-contracts";
 
+/** Cancellation stops waiting; an accepted rollout may still finish on the server. */
+export const redeployService = async (
+	serviceId: string,
+	signal: AbortSignal,
+	request: typeof fetch = fetch,
+): Promise<void> => {
+	const response = await request(`/api/ui/services/${encodeURIComponent(serviceId)}/redeploy`, {
+		method: "POST",
+		cache: "no-store",
+		credentials: "same-origin",
+		headers: { "x-paas-redeploy": "1" },
+		signal,
+	});
+	if (!response.ok)
+		throw new Error(
+			response.status === 401
+				? "A platform session is required. Sign in again."
+				: response.status === 404
+					? "Service is not configured. Reload the service list."
+					: "Cannot redeploy service. Inspect service status and events. The request may have completed; reload the page to check.",
+		);
+};
+
 /** Explicit Git refresh; cancellation stops waiting, but server work may finish. */
 export async function refreshGit(
 	serviceId: string | undefined,

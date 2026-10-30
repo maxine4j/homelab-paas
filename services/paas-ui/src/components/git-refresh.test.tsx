@@ -1,7 +1,50 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test, vi } from "vitest";
 
-import { GitRefreshFeedback, runGitRefresh } from "./git-refresh.tsx";
+import { GitRefreshFeedback, runGitRefresh, runRedeploy } from "./git-refresh.tsx";
+
+test("service actions include warning redeploy and info refresh, disabled together", () => {
+	const html = renderToStaticMarkup(
+		<GitRefreshFeedback serviceId='demo' pending onRefresh={() => {}} onRedeploy={() => {}} />,
+	);
+	expect(html).toContain('class="action-info"');
+	expect(html).toContain('class="action-warning"');
+	expect(html).toContain("Redeploy</button>");
+	expect(html).toContain("Refresh</button>");
+	expect(html.match(/disabled/g)).toHaveLength(2);
+	expect(renderToStaticMarkup(<GitRefreshFeedback onRefresh={() => {}} />)).not.toContain("Redeploy");
+});
+
+test("redeploy feedback reloads on success, reports failures and suppresses cancelled completion", async () => {
+	const update = vi.fn();
+	const reload = vi.fn();
+	await runRedeploy(
+		"demo",
+		new AbortController().signal,
+		update,
+		reload,
+		async () => new Response(null, { status: 204 }),
+	);
+	expect(update.mock.calls.at(0)?.at(0)).toMatchObject({ pending: true });
+	expect(update.mock.calls.at(-1)?.at(0)).toMatchObject({ pending: false, message: "Redeploy complete." });
+	expect(reload).toHaveBeenCalledTimes(1);
+	await runRedeploy(
+		"demo",
+		new AbortController().signal,
+		update,
+		reload,
+		async () => new Response(null, { status: 503 }),
+	);
+	expect(update.mock.calls.at(-1)?.at(0)).toMatchObject({ error: expect.stringContaining("Cannot redeploy") });
+	const controller = new AbortController();
+	update.mockClear();
+	await runRedeploy("demo", controller.signal, update, reload, async () => {
+		controller.abort();
+		return new Response(null, { status: 204 });
+	});
+	expect(update).toHaveBeenCalledTimes(1);
+	expect(reload).toHaveBeenCalledTimes(1);
+});
 
 test("refresh feedback distinguishes scope, progress and safe failures", () => {
 	const idle = renderToStaticMarkup(<GitRefreshFeedback onRefresh={() => {}} />);

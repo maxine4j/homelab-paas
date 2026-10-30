@@ -15,7 +15,26 @@ import type { IServiceEventStore } from "./service-event-store.ts";
 import { serviceEventMessages } from "./types.ts";
 import type { DescriptorDecoder, IReconcilerService, IReconciliationStateStore } from "./types.ts";
 
-export class ReconcilerService implements IReconcilerService {
+export interface IServiceRedeployer {
+	/** Serializes with reconciliation; validates inputs before forcing all workloads through their rollout strategy. Throws RedeployError. */
+	redeploy(serviceId: string): Promise<void>;
+}
+
+export class RedeployError extends Error {
+	constructor(
+		readonly kind: "not-found" | "unavailable",
+		options?: ErrorOptions,
+	) {
+		super(
+			kind === "not-found"
+				? "Service is not configured"
+				: "Cannot redeploy service; inspect service status and events",
+			options,
+		);
+	}
+}
+
+export class ReconcilerService implements IReconcilerService, IServiceRedeployer {
 	private readonly log = createLogger(ReconcilerService.name);
 	private pending: Promise<void> = Promise.resolve();
 
@@ -55,9 +74,23 @@ export class ReconcilerService implements IReconcilerService {
 		return operation;
 	}
 
-	private async reconcileService(serviceId: string, source: GitFileSource): Promise<void> {
+	redeploy(serviceId: string): Promise<void> {
+		const operation = this.pending.then(async () => {
+			const sources = this.config.getServices();
+			if (!Object.hasOwn(sources, serviceId)) throw new RedeployError("not-found");
+			try {
+				await this.reconcileService(serviceId, sources[serviceId]!, true);
+			} catch (cause) {
+				throw new RedeployError("unavailable", { cause });
+			}
+		});
+		this.pending = operation.catch(() => {});
+		return operation;
+	}
+
+	private async reconcileService(serviceId: string, source: GitFileSource, force = false): Promise<void> {
 		const previous = await this.state.read(serviceId);
-		if ((previous?.retryAt ?? 0) > this.now()) return;
+		if (!force && (previous?.retryAt ?? 0) > this.now()) return;
 		let desiredRevision = previous?.desiredRevision;
 		let deploymentStartedAt = previous?.deploymentStartedAt;
 		let message: string = serviceEventMessages.fetch;
@@ -110,10 +143,22 @@ export class ReconcilerService implements IReconcilerService {
 				resourceId = id;
 				if (resource.type === "web") {
 					message = serviceEventMessages.web;
-					await this.web.reconcile({ serviceId, resourceId: id, revision: desiredRevision, resource });
+					await this.web.reconcile({
+						serviceId,
+						resourceId: id,
+						revision: desiredRevision,
+						resource,
+						...(force ? { force } : {}),
+					});
 				} else {
 					message = serviceEventMessages.worker;
-					await this.worker.reconcile({ serviceId, resourceId: id, revision: desiredRevision, resource });
+					await this.worker.reconcile({
+						serviceId,
+						resourceId: id,
+						revision: desiredRevision,
+						resource,
+						...(force ? { force } : {}),
+					});
 				}
 			}
 			resourceId = undefined;
@@ -179,6 +224,7 @@ export class ReconcilerService implements IReconcilerService {
 				retryAt,
 			});
 			this.changes?.publish({ serviceId });
+			if (force) throw error;
 		}
 	}
 

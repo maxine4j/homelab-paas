@@ -10,6 +10,13 @@ import { WorkerResourceReconciler } from "./worker-reconciler.ts";
 const resource: DeploymentWorkerResource = { type: "worker", image: "jobs:1", healthcheckPort: 9090, replicas: 2 };
 const input = { serviceId: "demo", resourceId: "jobs", revision: "rev1", resource };
 
+test("forced reconciliation replaces healthy unchanged worker replicas", async () => {
+	const f = fixture();
+	await f.converge();
+	await f.reconciler.reconcile({ ...input, force: true });
+	expect(f.deploy).toHaveBeenCalledWith(expect.objectContaining({ force: true }));
+});
+
 test("device paths, access and supplementary groups affect replacement while omitted fields retain identity", async () => {
 	const f = fixture();
 	const hash = async (settings: Partial<DeploymentWorkerResource>) => {

@@ -39,6 +39,12 @@ The control is disabled while running and shows progress, completion or a safe e
 
 The router delegates directly to the injected `IGitRefreshService` shared with periodic refresh; it owns no fetch/reconciliation orchestration or separate cache.
 
+### Manual redeploy
+
+Service detail offers “Redeploy” next to “Refresh” in the topbar. Both buttons have equal widths; Refresh uses an information colour and Redeploy a warning colour. Both are disabled during either action, with progress and safe outcome feedback. Redeploy replaces all supported web and worker containers even when their specifications are unchanged, using each resource's configured rollout strategy. Recreate can cause downtime. Volumes and credentials are retained. It uses the committed descriptor available through the shared Git cache; use Refresh first to explicitly fetch remote changes. The mock development preview remains read-only.
+
+`POST /api/ui/services/:serviceId/redeploy` has no payload and requires the configured session, matching management `Origin`, and `X-Paas-Redeploy: 1`. It delegates to the injected reconciler, serializes with periodic reconciliation, and bypasses existing retry backoff for the selected service. Descriptor, capability and secret validation precede workload changes. Success returns 204 only after all resource rollouts complete; unknown services return 404, missing origin/intent returns 403, and failures return a sanitized 503. Responses use `Cache-Control: no-store`; GET/HEAD cannot trigger redeployment. Failures retain normal checkpoints, events and observed-state recovery. Navigation cancels waiting and suppresses stale feedback; server work can still finish. Inspect status before retrying an interrupted request.
+
 ## Service events
 
 Service detail shows at most two events under “Recent events”, above resources. When more retained events are available, “N more events...” links to `#/services/:serviceId/events`; N counts the remaining events in the fetched history. Event history shows the latest 200 retained events, newest first. Events include timestamp, severity, operation, a safe actionable message, and resource, revision, attempt count and scheduled retry time when available. Retry times describe the schedule when the event was recorded. Event history refreshes independently and remains readable without Git or Docker. Loading, empty and unavailable histories are explicit. Persistence and retention follow [reconciliation events](reconciliation-and-deployments.md#service-events).

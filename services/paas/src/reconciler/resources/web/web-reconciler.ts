@@ -8,6 +8,7 @@ import type { DeploymentWebResource } from "../../deployment/strategy/types.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
 
 export interface WebReconciliationRequest {
+	force?: boolean;
 	serviceId: string;
 	resourceId: string;
 	revision: string;
@@ -41,7 +42,7 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 		const containers = await this.docker.listServiceContainers(serviceId, resourceId);
 		const current = containers.at(0);
 
-		if (containers.length === 1 && current?.spec === spec && current.state === "running") {
+		if (!request.force && containers.length === 1 && current?.spec === spec && current.state === "running") {
 			const network = await this.docker.inspectServiceNetwork(serviceId);
 			const container = await this.docker.inspectServiceContainer(serviceId, current.id);
 			const address = network && container?.networks[network.name]?.address;
@@ -67,6 +68,7 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 		else if (containers.length !== 1) reason = "duplicates";
 		else if (current.spec !== spec) reason = "specification-changed";
 		else if (current.state !== "running") reason = "not-running";
+		if (request.force) reason = "manual-redeploy";
 		this.log.info(
 			{
 				event: "resource.drift",

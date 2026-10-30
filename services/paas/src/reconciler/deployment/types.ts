@@ -6,6 +6,7 @@ export type DeploymentWorkerResource = Omit<WorkerResource, "env"> & {
 };
 
 export interface WorkerDeploymentRequest {
+	force?: boolean;
 	serviceId: string;
 	resourceId: string;
 	revision: string;

@@ -245,9 +245,29 @@ main {
 	gap: 12px;
 	min-width: 0;
 }
-.git-refresh button {
+.service-actions {
+	display: inline-grid;
+	grid-auto-flow: column;
+	grid-auto-columns: 1fr;
+	gap: 12px;
 	order: 1;
 	flex-shrink: 0;
+}
+.git-refresh .action-info {
+	color: #bfdbfe;
+	background: #172d49;
+	border-color: #406a9e;
+}
+.git-refresh .action-info:hover {
+	background: #224268;
+}
+.git-refresh .action-warning {
+	color: #fde68a;
+	background: #3b2c13;
+	border-color: #96702c;
+}
+.git-refresh .action-warning:hover {
+	background: #563e18;
 }
 .git-refresh p {
 	margin: 0;

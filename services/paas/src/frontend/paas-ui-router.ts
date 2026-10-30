@@ -6,6 +6,7 @@ import { z } from "zod";
 import { ConfigEditError } from "../config/paas-config.ts";
 import { GitRefreshError, type IGitRefreshService } from "../git/git-refresh-service.ts";
 import type { AuthedUserDetails } from "../ingress/auth/types.ts";
+import { RedeployError, type IServiceRedeployer } from "../reconciler/reconciler-service.ts";
 import { logger } from "../util/logger.ts";
 import { PaasUiError, type IPaasUiService } from "./paas-ui-service.ts";
 
@@ -28,6 +29,7 @@ export const createPaasUiRouter = (
 	gitRefresh: IGitRefreshService,
 	sessions?: UiSessionVerifier,
 	managementOrigin?: () => string,
+	redeploy?: IServiceRedeployer,
 ): Router => {
 	const router = new Router({ prefix: "/api/ui" });
 	router.use(async (context, next) => {
@@ -56,7 +58,9 @@ export const createPaasUiRouter = (
 							: error.kind === "conflict"
 								? 409
 								: 503
-						: (error instanceof PaasUiError || error instanceof GitRefreshError)
+						: (error instanceof PaasUiError
+									|| error instanceof GitRefreshError
+									|| error instanceof RedeployError)
 							  && error.kind === "not-found"
 							? 404
 							: 503;
@@ -66,10 +70,24 @@ export const createPaasUiRouter = (
 					|| error instanceof PaasUiError
 					|| error instanceof ConfigEditError
 					|| error instanceof GitRefreshError
+					|| error instanceof RedeployError
 						? error.message
 						: "Cluster data is unavailable; retry shortly",
 			};
 		}
+	});
+	router.post("/services/:serviceId/redeploy", async (context) => {
+		if (
+			context.get("origin") !== (managementOrigin?.() ?? `${context.protocol}://${context.host}`)
+			|| context.get("x-paas-redeploy") !== "1"
+		) {
+			context.status = 403;
+			context.body = { message: "Redeploy requires a same-origin request" };
+			return;
+		}
+		if (!redeploy) throw new RedeployError("unavailable");
+		await redeploy.redeploy(context.params["serviceId"]!);
+		context.status = 204;
 	});
 	for (const path of ["/services/refresh", "/services/:serviceId/refresh"]) {
 		router.post(path, async (context) => {

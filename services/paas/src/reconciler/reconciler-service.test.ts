@@ -3,7 +3,7 @@ import { expect, test, vi } from "vitest";
 
 import { decodeDescriptorYaml } from "../config/paas-config.ts";
 import { ChangeBus } from "../events/change-bus.ts";
-import type { GitFile } from "../git/types.ts";
+import type { GitFile, GitFileSource } from "../git/types.ts";
 import { testConfig } from "../util/test/config.ts";
 import { captureLogs } from "../util/test/logs.ts";
 import { EnvironmentResolver } from "./environment-resolver.ts";
@@ -16,6 +16,67 @@ const descriptor = {
 	metadata: { serviceId: "demo" },
 	resources: { app: { type: "web", image: "app:1", ingress: { public: true, port: 8080 } } },
 };
+
+test("redeploy bypasses backoff for only the selected service and forces unchanged workloads", async () => {
+	const f = fixture();
+	f.states.set("demo", { phase: "ready", activeRevision: "rev", desiredRevision: "rev", retryAt: 9999 });
+	await f.service.redeploy("demo");
+	expect(f.fetchFile).toHaveBeenCalledTimes(1);
+	expect(f.reconcile).toHaveBeenCalledWith(expect.objectContaining({ serviceId: "demo", force: true }));
+	expect(f.states.get("demo")).toMatchObject({ phase: "ready" });
+	await expect(f.service.redeploy("toString")).rejects.toThrow("Service is not configured");
+	expect(f.fetchFile).toHaveBeenCalledTimes(1);
+});
+
+test("redeploy validates secrets before touching containers and reports deployment failure", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "rev",
+		content: JSON.stringify({
+			...descriptor,
+			resources: { app: { ...descriptor.resources.app, env: [{ name: "TOKEN", secret: true }] } },
+		}),
+	});
+	await expect(f.service.redeploy("demo")).rejects.toThrow("Cannot redeploy service");
+	expect(f.reconcile).not.toHaveBeenCalled();
+	expect(f.states.get("demo")).toMatchObject({ phase: "failed", error: serviceEventMessages.secrets });
+});
+
+test("redeploy forces web and worker resources without reconciling another service", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "rev",
+		content: JSON.stringify({
+			...descriptor,
+			resources: { ...descriptor.resources, jobs: { type: "worker", image: "jobs:1", healthcheckPort: 9090 } },
+		}),
+	});
+	const service = f.createService({ ...f.deps.services, other: f.deps.services.demo });
+	await service.redeploy("demo");
+	expect(f.fetchFile).toHaveBeenCalledTimes(1);
+	expect(f.reconcileWorker).toHaveBeenCalledWith(expect.objectContaining({ serviceId: "demo", force: true }));
+	f.reconcile.mockRejectedValueOnce(new Error("secret-canary"));
+	await expect(service.redeploy("demo")).rejects.toThrow("Cannot redeploy service");
+	expect(f.states.get("demo")).toMatchObject({ phase: "failed", error: serviceEventMessages.web });
+});
+
+test("redeploy queues behind an active reconciliation pass", async () => {
+	const f = fixture();
+	let finish = () => {};
+	f.reconcile.mockImplementationOnce(
+		() =>
+			new Promise<void>((resolve) => {
+				finish = resolve;
+			}),
+	);
+	const running = f.service.reconcile();
+	await vi.waitFor(() => expect(f.reconcile).toHaveBeenCalledTimes(1));
+	const forced = f.service.redeploy("demo");
+	expect(f.fetchFile).toHaveBeenCalledTimes(1);
+	finish();
+	await Promise.all([running, forced]);
+	expect(f.reconcile).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }));
+});
 
 function fixture() {
 	let time = 0;
@@ -43,7 +104,7 @@ function fixture() {
 		},
 		now: () => time,
 	};
-	const createService = (services = deps.services, privateIngressEnabled = false) =>
+	const createService = (services: Record<string, GitFileSource> = deps.services, privateIngressEnabled = false) =>
 		new ReconcilerService(
 			testConfig({
 				services: services,

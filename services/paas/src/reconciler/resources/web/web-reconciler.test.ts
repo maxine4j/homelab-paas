@@ -10,6 +10,15 @@ import { WebResourceReconciler } from "./web-reconciler.ts";
 const resource: DeploymentWebResource = { type: "web", image: "app:1", ingress: { public: true, port: 8080 } };
 const input = { serviceId: "demo", resourceId: "app", revision: "rev", resource };
 
+test("forced reconciliation replaces a healthy unchanged web container", async () => {
+	const f = fixture();
+	const containers = await f.converge();
+	const before = f.requests.length;
+	await f.reconciler.reconcile({ ...input, force: true });
+	expect(f.requests).toHaveLength(before + 1);
+	expect(f.requests.at(-1)?.spec).toBe(containers.at(0)?.spec);
+});
+
 test("device paths, access and supplementary groups affect replacement while omitted fields retain identity", async () => {
 	const f = fixture();
 	const hash = async (settings: Partial<DeploymentWebResource>) => {

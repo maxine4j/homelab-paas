@@ -26,6 +26,23 @@ const request: WorkerDeploymentRequest = {
 	},
 };
 
+test.each(["recreate", "surge"] as const)(
+	"forced %s replaces every healthy replica and retains mounts",
+	async (rolloutStrategy) => {
+		const f = fixture();
+		f.old("old-one", request.spec);
+		f.old("old-two", request.spec);
+		await f.service.deploy({ ...request, force: true, resource: { ...request.resource, rolloutStrategy } });
+		expect([...f.containers.keys()]).toEqual(["new-1", "new-2"]);
+		expect(f.docker.createResourceContainer).toHaveBeenCalledWith(
+			expect.objectContaining({ volumes: request.resource.volumes }),
+		);
+		const stop = f.events.indexOf("stop:old-one");
+		const ready = f.events.indexOf("probe:new-2");
+		expect(rolloutStrategy === "surge" ? stop > ready : stop < ready).toBe(true);
+	},
+);
+
 const fixture = () => {
 	const containers = new Map<string, ServiceContainer>();
 	const events: string[] = [];

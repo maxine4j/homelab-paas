@@ -30,7 +30,8 @@ export class WorkerResourceReconciler implements IWorkerResourceReconciler {
 		const spec = this.fingerprint(resourceId, resource);
 		const containers = await this.docker.listServiceContainers(serviceId, resourceId);
 		if (
-			containers.length === (resource.replicas ?? 1)
+			!request.force
+			&& containers.length === (resource.replicas ?? 1)
 			&& containers.every((container) => container.spec === spec && container.state === "running")
 		) {
 			await this.docker.prepareServiceNetwork(serviceId);

@@ -3,6 +3,7 @@ import { expect, test, vi } from "vitest";
 
 import { ConfigEditError } from "../config/paas-config.ts";
 import { GitRefreshError } from "../git/git-refresh-service.ts";
+import { RedeployError } from "../reconciler/reconciler-service.ts";
 import { captureLogs } from "../util/test/logs.ts";
 import { startTestApi } from "../util/test/router.ts";
 import { createPaasUiRouter } from "./paas-ui-router.ts";
@@ -51,10 +52,49 @@ const fixture = async (authenticated = true) => {
 		{ serviceId: "demo", refreshed: true },
 		{ serviceId: "broken", refreshed: false },
 	]);
-	const router = createPaasUiRouter(service, { refreshOne, refreshAll }, { verifyAuthCookie });
+	const redeploy = vi.fn(async (_id: string) => {});
+	const router = createPaasUiRouter(service, { refreshOne, refreshAll }, { verifyAuthCookie }, undefined, {
+		redeploy,
+	});
 	const server = await startTestApi(new Koa().use(router.routes()).use(router.allowedMethods()));
-	return { ...server, calls, verifyAuthCookie, updateConfig, refreshOne, refreshAll };
+	return { ...server, calls, verifyAuthCookie, updateConfig, refreshOne, refreshAll, redeploy };
 };
+
+test("redeploy requires session and same-origin intent and reports sanitized failures", async () => {
+	const f = await fixture();
+	const send = (headers: Record<string, string> = {}) =>
+		fetch(`${f.origin}/api/ui/services/demo/redeploy`, {
+			method: "POST",
+			headers: { origin: f.origin, "x-paas-redeploy": "1", ...headers },
+		});
+	try {
+		const response = await send();
+		expect(response.status).toBe(204);
+		expect(response.headers.get("cache-control")).toBe("no-store");
+		expect(f.redeploy).toHaveBeenCalledWith("demo");
+		const rejected: Record<string, string>[] = [
+			{ origin: "https://evil.test" },
+			{ origin: "" },
+			{ "x-paas-redeploy": "" },
+		];
+		for (const headers of rejected) expect((await send(headers)).status).toBe(403);
+		f.verifyAuthCookie.mockReturnValueOnce(undefined);
+		expect((await send()).status).toBe(401);
+		expect(f.redeploy).toHaveBeenCalledTimes(1);
+		for (const [kind, status] of [
+			["not-found", 404],
+			["unavailable", 503],
+		] as const) {
+			f.redeploy.mockRejectedValueOnce(new RedeployError(kind, { cause: new Error("secret-canary") }));
+			const failed = await send();
+			expect(failed.status).toBe(status);
+			expect(await failed.text()).not.toContain("secret-canary");
+		}
+		expect((await fetch(`${f.origin}/api/ui/services/demo/redeploy`)).status).toBe(405);
+	} finally {
+		await f.close();
+	}
+});
 
 test("manual Git refresh requires session and same-origin intent, delegates scope and sanitizes failures", async () => {
 	const f = await fixture();
