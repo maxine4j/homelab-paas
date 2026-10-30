@@ -1,0 +1,55 @@
+version: 1
+metadata:
+    serviceId: paas-metrics
+resources:
+    grafana:
+        type: web
+        primary: true
+        image: grafana/grafana:12.4.5
+        rolloutStrategy: recreate
+        ingress:
+            public: false
+            port: 3000
+        healthcheckUrl: /api/health
+        env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              secret: true
+            - name: GF_PLUGINS_PREINSTALL_SYNC
+              value: victoriametrics-logs-datasource@0.32.0
+            - name: GF_METRICS_ENABLED
+              value: "true"
+        volumes:
+            - hostPath: /var/homelab-paas/paas-metrics/grafana
+              mountPath: /var/lib/grafana
+              ownership: false
+            - hostPath: /etc/homelab-paas/paas-metrics/grafana-datasources.yaml
+              mountPath: /etc/grafana/provisioning/datasources/paas-metrics.yaml
+              readOnly: true
+    victoriametrics:
+        type: worker
+        image: victoriametrics/victoria-metrics:v1.146.0
+        rolloutStrategy: recreate
+        healthcheckPort: 8428
+        healthcheckUrl: /health
+        command:
+            - -storageDataPath=/storage
+            - -retentionPeriod=30d
+            - -promscrape.config=/etc/prometheus/prometheus.yaml
+        volumes:
+            - hostPath: /var/homelab-paas/paas-metrics/victoriametrics
+              mountPath: /storage
+            - hostPath: /etc/homelab-paas/paas-metrics/prometheus.yaml
+              mountPath: /etc/prometheus/prometheus.yaml
+              readOnly: true
+    victorialogs:
+        type: worker
+        image: victoriametrics/victoria-logs:v1.53.0
+        rolloutStrategy: recreate
+        healthcheckPort: 9428
+        healthcheckUrl: /health
+        command:
+            - -storageDataPath=/storage
+            - -retentionPeriod=14d
+        volumes:
+            - hostPath: /var/homelab-paas/paas-metrics/victorialogs
+              mountPath: /storage
