@@ -87,6 +87,18 @@ test("cluster and service pages expose configuration, deployment status and reso
 	expect(detail).not.toContain("No containers");
 });
 
+test("service details omit the Service label and separate services back link", () => {
+	const html = renderToStaticMarkup(
+		<ServicePage
+			service={{ serviceId: "demo", phase: "ready", source: {}, descriptorStatus: "available", resources: [] }}
+		/>,
+	);
+	expect(html).not.toContain('<p class="eyebrow">Service</p>');
+	expect(html).not.toContain('href="#/services"');
+	expect(html).toContain("<h1>demo</h1>");
+	expect(html).toContain("badge-healthy");
+});
+
 test.each([
 	["ready", "healthy"],
 	["deploying", "deploying"],
