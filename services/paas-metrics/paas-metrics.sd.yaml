@@ -27,7 +27,9 @@ resources:
         volumes:
             - hostPath: /var/homelab-paas/paas-metrics/grafana
               mountPath: /var/lib/grafana
-              ownership: false
+              ownership:
+                  uid: 472
+                  gid: 0
             - hostPath: /etc/homelab-paas/paas-metrics/grafana-datasources.yaml
               mountPath: /etc/grafana/provisioning/datasources/paas-metrics.yaml
               readOnly: true

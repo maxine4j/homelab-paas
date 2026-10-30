@@ -114,7 +114,9 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 								mountPath,
 								readOnly: readOnly ?? false,
 								selinux: "z",
-								...(!readOnly && ownership !== false ? { ownership: "1000:1000" } : {}),
+								...(!readOnly && ownership !== false
+									? { ownership: ownership ? `${ownership.uid}:${ownership.gid}` : "1000:1000" }
+									: {}),
 							})) ?? [],
 						limits: { cpus: resource.limits?.cpus, memoryMiB: resource.limits?.memoryMiB },
 						replicas: resource.replicas ?? 1,

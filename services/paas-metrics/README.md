@@ -12,10 +12,11 @@ Run from the repository root on the **Docker host**, before registering the serv
 sudo install -d -m 0755 /etc/homelab-paas/paas-metrics
 sudo install -m 0644 services/paas-metrics/grafana-datasources.yaml /etc/homelab-paas/paas-metrics/grafana-datasources.yaml
 sudo install -m 0644 services/paas-metrics/prometheus.yaml /etc/homelab-paas/paas-metrics/prometheus.yaml
-sudo install -d -o 472 -g 0 -m 0750 /var/homelab-paas/paas-metrics/grafana
 ```
 
-Grafana runs as UID 472. Its data mount opts out of PaaS's default `1000:1000` ownership preparation; preserve UID 472 ownership when restoring data. Docker/PaaS prepares the other writable data directories. See [volume semantics](../../docs/configuration.md#volumes-and-resource-limits), including SELinux relabeling. All resources use recreate deployment to avoid concurrent access to persistent data.
+Grafana runs as UID 472. Its data mount declares `ownership: { uid: 472, gid: 0 }`; PaaS prepares the data directory's ownership before starting Grafana, including when Docker creates it. The read-only datasource file retains its host ownership. Docker/PaaS prepares the other writable data directories with the default ownership. See [volume semantics](../../docs/configuration.md#volumes-and-resource-limits), including SELinux relabeling. All resources use recreate deployment to avoid concurrent access to persistent data.
+
+Upgrade the control plane to a version supporting explicit volume ownership before deploying this descriptor. Ownership preparation changes only the mount root; existing descendant permissions and ownership are preserved. When restoring data, preserve Grafana's UID 472 ownership and writable permissions for its files and subdirectories.
 
 Grafana uses anonymous access with the `Admin` organization role behind private PaaS ingress. After platform authentication, users can manage dashboards and organization settings without a second login. Grafana's login form and basic authentication are disabled; no Grafana password secret file is required. Anonymous access does not impersonate the named `admin` account or grant Grafana server-administrator privileges. See [Grafana anonymous access](https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/anonymous-auth/).
 

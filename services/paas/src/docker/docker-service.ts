@@ -151,14 +151,15 @@ export class DockerService implements IDockerService {
 	}
 
 	async createResourceContainer(options: CreateResourceContainerOptions): Promise<string> {
-		const hostPaths = [
-			...new Set(
-				options.volumes
-					?.filter(({ readOnly, ownership }) => !readOnly && ownership !== false)
-					.map(({ hostPath }) => hostPath),
-			),
-		];
-		if (hostPaths.length) {
+		const ownershipGroups = new Map<string, Set<string>>();
+		for (const { hostPath, readOnly, ownership } of options.volumes ?? []) {
+			if (readOnly || ownership === false) continue;
+			const owner = ownership ? `${ownership.uid}:${ownership.gid}` : "1000:1000";
+			const paths = ownershipGroups.get(owner) ?? new Set<string>();
+			paths.add(hostPath);
+			ownershipGroups.set(owner, paths);
+		}
+		if (ownershipGroups.size) {
 			const labels = { "homelab-paas.cluster": this.config.getClusterId(), "homelab-paas.role": "control-plane" };
 			const controllers = await this.client.listContainers({ all: false, labels });
 			const controller = controllers.at(0);
@@ -168,11 +169,18 @@ export class DockerService implements IDockerService {
 				|| Object.entries(labels).some(([key, value]) => controller.labels[key] !== value)
 			)
 				throw new DockerServiceError("infrastructure");
-			await this.client.prepareVolumeOwnership(controller.imageId, hostPaths, {
-				"homelab-paas.cluster": this.config.getClusterId(),
-				"homelab-paas.owner-service": options.serviceId,
-				"homelab-paas.role": "volume-init",
-			});
+			for (const [owner, paths] of ownershipGroups) {
+				await this.client.prepareVolumeOwnership(
+					controller.imageId,
+					[...paths],
+					{
+						"homelab-paas.cluster": this.config.getClusterId(),
+						"homelab-paas.owner-service": options.serviceId,
+						"homelab-paas.role": "volume-init",
+					},
+					owner,
+				);
+			}
 		}
 		return this.client.createContainer({
 			name: `paas-${this.config.getClusterId()}-${options.serviceId}-${options.resourceId}-${options.spec.slice(0, 12)}${options.instanceId ? `-${options.instanceId}` : ""}`,

@@ -312,21 +312,55 @@ test.each([
 	).toThrow("Invalid service descriptor");
 });
 
-test("accepts opting out of application volume ownership", () => {
-	expect(
+test.each([false, { uid: 472, gid: 0 }, { uid: 0, gid: 4294967294 }])(
+	"accepts application volume ownership %j",
+	(ownership) => {
+		expect(
+			parseDescriptor(
+				{
+					...descriptor,
+					resources: {
+						app: {
+							...descriptor.resources.app,
+							volumes: [{ hostPath: "/srv/data", mountPath: "/data", ownership }],
+						},
+					},
+				},
+				"test-service",
+			).resources["app"],
+		).toMatchObject({ volumes: [{ ownership }] });
+	},
+);
+
+test.each([
+	true,
+	"472:0",
+	{},
+	{ uid: 472 },
+	{ gid: 0 },
+	{ uid: -1, gid: 0 },
+	{ uid: 1.5, gid: 0 },
+	{ uid: 4294967295, gid: 0 },
+	{ uid: 472, gid: -1 },
+	{ uid: 472, gid: 0.5 },
+	{ uid: 472, gid: 4294967295 },
+	{ uid: "472", gid: 0 },
+	{ uid: 472, gid: 0, recursive: true },
+])("rejects invalid volume ownership %j", (ownership) => {
+	expect(() =>
 		parseDescriptor(
 			{
 				...descriptor,
 				resources: {
 					app: {
 						...descriptor.resources.app,
-						volumes: [{ hostPath: "/srv/data", mountPath: "/data", ownership: false }],
+						volumes: [{ hostPath: "/srv/data", mountPath: "/data", ownership }],
 					},
 				},
 			},
 			"test-service",
-		).resources["app"],
-	).toMatchObject({ volumes: [{ ownership: false }] });
+		),
+	).toThrow("Invalid service descriptor");
 });
 
 test.each(["/srv/media", "/mnt/other disk/data", "/etc/application.conf"])(

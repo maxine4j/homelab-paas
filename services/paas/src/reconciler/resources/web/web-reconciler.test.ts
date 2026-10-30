@@ -12,7 +12,7 @@ const input = { serviceId: "demo", resourceId: "app", revision: "rev", resource 
 
 test("volume ownership policy changes the web specification and ignores read-only ownership", async () => {
 	const f = fixture();
-	const hash = async (readOnly: boolean, ownership?: false) => {
+	const hash = async (readOnly: boolean, ownership?: false | { uid: number; gid: number }) => {
 		await f.reconciler.reconcile({
 			...input,
 			resource: { ...resource, volumes: [{ hostPath: "/srv/data", mountPath: "/data", readOnly, ownership }] },
@@ -21,6 +21,11 @@ test("volume ownership policy changes the web specification and ignores read-onl
 	};
 	expect(await hash(false)).not.toBe(await hash(false, false));
 	expect(await hash(true)).toBe(await hash(true, false));
+	expect(await hash(false, { uid: 1000, gid: 1000 })).toBe(await hash(false));
+	expect(await hash(false, { uid: 472, gid: 0 })).not.toBe(await hash(false));
+	expect(await hash(false, { uid: 472, gid: 0 })).not.toBe(await hash(false, { uid: 473, gid: 0 }));
+	expect(await hash(false, { uid: 472, gid: 0 })).not.toBe(await hash(false, { uid: 472, gid: 1 }));
+	expect(await hash(true, { uid: 472, gid: 0 })).toBe(await hash(true));
 });
 
 test("forced reconciliation replaces a healthy unchanged web container", async () => {

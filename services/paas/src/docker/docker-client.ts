@@ -37,11 +37,11 @@ export interface IDockerClient {
 	inspectContainer(id: string): Promise<DockerContainerDetails | null>;
 	/** Returns a completed tail; live follows use IDockerLogClient. */
 	readContainerLogs(id: string): Promise<string>;
-	/** Nonrecursively assigns source roots to 1000:1000 using a short-lived helper.
-	 * The caller supplies a trusted control-plane image and writable source paths.
+	/** Nonrecursively assigns source roots to owner (default 1000:1000) using a short-lived helper.
+	 * The caller supplies a trusted control-plane image, writable source paths and validated numeric UID:GID.
 	 * Rejects on helper failure; cleanup is attempted even after start/wait failure.
 	 */
-	prepareVolumeOwnership(image: string, hostPaths: string[], labels: Labels): Promise<void>;
+	prepareVolumeOwnership(image: string, hostPaths: string[], labels: Labels, owner?: string): Promise<void>;
 	/** Bind mounts use shared SELinux labels; Docker creates missing source directories on start. */
 	createContainer(options: CreateContainerOptions): Promise<string>;
 	startContainer(id: string): Promise<void>;
@@ -237,7 +237,12 @@ export class DockerClient implements IDockerClient, IDockerPruneClient {
 		return decode(identity, response.body).Id;
 	}
 
-	async prepareVolumeOwnership(image: string, hostPaths: string[], labels: Labels): Promise<void> {
+	async prepareVolumeOwnership(
+		image: string,
+		hostPaths: string[],
+		labels: Labels,
+		owner = "1000:1000",
+	): Promise<void> {
 		if (!hostPaths.length) return;
 		const response = await this.request(
 			"POST",
@@ -246,7 +251,7 @@ export class DockerClient implements IDockerClient, IDockerPruneClient {
 				Image: image,
 				User: "0:0",
 				Entrypoint: ["chown"],
-				Cmd: ["-h", "1000:1000", ...hostPaths.map((_path, index) => `/volumes/${index}`)],
+				Cmd: ["-h", owner, ...hostPaths.map((_path, index) => `/volumes/${index}`)],
 				Labels: labels,
 				HostConfig: {
 					Binds: hostPaths.map((hostPath, index) => `${hostPath}:/volumes/${index}:rw,z`),

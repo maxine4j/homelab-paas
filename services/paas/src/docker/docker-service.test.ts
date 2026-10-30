@@ -30,15 +30,26 @@ test("prepares only writable opted-in mounts using the uniquely identified contr
 			{ hostPath: "/srv/data", mountPath: "/data" },
 			{ hostPath: "/srv/media", mountPath: "/media", readOnly: true },
 			{ hostPath: "/srv/custom", mountPath: "/custom", ownership: false },
+			{ hostPath: "/srv/grafana", mountPath: "/grafana", ownership: { uid: 472, gid: 0 } },
+			{ hostPath: "/srv/plugins", mountPath: "/plugins", ownership: { uid: 472, gid: 0 } },
+			{ hostPath: "/srv/config", mountPath: "/config", readOnly: true, ownership: { uid: 472, gid: 0 } },
+			{ hostPath: "/srv/data", mountPath: "/data-again", ownership: { uid: 1000, gid: 1000 } },
 		],
 	});
 	expect(f.calls.filter(({ operation }) => operation !== "listContainers").map(({ operation }) => operation)).toEqual(
-		["prepareVolumeOwnership", "createContainer"],
+		["prepareVolumeOwnership", "prepareVolumeOwnership", "createContainer"],
 	);
 	expect(f.calls.find(({ operation }) => operation === "prepareVolumeOwnership")?.args).toEqual([
 		"controller-image",
 		["/srv/data"],
 		{ "homelab-paas.cluster": "local", "homelab-paas.owner-service": "demo", "homelab-paas.role": "volume-init" },
+		"1000:1000",
+	]);
+	expect(f.calls.filter(({ operation }) => operation === "prepareVolumeOwnership").at(1)?.args).toEqual([
+		"controller-image",
+		["/srv/grafana", "/srv/plugins"],
+		{ "homelab-paas.cluster": "local", "homelab-paas.owner-service": "demo", "homelab-paas.role": "volume-init" },
+		"472:0",
 	]);
 });
 

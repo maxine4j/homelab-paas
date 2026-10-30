@@ -55,7 +55,11 @@ test.each(["not json", "{}", '{"SpaceReclaimed":-1}', '{"SpaceReclaimed":"100"}'
 	},
 );
 
-test.each([0, 1])("prepares host mount roots through an isolated helper and cleans up: exit %s", async (exitCode) => {
+test.each([
+	{ exitCode: 0, owner: undefined },
+	{ exitCode: 1, owner: undefined },
+	{ exitCode: 0, owner: "472:0" },
+])("prepares host mount roots through an isolated helper and cleans up: %j", async ({ exitCode, owner }) => {
 	const calls: { method: string; path: string; body: unknown }[] = [];
 	const client = new DockerClient({
 		async request(method, path, body) {
@@ -68,9 +72,14 @@ test.each([0, 1])("prepares host mount roots through an isolated helper and clea
 			return { status: 204, body: "" };
 		},
 	});
-	const result = client.prepareVolumeOwnership("controller-image", ["/srv/data", "/srv/file with spaces"], {
-		"homelab-paas.role": "volume-init",
-	});
+	const result = client.prepareVolumeOwnership(
+		"controller-image",
+		["/srv/data", "/srv/file with spaces"],
+		{
+			"homelab-paas.role": "volume-init",
+		},
+		owner,
+	);
 	if (exitCode)
 		await expect(result).rejects.toMatchObject({
 			kind: "unavailable",
@@ -90,7 +99,7 @@ test.each([0, 1])("prepares host mount roots through an isolated helper and clea
 		Image: "controller-image",
 		User: "0:0",
 		Entrypoint: ["chown"],
-		Cmd: ["-h", "1000:1000", "/volumes/0", "/volumes/1"],
+		Cmd: ["-h", owner ?? "1000:1000", "/volumes/0", "/volumes/1"],
 		HostConfig: {
 			NetworkMode: "none",
 			ReadonlyRootfs: true,
