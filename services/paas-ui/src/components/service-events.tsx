@@ -28,6 +28,12 @@ export const ServiceEvents = ({ events, error }: { events?: UiServiceEvent[]; er
 						</time>
 					</div>
 					<p className='event-message'>{event.message}</p>
+					{event.diagnostics && (
+						<details className='event-diagnostics'>
+							<summary>Error diagnostics</summary>
+							<pre>{event.diagnostics}</pre>
+						</details>
+					)}
 					{event.secretFailure && (
 						<div className='secret-failure'>
 							<p>

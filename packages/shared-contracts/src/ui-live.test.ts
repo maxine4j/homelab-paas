@@ -41,3 +41,21 @@ test("live protocol restricts subscription targets, identities and safe server e
 	).toBe(false);
 	expect(uiLiveServerSchema.safeParse({ type: "error", id: "1", message: "raw secret" }).success).toBe(false);
 });
+
+test("event notifications retain bounded diagnostic text and reject oversized UTF-8 output", () => {
+	const notification = (diagnostics: string) => ({
+		type: "event",
+		serviceId: "demo",
+		event: {
+			timestamp: 1,
+			level: "error",
+			event: "reconciliation.failed",
+			message: "Deployment failed",
+			diagnostics,
+		},
+	});
+	const diagnostics = "Docker POST /containers/create: HTTP 500\n at start";
+	expect(uiLiveServerSchema.parse(notification(diagnostics))).toMatchObject({ event: { diagnostics } });
+	expect(uiLiveServerSchema.safeParse(notification("x".repeat(32769))).success).toBe(false);
+	expect(uiLiveServerSchema.safeParse(notification("雪".repeat(16000))).success).toBe(false);
+});

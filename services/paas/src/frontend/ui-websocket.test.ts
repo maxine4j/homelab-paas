@@ -82,18 +82,32 @@ test("adapter permits unauthenticated local management with the same origin guar
 	await adapter.close();
 });
 
-test("oversized input/output and excessive subscriptions close bounded connections", async () => {
+test("large diagnostic histories are delivered while oversized input/output and excessive subscriptions close", async () => {
 	const server = createServer();
 	let large = false;
+	let history = false;
 	const adapter = new UiWebSocket(
 		{
 			subscribe: (id, target, receive) => {
+				if (history)
+					receive({
+						type: "snapshot",
+						id,
+						target,
+						data: Array.from({ length: 200 }, (_, timestamp) => ({
+							timestamp,
+							level: "error",
+							event: "reconciliation.failed",
+							message: "Failed",
+							diagnostics: "x".repeat(32766),
+						})),
+					});
 				if (large)
 					receive({
 						type: "snapshot",
 						id,
 						target,
-						data: { clusterId: "test", config: "x".repeat(1048577), revision: "r", fields: [] },
+						data: { clusterId: "test", config: "x".repeat(16777217), revision: "r", fields: [] },
 					});
 				return () => {};
 			},
@@ -122,6 +136,16 @@ test("oversized input/output and excessive subscriptions close bounded connectio
 		for (let index = 0; index < 17; index++)
 			excessive.send(JSON.stringify({ type: "subscribe", id: String(index), target: { kind: "services" } }));
 		expect((await excessiveClosed)[0]).toBe(1008);
+		history = true;
+		const reader = await connect();
+		const received = Promise.race([
+			once(reader, "message").then(([value]) => JSON.parse(String(value))),
+			once(reader, "close").then(() => undefined),
+		]);
+		reader.send(JSON.stringify({ type: "subscribe", id: "events", target: { kind: "events", serviceId: "demo" } }));
+		expect((await received)?.data).toHaveLength(200);
+		reader.terminate();
+		history = false;
 		large = true;
 		const slow = await connect();
 		const slowClosed = once(slow, "close");

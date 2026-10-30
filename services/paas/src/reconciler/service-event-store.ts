@@ -62,6 +62,11 @@ const eventSchema = z.strictObject({
 		"deployment.succeeded",
 	]),
 	message: z.enum(Object.values(serviceEventMessages)),
+	diagnostics: z
+		.string()
+		.max(32768)
+		.refine((value) => Buffer.byteLength(JSON.stringify(value)) <= 32768)
+		.optional(),
 	resourceId: identity.optional(),
 	revision: z.string().max(256).optional(),
 	failures: z.number().int().nonnegative().max(1024).optional(),

@@ -46,6 +46,7 @@ import { RecreateDeploymentStrategy } from "./reconciler/deployment/strategy/rec
 import { SurgeDeploymentStrategy } from "./reconciler/deployment/strategy/surge-deployment-strategy.ts";
 import { WorkerDeploymentService } from "./reconciler/deployment/worker-deployment-service.ts";
 import { EnvironmentResolver } from "./reconciler/environment-resolver.ts";
+import { EventDiagnostics } from "./reconciler/event-diagnostics.ts";
 import { EndpointsStore } from "./reconciler/networking/endpoints-store.ts";
 import { NetworkingService } from "./reconciler/networking/networking-service.ts";
 import { ReconcilerService } from "./reconciler/reconciler-service.ts";
@@ -134,6 +135,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 			probe,
 		),
 		events,
+		new EventDiagnostics(config),
 		changes,
 	);
 	const gitRefresh = new GitRefreshService(config, git, reconciler, changes);

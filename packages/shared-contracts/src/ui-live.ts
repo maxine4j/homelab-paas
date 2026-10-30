@@ -70,6 +70,11 @@ export const uiServiceEventSchema = z.object({
 		"reconciliation.recovered",
 	]),
 	message: z.string().max(4096),
+	diagnostics: z
+		.string()
+		.max(32768)
+		.refine((value) => new TextEncoder().encode(JSON.stringify(value)).length <= 32768)
+		.optional(),
 	resourceId: identity.optional(),
 	revision: z.string().optional(),
 	failures: z.number().optional(),

@@ -620,6 +620,19 @@ p {
 	margin: 14px 0;
 	line-height: 1.5;
 }
+.event-diagnostics {
+	margin: 14px 0;
+}
+.event-diagnostics summary {
+	cursor: pointer;
+	padding: 12px 0;
+}
+.event-diagnostics pre {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	max-height: 36rem;
+	overflow: auto;
+}
 .secret-failure {
 	margin: 14px 0;
 	padding: 0 0 0 14px;

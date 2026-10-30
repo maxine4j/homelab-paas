@@ -6,6 +6,7 @@ import { JwtClient } from "../ingress/auth/jwt-client.ts";
 import { GitHubOauth2Provider } from "../ingress/auth/oauth-provider/github.ts";
 import { TlsCertProvisionService } from "../ingress/tls/cert-provision-service.ts";
 import { DigitalOceanDnsAcmeChallengeProvider } from "../ingress/tls/dns-challenge/digitalocean-dns-challenge-provider.ts";
+import { EventDiagnostics } from "../reconciler/event-diagnostics.ts";
 import { ReconcilerService } from "../reconciler/reconciler-service.ts";
 import type { ReconciliationState } from "../reconciler/types.ts";
 import { PeriodicTaskRunner } from "../task/periodic.ts";
@@ -110,6 +111,7 @@ test("existing reconciler and UI discover reloaded service sources and retry bou
 		{ resolve: async () => [] },
 		{ type: "worker", lifecycle: "deployment", reconcile },
 		{ append: async () => {}, list: async () => [] },
+		new EventDiagnostics(f.config),
 	);
 	const ui = new PaasUiService(
 		f.config,
