@@ -18,12 +18,8 @@ export const ServicePage = ({
 	const primaryUrl = service.resources.find((resource) => resource.type === "web" && resource.primaryUrl)?.primaryUrl;
 	return (
 		<>
-			<a className='back-link' href='#/services'>
-				← Services
-			</a>
 			<div className='page-heading service-heading'>
 				<div className='service-heading-content'>
-					<p className='eyebrow'>Service</p>
 					<div className='service-heading-row'>
 						<div className='service-identity-block'>
 							<div className='service-identity'>
