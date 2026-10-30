@@ -12,8 +12,14 @@ resources:
             port: 3000
         healthcheckUrl: /api/health
         env:
-            - name: GF_SECURITY_ADMIN_PASSWORD
-              secret: true
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: Admin
+            - name: GF_AUTH_DISABLE_LOGIN_FORM
+              value: "true"
+            - name: GF_AUTH_BASIC_ENABLED
+              value: "false"
             - name: GF_PLUGINS_PREINSTALL_SYNC
               value: victoriametrics-logs-datasource@0.32.0
             - name: GF_METRICS_ENABLED

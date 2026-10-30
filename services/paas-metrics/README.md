@@ -17,13 +17,9 @@ sudo install -d -o 472 -g 0 -m 0750 /var/homelab-paas/paas-metrics/grafana
 
 Grafana runs as UID 472. Its data mount opts out of PaaS's default `1000:1000` ownership preparation; preserve UID 472 ownership when restoring data. Docker/PaaS prepares the other writable data directories. See [volume semantics](../../docs/configuration.md#volumes-and-resource-limits), including SELinux relabeling. All resources use recreate deployment to avoid concurrent access to persistent data.
 
-Create or update the restricted, operator-managed `/etc/homelab-paas/env/paas-metrics.env` file with a strong initial Grafana administrator password:
+Grafana uses anonymous access with the `Admin` organization role behind private PaaS ingress. After platform authentication, users can manage dashboards and organization settings without a second login. Grafana's login form and basic authentication are disabled; no Grafana password secret file is required. Anonymous access does not impersonate the named `admin` account or grant Grafana server-administrator privileges. See [Grafana anonymous access](https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/anonymous-auth/).
 
-```dotenv
-GF_SECURITY_ADMIN_PASSWORD=replace-with-a-strong-password
-```
-
-Use directory mode `0700` and file mode `0600`; the file must be readable by the control plane. The initial Grafana username is `admin`. Grafana stores users, dashboards, settings, and installed plugins in `/var/lib/grafana`; changing this environment secret does not reset an existing administrator password. Grafana's own login remains enabled in addition to platform authentication.
+Grafana stores users, dashboards, settings, and installed plugins in `/var/lib/grafana`. Existing accounts and data are retained. An existing `GF_SECURITY_ADMIN_PASSWORD` entry in the service secret file is no longer injected and may be removed.
 
 The VictoriaLogs datasource plugin is pinned and installed synchronously before Grafana starts. First startup requires outbound access to Grafana's plugin registry/download endpoints. The persistent Grafana directory retains the installation. Image versions follow the [upstream stack example](https://github.com/VictoriaMetrics/VictoriaLogs/blob/master/deployment/docker/compose-vl-single.yml); plugin configuration follows [Grafana plugin settings](https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#plugins).
 
