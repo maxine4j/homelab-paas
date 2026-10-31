@@ -11,6 +11,36 @@ import { ServiceEventsPage } from "./service-events-page.tsx";
 import { ServicePage } from "./service-page.tsx";
 import { ServicesPage } from "./services-page.tsx";
 
+test("Secrets is an independent service route and remains linked from service event pages", () => {
+	expect(parseRoute("#/services/demo/secrets")).toEqual({ page: "secrets", serviceId: "demo" });
+	expect(renderToStaticMarkup(<ServiceEventsPage serviceId='demo' events={[]} />)).toContain(
+		'href="#/services/demo/secrets"',
+	);
+});
+
+test("secret failure events link directly to the service Secrets editor", () => {
+	const html = renderToStaticMarkup(
+		<ServiceEvents
+			serviceId='demo'
+			events={[
+				{
+					timestamp: 0,
+					event: "reconciliation.failed",
+					level: "error",
+					message: "Missing secrets",
+					secretFailure: {
+						reason: "missing-variables",
+						filePath: "/env/demo.env",
+						missingVariables: ["FIRST", "SECOND"],
+					},
+				},
+			]}
+		/>,
+	);
+	expect(html).toContain('href="#/services/demo/secrets"');
+	expect(html).toContain("FIRST, SECOND");
+});
+
 test.each(["deploying", "missing", "healthy", "unhealthy"] as const)(
 	"resource %s health sits beside its heading and replaces card container status",
 	(health) => {

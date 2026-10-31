@@ -13,6 +13,7 @@ export const parseRoute = (hash: string): Route => {
 	if (parts.length === 2) return { page: "service", serviceId };
 	if (parts.length === 3 && parts.at(2) === "resources") return { page: "service", serviceId, tab: "resources" };
 	if (parts.length === 3 && parts.at(2) === "events") return { page: "events", serviceId };
+	if (parts.length === 3 && parts.at(2) === "secrets") return { page: "secrets", serviceId };
 	if (parts.at(2) !== "resources" || !resourceId || !id.test(resourceId)) return { page: "missing" };
 	const tab = parts.at(4) ?? "config";
 	if (parts.length === 5 && tab === "events") return { page: "resource-events", serviceId, resourceId };

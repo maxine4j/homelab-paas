@@ -135,3 +135,13 @@ export type UiLiveServerMessage =
 			message: "Requested item was not found" | "Cluster data is unavailable; retry shortly";
 	  }
 	| { type: "event"; serviceId: string; event: UiServiceEvent };
+/** Secret values are write-only. Names and configured status are safe metadata. */
+export interface UiSecrets {
+	revision: string;
+	variables: { name: string; configured: boolean; used: boolean }[];
+}
+
+export interface UiSecretsUpdate {
+	revision: string;
+	changes: { name: string; value: string }[];
+}

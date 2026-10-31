@@ -23,7 +23,7 @@ export const ServiceDetailTabs = ({
 	tab,
 }: {
 	serviceId: string;
-	tab: "overview" | "resources" | "events";
+	tab: "overview" | "resources" | "events" | "secrets";
 }) => (
 	<DetailTabs
 		base={`#/services/${serviceId}`}
@@ -33,6 +33,7 @@ export const ServiceDetailTabs = ({
 			{ path: "", label: "Overview" },
 			{ path: "/resources", label: "Resources" },
 			{ path: "/events", label: "Events" },
+			{ path: "/secrets", label: "Secrets" },
 		]}
 	/>
 );

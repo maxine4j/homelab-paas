@@ -2,6 +2,7 @@ import Koa from "koa";
 import { expect, test, vi } from "vitest";
 
 import { ConfigEditError } from "../config/paas-config.ts";
+import { SecretEditError } from "../config/secret-store.ts";
 import { GitRefreshError } from "../git/git-refresh-service.ts";
 import { RedeployError } from "../reconciler/reconciler-service.ts";
 import { captureLogs } from "../util/test/logs.ts";
@@ -53,12 +54,71 @@ const fixture = async (authenticated = true) => {
 		{ serviceId: "broken", refreshed: false },
 	]);
 	const redeploy = vi.fn(async (_id: string) => {});
-	const router = createPaasUiRouter(service, { refreshOne, refreshAll }, { verifyAuthCookie }, undefined, {
-		redeploy,
-	});
+	const secrets = {
+		read: vi.fn(async (_id: string) => ({
+			revision: "r1",
+			variables: [{ name: "TOKEN", configured: true, used: true }],
+		})),
+		update: vi.fn(async (_id: string, _update: unknown) => ({ revision: "r2", variables: [] })),
+	};
+	const router = createPaasUiRouter(
+		service,
+		{ refreshOne, refreshAll },
+		{ verifyAuthCookie },
+		undefined,
+		{
+			redeploy,
+		},
+		secrets,
+	);
 	const server = await startTestApi(new Koa().use(router.routes()).use(router.allowedMethods()));
-	return { ...server, calls, verifyAuthCookie, updateConfig, refreshOne, refreshAll, redeploy };
+	return { ...server, calls, verifyAuthCookie, updateConfig, refreshOne, refreshAll, redeploy, secrets };
 };
+
+test("secret endpoints require authentication, same-origin JSON intent, strict bounded edits and safe errors", async () => {
+	const f = await fixture();
+	const body = { revision: "r1", changes: [{ name: "TOKEN", value: "private-value" }] };
+	const send = (value: unknown = body, headers: Record<string, string> = {}) =>
+		fetch(`${f.origin}/api/ui/services/demo/secrets`, {
+			method: "PUT",
+			headers: { origin: f.origin, "x-paas-secrets": "1", "content-type": "application/json", ...headers },
+			body: JSON.stringify(value),
+		});
+	try {
+		const read = await fetch(`${f.origin}/api/ui/services/demo/secrets`);
+		expect(read.status).toBe(200);
+		expect(read.headers.get("cache-control")).toBe("no-store");
+		expect(await read.json()).toMatchObject({ variables: [{ name: "TOKEN", configured: true }] });
+		expect((await send()).status).toBe(200);
+		expect(f.secrets.update).toHaveBeenCalledWith("demo", body);
+		expect((await send(body, { origin: "https://evil.test" })).status).toBe(403);
+		expect((await send(body, { "x-paas-secrets": "" })).status).toBe(403);
+		expect((await send(body, { "content-type": "text/plain" })).status).toBe(415);
+		for (const value of [
+			{ ...body, extra: true },
+			{ ...body, changes: [{ name: "bad-name", value: "x" }] },
+			{ ...body, changes: [] },
+		])
+			expect((await send(value)).status).toBe(400);
+		expect((await send({ ...body, changes: [{ name: "TOKEN", value: "x".repeat(70000) }] })).status).toBe(413);
+		for (const [kind, status] of [
+			["invalid", 400],
+			["conflict", 409],
+			["not-found", 404],
+			["unavailable", 503],
+		] as const) {
+			f.secrets.update.mockRejectedValueOnce(new SecretEditError(kind));
+			const response = await send();
+			expect(response.status).toBe(status);
+			expect(await response.text()).not.toContain("private-value");
+		}
+		f.verifyAuthCookie.mockReturnValue(undefined);
+		expect((await send()).status).toBe(401);
+		expect((await fetch(`${f.origin}/api/ui/services/demo/secrets`)).status).toBe(401);
+	} finally {
+		await f.close();
+	}
+});
 
 test("redeploy requires session and same-origin intent and reports sanitized failures", async () => {
 	const f = await fixture();

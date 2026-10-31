@@ -6,6 +6,7 @@ export type Route =
 	| { page: "missing" }
 	| { page: "service"; serviceId: string; tab?: ServiceTab }
 	| { page: "events"; serviceId: string }
+	| { page: "secrets"; serviceId: string }
 	| { page: "resource-events"; serviceId: string; resourceId: string }
 	| { page: "resource"; serviceId: string; resourceId: string; tab: ResourceTab; containerId?: string };
 export interface ApiResult<T> {

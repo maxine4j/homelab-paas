@@ -14,6 +14,8 @@ export type {
 	ResourceHostPort,
 } from "./service-descriptor.ts";
 export type {
+	UiSecrets,
+	UiSecretsUpdate,
 	JsonValue,
 	UiLiveTarget,
 	UiLiveData,

@@ -18,6 +18,34 @@ const descriptor = {
 	resources: { app: { type: "web", image: "app:1", ingress: { public: true, port: 8080 } } },
 };
 
+test("missing secrets across resources are all named in a persistent event directing users to Secrets", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "rev",
+		content: JSON.stringify({
+			...descriptor,
+			resources: {
+				app: { ...descriptor.resources.app, env: [{ name: "FIRST", secret: true }] },
+				jobs: {
+					type: "worker",
+					image: "jobs:1",
+					healthcheckPort: 8080,
+					env: [{ name: "SECOND", secret: true }],
+				},
+			},
+		}),
+	});
+	await f.service.reconcile();
+	expect(f.appendEvent).toHaveBeenCalledWith(
+		"demo",
+		expect.objectContaining({
+			message: expect.stringMatching(/Secrets.*FIRST, SECOND/),
+			secretFailure: expect.objectContaining({ missingVariables: ["FIRST", "SECOND"] }),
+		}),
+	);
+	expect(f.reconcile).not.toHaveBeenCalled();
+});
+
 test("redeploy bypasses backoff for only the selected service and forces unchanged workloads", async () => {
 	const f = fixture();
 	f.states.set("demo", { phase: "ready", activeRevision: "rev", desiredRevision: "rev", retryAt: 9999 });

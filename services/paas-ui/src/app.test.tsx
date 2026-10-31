@@ -3,6 +3,22 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { App, AppView, viewPaths } from "./app.tsx";
 
+test("Secrets loads independently of unavailable Git/Docker snapshots and retains service tabs", () => {
+	expect(viewPaths({ page: "secrets", serviceId: "demo" })).toEqual({});
+	const html = renderToStaticMarkup(
+		<AppView
+			route={{ page: "secrets", serviceId: "demo" }}
+			snapshot={{ error: "Docker unavailable", refresh: () => {} }}
+			events={{ refresh: () => {} }}
+			logs={{}}
+		/>,
+	);
+	expect(html).toContain("Service secrets");
+	expect(html).toContain("/etc/homelab-paas/env/demo.env");
+	expect(html).toContain('href="#/services/demo/secrets" aria-current="page"');
+	expect(html).not.toContain("Docker unavailable");
+});
+
 test("resource overview and history share the service events stream while history avoids inspection", () => {
 	expect(viewPaths({ page: "resource", serviceId: "demo", resourceId: "app", tab: "config" })).toEqual({
 		snapshot: "/services/demo/resources/app",

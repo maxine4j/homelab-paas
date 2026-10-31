@@ -40,7 +40,7 @@ export const ResourcePage = ({
 							)}
 							{eventError && <a href={`${base}/events`}>Event history</a>}
 						</div>
-						<ServiceEvents events={resourceEvents?.slice(0, 2)} error={eventError} />
+						<ServiceEvents serviceId={serviceId} events={resourceEvents?.slice(0, 2)} error={eventError} />
 					</section>
 					<div className='resource-overview'>
 						<ResourceConfiguration config={resource.config} configYaml={resource.configYaml} />

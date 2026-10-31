@@ -110,15 +110,33 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 			message = serviceEventMessages.capabilities;
 			const desired = this.deploymentResources(descriptor);
 			message = serviceEventMessages.secrets;
+			// Resolve the union first so a missing file or variable reports every required name.
+			const declaredSecrets = new Map(
+				desired.flatMap(([, resource]) =>
+					(resource.env ?? [])
+						.filter((entry) => "secret" in entry)
+						.map((entry) => [entry.name, entry] as const),
+				),
+			);
+			resourceId = desired.length === 1 ? desired.at(0)?.[0] : undefined;
+			const resolvedSecrets = new Map(
+				(await this.environment.resolve(serviceId, [...declaredSecrets.values()])).map((entry) => [
+					entry.name,
+					entry.value,
+				]),
+			);
+			secrets.push(...resolvedSecrets.values());
 			const resources: [string, DeploymentWebResource | DeploymentWorkerResource][] = [];
 			for (const [id, resource] of desired) {
 				resourceId = id;
 				resourceContext = resource;
 				image = resource.image;
-				const env = await this.environment.resolve(serviceId, resource.env ?? []);
-				for (const entry of env)
-					if (resource.env?.some((declared) => declared.name === entry.name && "secret" in declared))
-						secrets.push(entry.value);
+				const env = (resource.env ?? []).map((entry) => {
+					const value = "value" in entry ? entry.value : resolvedSecrets.get(entry.name);
+					if (value === undefined)
+						throw new Error("Cannot resolve application secrets; open the service Secrets tab");
+					return { name: entry.name, value };
+				});
 				resources.push([id, { ...resource, env }]);
 			}
 			resourceId = undefined;

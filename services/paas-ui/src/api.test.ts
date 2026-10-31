@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 
-import { fetchUi, saveConfig, refreshGit, redeployService } from "./api.ts";
+import { fetchUi, saveConfig, refreshGit, redeployService, saveSecrets } from "./api.ts";
 
 test("redeploy sends same-origin intent, cancellation and safe errors", async () => {
 	const signal = new AbortController().signal;
@@ -98,4 +98,37 @@ test("fetches private snapshots with cancellation and preserves auth errors", as
 	await expect(
 		fetchUi("/cluster", controller.signal, async () => new Response("secret-canary", { status: 503 })),
 	).rejects.toThrow("Cluster data is unavailable");
+});
+test("secret saves send only selected write-only edits and provide safe conflict/validation messages", async () => {
+	const update = { revision: "r1", changes: [{ name: "EMPTY", value: "" }] };
+	const request = vi.fn(async () => new Response(JSON.stringify({ revision: "r2", variables: [] })));
+	expect(await saveSecrets("demo", update, new AbortController().signal, request)).toEqual({
+		revision: "r2",
+		variables: [],
+	});
+	expect(request).toHaveBeenCalledWith(
+		"/api/ui/services/demo/secrets",
+		expect.objectContaining({
+			method: "PUT",
+			credentials: "same-origin",
+			cache: "no-store",
+			headers: { "content-type": "application/json", "x-paas-secrets": "1" },
+			body: JSON.stringify(update),
+		}),
+	);
+	for (const [status, message] of [
+		[409, "Secrets changed"],
+		[400, "single-line"],
+		[401, "session"],
+		[503, "Cannot save secrets"],
+	] as const) {
+		await expect(
+			saveSecrets(
+				"demo",
+				update,
+				new AbortController().signal,
+				async () => new Response("private-secret", { status }),
+			),
+		).rejects.toThrow(message);
+	}
 });

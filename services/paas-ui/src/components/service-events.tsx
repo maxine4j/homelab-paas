@@ -3,7 +3,15 @@ import type { UiServiceEvent } from "@homelab-paas/shared-contracts";
 import { EventCopy } from "./event-copy.tsx";
 import { presentDiagnostics } from "./event-diagnostics.ts";
 
-export const ServiceEvents = ({ events, error }: { events?: UiServiceEvent[]; error?: string }) => {
+export const ServiceEvents = ({
+	events,
+	error,
+	serviceId,
+}: {
+	events?: UiServiceEvent[];
+	error?: string;
+	serviceId?: string;
+}) => {
 	if (error)
 		return (
 			<p className='notice' role='alert'>
@@ -48,6 +56,13 @@ export const ServiceEvents = ({ events, error }: { events?: UiServiceEvent[]; er
 						)}
 						{event.secretFailure && (
 							<div className='secret-failure'>
+								{serviceId && (
+									<p>
+										<a href={`#/services/${serviceId}/secrets`}>
+											Open Secrets to configure required variables
+										</a>
+									</p>
+								)}
 								<p>
 									{event.secretFailure.reason === "missing-file"
 										? "Secret file is missing"
