@@ -5,49 +5,27 @@ resources:
     grafana:
         type: web
         primary: true
-        image: grafana/grafana:12.4.5
+        image: ghcr.io/maxine4j/homelab-paas/metrics-grafana:latest
         rolloutStrategy: recreate
+        healthcheckUrl: /api/health
         ingress:
             public: false
             port: 3000
-        env:
-            - name: GF_AUTH_ANONYMOUS_ENABLED
-              value: "true"
-            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
-              value: Admin
-            - name: GF_AUTH_DISABLE_LOGIN_FORM
-              value: "true"
-            - name: GF_AUTH_BASIC_ENABLED
-              value: "false"
-            - name: GF_PLUGINS_PREINSTALL_SYNC
-              value: victoriametrics-logs-datasource@0.32.0
-            - name: GF_METRICS_ENABLED
-              value: "true"
         volumes:
             - hostPath: /var/homelab-paas/paas-metrics/grafana
               mountPath: /var/lib/grafana
               ownership:
                   uid: 472
                   gid: 0
-            - hostPath: /etc/homelab-paas/paas-metrics/grafana-datasources.yaml
-              mountPath: /etc/grafana/provisioning/datasources/paas-metrics.yaml
-              readOnly: true
     victoriametrics:
         type: worker
-        image: victoriametrics/victoria-metrics:v1.146.0
+        image: ghcr.io/maxine4j/homelab-paas/metrics-victoriametrics:latest
         rolloutStrategy: recreate
         healthcheckPort: 8428
         healthcheckUrl: /health
-        command:
-            - -storageDataPath=/storage
-            - -retentionPeriod=30d
-            - -promscrape.config=/etc/prometheus/prometheus.yaml
         volumes:
             - hostPath: /var/homelab-paas/paas-metrics/victoriametrics
               mountPath: /storage
-            - hostPath: /etc/homelab-paas/paas-metrics/prometheus.yaml
-              mountPath: /etc/prometheus/prometheus.yaml
-              readOnly: true
     victorialogs:
         type: worker
         image: victoriametrics/victoria-logs:v1.53.0
@@ -60,3 +38,19 @@ resources:
         volumes:
             - hostPath: /var/homelab-paas/paas-metrics/victorialogs
               mountPath: /storage
+    telegraf:
+        type: worker
+        image: ghcr.io/maxine4j/homelab-paas/metrics-telegraf:latest
+        rolloutStrategy: recreate
+        healthcheckPort: 8080
+        healthcheckUrl: /
+        limits:
+            cpus: 0.1
+            memoryMiB: 128
+        volumes:
+            - hostPath: /var/run/docker.sock
+              mountPath: /var/run/docker.sock
+              readOnly: true
+            - hostPath: /var/homelab-paas/paas-metrics/telegraf
+              mountPath: /var/lib/telegraf
+              ownership: false
