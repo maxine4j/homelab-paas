@@ -5,7 +5,7 @@ resources:
     grafana:
         type: web
         primary: true
-        image: ghcr.io/maxine4j/homelab-paas/metrics-grafana:latest
+        image: ghcr.io/maxine4j/homelab-paas/metrics-grafana:${COMMIT_ID:40}
         rolloutStrategy: recreate
         healthcheckUrl: /api/health
         ingress:
@@ -19,7 +19,7 @@ resources:
                   gid: 0
     victoriametrics:
         type: worker
-        image: ghcr.io/maxine4j/homelab-paas/metrics-victoriametrics:latest
+        image: ghcr.io/maxine4j/homelab-paas/metrics-victoriametrics:${COMMIT_ID:40}
         rolloutStrategy: recreate
         healthcheckPort: 8428
         healthcheckUrl: /health
@@ -40,7 +40,7 @@ resources:
               mountPath: /storage
     telegraf:
         type: worker
-        image: ghcr.io/maxine4j/homelab-paas/metrics-telegraf:latest
+        image: ghcr.io/maxine4j/homelab-paas/metrics-telegraf:${COMMIT_ID:40}
         rolloutStrategy: recreate
         healthcheckPort: 8080
         healthcheckUrl: /

@@ -16,7 +16,7 @@ Grafana uses anonymous access with the `Admin` organization role behind private 
 
 Grafana stores users, dashboards, settings, and installed plugins in `/var/lib/grafana`. Existing accounts and data are retained. An existing `GF_SECURITY_ADMIN_PASSWORD` entry in the service secret file is no longer injected and may be removed.
 
-The Docker host must be able to pull the published GHCR images. CI must publish them before first deployment. Make the three new GHCR packages public after their first publication for credential-free pulls from fresh hosts; this is a one-time registry setting, not host configuration. The descriptor uses `latest` from `main`; matching full-commit and release tags allow pinned deployments. See [image publishing](../../docs/development.md#continuous-integration-and-image-publishing). Grafana does not download plugins at startup, report analytics, or check for updates.
+The Docker host must be able to pull the published GHCR images. CI must publish them before deployment. Make the three new GHCR packages public after their first publication for credential-free pulls from fresh hosts; this is a one-time registry setting, not host configuration. The descriptor pins the three custom images with `${COMMIT_ID:40}`, resolving to the exact source commit used to read the descriptor; see [image tag variables](../../docs/configuration.md#image-tag-variables). CI publishes matching full-commit tags; see [image publishing](../../docs/development.md#continuous-integration-and-image-publishing). Grafana does not download plugins at startup, report analytics, or check for updates.
 
 ## Register and access
 
@@ -33,7 +33,7 @@ Merge this entry into the existing map, retaining other services. Commit the des
 
 Open `https://paas-metrics.{baseDomain}` (also available at `https://grafana.paas-metrics.{baseDomain}`) and sign in. The provisioned VictoriaMetrics datasource is the default; select VictoriaLogs in Explore to query ingested logs. Worker APIs are reachable only on the service network at `http://victoriametrics:8428` and `http://victorialogs:9428`.
 
-Persistent data paths refer to the Docker host, independently of bootstrap mounts. Docker Desktop's `local/var` mapping does not relocate workload data. Removing containers retains data. Obsolete provisioning-file directories under `/etc/homelab-paas/paas-metrics/` are no longer mounted and need not be repaired. Configuration/plugin changes require rebuilding and publishing the corresponding image, then [manually redeploying](../../docs/reconciliation-and-deployments.md#manual-redeploy) or changing the pinned image tag. A changed `latest` alone does not replace a running workload. No host configuration copies or startup plugin downloads are required.
+Persistent data paths refer to the Docker host, independently of bootstrap mounts. Docker Desktop's `local/var` mapping does not relocate workload data. Removing containers retains data. Obsolete provisioning-file directories under `/etc/homelab-paas/paas-metrics/` are no longer mounted and need not be repaired. Each new source commit changes the three resolved custom image tags and triggers replacement during reconciliation, including commits that leave the descriptor unchanged. CI must publish those images before deployment can succeed; missing tags retry under the [deployment retry contract](../../docs/reconciliation-and-deployments.md#implemented-deployment-mvp). No host configuration copies or startup plugin downloads are required.
 
 ## Container collection and resource budget
 
