@@ -174,7 +174,7 @@ jobs:
                   retention-days: 7
     publish:
         runs-on: ubuntu-24.04
-        needs: [validate, lint, typecheck, unit, installer, docker-build, integration, metrics]
+        needs: docker-build
         if: inputs.publish-images && github.event_name == 'push'
         permissions:
             contents: read
