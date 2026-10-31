@@ -359,7 +359,7 @@ test("resource history direct links show all exact matches without resource insp
 		/>,
 	);
 	expect(html).toContain("Resource events");
-	expect(html).toContain('href="#/services/demo/resources/app"');
+	expect(html).toContain('href="#/services/demo/resources/app/config"');
 	expect(html).toContain("latest 200 service events");
 	expect(html).toContain("&lt;unsafe&gt;");
 	expect(html).not.toContain("Other");
@@ -411,6 +411,7 @@ test("service overview shows tabs and two recent events above compact resources 
 	);
 	expect(html).toContain('href="#/services/demo" aria-current="page">Overview</a>');
 	expect(html).toContain('href="#/services/demo/resources">Resources</a>');
+	expect(html).toContain('href="#/services/demo/events">Events</a>');
 	expect(html.indexOf("Recent events")).toBeLessThan(html.indexOf("<h2>Resources"));
 	expect(html).not.toContain("Service descriptor");
 	expect(html).toContain("1 more events...");

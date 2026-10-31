@@ -1,5 +1,6 @@
 import type { UiServiceEvent } from "@homelab-paas/shared-contracts";
 
+import { EventCopy } from "./event-copy.tsx";
 import { presentDiagnostics } from "./event-diagnostics.ts";
 
 export const ServiceEvents = ({ events, error }: { events?: UiServiceEvent[]; error?: string }) => {
@@ -96,6 +97,7 @@ export const ServiceEvents = ({ events, error }: { events?: UiServiceEvent[]; er
 								</span>
 							)}
 						</div>
+						<EventCopy event={event} />
 					</li>
 				);
 			})}

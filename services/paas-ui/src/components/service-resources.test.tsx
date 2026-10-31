@@ -13,7 +13,7 @@ const renderResources = (resources: UiResource[]) =>
 	);
 
 test.each([true, false])(
-	"web cards show independent ingress links, %s access, health and the configured image",
+	"web cards prefer the primary ingress link, %s access, health and the configured image",
 	(isPublic) => {
 		const html = renderResources([
 			{
@@ -30,13 +30,16 @@ test.each([true, false])(
 			},
 		]);
 		expect(html).toContain('href="#/services/metrics/resources/grafana"');
-		expect(html).toContain('href="https://grafana.metrics.example.test" target="_blank" rel="noreferrer"');
+		expect(html).not.toContain('href="https://grafana.metrics.example.test"');
 		expect(html).toContain('href="https://metrics.example.test" target="_blank" rel="noreferrer"');
 		expect(html).toContain(isPublic ? "Public ingress" : "Private ingress");
 		expect(html).toContain(isPublic ? 'data-icon="globe"' : 'data-icon="lock"');
 		expect(html).toContain("badge-healthy");
 		expect(html).toContain("ghcr.io/maxine4j/homelab-paas/metrics-grafana:latest");
 		expect(html).not.toMatch(/<a\b[^>]*>(?:(?!<\/a>)[\s\S])*<a\b/);
+		expect(html).toMatch(
+			/<h3><a class="resource-inspection-link"[^>]*>grafana<\/a><\/h3><span class="eyebrow">web<\/span>/,
+		);
 	},
 );
 
@@ -48,6 +51,7 @@ test("cards retain non-web and observed-only resources with explicit unavailable
 	]);
 	expect(html).toContain('href="#/services/metrics/resources/db"');
 	expect(html).toContain('href="#/services/metrics/resources/old"');
+	expect(html).toContain('href="https://app.metrics.example.test" target="_blank" rel="noreferrer"');
 	expect(html).toContain("postgres:17");
 	expect(html).toContain("Image unavailable");
 	expect(html).toContain("Ingress access unavailable");

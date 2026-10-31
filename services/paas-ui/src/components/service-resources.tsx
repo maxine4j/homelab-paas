@@ -52,16 +52,20 @@ export const ServiceResources = ({ serviceId, resources }: { serviceId: string; 
 							? ingress["public"]
 							: undefined;
 					const image = config?.["image"];
+					const url = resource.primaryUrl ?? resource.url;
 					return (
 						<article className='card service-resource-card' key={resource.resourceId}>
 							<div className='card-top'>
-								<div>
-									<span className='eyebrow'>{resource.type}</span>
+								<div className='resource-card-identity'>
 									<h3>
-										<a href={`#/services/${serviceId}/resources/${resource.resourceId}`}>
+										<a
+											className='resource-inspection-link'
+											href={`#/services/${serviceId}/resources/${resource.resourceId}`}
+										>
 											{resource.resourceId}
 										</a>
 									</h3>
+									<span className='eyebrow'>{resource.type}</span>
 								</div>
 								<StatusBadge status={resource.health} />
 							</div>
@@ -76,15 +80,11 @@ export const ServiceResources = ({ serviceId, resources }: { serviceId: string; 
 									) : (
 										<span className='muted'>Ingress access unavailable</span>
 									)}
-									{[
-										...new Set(
-											[resource.url, resource.primaryUrl].filter((url) => url !== undefined),
-										),
-									].map((url) => (
-										<a key={url} href={url} target='_blank' rel='noreferrer'>
+									{url && (
+										<a href={url} target='_blank' rel='noreferrer'>
 											{url} <span aria-hidden='true'>↗</span>
 										</a>
-									))}
+									)}
 								</div>
 							)}
 						</article>

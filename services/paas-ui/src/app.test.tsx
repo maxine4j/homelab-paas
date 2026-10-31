@@ -40,6 +40,29 @@ test("resource event history renders independently of failed inspection with lin
 		/breadcrumbs[^]*href="#\/services\/demo\/resources\/app">app<\/a>[^]*aria-current="page">Events/,
 	);
 	expect(html).toContain("Live · connected");
+	expect(html).toContain('aria-label="Resource inspection"');
+	expect(html).toContain('href="#/services/demo/resources/app/config">Overview</a>');
+	expect(html).toContain('href="#/services/demo/resources/app/logs">Logs</a>');
+	expect(html).toContain('href="#/services/demo/resources/app/events" aria-current="page">Events</a>');
+	expect(html).not.toContain('class="back-link"');
+});
+
+test("service history retains service navigation without a Git snapshot", () => {
+	const html = renderToStaticMarkup(
+		<AppView
+			route={{ page: "events", serviceId: "demo" }}
+			snapshot={{ error: "Git unavailable", refresh: () => {} }}
+			events={{ data: [], refresh: () => {} }}
+			logs={{}}
+		/>,
+	);
+	expect(html).toContain("<h1>demo</h1>");
+	expect(html).toContain('aria-label="Service detail"');
+	expect(html).toContain('href="#/services/demo">Overview</a>');
+	expect(html).toContain('href="#/services/demo/resources">Resources</a>');
+	expect(html).toContain('href="#/services/demo/events" aria-current="page">Events</a>');
+	expect(html).not.toContain("Git unavailable");
+	expect(html).not.toContain('class="back-link"');
 });
 
 test.each([
