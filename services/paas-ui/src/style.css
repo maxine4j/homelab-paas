@@ -593,6 +593,12 @@ p {
 .section-heading a {
 	padding: 12px 0;
 }
+.recent-events .section-heading {
+	margin-bottom: 12px;
+}
+.recent-events .section-heading h2 {
+	margin: 0;
+}
 .service-events {
 	list-style: none;
 	padding: 0;
@@ -602,6 +608,7 @@ p {
 }
 .service-event {
 	padding: 18px;
+	min-width: 0;
 	border: 1px solid #303844;
 	border-left: 3px solid #3d5b86;
 	border-radius: 8px;
@@ -616,25 +623,53 @@ p {
 	color: #a9b5c6;
 	font-size: 0.8rem;
 }
+.event-heading {
+	gap: 8px 16px;
+}
+.event-heading time {
+	margin-left: auto;
+	text-align: right;
+}
 .event-message {
-	margin: 14px 0;
+	margin: 12px 0 0;
 	line-height: 1.5;
 }
 .event-diagnostics {
-	margin: 14px 0;
+	margin: 12px 0 0;
+	border-top: 1px solid #303844;
 }
 .event-diagnostics summary {
 	cursor: pointer;
 	padding: 12px 0;
+	line-height: 1.5;
+}
+.event-diagnostics h3 {
+	margin: 4px 0 8px;
+	font-size: 0.85rem;
+	font-weight: 600;
 }
 .event-diagnostics pre {
+	margin: 0 0 16px;
+	padding: 12px;
+	border: 1px solid #303844;
+	border-radius: 6px;
+	background: #101620;
+	font-size: 0.8rem;
+	line-height: 1.6;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	max-height: 36rem;
 	overflow: auto;
 }
+.event-diagnostics > :last-child {
+	margin-bottom: 0;
+}
+.event-diagnostics > p {
+	margin: 0;
+	line-height: 1.6;
+}
 .secret-failure {
-	margin: 14px 0;
+	margin: 12px 0 0;
 	padding: 0 0 0 14px;
 	border-left: 2px solid #62404a;
 	font-size: 0.85rem;
@@ -644,9 +679,11 @@ p {
 	margin: 6px 0;
 }
 .event-metadata {
+	margin-top: 16px;
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px 20px;
+	line-height: 1.6;
 }
 dl {
 	margin: 0;
@@ -981,6 +1018,12 @@ footer {
 	}
 }
 @media (max-width: 700px) {
+	.service-event {
+		padding: 16px;
+	}
+	.event-diagnostics pre {
+		padding: 10px;
+	}
 	.service-commit-panels {
 		flex-direction: column;
 		gap: 16px;

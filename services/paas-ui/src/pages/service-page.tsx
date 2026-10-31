@@ -64,7 +64,7 @@ export const ServicePage = ({
 					</div>
 				</dl>
 			)}
-			<section aria-label='Recent service events'>
+			<section className='recent-events' aria-label='Recent service events'>
 				<div className='section-heading'>
 					<h2>Recent events</h2>
 					{events && events.length > 2 && (

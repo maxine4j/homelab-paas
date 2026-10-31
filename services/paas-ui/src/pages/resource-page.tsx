@@ -64,7 +64,7 @@ export const ResourcePage = ({
 			</nav>
 			{tab === "config" && (
 				<>
-					<section aria-label='Recent resource events'>
+					<section className='recent-events' aria-label='Recent resource events'>
 						<div className='section-heading'>
 							<h2>Recent events</h2>
 							{resourceEvents && resourceEvents.length > 2 && (

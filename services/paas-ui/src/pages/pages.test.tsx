@@ -255,7 +255,19 @@ const events = [
 	},
 ];
 
-test("diagnostics show the actual error first, decoded stacks, causes/provider details and YAML context", () => {
+test.each(["error", "info"] as const)(
+	"%s event cards keep severity and timestamp in their shared first row",
+	(level) => {
+		const html = renderToStaticMarkup(<ServiceEvents events={[{ ...events[0]!, level }]} />);
+		expect(html).toMatch(
+			new RegExp(
+				`service-event-${level}"[^>]*><div class="event-heading"><span class="badge badge-${level}">${level}</span><time[^]*?</time></div><p class="event-message">`,
+			),
+		);
+	},
+);
+
+test("diagnostics show the actual error below the status row, decoded stacks, causes/provider details and YAML context", () => {
 	const diagnostics = JSON.stringify({
 		error: {
 			message: "Port <bind> failed",
@@ -281,7 +293,7 @@ test("diagnostics show the actual error first, decoded stacks, causes/provider d
 			]}
 		/>,
 	);
-	expect(html).toMatch(/service-event-error[^>]*><p class="event-message">Port &lt;bind&gt; failed<\/p>/);
+	expect(html).toMatch(/<\/time><\/div><p class="event-message">Port &lt;bind&gt; failed<\/p>/);
 	expect(html).not.toContain("Cannot reconcile worker");
 	expect(html).toContain("Stack trace</h3><pre");
 	expect(html).toContain("\n    at start (src/start.ts:1:2)");

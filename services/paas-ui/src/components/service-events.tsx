@@ -25,13 +25,13 @@ export const ServiceEvents = ({ events, error }: { events?: UiServiceEvent[]; er
 						className={`service-event service-event-${event.level}`}
 						key={`${event.timestamp}-${event.event}-${index}`}
 					>
-						<p className='event-message'>{diagnostics?.message ?? event.message}</p>
 						<div className='event-heading'>
 							<span className={`badge badge-${event.level}`}>{event.level}</span>
 							<time dateTime={new Date(event.timestamp).toISOString()}>
 								{new Date(event.timestamp).toLocaleString()}
 							</time>
 						</div>
+						<p className='event-message'>{diagnostics?.message ?? event.message}</p>
 						{diagnostics && (
 							<details className='event-diagnostics'>
 								<summary>Error diagnostics</summary>
