@@ -2,7 +2,6 @@ import type { UiServiceEvent } from "@homelab-paas/shared-contracts";
 import { z } from "zod";
 
 import type { KeyValueStore } from "../store/types.ts";
-import { serviceEventMessages } from "./types.ts";
 
 export interface IServiceEventStore {
 	/** Appends a safe event, retaining the latest 200. Writes are serialized; failures propagate. */
@@ -61,7 +60,7 @@ const eventSchema = z.strictObject({
 		"reconciliation.recovered",
 		"deployment.succeeded",
 	]),
-	message: z.enum(Object.values(serviceEventMessages)),
+	message: z.string().min(1).max(4096),
 	diagnostics: z
 		.string()
 		.max(32768)

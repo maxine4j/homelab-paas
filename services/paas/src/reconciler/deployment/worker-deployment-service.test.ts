@@ -26,6 +26,27 @@ const request: WorkerDeploymentRequest = {
 	},
 };
 
+test.each([
+	["missing", "container is no longer present"],
+	["stopped", "container is not running"],
+	["address", "container has no address on the service network"],
+	["probe", "private health check on port 9090 at /ready did not pass"],
+] as const)("reports the last observed worker readiness condition: %s", async (condition, reason) => {
+	const f = fixture();
+	if (condition === "missing") vi.mocked(f.docker.inspectServiceContainer).mockResolvedValue(null);
+	if (condition === "stopped" || condition === "address")
+		vi.mocked(f.docker.inspectServiceContainer).mockResolvedValue({
+			id: "new-1",
+			imageId: "image",
+			labels: {},
+			running: condition !== "stopped",
+			networks: {},
+		});
+	f.probe.mockResolvedValue(false);
+	await expect(f.service.deploy(request)).rejects.toThrow(`Worker readiness failed after 30 checks: ${reason}`);
+	expect(f.sleep).toHaveBeenCalledTimes(29);
+});
+
 test.each([undefined, null])("workers become ready without HTTP checks: %s", async (healthcheckUrl) => {
 	const f = fixture();
 	f.probe.mockResolvedValue(false);

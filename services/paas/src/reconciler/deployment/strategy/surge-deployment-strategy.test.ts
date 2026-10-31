@@ -64,6 +64,33 @@ test("propagates resolved secrets, arbitrary host mounts and CPU/memory limits t
 	]);
 });
 
+test.each([
+	["missing", "container is no longer present"],
+	["stopped", "container is not running"],
+	["address", "container has no address on the service network"],
+	["probe", "HTTP health check on port 8080 at /ready did not pass"],
+] as const)("reports the last observed web readiness condition: %s", async (condition, reason) => {
+	const f = fixture();
+	f.docker.inspectServiceContainer = async (): Promise<DockerContainerDetails | null> =>
+		condition === "missing"
+			? null
+			: {
+					id: "new",
+					imageId: "image",
+					labels: {},
+					running: condition !== "stopped",
+					networks: condition === "address" ? {} : { network: { address: "10.0.0.2", aliases: [] } },
+				};
+	const strategy = new SurgeDeploymentStrategy(
+		f.docker,
+		f.routes,
+		async () => false,
+		f.sleep,
+		() => "instance",
+	);
+	await expect(strategy.deploy(request)).rejects.toThrow(`Container readiness failed after 30 checks: ${reason}`);
+});
+
 function fixture() {
 	const calls: { action: string; args: unknown[] }[] = [];
 	const record = (action: string, ...args: unknown[]) => {

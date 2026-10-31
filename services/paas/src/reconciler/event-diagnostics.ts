@@ -2,11 +2,26 @@ import type { IPaasConfig } from "../config/paas-config.ts";
 import { EnvironmentResolutionError } from "./environment-resolver.ts";
 
 export interface IEventDiagnostics {
+	/** Redacted, single-line failure headline, bounded to 4096 characters. */
+	summarize(failure: unknown, secrets: string[]): string;
 	describe(failure: unknown, context: Record<string, unknown>, secrets: string[]): string;
 }
 
 export class EventDiagnostics implements IEventDiagnostics {
 	constructor(private readonly config: IPaasConfig) {}
+
+	summarize(failure: unknown, secrets: string[]): string {
+		const message =
+			failure instanceof Error ? Object.getOwnPropertyDescriptor(failure, "message")?.value : undefined;
+		if (typeof message !== "string") return "Reconciliation failed; inspect error diagnostics";
+		const safe = this.config
+			.redact(message, secrets)
+			.replace(/Command failed:[^\r\n]*/g, "Command failed: [redacted]")
+			.replace(/\s+/g, " ")
+			.trim();
+		if (!safe) return "Reconciliation failed; inspect error diagnostics";
+		return safe.length <= 4096 ? safe : `${safe.slice(0, 4084)} [truncated]`;
+	}
 	describe(failure: unknown, context: Record<string, unknown>, secrets: string[]): string {
 		const budget = { nodes: 128, seen: new WeakSet<object>() };
 		const text = JSON.stringify(

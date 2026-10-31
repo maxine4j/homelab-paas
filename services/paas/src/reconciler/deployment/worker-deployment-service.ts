@@ -101,19 +101,23 @@ export class WorkerDeploymentService implements IWorkerDeploymentService {
 	}
 
 	private async waitReady(request: WorkerDeploymentRequest, id: string, networkName: string): Promise<void> {
+		let reason = "private health check did not pass";
 		for (let attempt = 0; attempt < 30; attempt++) {
 			const container = await this.docker.inspectServiceContainer(request.serviceId, id);
 			const address = container?.networks[networkName]?.address;
-			if (
-				container?.running
-				&& address
-				&& (!request.resource.healthcheckUrl
-					|| (await this.probe(address, request.resource.healthcheckPort, request.resource.healthcheckUrl)))
+			if (!container) reason = "container is no longer present";
+			else if (!container.running) reason = "container is not running";
+			else if (!address) reason = "container has no address on the service network";
+			else if (
+				!request.resource.healthcheckUrl
+				|| (await this.probe(address, request.resource.healthcheckPort, request.resource.healthcheckUrl))
 			)
 				return;
+			else
+				reason = `private health check on port ${request.resource.healthcheckPort} at ${request.resource.healthcheckUrl} did not pass`;
 			if (attempt < 29) await this.sleep(1000);
 		}
-		throw new Error("Worker readiness failed; check container startup and private health check");
+		throw new Error(`Worker readiness failed after 30 checks: ${reason}`);
 	}
 
 	private async retire(request: WorkerDeploymentRequest, ids: string[]): Promise<void> {

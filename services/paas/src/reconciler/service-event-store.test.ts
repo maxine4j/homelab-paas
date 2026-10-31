@@ -45,14 +45,17 @@ test("serializes concurrent appends and retains only the latest 200 events", asy
 	expect(events.at(-1)).toEqual(event(5));
 });
 
-test("rejects invalid persisted events, unsafe messages and service identities", async () => {
+test("persists specific sanitized summaries and rejects unbounded messages and service identities", async () => {
 	const backing = new InMemoryKeyValueStore<unknown>();
 	const store = new ServiceEventStore(backing);
-	await expect(store.append("demo", { ...event(1), message: "raw-secret" })).rejects.toThrow(
+	const specific = { ...event(1), message: "Worker readiness failed: container is not running" };
+	await store.append("demo", specific);
+	expect(await store.list("demo")).toEqual([specific]);
+	await expect(store.append("demo", { ...event(1), message: "x".repeat(4097) })).rejects.toThrow(
 		"Cannot append service event",
 	);
 	await expect(store.list("../demo")).rejects.toThrow("Invalid service event identity");
-	await backing.set("demo.events", [{ ...event(1), message: "raw-secret" }]);
+	await backing.set("demo.events", [{ ...event(1), message: "" }]);
 	await expect(store.list("demo")).rejects.toThrow("Cannot read service events");
 });
 

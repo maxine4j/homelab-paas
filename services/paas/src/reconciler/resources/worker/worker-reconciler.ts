@@ -48,7 +48,9 @@ export class WorkerResourceReconciler implements IWorkerResourceReconciler {
 					resource.healthcheckUrl
 					&& !(await this.probe(address, resource.healthcheckPort, resource.healthcheckUrl))
 				)
-					throw new Error("Worker readiness failed; check private health check");
+					throw new Error(
+						`Worker readiness failed: private health check on port ${resource.healthcheckPort} at ${resource.healthcheckUrl} did not pass`,
+					);
 			}
 			if (connected) return;
 		}

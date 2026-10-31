@@ -173,7 +173,9 @@ test("a failed private health check prevents reporting a converged worker as rea
 	const f = fixture();
 	await f.converge();
 	f.probe.mockResolvedValue(false);
-	await expect(f.reconciler.reconcile(input)).rejects.toThrow("Worker readiness failed");
+	await expect(f.reconciler.reconcile(input)).rejects.toThrow(
+		"Worker readiness failed: private health check on port 9090 at /healthcheck did not pass",
+	);
 	expect(f.deploy).not.toHaveBeenCalled();
 });
 

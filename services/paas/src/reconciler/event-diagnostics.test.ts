@@ -4,6 +4,24 @@ import { testConfig } from "../util/test/config.ts";
 import { EnvironmentResolutionError } from "./environment-resolver.ts";
 import { EventDiagnostics } from "./event-diagnostics.ts";
 
+test("summarizes actual errors safely with bounded, single-line messages and unknown fallbacks", () => {
+	const diagnostics = new EventDiagnostics(testConfig());
+	expect(diagnostics.summarize(new Error("Worker readiness failed: container is not running"), [])).toBe(
+		"Worker readiness failed: container is not running",
+	);
+	expect(
+		diagnostics.summarize(new Error("Denied private-value https://user:pass@registry/app\nretry"), [
+			"private-value",
+		]),
+	).toBe("Denied [redacted] https://[redacted]@registry/app retry");
+	for (const failure of [undefined, null, {}, "raw rejection", new Error("")])
+		expect(diagnostics.summarize(failure, [])).toBe("Reconciliation failed; inspect error diagnostics");
+	expect(diagnostics.summarize(new Error("x".repeat(5000)), [])).toHaveLength(4096);
+	expect(
+		diagnostics.summarize(new Error("Command failed: git --token private-inline\nfatal: access denied"), []),
+	).toBe("Command failed: [redacted] fatal: access denied");
+});
+
 test("captures error chains, stacks and provider properties with redacted deployment context", () => {
 	const provider = Object.assign(new Error("Docker POST /containers/create: HTTP 500: bind failed private-value"), {
 		code: "EACCES",

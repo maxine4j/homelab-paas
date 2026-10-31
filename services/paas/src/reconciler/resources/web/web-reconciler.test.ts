@@ -449,7 +449,9 @@ test("unhealthy unchanged containers do not receive newly published routes", asy
 	f.setContainers([{ id: "c", imageId: "image", resourceId: "app", revision: "rev", spec, state: "running" }]);
 	f.requests.length = 0;
 	f.setHealthy(false);
-	await expect(f.reconciler.reconcile(checked)).rejects.toThrow("readiness");
+	await expect(f.reconciler.reconcile(checked)).rejects.toThrow(
+		"Container readiness failed: HTTP health check on port 8080 at /ready did not pass",
+	);
 	expect(f.routes).toEqual([]);
 	expect(f.requests).toEqual([]);
 });

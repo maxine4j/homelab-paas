@@ -334,7 +334,7 @@ test.each(["fetch", "descriptor", "capabilities", "secrets", "web", "worker"] as
 			}),
 		);
 		const [, failure] = f.appendEvent.mock.calls.find(([, event]) => event.event === "reconciliation.failed") ?? [];
-		expect(failure?.message).toBe(serviceEventMessages[stage]);
+		expect(failure?.message).toBe(JSON.parse(failure!.diagnostics!).error.message);
 		expect(JSON.stringify(failure)).not.toContain("raw-secret");
 		if (["secrets", "web", "worker"].includes(stage)) expect(failure).toMatchObject({ resourceId: "app" });
 		const callsBeforeRetry = f.appendEvent.mock.calls.length;
@@ -352,6 +352,27 @@ test.each(["fetch", "descriptor", "capabilities", "secrets", "web", "worker"] as
 	},
 );
 
+test("promotes a specific redacted worker failure to the event headline", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValueOnce({
+		revision: "rev",
+		content: JSON.stringify({
+			...descriptor,
+			resources: { jobs: { type: "worker", image: "app:1", healthcheckPort: 8080 } },
+		}),
+	});
+	f.reconcileWorker.mockRejectedValueOnce(new Error("Worker readiness failed: private health check did not pass"));
+	await f.service.reconcile();
+	expect(f.appendEvent).toHaveBeenCalledWith(
+		"demo",
+		expect.objectContaining({
+			event: "reconciliation.failed",
+			message: "Worker readiness failed: private health check did not pass",
+			resourceId: "jobs",
+		}),
+	);
+});
+
 test("records state failures even when checkpoint storage is unavailable", async () => {
 	const f = fixture();
 	f.deps.state.read = vi.fn(async () => {
@@ -363,7 +384,7 @@ test("records state failures even when checkpoint storage is unavailable", async
 		expect.objectContaining({
 			event: "reconciliation.state-failed",
 			level: "error",
-			message: "Cannot persist reconciliation state; check platform state directory access",
+			message: "raw-[redacted]",
 		}),
 	);
 	expect(JSON.stringify(f.appendEvent.mock.calls)).not.toContain("raw-secret");

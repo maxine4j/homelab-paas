@@ -78,9 +78,15 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 
 	private async waitReady(request: DeploymentRequest, containerId: string, networkName: string): Promise<Endpoint> {
 		const { serviceId, resource } = request;
+		let reason = "container is no longer present";
 		for (let attempt = 0; attempt < MAX_STARTUP_PROBE_ATTEMPTS; attempt++) {
 			const container = await this.docker.inspectServiceContainer(serviceId, containerId);
 			const address = container?.networks[networkName]?.address;
+			if (!container) reason = "container is no longer present";
+			else if (!container.running) reason = "container is not running";
+			else if (!address) reason = "container has no address on the service network";
+			else
+				reason = `HTTP health check on port ${resource.ingress.port} at ${resource.healthcheckUrl} did not pass`;
 			if (container?.running && address) {
 				const endpoint: Endpoint = {
 					address,
@@ -97,6 +103,6 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 			}
 			if (attempt < 29) await this.sleep(1000);
 		}
-		throw new Error("Container readiness failed; check container startup and healthcheckUrl");
+		throw new Error(`Container readiness failed after 30 checks: ${reason}`);
 	}
 }

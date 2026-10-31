@@ -63,7 +63,7 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 						timestamp: this.now(),
 						level: "error",
 						event: "reconciliation.state-failed",
-						message: serviceEventMessages.state,
+						message: this.diagnostics.summarize(error, []),
 						diagnostics: this.diagnostics.describe(error, { operation: "state", serviceId }, []),
 					});
 					this.log.error(
@@ -212,7 +212,7 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 				timestamp: this.now(),
 				level: "error",
 				event: "reconciliation.failed",
-				message,
+				message: this.diagnostics.summarize(error, secrets),
 				diagnostics: this.diagnostics.describe(
 					error,
 					{
