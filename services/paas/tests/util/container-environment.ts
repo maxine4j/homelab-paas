@@ -11,6 +11,7 @@ import { testConfig } from "../../src/util/test/config.ts";
 import { parseYaml, stringifyYaml } from "../../src/util/yaml.ts";
 import { MockGitHub } from "../mocks/github.ts";
 import { artifactDirectory, TestGit } from "./git.ts";
+import { ImageRetention } from "./image-retention.ts";
 import { ingressPorts } from "./ports.ts";
 import { createTls, seedTls } from "./tls.ts";
 import { waitFor } from "./wait.ts";
@@ -23,8 +24,8 @@ const root = resolve(import.meta.dirname, "../../../..");
 export class ContainerEnvironment {
 	readonly cluster = `e2e-${randomUUID().slice(0, 8)}`;
 	readonly github = new MockGitHub();
-	readonly image = `${this.cluster}-workload:local`;
-	readonly paasImage = `${this.cluster}-paas:local`;
+	readonly image = process.env["TEST_SERVICE_IMAGE"] ?? "homelab-paas/test-service:ci";
+	readonly paasImage = process.env["PAAS_IMAGE"] ?? "homelab-paas/paas:ci";
 	directory = "";
 	git!: TestGit;
 	config!: PlatformConfig;
@@ -39,8 +40,13 @@ export class ContainerEnvironment {
 		this.git = new TestGit(this.directory);
 		await this.git.init();
 		await this.github.server.listen();
-		await this.docker(["tag", process.env["PAAS_IMAGE"] ?? "homelab-paas/paas:ci", this.paasImage]);
-		await this.docker(["tag", process.env["TEST_SERVICE_IMAGE"] ?? "homelab-paas/test-service:ci", this.image]);
+		// Keep image bytes in use; global setup resolved IDs because prune can remove tags.
+		await new ImageRetention(this.cluster, (args) => this.docker(args)).retain([
+			this.paasImage,
+			this.image,
+			process.env["PLAYWRIGHT_IMAGE"] ?? "homelab-paas/playwright:ci",
+			"envoyproxy/envoy:v1.37.0",
+		]);
 		this.config = parseYaml((await readFile(join(fixtures, "config.yaml")))!, "test config") as PlatformConfig;
 		this.config.metadata.clusterId = this.cluster;
 		this.config.ingress.baseDomain = `${this.cluster}.paas.test`;
@@ -303,7 +309,7 @@ export class ContainerEnvironment {
 			.split("\n")
 			.filter(Boolean);
 		if (networks.length) await attempt(() => this.docker(["network", "rm", ...networks]));
-		await attempt(() => this.docker(["image", "rm", this.image, this.paasImage]));
+		// Image IDs are shared test inputs; keep their bytes available for later tests.
 		await attempt(() => this.github.server.close());
 		if (failures.length) throw new AggregateError(failures, "Test cluster cleanup failed");
 	}

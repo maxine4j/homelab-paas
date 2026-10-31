@@ -16,7 +16,7 @@ test("manual refresh fetches one service independently and all services on deman
 	await env.waitReady("public", "v1");
 	await page.goto(env.url("", "/#/services"));
 	// Join any startup refresh before publishing the revision used to prove isolation.
-	await page.getByRole("button", { name: "Refresh all services from Git", exact: true }).click();
+	await page.getByRole("button", { name: "Refresh all", exact: true }).click();
 	await expect(page.getByRole("status").filter({ hasText: "Git refresh complete" })).toBeVisible();
 	await page.goto(env.url("", "/#/services/public"));
 	const before = (await env.checkpoint("second"))!.activeRevision;
@@ -24,7 +24,7 @@ test("manual refresh fetches one service independently and all services on deman
 	const response = page.waitForResponse(
 		(result) => result.url().endsWith("/api/ui/services/public/refresh") && result.request().method() === "POST",
 	);
-	await page.getByRole("button", { name: "Refresh service from Git", exact: true }).click();
+	await page.getByRole("button", { name: "Refresh", exact: true }).click();
 	expect((await response).status()).toBe(200);
 	await expect(page.getByRole("status").filter({ hasText: "Git refresh complete" })).toBeVisible();
 	await env.waitReady("public", "v2");
@@ -32,7 +32,7 @@ test("manual refresh fetches one service independently and all services on deman
 	// Every service uses its own cache even though this fixture uses the same remote.
 	expect((await env.checkpoint("second"))!.activeRevision).toBe(before);
 	await page.goto(env.url("", "/#/services"));
-	await page.getByRole("button", { name: "Refresh all services from Git", exact: true }).click();
+	await page.getByRole("button", { name: "Refresh all", exact: true }).click();
 	await expect(page.getByRole("status").filter({ hasText: "Git refresh complete" })).toBeVisible();
 	expect((await env.checkpoint("second"))!.activeRevision).toBe(revision);
 });

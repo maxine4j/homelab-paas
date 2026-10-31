@@ -25,7 +25,9 @@ test("authenticated Envoy pushes deployment snapshots/events and follows new Doc
 	await expect.poll(() => JSON.stringify(frames)).toContain('"event":"deployment.started"');
 	await env.waitReady("public", "live-v2");
 	await expect.poll(() => JSON.stringify(frames)).toContain('"event":"deployment.succeeded"');
-	await expect(page.locator("dl.summary dd").first()).toContainText(revision);
+	await expect(
+		page.locator(".service-revision").filter({ hasText: "Active revision" }).getByTitle(revision, { exact: true }),
+	).toHaveText(revision.slice(0, 7));
 	await page.goto(env.url("", "/#/services/public/resources/app/logs"));
 	const logs = page.getByLabel("Container logs", { exact: true });
 	await expect(logs).toBeVisible();
@@ -49,7 +51,7 @@ test("authenticated Envoy pushes deployment snapshots/events and follows new Doc
 	await expect.poll(() => JSON.stringify(frames)).toContain('"event":"reconciliation.failed"');
 	await expect(
 		page
-			.getByText("Invalid descriptor; check service identity and supported resource fields", { exact: true })
+			.getByText("Invalid service descriptor: check service identity and resource configuration", { exact: true })
 			.first(),
 	).toBeVisible();
 	expect(reads).toEqual([]);

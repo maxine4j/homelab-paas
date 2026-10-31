@@ -423,21 +423,41 @@ test("uses a preloaded local image without pulling", async () => {
 	expect(f.calls).toEqual([{ operation: "inspectImage", args: ["app:local"] }]);
 });
 
-test.each(["app:1", "app:local"])("pulls and inspects images that need resolving: %s", async (reference) => {
-	let inspections = 0;
-	const order: string[] = [];
+test("resolves a loaded immutable image ID without treating it as a registry reference", async () => {
+	const reference = `sha256:${"a".repeat(64)}`;
+	const f = fixture();
+	expect(await f.service.resolveImage(reference)).toBe("sha256:a");
+	expect(f.calls).toEqual([{ operation: "inspectImage", args: [reference] }]);
+});
+
+test("reports an absent immutable image ID without attempting a registry pull", async () => {
 	const f = fixture({
 		async inspectImage() {
-			order.push("inspect");
-			return reference.endsWith(":local") && inspections++ === 0 ? null : { id: "sha256:new" };
-		},
-		async pullImage() {
-			order.push("pull");
+			return null;
 		},
 	});
-	expect(await f.service.resolveImage(reference)).toBe("sha256:new");
-	expect(order).toEqual(reference.endsWith(":local") ? ["inspect", "pull", "inspect"] : ["pull", "inspect"]);
+	await expect(f.service.resolveImage(`sha256:${"a".repeat(64)}`)).rejects.toMatchObject({ kind: "not-found" });
+	expect(f.calls).toEqual([]);
 });
+
+test.each(["app:1", "app:local", "sha256:release"])(
+	"pulls and inspects images that need resolving: %s",
+	async (reference) => {
+		let inspections = 0;
+		const order: string[] = [];
+		const f = fixture({
+			async inspectImage() {
+				order.push("inspect");
+				return reference.endsWith(":local") && inspections++ === 0 ? null : { id: "sha256:new" };
+			},
+			async pullImage() {
+				order.push("pull");
+			},
+		});
+		expect(await f.service.resolveImage(reference)).toBe("sha256:new");
+		expect(order).toEqual(reference.endsWith(":local") ? ["inspect", "pull", "inspect"] : ["pull", "inspect"]);
+	},
+);
 
 test("image failures propagate and a successful pull must produce an inspectable image", async () => {
 	const f = fixture({

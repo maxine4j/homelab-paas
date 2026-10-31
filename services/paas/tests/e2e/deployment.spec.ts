@@ -4,6 +4,19 @@ import { waitFor } from "../util/wait.ts";
 test("initial deployment owns isolated resources and unchanged Git keeps the workload", async ({
 	environment: env,
 }) => {
+	// Image IDs must remain usable by this cluster and later tests after host cleanup.
+	await env.docker(["system", "prune", "--all", "--force"]);
+	const retained = JSON.parse(
+		await env.docker([
+			"image",
+			"inspect",
+			process.env["PLAYWRIGHT_IMAGE"] ?? "homelab-paas/playwright:ci",
+			"envoyproxy/envoy:v1.37.0",
+			env.paasImage,
+			env.image,
+		]),
+	);
+	expect(retained).toHaveLength(4);
 	const [id] = await env.workloadIds("public");
 	expect(id).toBeTruthy();
 	const [container] = JSON.parse(await env.docker(["inspect", id!]));

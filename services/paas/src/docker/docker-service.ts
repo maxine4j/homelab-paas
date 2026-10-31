@@ -32,6 +32,7 @@ export interface IDockerService {
 	readServiceContainerLogs(serviceId: string, containerId: string): Promise<string>;
 	inspectServiceNetwork(serviceId: string): Promise<DockerNetwork | null>;
 	prepareServiceNetwork(serviceId: string): Promise<void>;
+	/** Full sha256 image IDs resolve locally and reject with not-found when absent. */
 	resolveImage(reference: string): Promise<string>;
 	createResourceContainer(options: CreateResourceContainerOptions): Promise<string>;
 	startServiceContainer(serviceId: string, containerId: string): Promise<void>;
@@ -140,6 +141,11 @@ export class DockerService implements IDockerService {
 	}
 
 	async resolveImage(reference: string): Promise<string> {
+		if (/^sha256:[a-f0-9]{64}$/.test(reference)) {
+			const image = await this.client.inspectImage(reference);
+			if (!image) throw new DockerServiceError("not-found");
+			return image.id;
+		}
 		if (reference.endsWith(":local")) {
 			const local = await this.client.inspectImage(reference);
 			if (local) return local.id;

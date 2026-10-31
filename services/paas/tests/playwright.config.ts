@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
 	testDir: "./e2e",
+	globalSetup: "./image-setup.ts",
 	fullyParallel: false,
 	workers: 1,
 	retries: 0,
