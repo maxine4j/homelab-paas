@@ -108,7 +108,7 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 	async getEvents(serviceId: string): Promise<UiServiceEvent[]> {
 		this.assertService(serviceId);
 		try {
-			return await this.events.list(serviceId);
+			return (await this.events.list(serviceId)).map((event) => this.presentEvent(event));
 		} catch (cause) {
 			throw new PaasUiError("unavailable", { cause });
 		}
@@ -284,6 +284,33 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 		} catch (error) {
 			if (error instanceof PaasUiError) throw error;
 			throw new PaasUiError("unavailable", { cause: error });
+		}
+	}
+
+	private presentEvent(event: UiServiceEvent): UiServiceEvent {
+		if (!event.diagnostics) return event;
+		try {
+			const diagnostic: unknown = JSON.parse(event.diagnostics);
+			if (!diagnostic || typeof diagnostic !== "object" || Array.isArray(diagnostic)) return event;
+			if (!("context" in diagnostic) || "contextYaml" in diagnostic) return event;
+			const { context, ...details } = diagnostic;
+			const yaml = stringifyYaml(context);
+			const serialize = (length: number): string =>
+				JSON.stringify({
+					...details,
+					contextYaml: length === yaml.length ? yaml : `${yaml.slice(0, length)}\n[truncated]`,
+				});
+			if (Buffer.byteLength(JSON.stringify(serialize(0))) > 32768) return event;
+			let start = 0;
+			let end = yaml.length;
+			while (start < end) {
+				const middle = Math.ceil((start + end) / 2);
+				if (Buffer.byteLength(JSON.stringify(serialize(middle))) <= 32768) start = middle;
+				else end = middle - 1;
+			}
+			return { ...event, diagnostics: serialize(start) };
+		} catch {
+			return event;
 		}
 	}
 

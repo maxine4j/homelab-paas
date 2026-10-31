@@ -1,4 +1,5 @@
 import type { IPaasConfig } from "../config/paas-config.ts";
+import { stringifyYaml } from "../util/yaml.ts";
 import { EnvironmentResolutionError } from "./environment-resolver.ts";
 
 export interface IEventDiagnostics {
@@ -24,10 +25,13 @@ export class EventDiagnostics implements IEventDiagnostics {
 	}
 	describe(failure: unknown, context: Record<string, unknown>, secrets: string[]): string {
 		const budget = { nodes: 128, seen: new WeakSet<object>() };
+		const error = this.visit(failure, secrets, budget, 0);
+		const safeContext = this.visit(context, secrets, budget, 0);
 		const text = JSON.stringify(
 			{
-				error: this.visit(failure, secrets, budget, 0),
-				context: this.visit(context, secrets, budget, 0),
+				error,
+				context: safeContext,
+				contextYaml: stringifyYaml(safeContext),
 			},
 			undefined,
 			2,

@@ -1,8 +1,23 @@
 import { expect, test } from "vitest";
 
 import { testConfig } from "../util/test/config.ts";
+import { parseYaml } from "../util/yaml.ts";
 import { EnvironmentResolutionError } from "./environment-resolver.ts";
 import { EventDiagnostics } from "./event-diagnostics.ts";
+
+test("includes canonical YAML from the same redacted context for diagnostic presentation", () => {
+	const text = new EventDiagnostics(testConfig()).describe(
+		new Error("failed"),
+		{
+			resource: { image: "app:1", password: "private-password", volumes: [{ hostPath: "/data" }] },
+		},
+		[],
+	);
+	const diagnostic = JSON.parse(text);
+	expect(diagnostic.contextYaml).toContain("image: app:1");
+	expect(parseYaml(diagnostic.contextYaml, "diagnostic.yaml")).toEqual(diagnostic.context);
+	expect(text).not.toContain("private-password");
+});
 
 test("summarizes actual errors safely with bounded, single-line messages and unknown fallbacks", () => {
 	const diagnostics = new EventDiagnostics(testConfig());

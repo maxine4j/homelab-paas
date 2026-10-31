@@ -5,6 +5,7 @@ import { ServiceEvents } from "../components/service-events.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
 import { parseRoute } from "../hooks/use-route.ts";
 import { ClusterPage } from "./cluster-page.tsx";
+import { ResourceEventsPage } from "./resource-events-page.tsx";
 import { ResourcePage } from "./resource-page.tsx";
 import { ServiceEventsPage } from "./service-events-page.tsx";
 import { ServicePage } from "./service-page.tsx";
@@ -253,6 +254,104 @@ const events = [
 		revision: "abcdef",
 	},
 ];
+
+test("diagnostics show the actual error first, decoded stacks, causes/provider details and YAML context", () => {
+	const diagnostics = JSON.stringify({
+		error: {
+			message: "Port <bind> failed",
+			stack: "Error: Port <bind> failed\n    at start (file:///app/services/paas/src/start.ts:1:2)",
+			cause: {
+				message: "Docker create failed",
+				stack: "Error: Docker create failed\n    at create (file:///app/services/paas/src/docker.ts:3:4)",
+				status: 500,
+				body: { message: "bind source missing" },
+			},
+		},
+		context: { resource: { image: "app:1" } },
+		contextYaml: "resource:\n  image: app:1\n",
+	});
+	const html = renderToStaticMarkup(
+		<ServiceEvents
+			events={[
+				{
+					...events[0]!,
+					message: "Cannot reconcile worker resource; check Docker, image and private health check",
+					diagnostics,
+				},
+			]}
+		/>,
+	);
+	expect(html).toMatch(/service-event-error[^>]*><p class="event-message">Port &lt;bind&gt; failed<\/p>/);
+	expect(html).not.toContain("Cannot reconcile worker");
+	expect(html).toContain("Stack trace</h3><pre");
+	expect(html).toContain("\n    at start (src/start.ts:1:2)");
+	expect(html).toContain("\n    at create (src/docker.ts:3:4)");
+	expect(html).not.toContain("file:///app/services/paas/");
+	expect(html).toContain("Context</h3><pre");
+	expect(html).toContain("resource:\n  image: app:1\n");
+	expect(html).toContain("bind source missing");
+	expect(html).toContain("500");
+	expect(html).not.toContain("&quot;stack&quot;");
+});
+
+test.each(["Error: plain\n    at start", '{"error":{"message":"partial"\n[truncated]'])(
+	"legacy and truncated diagnostics remain readable: %s",
+	(diagnostics) => {
+		const html = renderToStaticMarkup(<ServiceEvents events={[{ ...events[0]!, diagnostics }]} />);
+		expect(html).toContain("Stack trace</h3>");
+		expect(html).toContain("Context</h3>");
+		expect(html).toContain(diagnostics.startsWith("Error") ? "    at start" : "[truncated]");
+	},
+);
+
+test("resource overview shows two exact resource matches and event navigation", () => {
+	const history = [
+		{ ...events[0]!, message: "Other", resourceId: "app-other" },
+		{ ...events[0]!, message: "Service-wide", resourceId: undefined },
+		...["Latest", "Earlier", "Oldest"].map((message, index) => ({
+			...events[0]!,
+			message,
+			timestamp: 1000 - index,
+		})),
+	];
+	const html = renderToStaticMarkup(
+		<ResourcePage
+			serviceId='demo'
+			resource={{ resourceId: "app", type: "web", health: "missing", containers: [] }}
+			tab='config'
+			events={history}
+		/>,
+	);
+	expect(html).toContain('aria-label="Recent resource events"');
+	expect(html).toContain("Latest");
+	expect(html).toContain("Earlier");
+	expect(html).not.toContain("Oldest");
+	expect(html).not.toContain("Service-wide");
+	expect(html).not.toContain("Other");
+	expect(html).toContain('href="#/services/demo/resources/app/events"');
+	expect(html).toContain("1 more events...");
+});
+
+test("resource history direct links show all exact matches without resource inspection data", () => {
+	expect(parseRoute("#/services/demo/resources/app/events")).toEqual({
+		page: "resource-events",
+		serviceId: "demo",
+		resourceId: "app",
+	});
+	expect(parseRoute("#/services/demo/resources/app/events/extra")).toEqual({ page: "missing" });
+	const html = renderToStaticMarkup(
+		<ResourceEventsPage
+			serviceId='demo'
+			resourceId='app'
+			events={[...events, { ...events[0]!, resourceId: "other", message: "Other" }]}
+		/>,
+	);
+	expect(html).toContain("Resource events");
+	expect(html).toContain('href="#/services/demo/resources/app"');
+	expect(html).toContain("latest 200 service events");
+	expect(html).toContain("&lt;unsafe&gt;");
+	expect(html).not.toContain("Other");
+});
 
 test("service details show recent failure events and link to service event history", () => {
 	const html = renderToStaticMarkup(

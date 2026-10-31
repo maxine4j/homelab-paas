@@ -144,13 +144,52 @@ const events: UiServiceEvent[] = [
 		level: "info",
 		event: "reconciliation.recovered",
 		message: "Service reconciliation recovered.",
+		resourceId: "web",
 		revision,
+	},
+	{
+		timestamp: Date.now() - 240000,
+		level: "error",
+		event: "reconciliation.failed",
+		message: "Docker POST /containers/create: HTTP 500: bind source path does not exist",
+		resourceId: "web",
+		revision,
+		failures: 1,
+		retryAt: Date.now() - 180000,
+		diagnostics: JSON.stringify({
+			error: {
+				name: "DockerServiceError",
+				message: "Docker POST /containers/create: HTTP 500: bind source path does not exist",
+				stack: "DockerServiceError: Docker POST /containers/create: HTTP 500: bind source path does not exist\n    at DockerService.createContainer (file:///app/services/paas/src/docker/docker-service.ts:241:10)\n    at WebReconciler.reconcile (file:///app/services/paas/src/reconciler/web-reconciler.ts:89:4)",
+				cause: {
+					name: "DockerClientError",
+					message: "bind source path does not exist: /srv/paperless/consume",
+					stack: "DockerClientError: bind source path does not exist: /srv/paperless/consume\n    at DockerClient.request (file:///app/services/paas/src/docker/docker-client.ts:162:10)",
+					method: "POST",
+					path: "/containers/create",
+					status: 500,
+					body: { message: "bind source path does not exist: /srv/paperless/consume" },
+				},
+			},
+			contextYaml: `operation: web
+serviceId: paperless
+resourceId: web
+resource:
+  type: web
+  image: ghcr.io/paperless-ngx/paperless-ngx:2.20
+  env: "[redacted]"
+  volumes:
+    - hostPath: /srv/paperless/consume
+      mountPath: /usr/src/paperless/consume
+`,
+		}),
 	},
 	{
 		timestamp: Date.now() - 300000,
 		level: "info",
 		event: "deployment.succeeded",
 		message: "Service is ready.",
+		resourceId: "web",
 		revision: "92a81cf",
 	},
 ];

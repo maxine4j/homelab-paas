@@ -1,8 +1,9 @@
-import type { UiLogs, UiResource } from "@homelab-paas/shared-contracts";
+import type { UiLogs, UiResource, UiServiceEvent } from "@homelab-paas/shared-contracts";
 
 import { ContainerLogs } from "../components/container-logs.tsx";
 import { ResourceConfiguration } from "../components/resource-configuration.tsx";
 import { ResourceState } from "../components/resource-state.tsx";
+import { ServiceEvents } from "../components/service-events.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
 import type { ResourceTab } from "../types.ts";
 
@@ -13,6 +14,8 @@ export const ResourcePage = ({
 	containerId = resource.containers.at(0)?.id,
 	logs,
 	logError,
+	events,
+	eventError,
 }: {
 	serviceId: string;
 	resource: UiResource;
@@ -20,8 +23,11 @@ export const ResourcePage = ({
 	containerId?: string;
 	logs?: UiLogs;
 	logError?: string;
+	events?: UiServiceEvent[];
+	eventError?: string;
 }) => {
 	const base = `#/services/${serviceId}/resources/${resource.resourceId}`;
+	const resourceEvents = events?.filter((event) => event.resourceId === resource.resourceId);
 	return (
 		<>
 			<a className='back-link' href={`#/services/${serviceId}`}>
@@ -54,16 +60,29 @@ export const ResourcePage = ({
 						{value === "config" ? "Overview" : "Logs"}
 					</a>
 				))}
+				<a href={`${base}/events`}>Events</a>
 			</nav>
 			{tab === "config" && (
-				<div className='resource-overview'>
-					<ResourceConfiguration config={resource.config} configYaml={resource.configYaml} />
-					<ResourceState
-						serviceId={serviceId}
-						resourceId={resource.resourceId}
-						containers={resource.containers}
-					/>
-				</div>
+				<>
+					<section aria-label='Recent resource events'>
+						<div className='section-heading'>
+							<h2>Recent events</h2>
+							{resourceEvents && resourceEvents.length > 2 && (
+								<a href={`${base}/events`}>{resourceEvents.length - 2} more events...</a>
+							)}
+							{eventError && <a href={`${base}/events`}>Event history</a>}
+						</div>
+						<ServiceEvents events={resourceEvents?.slice(0, 2)} error={eventError} />
+					</section>
+					<div className='resource-overview'>
+						<ResourceConfiguration config={resource.config} configYaml={resource.configYaml} />
+						<ResourceState
+							serviceId={serviceId}
+							resourceId={resource.resourceId}
+							containers={resource.containers}
+						/>
+					</div>
+				</>
 			)}
 			{tab === "logs" && (
 				<>

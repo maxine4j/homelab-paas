@@ -14,6 +14,7 @@ export const parseRoute = (hash: string): Route => {
 	if (parts.length === 3 && parts.at(2) === "events") return { page: "events", serviceId };
 	if (parts.at(2) !== "resources" || !resourceId || !id.test(resourceId)) return { page: "missing" };
 	const tab = parts.at(4) ?? "config";
+	if (parts.length === 5 && tab === "events") return { page: "resource-events", serviceId, resourceId };
 	if (!["config", "state", "logs"].includes(tab) || parts.length > 6 || (parts.length === 6 && tab !== "logs"))
 		return { page: "missing" };
 	return {

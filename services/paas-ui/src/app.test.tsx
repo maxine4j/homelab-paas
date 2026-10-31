@@ -1,7 +1,63 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test, vi } from "vitest";
 
-import { App } from "./app.tsx";
+import { App, AppView, viewPaths } from "./app.tsx";
+
+test("resource overview and history share the service events stream while history avoids inspection", () => {
+	expect(viewPaths({ page: "resource", serviceId: "demo", resourceId: "app", tab: "config" })).toEqual({
+		snapshot: "/services/demo/resources/app",
+		events: "/services/demo/events",
+	});
+	expect(viewPaths({ page: "resource-events", serviceId: "demo", resourceId: "app" })).toEqual({
+		events: "/services/demo/events",
+	});
+});
+
+test("resource event history renders independently of failed inspection with linked breadcrumbs", () => {
+	const html = renderToStaticMarkup(
+		<AppView
+			route={{ page: "resource-events", serviceId: "demo", resourceId: "app" }}
+			snapshot={{ error: "Docker unavailable", refresh: () => {} }}
+			events={{
+				data: [
+					{
+						timestamp: 1,
+						event: "reconciliation.failed",
+						level: "error",
+						message: "App failed",
+						resourceId: "app",
+					},
+				],
+				connected: true,
+				refresh: () => {},
+			}}
+			logs={{}}
+		/>,
+	);
+	expect(html).toContain("App failed");
+	expect(html).not.toContain("Docker unavailable");
+	expect(html).toMatch(
+		/breadcrumbs[^]*href="#\/services\/demo\/resources\/app">app<\/a>[^]*aria-current="page">Events/,
+	);
+	expect(html).toContain("Live · connected");
+});
+
+test.each([
+	[{}, "Loading events"],
+	[{ data: [] }, "No events recorded"],
+	[{ error: "History unavailable" }, "History unavailable"],
+])("resource event history retains explicit states and reconnect status", (events, expected) => {
+	const html = renderToStaticMarkup(
+		<AppView
+			route={{ page: "resource-events", serviceId: "demo", resourceId: "app" }}
+			snapshot={{ refresh: () => {} }}
+			events={{ ...events, refresh: () => {} }}
+			logs={{}}
+		/>,
+	);
+	expect(html).toContain(expected);
+	expect(html).toContain("Live · reconnecting");
+});
 
 afterEach(() => vi.unstubAllEnvs());
 

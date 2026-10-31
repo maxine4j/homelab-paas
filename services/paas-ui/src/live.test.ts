@@ -1,6 +1,93 @@
+import type { UiServiceEvent } from "@homelab-paas/shared-contracts";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test, vi } from "vitest";
 
 import { subscribeUi, type BrowserSocket } from "./live.ts";
+import { ResourceEventsPage } from "./pages/resource-events-page.tsx";
+import { ResourcePage } from "./pages/resource-page.tsx";
+
+test("resource views filter immediate and persisted service events identically across reconnect and navigation", async () => {
+	vi.useFakeTimers();
+	try {
+		const sockets: BrowserSocket[] = [];
+		const create = () => {
+			const socket: BrowserSocket = {
+				onopen: null,
+				onclose: null,
+				onmessage: null,
+				onerror: null,
+				send: vi.fn(),
+				close: vi.fn(),
+			};
+			sockets.push(socket);
+			return socket;
+		};
+		const update = vi.fn();
+		const cancel = subscribeUi<UiServiceEvent[]>("/services/demo/events", update, create, "https://cluster.test");
+		const event: UiServiceEvent = {
+			timestamp: 1,
+			event: "reconciliation.failed",
+			level: "error",
+			resourceId: "app",
+			message: "Port bind failed",
+			diagnostics: JSON.stringify({
+				error: {
+					message: "Port bind failed",
+					stack: "Error: Port bind failed\n    at start (file:///app/services/paas/src/start.ts:1:2)",
+					cause: { message: "Docker bind failed", status: 500 },
+				},
+				context: { image: "app:1" },
+				contextYaml: "image: app:1\n",
+			}),
+		};
+		const push = (value: unknown) =>
+			sockets.at(-1)!.onmessage?.(new MessageEvent("message", { data: JSON.stringify(value) }));
+		push({ type: "event", serviceId: "other", event: { ...event, message: "Wrong service" } });
+		push({ type: "event", serviceId: "demo", event });
+		push({
+			type: "event",
+			serviceId: "demo",
+			event: { ...event, message: "Wrong resource", resourceId: "app-other" },
+		});
+		push({ type: "event", serviceId: "demo", event: { ...event, message: "Service-wide", resourceId: undefined } });
+		const render = () => {
+			const events: UiServiceEvent[] = update.mock.calls.at(-1)![0].data;
+			return [
+				renderToStaticMarkup(
+					createElement(ResourceEventsPage, { serviceId: "demo", resourceId: "app", events }),
+				),
+				renderToStaticMarkup(
+					createElement(ResourcePage, {
+						serviceId: "demo",
+						resource: { resourceId: "app", type: "web", health: "unhealthy", containers: [] },
+						tab: "config",
+						events,
+					}),
+				),
+			];
+		};
+		const immediate = render();
+		for (const html of immediate) {
+			expect(html.match(/class="service-event service-event-error"/g)).toHaveLength(1);
+			expect(html).toContain("Port bind failed");
+			expect(html).toContain("\n    at start (src/start.ts:1:2)");
+			expect(html).toContain("image: app:1\n");
+			for (const excluded of ["Wrong service", "Wrong resource", "Service-wide"])
+				expect(html).not.toContain(excluded);
+		}
+		sockets.at(-1)!.onclose?.({} as CloseEvent);
+		await vi.advanceTimersByTimeAsync(1000);
+		push({ type: "snapshot", id: "view", target: { kind: "events", serviceId: "demo" }, data: [event] });
+		expect(render()).toEqual(immediate);
+		cancel();
+		const count = update.mock.calls.length;
+		push({ type: "event", serviceId: "demo", event: { ...event, message: "Stale" } });
+		expect(update).toHaveBeenCalledTimes(count);
+	} finally {
+		vi.useRealTimers();
+	}
+});
 
 test("live subscription replaces snapshots, reconnects and cancels without HTTP polling", async () => {
 	vi.useFakeTimers();

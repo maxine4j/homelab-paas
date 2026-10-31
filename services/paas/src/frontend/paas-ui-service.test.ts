@@ -1,4 +1,4 @@
-import type { ResourceHealth } from "@homelab-paas/shared-contracts";
+import type { ResourceHealth, UiServiceEvent } from "@homelab-paas/shared-contracts";
 import { expect, test, vi } from "vitest";
 
 import { parseConfig, decodeDescriptorYaml } from "../config/paas-config.ts";
@@ -61,7 +61,7 @@ const fixture = (health: ResourceHealth = "unhealthy") => {
 			receive("safe tail");
 		},
 	);
-	const listEvents = vi.fn(async () => [
+	const listEvents = vi.fn(async (): Promise<UiServiceEvent[]> => [
 		{
 			timestamp: 100,
 			level: "error" as const,
@@ -326,6 +326,36 @@ test("events remain readable without Git or Docker and unknown services cannot a
 		kind: "unavailable",
 		message: "Cluster data is unavailable; retry shortly",
 	});
+});
+
+test("legacy diagnostic context is projected as bounded YAML without mutating stored history", async () => {
+	const f = fixture();
+	const original = JSON.stringify({
+		error: { message: "bind failed", stack: "Error: bind failed\n    at start", status: 500 },
+		context: { resource: { image: "app:1" } },
+	});
+	const event: UiServiceEvent = {
+		timestamp: 1,
+		level: "error",
+		event: "reconciliation.failed",
+		message: "legacy",
+		diagnostics: original,
+	};
+	f.listEvents.mockResolvedValue([event]);
+	const [projected] = await f.service.getEvents("demo");
+	const diagnostic = JSON.parse(projected!.diagnostics!);
+	expect(parseYaml(diagnostic.contextYaml, "context.yaml")).toEqual({ resource: { image: "app:1" } });
+	expect(diagnostic.error).toEqual(JSON.parse(original).error);
+	expect(event.diagnostics).toBe(original);
+	for (const diagnostics of ["Error: plain", '{"error":\n[truncated]']) {
+		f.listEvents.mockResolvedValue([{ ...event, diagnostics }]);
+		expect((await f.service.getEvents("demo"))[0]!.diagnostics).toBe(diagnostics);
+	}
+	const large = JSON.stringify({ error: { message: "failed" }, context: { value: "雪\n".repeat(2500) } });
+	f.listEvents.mockResolvedValue([{ ...event, diagnostics: large }]);
+	const text = (await f.service.getEvents("demo"))[0]!.diagnostics!;
+	expect(Buffer.byteLength(JSON.stringify(text))).toBeLessThanOrEqual(32768);
+	expect(JSON.parse(text).error.message).toBe("failed");
 });
 
 test("web inspection exposes resource URLs and only the primary service alias", async () => {

@@ -11,15 +11,18 @@ import { GitRefreshControl } from "./components/git-refresh.tsx";
 import { useApi } from "./hooks/use-api.ts";
 import { useRoute } from "./hooks/use-route.ts";
 import { ClusterPage } from "./pages/cluster-page.tsx";
+import { ResourceEventsPage } from "./pages/resource-events-page.tsx";
 import { ResourcePage } from "./pages/resource-page.tsx";
 import { ServiceEventsPage } from "./pages/service-events-page.tsx";
 import { ServicePage } from "./pages/service-page.tsx";
 import { ServicesPage } from "./pages/services-page.tsx";
+import type { ApiResult, Route } from "./types.ts";
 
-export const App = () => {
-	const buildSha = import.meta.env["VITE_BUILD_SHA"] || "unknown";
-	const route = useRoute();
-	const path =
+type Inspection = UiCluster | UiServiceSummary[] | UiService | UiResource;
+type ViewResult<T> = ApiResult<T> & { refresh(): void };
+
+export const viewPaths = (route: Route): { snapshot?: string; events?: string } => ({
+	snapshot:
 		route.page === "cluster"
 			? "/cluster"
 			: route.page === "services"
@@ -28,21 +31,49 @@ export const App = () => {
 					? `/services/${route.serviceId}`
 					: route.page === "resource"
 						? `/services/${route.serviceId}/resources/${route.resourceId}`
-						: undefined;
-	const snapshot = useApi<UiCluster | UiServiceSummary[] | UiService | UiResource>(path);
+						: undefined,
+	events:
+		route.page === "service"
+		|| route.page === "events"
+		|| route.page === "resource"
+		|| route.page === "resource-events"
+			? `/services/${route.serviceId}/events`
+			: undefined,
+});
+
+export const App = () => {
+	const route = useRoute();
+	const paths = viewPaths(route);
+	const snapshot = useApi<Inspection>(paths.snapshot);
 	const containerId =
 		route.page === "resource"
 			? (route.containerId
 				?? (snapshot.data && "containers" in snapshot.data ? snapshot.data.containers.at(0)?.id : undefined))
 			: undefined;
-	const events = useApi<UiServiceEvent[]>(
-		route.page === "service" || route.page === "events" ? `/services/${route.serviceId}/events` : undefined,
-	);
+	const events = useApi<UiServiceEvent[]>(paths.events);
 	const logs = useApi<UiLogs>(
 		route.page === "resource" && route.tab === "logs" && containerId
-			? `${path}/containers/${encodeURIComponent(containerId)}/logs`
+			? `${paths.snapshot}/containers/${encodeURIComponent(containerId)}/logs`
 			: undefined,
 	);
+	return <AppView route={route} snapshot={snapshot} events={events} logs={logs} containerId={containerId} />;
+};
+
+export const AppView = ({
+	route,
+	snapshot,
+	events,
+	logs,
+	containerId,
+}: {
+	route: Route;
+	snapshot: ViewResult<Inspection>;
+	events: ViewResult<UiServiceEvent[]>;
+	logs: ApiResult<UiLogs>;
+	containerId?: string;
+}) => {
+	const buildSha = import.meta.env["VITE_BUILD_SHA"] || "unknown";
+	const path = viewPaths(route).snapshot;
 	return (
 		<div className='app-shell'>
 			<header className='primary-header'>
@@ -75,7 +106,10 @@ export const App = () => {
 								<a href='#/services' aria-current={route.page === "services" ? "page" : undefined}>
 									Services
 								</a>
-								{(route.page === "service" || route.page === "resource" || route.page === "events") && (
+								{(route.page === "service"
+									|| route.page === "resource"
+									|| route.page === "events"
+									|| route.page === "resource-events") && (
 									<>
 										<span aria-hidden='true'>/</span>
 										<a
@@ -86,13 +120,19 @@ export const App = () => {
 										</a>
 									</>
 								)}
-								{route.page === "resource" && (
+								{(route.page === "resource" || route.page === "resource-events") && (
 									<>
 										<span aria-hidden='true'>/</span>
-										<span aria-current='page'>{route.resourceId}</span>
+										{route.page === "resource-events" ? (
+											<a href={`#/services/${route.serviceId}/resources/${route.resourceId}`}>
+												{route.resourceId}
+											</a>
+										) : (
+											<span aria-current='page'>{route.resourceId}</span>
+										)}
 									</>
 								)}
-								{route.page === "events" && (
+								{(route.page === "events" || route.page === "resource-events") && (
 									<>
 										<span aria-hidden='true'>/</span>
 										<span aria-current='page'>Events</span>
@@ -115,6 +155,13 @@ export const App = () => {
 				<main id='main-content'>
 					{route.page === "events" ? (
 						<ServiceEventsPage serviceId={route.serviceId} events={events.data} error={events.error} />
+					) : route.page === "resource-events" ? (
+						<ResourceEventsPage
+							serviceId={route.serviceId}
+							resourceId={route.resourceId}
+							events={events.data}
+							error={events.error}
+						/>
 					) : snapshot.error ? (
 						<div className='empty' role='alert'>
 							<h1>Unable to load cluster data</h1>
@@ -145,6 +192,8 @@ export const App = () => {
 							containerId={containerId}
 							logs={logs.data}
 							logError={logs.error}
+							events={events.data}
+							eventError={events.error}
 						/>
 					)}
 				</main>
