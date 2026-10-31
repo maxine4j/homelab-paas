@@ -10,6 +10,13 @@ const descriptor = {
 	resources: { app: { type: "web", image: "test-service:local", ingress: { public: true, port: 8080 } } },
 };
 
+test("reads control-plane build revision from the configured environment", () => {
+	expect(new PaasConfig(async () => undefined, { BUILD_SHA: "abcdef012345" }).getBuildRevision()).toBe(
+		"abcdef012345",
+	);
+	expect(new PaasConfig(async () => undefined).getBuildRevision()).toBe("unknown");
+});
+
 test("one Git poll interval defaults to five minutes, preserves explicit values and rejects the removed fetch field", () => {
 	const base = {
 		version: 1,

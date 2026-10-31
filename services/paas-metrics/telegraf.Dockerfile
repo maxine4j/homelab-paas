@@ -6,7 +6,7 @@ RUN tar -xzf /tmp/telegraf.tar.gz --strip-components=1 -C /src
 # memory overhead. Keep these tags aligned with telegraf.conf.
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -trimpath \
-    -tags "custom,inputs.docker,inputs.docker_log,outputs.influxdb,outputs.loki,outputs.health,serializers.influx" \
+    -tags "custom,inputs.docker,inputs.docker_log,processors.rename,processors.regex,processors.defaults,outputs.influxdb,outputs.loki,outputs.health,serializers.influx" \
     -ldflags "-s -w -X github.com/influxdata/telegraf/internal.Version=1.39.3" \
     -o /out/telegraf ./cmd/telegraf
 

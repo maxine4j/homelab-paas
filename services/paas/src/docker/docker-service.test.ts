@@ -305,7 +305,7 @@ test("prepares a missing service network and attaches the cluster's infrastructu
 		args: [{ name: "paas-local-demo", driver: "bridge", labels: ownership }],
 	});
 	expect(f.calls.filter((call) => call.operation === "connectNetwork")).toEqual([
-		{ operation: "connectNetwork", args: ["n", "control-plane-id"] },
+		{ operation: "connectNetwork", args: ["n", "control-plane-id", ["control-plane.paas.internal"]] },
 		{ operation: "connectNetwork", args: ["n", "envoy-id"] },
 	]);
 });
@@ -313,6 +313,12 @@ test("prepares a missing service network and attaches the cluster's infrastructu
 test("reuses owned networks and skips existing infrastructure attachments", async () => {
 	const filters: unknown[] = [];
 	const f = fixture({
+		async inspectContainer() {
+			return {
+				...details,
+				networks: { "paas-local-demo": { address: "1.2.3.4", aliases: ["control-plane.paas.internal"] } },
+			};
+		},
 		async inspectNetwork() {
 			return { ...network, containerIds: ["control-plane-id", "envoy-id"] };
 		},
@@ -336,6 +342,29 @@ test("reuses owned networks and skips existing infrastructure attachments", asyn
 			labels: { "homelab-paas.cluster": "local", "homelab-paas.role": role },
 		})),
 	);
+});
+
+test("repairs an existing control-plane attachment missing its metrics DNS alias", async () => {
+	const f = fixture({
+		async inspectNetwork() {
+			return { ...network, containerIds: ["control-plane-id", "envoy-id"] };
+		},
+		async listContainers(options) {
+			const role = options?.labels?.["homelab-paas.role"] ?? "";
+			return [
+				{
+					...container,
+					id: `${role}-id`,
+					labels: { "homelab-paas.cluster": "local", "homelab-paas.role": role },
+				},
+			];
+		},
+	});
+	await f.service.prepareServiceNetwork("demo");
+	expect(f.calls.filter(({ operation }) => ["connectNetwork", "disconnectNetwork"].includes(operation))).toEqual([
+		{ operation: "disconnectNetwork", args: ["n", "control-plane-id"] },
+		{ operation: "connectNetwork", args: ["n", "control-plane-id", ["control-plane.paas.internal"]] },
+	]);
 });
 
 test.each([0, 2])("rejects ambiguous infrastructure before creating or attaching anything: %s peers", async (count) => {

@@ -6,3 +6,5 @@ RUN grafana cli --pluginsDir /opt/grafana/plugins plugins install victoriametric
 USER 472
 COPY services/paas-metrics/grafana-datasources.yaml /etc/grafana/provisioning/datasources/paas-metrics.yaml
 COPY services/paas-metrics/grafana.ini /etc/grafana/grafana.ini
+COPY services/paas-metrics/grafana-dashboards.yaml /etc/grafana/provisioning/dashboards/paas-metrics.yaml
+COPY services/paas-metrics/dashboards /etc/grafana/dashboards

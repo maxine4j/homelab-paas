@@ -116,6 +116,7 @@ function fixture() {
 	const readSecrets = vi.fn(async (): Promise<string | undefined> => undefined);
 	const appendEvent = vi.fn(async (_serviceId: string, _event: UiServiceEvent) => {});
 	const bus = new ChangeBus();
+	const reconciliation = vi.fn();
 	const resolveHostPath = vi.fn(async (): Promise<string | undefined> => undefined);
 	const deps = {
 		services: { demo: { remote: "local", descriptorPath: "/repo/demo.sd.yaml" } },
@@ -150,10 +151,12 @@ function fixture() {
 			{ append: appendEvent, list: async () => [] },
 			new EventDiagnostics(testConfig()),
 			bus,
+			{ reconciliation },
 		);
 	return {
 		deps,
 		bus,
+		reconciliation,
 		states,
 		fetchFile,
 		reconcile,
@@ -168,6 +171,21 @@ function fixture() {
 		},
 	};
 }
+
+test("measures actual reconciliation attempts with their revision, failures and duration, excluding backoff", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({ revision: "a".repeat(40), content: JSON.stringify(descriptor) });
+	f.reconcile.mockImplementation(async () => {
+		f.advance(500);
+	});
+	await f.service.reconcile();
+	expect(f.reconciliation).toHaveBeenLastCalledWith("demo", "a".repeat(40), "success", 0.5);
+	f.reconcile.mockRejectedValueOnce(new Error("failure"));
+	await f.service.reconcile();
+	expect(f.reconciliation).toHaveBeenLastCalledWith("demo", "a".repeat(40), "failure", 0);
+	await f.service.reconcile();
+	expect(f.reconciliation).toHaveBeenCalledTimes(2);
+});
 
 test("publishes deployment start before readiness waits; unchanged health passes do not claim another deployment", async () => {
 	const f = fixture();
@@ -407,6 +425,7 @@ test("records state failures even when checkpoint storage is unavailable", async
 		throw new Error("raw-secret");
 	});
 	await f.service.reconcile();
+	expect(f.reconciliation).toHaveBeenCalledWith("demo", undefined, "failure", 0);
 	expect(f.appendEvent).toHaveBeenCalledWith(
 		"demo",
 		expect.objectContaining({

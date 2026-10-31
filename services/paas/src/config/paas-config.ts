@@ -86,6 +86,10 @@ export class PaasConfig implements IPaasConfig {
 		});
 	}
 
+	getBuildRevision(): string {
+		return this.environment["BUILD_SHA"] || "unknown";
+	}
+
 	/** Failed reloads retain the last validated configuration and report the cause. */
 	async reload(): Promise<void> {
 		try {

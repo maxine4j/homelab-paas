@@ -27,7 +27,7 @@ import { DirectoryUiFiles } from "./frontend/frontend-store.ts";
 import { ManagementRefreshService } from "./frontend/management-refresh-service.ts";
 import { ManagementStateTask } from "./frontend/management-state-task.ts";
 import { createPaasUiRouter } from "./frontend/paas-ui-router.ts";
-import { PaasUiService } from "./frontend/paas-ui-service.ts";
+import { PaasUiService, type IPaasUiService } from "./frontend/paas-ui-service.ts";
 import { UiLiveService } from "./frontend/ui-live-service.ts";
 import { UiWebSocket } from "./frontend/ui-websocket.ts";
 import { GitClient } from "./git/git-client.ts";
@@ -45,6 +45,8 @@ import { TlsCertProvisionService } from "./ingress/tls/cert-provision-service.ts
 import { TlsCertRenewalTask } from "./ingress/tls/cert-renewal-task.ts";
 import { FileCertificateStore } from "./ingress/tls/certificate-store.ts";
 import { DigitalOceanDnsAcmeChallengeProvider } from "./ingress/tls/dns-challenge/digitalocean-dns-challenge-provider.ts";
+import { createMetricsMiddleware, createMetricsRouter } from "./metrics/metrics-router.ts";
+import { MetricsService } from "./metrics/metrics-service.ts";
 import { DeploymentProgress } from "./reconciler/deployment-progress.ts";
 import { DeploymentService } from "./reconciler/deployment/deployment-service.ts";
 import { RecreateDeploymentStrategy } from "./reconciler/deployment/strategy/recreate-deployment-strategy.ts";
@@ -77,6 +79,8 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const changes = new ChangeBus();
 	const config = new PaasConfig(new FileConfigStore(readFile, atomicWriteFile), process.env, changes);
 	await config.load();
+	let serviceSnapshots: IPaasUiService["listServices"] = async () => [];
+	const metrics = new MetricsService(config.getClusterId(), config.getBuildRevision(), () => serviceSnapshots());
 	const secureWrite: FileWriter = async (path, content) => {
 		await mkdir(STATE_DIRECTORY, { recursive: true, mode: 0o700 });
 		await atomicWriteFile(path, content, { mode: 0o600 });
@@ -146,6 +150,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		events,
 		new EventDiagnostics(config),
 		changes,
+		metrics,
 	);
 	const abort = new AbortController();
 	const pause = async (ms: number): Promise<void> => {
@@ -164,7 +169,10 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		pause,
 		report: (err) => logger.error({ err }, "Reconciliation task failed; check persistent state and Docker access"),
 	});
-	const app = new Koa().use(createRequestLogger()).use(createHealthCheckRouter().routes());
+	const app = new Koa()
+		.use(createMetricsMiddleware(metrics, Date.now))
+		.use(createRequestLogger())
+		.use(createHealthCheckRouter().routes());
 	app.on("error", (err) => logger.error({ err }, "HTTP request failed"));
 	const certificates = new FileCertificateStore(STATE_DIRECTORY, readFile, secureWrite);
 	let renewal: TlsCertRenewalTask | undefined;
@@ -212,6 +220,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		dockerLogs,
 	);
 	const uiService = new CachedPaasUiService(inspection, config, changes);
+	serviceSnapshots = () => uiService.listServices();
 	const managementState = new ManagementStateTask(health, uiService);
 	const gitRefresh = new ManagementRefreshService(
 		new GitRefreshService(config, git, reconciler, changes),
@@ -258,6 +267,12 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	);
 	lifecycle.registerShutdownHandler(() => live.close());
 	await once(server, "listening");
+	const metricsServer = new Koa().use(createMetricsRouter(metrics).routes()).listen(9090, "0.0.0.0");
+	lifecycle.registerShutdownHandler(
+		() =>
+			new Promise<void>((resolve, reject) => metricsServer.close((error) => (error ? reject(error) : resolve()))),
+	);
+	await once(metricsServer, "listening");
 	if (renewal) {
 		try {
 			await withLogContext({ task: "certificate-renewal", taskId: nanoid() }, async () => {

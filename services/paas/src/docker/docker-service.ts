@@ -133,7 +133,7 @@ export class DockerService implements IDockerService {
 
 	async prepareServiceNetwork(serviceId: string): Promise<void> {
 		const network = await this.inspectServiceNetwork(serviceId);
-		const peers: string[] = [];
+		const peers: { id: string; role: string }[] = [];
 		for (const role of ["control-plane", "envoy"]) {
 			const containers = await this.client.listContainers({
 				all: true,
@@ -148,7 +148,7 @@ export class DockerService implements IDockerService {
 			) {
 				throw new DockerServiceError("infrastructure");
 			}
-			peers.push(peer.id);
+			peers.push({ id: peer.id, role });
 		}
 		const networkId =
 			network?.id
@@ -158,7 +158,16 @@ export class DockerService implements IDockerService {
 				labels: this.labels(serviceId),
 			}));
 		for (const peer of peers) {
-			if (!network?.containerIds.includes(peer)) await this.client.connectNetwork(networkId, peer);
+			const attached = network?.containerIds.includes(peer.id);
+			if (peer.role === "control-plane") {
+				if (attached) {
+					const details = await this.client.inspectContainer(peer.id);
+					if (details?.networks[this.networkName(serviceId)]?.aliases.includes("control-plane.paas.internal"))
+						continue;
+					await this.client.disconnectNetwork(networkId, peer.id);
+				}
+				await this.client.connectNetwork(networkId, peer.id, ["control-plane.paas.internal"]);
+			} else if (!attached) await this.client.connectNetwork(networkId, peer.id);
 		}
 	}
 

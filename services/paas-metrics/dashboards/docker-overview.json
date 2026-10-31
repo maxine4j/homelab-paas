@@ -1,0 +1,588 @@
+{
+	"uid": "paas-docker",
+	"title": "Docker overview",
+	"description": "Single Docker Engine resource usage. CPU 100% equals one core. Memory is Docker usage including cache; Docker Desktop reports the Linux VM. Unlabelled containers use unmanaged/unknown.",
+	"tags": ["homelab-paas"],
+	"schemaVersion": 40,
+	"version": 1,
+	"editable": false,
+	"timezone": "browser",
+	"refresh": "30s",
+	"time": {
+		"from": "now-1h",
+		"to": "now"
+	},
+	"templating": {
+		"list": [
+			{
+				"name": "engine",
+				"label": "engine",
+				"type": "query",
+				"datasource": {
+					"type": "prometheus",
+					"uid": "victoriametrics"
+				},
+				"query": {
+					"query": "label_values(docker_n_cpus, engine_host)",
+					"refId": "StandardVariableQuery"
+				},
+				"refresh": 1,
+				"multi": true,
+				"includeAll": true,
+				"allValue": ".*",
+				"current": {
+					"text": "All",
+					"value": "$__all"
+				}
+			},
+			{
+				"name": "serviceId",
+				"label": "serviceId",
+				"type": "query",
+				"datasource": {
+					"type": "prometheus",
+					"uid": "victoriametrics"
+				},
+				"query": {
+					"query": "label_values(docker_container_mem_usage{engine_host=~\"$engine\"}, serviceId)",
+					"refId": "StandardVariableQuery"
+				},
+				"refresh": 1,
+				"multi": true,
+				"includeAll": true,
+				"allValue": ".*",
+				"current": {
+					"text": "All",
+					"value": "$__all"
+				}
+			},
+			{
+				"name": "revision",
+				"label": "revision",
+				"type": "query",
+				"datasource": {
+					"type": "prometheus",
+					"uid": "victoriametrics"
+				},
+				"query": {
+					"query": "label_values(docker_container_mem_usage{engine_host=~\"$engine\",serviceId=~\"$serviceId\"}, revision)",
+					"refId": "StandardVariableQuery"
+				},
+				"refresh": 1,
+				"multi": true,
+				"includeAll": true,
+				"allValue": ".*",
+				"current": {
+					"text": "All",
+					"value": "$__all"
+				}
+			}
+		]
+	},
+	"panels": [
+		{
+			"id": 1,
+			"title": "Running containers",
+			"type": "stat",
+			"description": "Engine-wide counts ignore service/revision filters.",
+			"datasource": {
+				"type": "prometheus",
+				"uid": "victoriametrics"
+			},
+			"gridPos": {
+				"x": 0,
+				"y": 0,
+				"w": 12,
+				"h": 8
+			},
+			"fieldConfig": {
+				"defaults": {
+					"unit": "short",
+					"min": 0
+				},
+				"overrides": []
+			},
+			"options": {
+				"reduceOptions": {
+					"calcs": ["lastNotNull"],
+					"fields": "",
+					"values": false
+				},
+				"colorMode": "value"
+			},
+			"targets": [
+				{
+					"refId": "A",
+					"expr": "docker_n_containers_running{engine_host=~\"$engine\"}",
+					"legendFormat": "{{serviceId}} / {{container_name}}",
+					"range": false,
+					"instant": true
+				}
+			]
+		},
+		{
+			"id": 2,
+			"title": "Stopped containers",
+			"type": "stat",
+			"description": "",
+			"datasource": {
+				"type": "prometheus",
+				"uid": "victoriametrics"
+			},
+			"gridPos": {
+				"x": 12,
+				"y": 0,
+				"w": 12,
+				"h": 8
+			},
+			"fieldConfig": {
+				"defaults": {
+					"unit": "short",
+					"min": 0
+				},
+				"overrides": []
+			},
+			"options": {
+				"reduceOptions": {
+					"calcs": ["lastNotNull"],
+					"fields": "",
+					"values": false
+				},
+				"colorMode": "value"
+			},
+			"targets": [
+				{
+					"refId": "A",
+					"expr": "docker_n_containers_stopped{engine_host=~\"$engine\"}",
+					"legendFormat": "{{serviceId}} / {{container_name}}",
+					"range": false,
+					"instant": true
+				}
+			]
+		},
+		{
+			"id": 3,
+			"title": "Container CPU",
+			"type": "timeseries",
+			"description": "100% = one fully used CPU core.",
+			"datasource": {
+				"type": "prometheus",
+				"uid": "victoriametrics"
+			},
+			"gridPos": {
+				"x": 0,
+				"y": 8,
+				"w": 12,
+				"h": 8
+			},
+			"fieldConfig": {
+				"defaults": {
+					"unit": "percent",
+					"min": 0
+				},
+				"overrides": []
+			},
+			"options": {
+				"legend": {
+					"displayMode": "table",
+					"placement": "bottom",
+					"calcs": ["lastNotNull"]
+				},
+				"tooltip": {
+					"mode": "multi",
+					"sort": "desc"
+				}
+			},
+			"targets": [
+				{
+					"refId": "A",
+					"expr": "docker_container_cpu_usage_percent{engine_host=~\"$engine\",serviceId=~\"$serviceId\",revision=~\"$revision\",cpu=\"cpu-total\"}",
+					"legendFormat": "{{serviceId}} / {{container_name}}",
+					"range": true,
+					"instant": false
+				}
+			]
+		},
+		{
+			"id": 4,
+			"title": "Container memory",
+			"type": "timeseries",
+			"description": "",
+			"datasource": {
+				"type": "prometheus",
+				"uid": "victoriametrics"
+			},
+			"gridPos": {
+				"x": 12,
+				"y": 8,
+				"w": 12,
+				"h": 8
+			},
+			"fieldConfig": {
+				"defaults": {
+					"unit": "bytes",
+					"min": 0
+				},
+				"overrides": []
+			},
+			"options": {
+				"legend": {
+					"displayMode": "table",
+					"placement": "bottom",
+					"calcs": ["lastNotNull"]
+				},
+				"tooltip": {
+					"mode": "multi",
+					"sort": "desc"
+				}
+			},
+			"targets": [
+				{
+					"refId": "A",
+					"expr": "docker_container_mem_usage{engine_host=~\"$engine\",serviceId=~\"$serviceId\",revision=~\"$revision\"}",
+					"legendFormat": "{{serviceId}} / {{container_name}}",
+					"range": true,
+					"instant": false
+				}
+			]
+		},
+		{
+			"id": 5,
+			"title": "Memory / container limit",
+			"type": "timeseries",
+			"description": "",
+			"datasource": {
+				"type": "prometheus",
+				"uid": "victoriametrics"
+			},
+			"gridPos": {
+				"x": 0,
+				"y": 16,
+				"w": 12,
+				"h": 8
+			},
+			"fieldConfig": {
+				"defaults": {
+					"unit": "percent",
+					"min": 0
+				},
+				"overrides": []
+			},
+			"options": {
+				"legend": {
+					"displayMode": "table",
+					"placement": "bottom",
+					"calcs": ["lastNotNull"]
+				},
+				"tooltip": {
+					"mode": "multi",
+					"sort": "desc"
+				}
+			},
+			"targets": [
+				{
+					"refId": "A",
+					"expr": "100 * docker_container_mem_usage{engine_host=~\"$engine\",serviceId=~\"$serviceId\",revision=~\"$revision\"} / docker_container_mem_limit{engine_host=~\"$engine\",serviceId=~\"$serviceId\",revision=~\"$revision\"}",
+					"legendFormat": "{{serviceId}} / {{container_name}}",
+					"range": true,
+					"instant": false
+				}
+			]
+		},
+		{
+			"id": 6,
+			"title": "Engine CPU cores",
+			"type": "stat",
+			"description": "",
+			"datasource": {
+				"type": "prometheus",
+				"uid": "victoriametrics"
+			},
+			"gridPos": {
+				"x": 12,
+				"y": 16,
+				"w": 12,
+				"h": 8
+			},
+			"fieldConfig": {
+				"defaults": {
+					"unit": "short",
+					"min": 0
+				},
+				"overrides": []
+			},
+			"options": {
+				"reduceOptions": {
+					"calcs": ["lastNotNull"],
+					"fields": "",
+					"values": false
+				},
+				"colorMode": "value"
+			},
+			"targets": [
+				{
+					"refId": "A",
+					"expr": "docker_n_cpus{engine_host=~\"$engine\"}",
+					"legendFormat": "{{serviceId}} / {{container_name}}",
+					"range": false,
+					"instant": true
+				}
+			]
+		},
+		{
+			"id": 7,
+			"title": "Network received",
+			"type": "timeseries",
+			"description": "",
+			"datasource": {
+				"type": "prometheus",
+				"uid": "victoriametrics"
+			},
+			"gridPos": {
+				"x": 0,
+				"y": 24,
+				"w": 12,
+				"h": 8
+			},
+			"fieldConfig": {
+				"defaults": {
+					"unit": "Bps",
+					"min": 0
+				},
+				"overrides": []
+			},
+			"options": {
+				"legend": {
+					"displayMode": "table",
+					"placement": "bottom",
+					"calcs": ["lastNotNull"]
+				},
+				"tooltip": {
+					"mode": "multi",
+					"sort": "desc"
+				}
+			},
+			"targets": [
+				{
+					"refId": "A",
+					"expr": "rate(docker_container_net_rx_bytes{engine_host=~\"$engine\",serviceId=~\"$serviceId\",revision=~\"$revision\",network=\"total\"}[$__rate_interval])",
+					"legendFormat": "{{serviceId}} / {{container_name}}",
+					"range": true,
+					"instant": false
+				}
+			]
+		},
+		{
+			"id": 8,
+			"title": "Network transmitted",
+			"type": "timeseries",
+			"description": "",
+			"datasource": {
+				"type": "prometheus",
+				"uid": "victoriametrics"
+			},
+			"gridPos": {
+				"x": 12,
+				"y": 24,
+				"w": 12,
+				"h": 8
+			},
+			"fieldConfig": {
+				"defaults": {
+					"unit": "Bps",
+					"min": 0
+				},
+				"overrides": []
+			},
+			"options": {
+				"legend": {
+					"displayMode": "table",
+					"placement": "bottom",
+					"calcs": ["lastNotNull"]
+				},
+				"tooltip": {
+					"mode": "multi",
+					"sort": "desc"
+				}
+			},
+			"targets": [
+				{
+					"refId": "A",
+					"expr": "rate(docker_container_net_tx_bytes{engine_host=~\"$engine\",serviceId=~\"$serviceId\",revision=~\"$revision\",network=\"total\"}[$__rate_interval])",
+					"legendFormat": "{{serviceId}} / {{container_name}}",
+					"range": true,
+					"instant": false
+				}
+			]
+		},
+		{
+			"id": 9,
+			"title": "Block I/O read",
+			"type": "timeseries",
+			"description": "",
+			"datasource": {
+				"type": "prometheus",
+				"uid": "victoriametrics"
+			},
+			"gridPos": {
+				"x": 0,
+				"y": 32,
+				"w": 12,
+				"h": 8
+			},
+			"fieldConfig": {
+				"defaults": {
+					"unit": "Bps",
+					"min": 0
+				},
+				"overrides": []
+			},
+			"options": {
+				"legend": {
+					"displayMode": "table",
+					"placement": "bottom",
+					"calcs": ["lastNotNull"]
+				},
+				"tooltip": {
+					"mode": "multi",
+					"sort": "desc"
+				}
+			},
+			"targets": [
+				{
+					"refId": "A",
+					"expr": "rate(docker_container_blkio_io_service_bytes_recursive_read{engine_host=~\"$engine\",serviceId=~\"$serviceId\",revision=~\"$revision\",device=\"total\"}[$__rate_interval])",
+					"legendFormat": "{{serviceId}} / {{container_name}}",
+					"range": true,
+					"instant": false
+				}
+			]
+		},
+		{
+			"id": 10,
+			"title": "Block I/O written",
+			"type": "timeseries",
+			"description": "",
+			"datasource": {
+				"type": "prometheus",
+				"uid": "victoriametrics"
+			},
+			"gridPos": {
+				"x": 12,
+				"y": 32,
+				"w": 12,
+				"h": 8
+			},
+			"fieldConfig": {
+				"defaults": {
+					"unit": "Bps",
+					"min": 0
+				},
+				"overrides": []
+			},
+			"options": {
+				"legend": {
+					"displayMode": "table",
+					"placement": "bottom",
+					"calcs": ["lastNotNull"]
+				},
+				"tooltip": {
+					"mode": "multi",
+					"sort": "desc"
+				}
+			},
+			"targets": [
+				{
+					"refId": "A",
+					"expr": "rate(docker_container_blkio_io_service_bytes_recursive_write{engine_host=~\"$engine\",serviceId=~\"$serviceId\",revision=~\"$revision\",device=\"total\"}[$__rate_interval])",
+					"legendFormat": "{{serviceId}} / {{container_name}}",
+					"range": true,
+					"instant": false
+				}
+			]
+		},
+		{
+			"id": 11,
+			"title": "Engine memory capacity",
+			"type": "stat",
+			"description": "",
+			"datasource": {
+				"type": "prometheus",
+				"uid": "victoriametrics"
+			},
+			"gridPos": {
+				"x": 0,
+				"y": 40,
+				"w": 12,
+				"h": 8
+			},
+			"fieldConfig": {
+				"defaults": {
+					"unit": "bytes",
+					"min": 0
+				},
+				"overrides": []
+			},
+			"options": {
+				"reduceOptions": {
+					"calcs": ["lastNotNull"],
+					"fields": "",
+					"values": false
+				},
+				"colorMode": "value"
+			},
+			"targets": [
+				{
+					"refId": "A",
+					"expr": "docker_memory_total{engine_host=~\"$engine\"}",
+					"legendFormat": "{{serviceId}} / {{container_name}}",
+					"range": false,
+					"instant": true
+				}
+			]
+		},
+		{
+			"id": 12,
+			"title": "Observed running containers by service",
+			"type": "timeseries",
+			"description": "Only running containers are sampled.",
+			"datasource": {
+				"type": "prometheus",
+				"uid": "victoriametrics"
+			},
+			"gridPos": {
+				"x": 12,
+				"y": 40,
+				"w": 12,
+				"h": 8
+			},
+			"fieldConfig": {
+				"defaults": {
+					"unit": "short",
+					"min": 0
+				},
+				"overrides": []
+			},
+			"options": {
+				"legend": {
+					"displayMode": "table",
+					"placement": "bottom",
+					"calcs": ["lastNotNull"]
+				},
+				"tooltip": {
+					"mode": "multi",
+					"sort": "desc"
+				}
+			},
+			"targets": [
+				{
+					"refId": "A",
+					"expr": "count by (serviceId, revision) (docker_container_mem_usage{engine_host=~\"$engine\",serviceId=~\"$serviceId\",revision=~\"$revision\"})",
+					"legendFormat": "{{serviceId}} / {{revision}}",
+					"range": true,
+					"instant": false
+				}
+			]
+		}
+	]
+}

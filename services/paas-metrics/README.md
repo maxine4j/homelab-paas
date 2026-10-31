@@ -37,9 +37,36 @@ Open `https://paas-metrics.{baseDomain}` (also available at `https://grafana.paa
 
 Persistent data paths refer to the Docker host, independently of bootstrap mounts. Docker Desktop's `local/var` mapping does not relocate workload data. Removing containers retains data. Obsolete provisioning-file directories under `/etc/homelab-paas/paas-metrics/` are no longer mounted and need not be repaired. Each new source commit changes the three resolved custom image tags and triggers replacement during reconciliation, including commits that leave the descriptor unchanged. CI must publish those images before deployment can succeed; missing tags retry under the [deployment retry contract](../../docs/reconciliation-and-deployments.md#implemented-deployment-mvp). No host configuration copies or startup plugin downloads are required.
 
+## Built-in dashboards and application metrics
+
+Grafana provisions **Docker overview** (`paas-docker`) and **PaaS control plane** (`paas-control-plane`) in the **Homelab PaaS** folder. JSON sources live in `dashboards/` and are baked into `/etc/grafana/dashboards`, outside the persistent data mount. Provisioning replaces these dashboards on image upgrades; edit the source JSON to retain changes. Datasource UID `victoriametrics` is stable.
+
+Docker overview covers running/stopped container counts, per-container CPU, memory and limits, network throughput, block I/O, and Engine capacity. CPU 100% means one fully used core; memory usage includes cache. Engine capacity describes the Docker host (the Linux VM on Docker Desktop), not a multi-host cluster. Engine totals ignore service/revision filters; per-container panels include only running containers.
+
+The control plane exposes Prometheus text at private port **9090**, path `/metrics`. VictoriaMetrics scrapes `control-plane.paas.internal:9090` every 30 seconds over the metrics service network. Port 9090 is neither published nor routed through Envoy. All service networks contain the trusted control-plane peer; the platform maintains its `control-plane.paas.internal` DNS alias (distinct from valid resource names), repairing old attachments on reconciliation. Repair briefly reconnects that peer to the affected service network.
+
+| Metric                                               | Meaning                                                                                              |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `paas_http_requests_total`                           | Completed control-plane HTTP requests by method and status, including health and authorization calls |
+| `paas_http_request_duration_seconds_count`, `_sum`   | Request duration observations; dashboard shows mean latency                                          |
+| `paas_reconciliations_total`                         | Actual per-service attempts by `success`/`failure`, excluding backoff skips                          |
+| `paas_reconciliation_duration_seconds_count`, `_sum` | Attempt duration observations                                                                        |
+| `paas_service_health`                                | Current management health, value 1 with a `health` label                                             |
+| `paas_service_sync`                                  | Current management sync, value 1 with a `sync` label                                                 |
+
+Health and sync reuse the shared management snapshots and their polling cadence. Removed services disappear from status metrics. Snapshot collection failures return HTTP 503 instead of silently exporting stale results. These request metrics describe the control plane; workload HTTP rates need application instrumentation/exporters.
+
+The control plane uses the maintained [`@prometheus-io/client`](https://github.com/prometheus/client_js) library with an isolated registry. Durations are histograms and also export `_bucket` series for quantile queries; counters, gauges, escaping and Prometheus serialization are managed by the library.
+
+Every service metric carries `serviceId` and `revision` (the first seven commit characters). Docker telemetry derives these from container ownership/source labels; it also normalizes the cluster label to `cluster`. Non-PaaS containers use `serviceId="unmanaged"`; unavailable revisions use `revision="unknown"`. Engine-wide Docker metrics use unmanaged/unknown because they do not belong to a service. The full source revision is replaced by the short tag; specification fingerprints and arbitrary labels are excluded from telemetry. Logs receive the same normalized tags.
+
+Control-plane request metrics use `serviceId="paas"` and its image build revision. Reconciliation metrics use the attempted desired revision (last known desired revision on Git failure); health uses active revision and sync uses desired revision. Unchanged workloads can legitimately retain older source revisions. Metrics-stack endpoint scrapes use `serviceId="paas-metrics"` and the custom image set's build revision. Supply `--build-arg BUILD_SHA=<full-sha>` when building the control-plane and VictoriaMetrics images locally; CI supplies it automatically.
+
+Counters and duration observations reset on process restart. Each counter family retains at most 2,048 label sets, evicting the oldest inserted set; VictoriaMetrics retains previously ingested history for its configured retention period. HTTP labels omit paths, URLs, query parameters, users and credentials. Unknown methods collapse to `OTHER`.
+
 ## Container collection and resource budget
 
-The collector uses upstream Telegraf's [supported custom build](https://github.com/influxdata/telegraf/blob/v1.39.3/docs/CUSTOMIZATION.md) to compile only the two Docker inputs and the three required outputs. This avoids loading the stock image's hundreds of unrelated plugins. The pinned source archive has a build-time SHA-256 check; no compiler or build dependencies ship in the runtime image.
+The collector uses upstream Telegraf's [supported custom build](https://github.com/influxdata/telegraf/blob/v1.39.3/docs/CUSTOMIZATION.md) to compile only the two Docker inputs, rename/regex/defaults tag processors and three required outputs. This avoids loading the stock image's hundreds of unrelated plugins. The pinned source archive has a build-time SHA-256 check; no compiler or build dependencies ship in the runtime image.
 
 Telegraf discovers **all running containers on the same Docker Engine**, including bootstrap containers, this stack, and workloads outside PaaS. Through `/var/run/docker.sock`, every 30 seconds it discovers containers and collects CPU, memory, network, block I/O, and state metrics. It follows stdout/stderr logs and sends batches every five seconds. Collection needs no connectivity to other service networks. Container names, images, and selected `homelab-paas.*` labels identify telemetry; arbitrary container labels and environment variables are not copied.
 

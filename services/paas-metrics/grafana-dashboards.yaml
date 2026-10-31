@@ -1,0 +1,11 @@
+apiVersion: 1
+providers:
+    - name: homelab-paas
+      orgId: 1
+      folder: Homelab PaaS
+      type: file
+      disableDeletion: false
+      allowUiUpdates: false
+      updateIntervalSeconds: 30
+      options:
+          path: /etc/grafana/dashboards

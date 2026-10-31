@@ -72,8 +72,17 @@ export class MockDocker {
 				const network = this.networks.get(name);
 				if (method === "GET") return network ? Response.json(network) : new Response(null, { status: 404 });
 				if (method === "POST" && path.endsWith("/connect") && network) {
-					const { Container } = z.object({ Container: z.string() }).parse(JSON.parse(body));
+					const { Container, EndpointConfig } = z
+						.object({
+							Container: z.string(),
+							EndpointConfig: z.object({ Aliases: z.array(z.string()).optional() }),
+						})
+						.parse(JSON.parse(body));
 					network.Containers[Container] = {};
+					this.containers.get(Container)!.NetworkSettings.Networks[name] = {
+						IPAddress: "127.0.0.1",
+						Aliases: EndpointConfig.Aliases ?? [],
+					};
 					return Response.json({});
 				}
 			}

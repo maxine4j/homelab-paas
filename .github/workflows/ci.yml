@@ -228,6 +228,7 @@ jobs:
                           tags+=(--tag "$image/metrics-$component:latest")
                       fi
                       docker buildx build --platform linux/amd64 \
+                          --build-arg "BUILD_SHA=$GITHUB_SHA" \
                           --file "services/paas-metrics/$component.Dockerfile" "${tags[@]}" \
                           --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
                           --label "org.opencontainers.image.revision=$GITHUB_SHA" --push .

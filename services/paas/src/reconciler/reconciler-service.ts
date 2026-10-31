@@ -4,6 +4,7 @@ import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IChangeBus } from "../events/change-bus.ts";
 import type { IGitService } from "../git/git-service.ts";
 import type { GitFileSource } from "../git/types.ts";
+import type { IReconciliationMetrics } from "../metrics/metrics-service.ts";
 import { createLogger } from "../util/logger.ts";
 import type { DeploymentWebResource } from "./deployment/strategy/types.ts";
 import type { DeploymentWorkerResource } from "./deployment/types.ts";
@@ -14,7 +15,7 @@ import type { IWebResourceReconciler } from "./resources/web/web-reconciler.ts";
 import type { IWorkerResourceReconciler } from "./resources/worker/worker-reconciler.ts";
 import type { IServiceEventStore } from "./service-event-store.ts";
 import { serviceEventMessages } from "./types.ts";
-import type { DescriptorDecoder, IReconcilerService, IReconciliationStateStore } from "./types.ts";
+import type { DescriptorDecoder, IReconcilerService, IReconciliationStateStore, ReconciliationState } from "./types.ts";
 
 export interface IServiceRedeployer {
 	/** Serializes with reconciliation; validates inputs before forcing all workloads through their rollout strategy. Throws RedeployError. */
@@ -51,6 +52,7 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 		private readonly events: IServiceEventStore,
 		private readonly diagnostics: IEventDiagnostics,
 		private readonly changes?: IChangeBus,
+		private readonly metrics?: IReconciliationMetrics,
 	) {}
 
 	reconcile(): Promise<void> {
@@ -92,8 +94,16 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 	}
 
 	private async reconcileService(serviceId: string, source: GitFileSource, force = false): Promise<void> {
-		const previous = await this.state.read(serviceId);
+		const started = this.now();
+		let previous: ReconciliationState | undefined;
+		try {
+			previous = await this.state.read(serviceId);
+		} catch (error) {
+			this.metrics?.reconciliation(serviceId, undefined, "failure", (this.now() - started) / 1000);
+			throw error;
+		}
 		if (!force && (previous?.retryAt ?? 0) > this.now()) return;
+		let outcome: "success" | "failure" = "failure";
 		let desiredRevision = previous?.desiredRevision;
 		let deploymentStartedAt = previous?.deploymentStartedAt;
 		let message: string = serviceEventMessages.fetch;
@@ -214,6 +224,7 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 					{ event: "reconciliation.recovered", serviceId, revision: desiredRevision },
 					"Service recovered; clearing retry backoff",
 				);
+			outcome = "success";
 		} catch (error) {
 			const retry = this.config.getReconciliationConfig();
 			const failures = Math.min(
@@ -275,6 +286,8 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 			});
 			this.changes?.publish({ serviceId });
 			if (force) throw error;
+		} finally {
+			this.metrics?.reconciliation(serviceId, desiredRevision, outcome, (this.now() - started) / 1000);
 		}
 	}
 
