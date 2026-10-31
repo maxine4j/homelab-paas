@@ -1,9 +1,10 @@
 export type ResourceTab = "config" | "logs";
+export type ServiceTab = "overview" | "resources";
 export type Route =
 	| { page: "services" }
 	| { page: "cluster" }
 	| { page: "missing" }
-	| { page: "service"; serviceId: string }
+	| { page: "service"; serviceId: string; tab?: ServiceTab }
 	| { page: "events"; serviceId: string }
 	| { page: "resource-events"; serviceId: string; resourceId: string }
 	| { page: "resource"; serviceId: string; resourceId: string; tab: ResourceTab; containerId?: string };

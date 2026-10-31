@@ -1,20 +1,24 @@
 import type { UiService, UiServiceEvent } from "@homelab-paas/shared-contracts";
 
-import { gitCommitLink, gitSourceLink } from "../components/git-source-link.ts";
+import { gitCommitLink } from "../components/git-source-link.ts";
 import { ServiceEvents } from "../components/service-events.tsx";
+import { ServiceResources } from "../components/service-resources.tsx";
 import { ServiceRevision } from "../components/service-revision.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
+import type { ServiceTab } from "../types.ts";
 
 export const ServicePage = ({
 	service,
 	events,
 	eventError,
+	tab = "overview",
 }: {
 	service: UiService;
 	events?: UiServiceEvent[];
 	eventError?: string;
+	tab?: ServiceTab;
 }) => {
-	const sourceUrl = gitSourceLink(service.source, service.descriptorRevision);
+	const base = `#/services/${service.serviceId}`;
 	const primaryUrl = service.resources.find((resource) => resource.type === "web" && resource.primaryUrl)?.primaryUrl;
 	return (
 		<>
@@ -51,69 +55,62 @@ export const ServicePage = ({
 					</div>
 				</div>
 			</div>
+			<nav className='tabs' aria-label='Service detail'>
+				<a href={base} aria-current={tab === "overview" ? "page" : undefined}>
+					Overview
+				</a>
+				<a href={`${base}/resources`} aria-current={tab === "resources" ? "page" : undefined}>
+					Resources
+				</a>
+			</nav>
 			{service.descriptorStatus === "unavailable" && (
 				<p className='notice' role='status'>
 					Descriptor unavailable. Showing observed resources; desired configuration could not be loaded.
 				</p>
 			)}
-			{service.retryAt && (
-				<dl className='summary'>
-					<div>
-						<dt>Next retry</dt>
-						<dd>{new Date(service.retryAt).toLocaleString()}</dd>
-					</div>
-				</dl>
-			)}
-			<section className='recent-events' aria-label='Recent service events'>
-				<div className='section-heading'>
-					<h2>Recent events</h2>
-					{events && events.length > 2 && (
-						<a href={`#/services/${service.serviceId}/events`}>{events.length - 2} more events...</a>
+			{tab === "overview" && (
+				<>
+					{service.retryAt && (
+						<dl className='summary'>
+							<div>
+								<dt>Next retry</dt>
+								<dd>{new Date(service.retryAt).toLocaleString()}</dd>
+							</div>
+						</dl>
 					)}
-					{eventError && <a href={`#/services/${service.serviceId}/events`}>Event history</a>}
-				</div>
-				<ServiceEvents events={events?.slice(0, 2)} error={eventError} />
-			</section>
-			<h2>
-				Resources <span className='count'>{service.resources.length}</span>
-			</h2>
-			<div className='card-grid resource-grid'>
-				{service.resources.map((resource) => (
-					<a
-						className='card resource-link'
-						key={resource.resourceId}
-						href={`#/services/${service.serviceId}/resources/${resource.resourceId}`}
-					>
-						<div className='card-top'>
-							<span className='eyebrow'>{resource.type}</span>
-							<StatusBadge status={resource.health} />
+					<section className='recent-events' aria-label='Recent service events'>
+						<div className='section-heading'>
+							<h2>Recent events</h2>
+							{events && events.length > 2 && (
+								<a href={`#/services/${service.serviceId}/events`}>
+									{events.length - 2} more events...
+								</a>
+							)}
+							{eventError && <a href={`#/services/${service.serviceId}/events`}>Event history</a>}
 						</div>
-						<h3>{resource.resourceId}</h3>
-					</a>
-				))}
-			</div>
-			<section aria-labelledby='service-descriptor-heading'>
-				<div className='section-heading'>
-					<h2 id='service-descriptor-heading'>Service descriptor</h2>
-					{sourceUrl ? (
-						<a href={sourceUrl} target='_blank' rel='noreferrer'>
-							Service source ↗
-						</a>
-					) : (
-						<span className='muted'>Source link unavailable</span>
-					)}
-				</div>
-				{service.descriptor ? (
-					<details className='json-disclosure'>
-						<summary>Service descriptor YAML</summary>
-						<pre className='code-view' tabIndex={0} aria-label='Service descriptor YAML'>
-							{service.descriptorYaml ?? "Descriptor unavailable."}
-						</pre>
-					</details>
-				) : (
-					<p>Descriptor unavailable.</p>
-				)}
-			</section>
+						<ServiceEvents events={events?.slice(0, 2)} error={eventError} />
+					</section>
+					<h2>
+						Resources <span className='count'>{service.resources.length}</span>
+					</h2>
+					<div className='card-grid resource-grid'>
+						{service.resources.map((resource) => (
+							<a
+								className='card resource-link'
+								key={resource.resourceId}
+								href={`#/services/${service.serviceId}/resources/${resource.resourceId}`}
+							>
+								<div className='card-top'>
+									<span className='eyebrow'>{resource.type}</span>
+									<StatusBadge status={resource.health} />
+								</div>
+								<h3>{resource.resourceId}</h3>
+							</a>
+						))}
+					</div>
+				</>
+			)}
+			{tab === "resources" && <ServiceResources serviceId={service.serviceId} resources={service.resources} />}
 		</>
 	);
 };

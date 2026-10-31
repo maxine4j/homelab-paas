@@ -11,6 +11,7 @@ export const parseRoute = (hash: string): Route => {
 	const id = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 	if (parts.at(0) !== "services" || !serviceId || !id.test(serviceId)) return { page: "missing" };
 	if (parts.length === 2) return { page: "service", serviceId };
+	if (parts.length === 3 && parts.at(2) === "resources") return { page: "service", serviceId, tab: "resources" };
 	if (parts.length === 3 && parts.at(2) === "events") return { page: "events", serviceId };
 	if (parts.at(2) !== "resources" || !resourceId || !id.test(resourceId)) return { page: "missing" };
 	const tab = parts.at(4) ?? "config";

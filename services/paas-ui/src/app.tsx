@@ -181,6 +181,7 @@ export const AppView = ({
 					) : route.page === "service" ? (
 						<ServicePage
 							service={snapshot.data as UiService}
+							tab={route.tab}
 							events={events.data}
 							eventError={events.error}
 						/>

@@ -388,6 +388,56 @@ p {
 .resource-grid {
 	grid-template-columns: repeat(auto-fill, minmax(min(100%, 285px), 1fr));
 }
+.service-resource-list {
+	display: grid;
+	gap: 16px;
+}
+.service-resource-card .card-top {
+	align-items: flex-start;
+	flex-wrap: nowrap;
+}
+.card.service-resource-card h3 {
+	margin: 8px 0 0;
+}
+.resource-card-image {
+	display: grid;
+	gap: 8px;
+	margin-top: 20px;
+	font-size: 0.85rem;
+}
+.resource-card-image code,
+.resource-card-ingress a {
+	overflow-wrap: anywhere;
+	min-width: 0;
+}
+.resource-card-ingress {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 24px;
+	margin-top: 16px;
+	font-size: 0.85rem;
+}
+.resource-card-ingress a {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 44px;
+}
+.service-resource-card h3 a {
+	display: inline-flex;
+	align-items: center;
+	min-height: 44px;
+}
+.ingress-access {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	color: #b4c1d3;
+}
+.ingress-access svg {
+	flex-shrink: 0;
+}
 .card {
 	border: 1px solid #303844;
 	background: #151b24;

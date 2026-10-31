@@ -376,7 +376,7 @@ test("service details show recent failure events and link to service event histo
 	expect(html).toContain("Recent events");
 });
 
-test("service details show two recent events above resources and collapse the complete descriptor", () => {
+test("service overview shows tabs and two recent events above compact resources without the descriptor", () => {
 	const html = renderToStaticMarkup(
 		<ServicePage
 			service={{
@@ -409,22 +409,39 @@ test("service details show two recent events above resources and collapse the co
 			]}
 		/>,
 	);
-	expect(html.indexOf("Recent events")).toBeLessThan(html.indexOf("Resources"));
-	expect(html.indexOf("Resources")).toBeLessThan(html.indexOf("Service descriptor"));
+	expect(html).toContain('href="#/services/demo" aria-current="page">Overview</a>');
+	expect(html).toContain('href="#/services/demo/resources">Resources</a>');
+	expect(html.indexOf("Recent events")).toBeLessThan(html.indexOf("<h2>Resources"));
+	expect(html).not.toContain("Service descriptor");
 	expect(html).toContain("1 more events...");
 	expect(html).toContain("Earlier event");
 	expect(html).not.toContain("Oldest event");
 	expect(html).not.toContain("Inspect resource");
-	expect(html).toContain('<details class="json-disclosure"><summary>Service descriptor YAML</summary>');
-	expect(html).toContain('aria-label="Service descriptor YAML"');
-	expect(html).toContain("version: 1\nmetadata:\n  serviceId: demo");
 	expect(html).toMatch(/service-heading-row[^]*<h1>demo<\/h1>[^]*badge-healthy[^]*primary-web-link/);
-	expect(html).toContain('href="https://github.com/example/demo/blob/abc1234/service.sd.yaml"');
 	expect(html).toContain('href="https://demo.example.test" target="_blank" rel="noreferrer"');
 	expect(html).toMatch(/primary-web-link[^>]*>demo.example.test[^<]*<span aria-hidden="true">↗<\/span><\/a>/);
-	expect(html).toContain("app:1");
 	expect(html).not.toContain("&quot;metadata&quot;");
 	expect(html).not.toContain("Service source configuration");
+});
+
+test("service resources tab supports direct links without changing resource inspection routes", () => {
+	expect(parseRoute("#/services/demo/resources")).toEqual({ page: "service", serviceId: "demo", tab: "resources" });
+	expect(parseRoute("#/services/demo/resources/app")).toEqual({
+		page: "resource",
+		serviceId: "demo",
+		resourceId: "app",
+		tab: "config",
+	});
+	const html = renderToStaticMarkup(
+		<ServicePage
+			tab='resources'
+			service={{ serviceId: "demo", phase: "ready", source: {}, descriptorStatus: "available", resources: [] }}
+		/>,
+	);
+	expect(html).toContain('href="#/services/demo/resources" aria-current="page">Resources</a>');
+	expect(html).toContain("No resources available");
+	expect(html).not.toContain("Recent events");
+	expect(html).not.toContain("Service descriptor");
 });
 
 test("event history direct links resolve and render timestamp, resource, severity and retry details", () => {

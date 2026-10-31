@@ -61,6 +61,39 @@ test.each([
 
 afterEach(() => vi.unstubAllEnvs());
 
+test("service Resources uses the service snapshot and renders detailed cards through AppView", () => {
+	const route = { page: "service", serviceId: "demo", tab: "resources" } as const;
+	expect(viewPaths(route)).toEqual({ snapshot: "/services/demo", events: "/services/demo/events" });
+	const html = renderToStaticMarkup(
+		<AppView
+			route={route}
+			snapshot={{
+				data: {
+					serviceId: "demo",
+					phase: "ready",
+					source: {},
+					descriptorStatus: "available",
+					resources: [
+						{
+							resourceId: "worker",
+							type: "worker",
+							health: "healthy",
+							config: { image: "worker:2" },
+							containers: [],
+						},
+					],
+				},
+				refresh: () => {},
+			}}
+			events={{ data: [], refresh: () => {} }}
+			logs={{}}
+		/>,
+	);
+	expect(html).toContain("worker:2");
+	expect(html).toContain('href="#/services/demo/resources" aria-current="page">Resources</a>');
+	expect(html).not.toContain("Recent events");
+});
+
 test("topbar offers Git refresh beside breadcrumbs without a snapshot refresh button", () => {
 	const html = renderToStaticMarkup(<App />);
 	expect(html).toMatch(
