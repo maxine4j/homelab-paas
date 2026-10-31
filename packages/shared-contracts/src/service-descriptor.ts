@@ -91,6 +91,7 @@ const base = {
 };
 const workload = {
 	...base,
+	selinuxLabeling: z.boolean().optional(),
 	devices: z
 		.array(device)
 		.refine((devices) => new Set(devices.map(({ mountPath }) => mountPath)).size === devices.length)

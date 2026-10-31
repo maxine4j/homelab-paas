@@ -15,6 +15,7 @@ export interface CreateContainerOptions {
 	volumes?: ResourceVolume[];
 	devices?: ResourceDevice[];
 	supplementaryGroups?: number[];
+	selinuxLabeling?: boolean;
 	hostPorts?: ResourceHostPort[];
 	limits?: ResourceLimits;
 	labels?: Labels;
@@ -213,6 +214,7 @@ export class DockerClient implements IDockerClient, IDockerPruneClient {
 					? Object.fromEntries(Object.keys(portBindings).map((key) => [key, {}]))
 					: undefined,
 				HostConfig: {
+					SecurityOpt: options.selinuxLabeling === false ? ["label=disable"] : undefined,
 					Devices: options.devices?.map(({ hostPath, mountPath, permissions }) => ({
 						PathOnHost: hostPath,
 						PathInContainer: mountPath,

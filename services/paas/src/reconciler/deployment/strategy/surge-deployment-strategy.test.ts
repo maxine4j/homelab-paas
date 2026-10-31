@@ -53,6 +53,7 @@ test("propagates resolved secrets, arbitrary host mounts and CPU/memory limits t
 		resource: {
 			...request.resource,
 			env: [{ name: "TOKEN", value: "resolved-secret" }],
+			selinuxLabeling: false,
 			volumes,
 			limits,
 			devices,
@@ -60,7 +61,14 @@ test("propagates resolved secrets, arbitrary host mounts and CPU/memory limits t
 		},
 	});
 	expect(f.calls.find((c) => c.action === "create")?.args).toEqual([
-		expect.objectContaining({ env: { TOKEN: "resolved-secret" }, volumes, limits, devices, supplementaryGroups }),
+		expect.objectContaining({
+			env: { TOKEN: "resolved-secret" },
+			volumes,
+			limits,
+			devices,
+			supplementaryGroups,
+			selinuxLabeling: false,
+		}),
 	]);
 });
 

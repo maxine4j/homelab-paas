@@ -40,6 +40,7 @@ resources:
               mountPath: /storage
     telegraf:
         type: worker
+        selinuxLabeling: false
         image: ghcr.io/maxine4j/homelab-paas/metrics-telegraf:${COMMIT_ID:40}
         rolloutStrategy: recreate
         healthcheckPort: 8080

@@ -18,6 +18,7 @@ export interface CreateResourceContainerOptions {
 	volumes?: ResourceVolume[];
 	devices?: ResourceDevice[];
 	supplementaryGroups?: number[];
+	selinuxLabeling?: boolean;
 	hostPorts?: ResourceHostPort[];
 	limits?: ResourceLimits;
 }
@@ -217,6 +218,7 @@ export class DockerService implements IDockerService {
 			volumes: options.volumes,
 			devices: options.devices,
 			supplementaryGroups: options.supplementaryGroups,
+			selinuxLabeling: options.selinuxLabeling,
 			hostPorts: options.hostPorts,
 			limits: options.limits,
 			labels: {

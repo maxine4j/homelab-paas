@@ -11,6 +11,13 @@ import { WebResourceReconciler } from "./web-reconciler.ts";
 const resource: DeploymentWebResource = { type: "web", image: "app:1", ingress: { public: true, port: 8080 } };
 const input = { serviceId: "demo", resourceId: "app", revision: "rev", resource };
 
+test("SELinux opt-out changes web identity; explicit default preserves it", () => {
+	const specification = new ResourceSpecification();
+	const original = specification.get("app", resource);
+	expect(specification.get("app", { ...resource, selinuxLabeling: true })).toBe(original);
+	expect(specification.get("app", { ...resource, selinuxLabeling: false })).not.toBe(original);
+});
+
 test.each([undefined, null])("unchanged web containers skip unconfigured HTTP checks: %s", async (healthcheckUrl) => {
 	const f = fixture();
 	await f.converge();

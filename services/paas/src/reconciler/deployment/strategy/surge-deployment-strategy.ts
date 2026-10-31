@@ -40,6 +40,7 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 			volumes: resource.volumes,
 			devices: resource.devices,
 			supplementaryGroups: resource.supplementaryGroups,
+			selinuxLabeling: resource.selinuxLabeling,
 			hostPorts: resource.hostPorts,
 			limits: resource.limits,
 		});

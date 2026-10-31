@@ -104,13 +104,14 @@ test("preserves descriptor mounts and resource limits for the Docker adapter", a
 		spec: "spec",
 		imageId: "image",
 		volumes,
+		selinuxLabeling: false,
 		devices,
 		supplementaryGroups,
 		hostPorts,
 		limits,
 	});
 	expect(f.calls.find(({ operation }) => operation === "createContainer")?.args).toEqual([
-		expect.objectContaining({ volumes, limits, hostPorts, devices, supplementaryGroups }),
+		expect.objectContaining({ volumes, limits, hostPorts, devices, supplementaryGroups, selinuxLabeling: false }),
 	]);
 });
 const identity = {

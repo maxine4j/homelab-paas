@@ -17,6 +17,13 @@ const resource: DeploymentWorkerResource = {
 };
 const input = { serviceId: "demo", resourceId: "jobs", revision: "rev1", resource };
 
+test("SELinux opt-out changes worker identity; explicit default preserves it", () => {
+	const specification = new ResourceSpecification();
+	const original = specification.get("jobs", resource);
+	expect(specification.get("jobs", { ...resource, selinuxLabeling: true })).toBe(original);
+	expect(specification.get("jobs", { ...resource, selinuxLabeling: false })).not.toBe(original);
+});
+
 test.each([undefined, null])("unchanged workers skip unconfigured HTTP checks: %s", async (healthcheckUrl) => {
 	const f = fixture();
 	const request = { ...input, resource: { ...resource, healthcheckUrl } };

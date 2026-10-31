@@ -12,6 +12,8 @@ Grafana runs as UID 472. Its data mount declares `ownership: { uid: 472, gid: 0 
 
 Upgrade the control plane to a version supporting explicit volume ownership before deploying this descriptor. Ownership preparation changes only the mount root; existing descendant permissions and ownership are preserved. When restoring data, preserve Grafana's UID 472 ownership and writable permissions for its files and subdirectories.
 
+Telegraf sets `selinuxLabeling: false` so SELinux enforcing hosts permit its connection to Docker's daemon socket. This disables label confinement only for the collector container; other resources retain default labeling. Upgrade the control plane to support this descriptor field before deploying it. See [SELinux settings](../../docs/configuration.md#volumes-and-resource-limits).
+
 Grafana uses anonymous access with the `Admin` organization role behind private PaaS ingress. After platform authentication, users can manage dashboards and organization settings without a second login. Grafana's login form and basic authentication are disabled; no Grafana password secret file is required. Anonymous access does not impersonate the named `admin` account or grant Grafana server-administrator privileges. See [Grafana anonymous access](https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/anonymous-auth/).
 
 Grafana stores users, dashboards, settings, and installed plugins in `/var/lib/grafana`. Existing accounts and data are retained. An existing `GF_SECURITY_ADMIN_PASSWORD` entry in the service secret file is no longer injected and may be removed.

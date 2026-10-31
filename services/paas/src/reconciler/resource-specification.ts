@@ -22,6 +22,7 @@ export class ResourceSpecification implements IResourceSpecification {
 					resourceId,
 					{
 						image: resource.image,
+						...(resource.selinuxLabeling === false ? { selinuxLabeling: false } : {}),
 						...(resource.devices?.length
 							? {
 									devices: resource.devices.map(({ hostPath, mountPath, permissions }) => ({
@@ -69,6 +70,7 @@ export class ResourceSpecification implements IResourceSpecification {
 					{
 						type: "worker",
 						image: resource.image,
+						...(resource.selinuxLabeling === false ? { selinuxLabeling: false } : {}),
 						...(resource.devices?.length
 							? {
 									devices: resource.devices.map(({ hostPath, mountPath, permissions }) => ({

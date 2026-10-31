@@ -155,6 +155,18 @@ test("maps Docker mount metadata for host secret file discovery", async () => {
 	]);
 });
 
+test.each([undefined, true, false])(
+	"SELinux labeling %s only disables confinement on explicit opt-out",
+	async (selinuxLabeling) => {
+		const f = fixture(201, { Id: "c" });
+		await f.client.createContainer({ name: "app", image: "image", selinuxLabeling });
+		expect(f.calls.at(0)?.body).toHaveProperty(
+			"HostConfig.SecurityOpt",
+			selinuxLabeling === false ? ["label=disable"] : undefined,
+		);
+	},
+);
+
 test("maps devices with default and explicit permissions and numeric supplementary groups", async () => {
 	const f = fixture(201, { Id: "c" });
 	await f.client.createContainer({

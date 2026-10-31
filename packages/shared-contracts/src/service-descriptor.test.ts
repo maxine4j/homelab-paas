@@ -10,6 +10,27 @@ const descriptor = {
 
 const binding = { protocol: "tcp", containerPort: 8080, hostPort: 18080, bindAddress: "127.0.0.1" };
 
+test.each(["web", "worker"])("SELinux labeling is an explicit boolean for %s", (type) => {
+	const app = type === "web" ? descriptor.resources.app : { type, image: "jobs:1", healthcheckPort: 8080 };
+	for (const selinuxLabeling of [true, false])
+		expect(
+			parseDescriptor({ ...descriptor, resources: { app: { ...app, selinuxLabeling } } }, "test-service")
+				.resources["app"],
+		).toMatchObject({ selinuxLabeling });
+	expect(() =>
+		parseDescriptor({ ...descriptor, resources: { app: { ...app, selinuxLabeling: "false" } } }, "test-service"),
+	).toThrow();
+});
+
+test.each(["postgres", "rabbitmq"])("managed %s rejects SELinux overrides", (type) => {
+	expect(() =>
+		parseDescriptor(
+			{ ...descriptor, resources: { store: { type, image: "store:1", selinuxLabeling: false } } },
+			"test-service",
+		),
+	).toThrow();
+});
+
 test.each(["web", "worker"])("accepts simple device mappings and numeric supplementary groups for %s", (type) => {
 	const app = type === "web" ? descriptor.resources.app : { type, image: "jobs:1", healthcheckPort: 8080 };
 	const devices = [{ hostPath: "/dev/dri", mountPath: "/dev/dri" }];

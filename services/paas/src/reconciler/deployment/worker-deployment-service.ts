@@ -82,6 +82,7 @@ export class WorkerDeploymentService implements IWorkerDeploymentService {
 					volumes: resource.volumes,
 					devices: resource.devices,
 					supplementaryGroups: resource.supplementaryGroups,
+					selinuxLabeling: resource.selinuxLabeling,
 					hostPorts: resource.hostPorts,
 					limits: resource.limits,
 				});
