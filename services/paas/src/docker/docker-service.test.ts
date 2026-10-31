@@ -8,6 +8,43 @@ import type { DockerContainer, DockerContainerDetails, DockerNetwork } from "./t
 
 const ownership = { "homelab-paas.cluster": "local", "homelab-paas.service": "demo" };
 
+test("discovers and inspects only the unique running control-plane container in this cluster", async () => {
+	const labels = { "homelab-paas.cluster": "local", "homelab-paas.role": "control-plane" };
+	const f = fixture({
+		listContainers: async (query) => {
+			expect(query).toEqual({ all: false, labels });
+			return [{ ...container, labels }];
+		},
+		inspectContainer: async () => ({ ...details, running: true, labels }),
+	});
+	expect(await f.service.inspectControlPlaneContainer()).toMatchObject({ id: "c", labels });
+	for (const candidates of [
+		[],
+		[container],
+		[
+			{ ...container, labels },
+			{ ...container, id: "other", labels },
+		],
+	]) {
+		await expect(
+			fixture({ listContainers: async () => candidates }).service.inspectControlPlaneContainer(),
+		).rejects.toThrow(DockerServiceError);
+	}
+	for (const inspected of [
+		null,
+		details,
+		{ ...details, labels, running: false },
+		{ ...details, labels, running: true, id: "other" },
+	]) {
+		await expect(
+			fixture({
+				listContainers: async () => [{ ...container, labels }],
+				inspectContainer: async () => inspected,
+			}).service.inspectControlPlaneContainer(),
+		).rejects.toThrow(DockerServiceError);
+	}
+});
+
 test("prepares only writable opted-in mounts using the uniquely identified control-plane image before creating workloads", async () => {
 	const f = fixture({
 		async listContainers() {

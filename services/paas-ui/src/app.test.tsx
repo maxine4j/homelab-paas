@@ -3,6 +3,21 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { App, AppView, viewPaths } from "./app.tsx";
 
+test("Cluster navigation and logs remain usable when configuration is unavailable", () => {
+	const html = renderToStaticMarkup(
+		<AppView
+			route={{ page: "cluster", tab: "logs" }}
+			snapshot={{ error: "Config unavailable", refresh: () => {} }}
+			events={{ refresh: () => {} }}
+			logs={{ data: { containerId: "controller", content: "ready", tail: 200 } }}
+		/>,
+	);
+	expect(html).toContain('href="#/cluster" aria-current="page">Cluster</a>');
+	expect(html).toContain("Control-plane logs");
+	expect(html).toContain("ready");
+	expect(html).not.toContain("Cluster config");
+});
+
 test("all service tabs share the same complete header with actions beside identity and ingress below", () => {
 	const service = {
 		serviceId: "demo",
@@ -251,6 +266,6 @@ test("main navigation is in the page header with services and cluster links", ()
 	const html = renderToStaticMarkup(<App />);
 	expect(html).toMatch(/<header class="primary-header">.*<nav aria-label="Main navigation">/);
 	expect(html).toContain('href="#/services" aria-current="page">Services</a>');
-	expect(html).toContain('href="#/cluster">Cluster config</a>');
+	expect(html).toContain('href="#/cluster">Cluster</a>');
 	expect(html).not.toContain("<aside");
 });

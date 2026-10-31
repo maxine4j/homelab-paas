@@ -37,6 +37,8 @@ export interface IPaasUiService {
 }
 
 export interface IPaasUiLogService {
+	/** Safe replacement tails for the cluster's control plane. Throws PaasUiError on unavailable infrastructure. */
+	followControlPlaneLogs(receive: (logs: UiLogs) => void, signal: AbortSignal): Promise<void>;
 	followLogs(
 		serviceId: string,
 		resourceId: string,
@@ -71,6 +73,19 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 		private readonly health: IResourceHealthReader,
 		private readonly logs?: IDockerLogService,
 	) {}
+
+	async followControlPlaneLogs(receive: (logs: UiLogs) => void, signal: AbortSignal): Promise<void> {
+		try {
+			if (!this.logs) throw new PaasUiError("unavailable");
+			await this.logs.followControlPlane(
+				(containerId, content) => receive({ containerId, content, tail: 200 }),
+				signal,
+			);
+		} catch (cause) {
+			if (signal.aborted) return;
+			throw new PaasUiError("unavailable", { cause });
+		}
+	}
 
 	async followLogs(
 		serviceId: string,

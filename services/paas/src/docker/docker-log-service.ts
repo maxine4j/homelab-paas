@@ -4,9 +4,13 @@ import { DockerServiceError } from "./docker-service.ts";
 import type { DockerContainerDetails } from "./types.ts";
 
 export interface LogContainerInspector {
+	/** Requires one running control plane with matching cluster/role labels; throws DockerServiceError otherwise. */
+	inspectControlPlaneContainer(): Promise<DockerContainerDetails>;
 	inspectServiceContainer(serviceId: string, containerId: string): Promise<DockerContainerDetails | null>;
 }
 export interface IDockerLogService {
+	/** Discovers the owned control plane and streams redacted replacement tails; cancellation closes the stream. */
+	followControlPlane(receive: (containerId: string, content: string) => void, signal: AbortSignal): Promise<void>;
 	/** Receives safe replacement tails; cancellation closes the underlying stream. */
 	follow(
 		serviceId: string,
@@ -32,6 +36,23 @@ export class DockerLogService implements IDockerLogService {
 	): Promise<void> {
 		const container = await this.docker.inspectServiceContainer(serviceId, containerId);
 		if (!container) throw new DockerServiceError("not-found");
+		await this.followContainer(container, secrets, receive, signal);
+	}
+
+	async followControlPlane(
+		receive: (containerId: string, content: string) => void,
+		signal: AbortSignal,
+	): Promise<void> {
+		const container = await this.docker.inspectControlPlaneContainer();
+		await this.followContainer(container, [], (content) => receive(container.id, content), signal);
+	}
+
+	private async followContainer(
+		container: DockerContainerDetails,
+		secrets: string[],
+		receive: (content: string) => void,
+		signal: AbortSignal,
+	): Promise<void> {
 		if (signal.aborted) return;
 		const redactor = this.config.createLogRedactor([...Object.values(container.env ?? {}), ...secrets]);
 		let tail = "";
@@ -46,7 +67,7 @@ export class DockerLogService implements IDockerLogService {
 			receive(tail);
 		};
 		append("");
-		await this.client.follow(containerId, (text) => append(redactor.push(text)), signal);
+		await this.client.follow(container.id, (text) => append(redactor.push(text)), signal);
 		if (!signal.aborted) append(redactor.push("", true));
 	}
 }

@@ -56,9 +56,11 @@ export const App = () => {
 			: undefined;
 	const events = useApi<UiServiceEvent[]>(paths.events);
 	const logs = useApi<UiLogs>(
-		route.page === "resource" && route.tab === "logs" && containerId
-			? `${paths.snapshot}/containers/${encodeURIComponent(containerId)}/logs`
-			: undefined,
+		route.page === "cluster" && route.tab === "logs"
+			? "/cluster/logs"
+			: route.page === "resource" && route.tab === "logs" && containerId
+				? `${paths.snapshot}/containers/${encodeURIComponent(containerId)}/logs`
+				: undefined,
 	);
 	return (
 		<AppView
@@ -117,7 +119,7 @@ export const AppView = ({
 						Services
 					</a>
 					<a href='#/cluster' aria-current={route.page === "cluster" ? "page" : undefined}>
-						Cluster config
+						Cluster
 					</a>
 				</nav>
 			</header>
@@ -125,7 +127,7 @@ export const AppView = ({
 				<header className='topbar'>
 					<nav className='breadcrumbs' aria-label='Breadcrumb'>
 						{route.page === "cluster" ? (
-							<span aria-current='page'>Cluster config</span>
+							<span aria-current='page'>Cluster</span>
 						) : route.page === "missing" ? (
 							<span aria-current='page'>Page not found</span>
 						) : (
@@ -184,7 +186,15 @@ export const AppView = ({
 					)}
 				</header>
 				<main id='main-content'>
-					{route.page === "secrets" ? (
+					{route.page === "cluster" ? (
+						<ClusterPage
+							cluster={snapshot.data && "clusterId" in snapshot.data ? snapshot.data : undefined}
+							tab={route.tab}
+							logs={logs.data}
+							logError={logs.error}
+							error={snapshot.error}
+						/>
+					) : route.page === "secrets" ? (
 						<SecretsPage
 							key={route.serviceId}
 							serviceId={route.serviceId}
@@ -218,8 +228,6 @@ export const AppView = ({
 						<p role='status' className='empty'>
 							Loading cluster data…
 						</p>
-					) : route.page === "cluster" ? (
-						<ClusterPage cluster={snapshot.data as UiCluster} />
 					) : route.page === "services" ? (
 						<ServicesPage services={snapshot.data as UiServiceSummary[]} />
 					) : route.page === "service" ? (

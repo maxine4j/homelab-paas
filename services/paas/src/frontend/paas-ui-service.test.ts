@@ -63,6 +63,9 @@ const fixture = (health: HealthStatus = "Degraded") => {
 			receive("safe tail");
 		},
 	);
+	const followControlPlane = vi.fn(async (receive: (id: string, content: string) => void, _signal: AbortSignal) => {
+		receive("control", "safe control tail");
+	});
 	const listEvents = vi.fn(async (): Promise<UiServiceEvent[]> => [
 		{
 			timestamp: 100,
@@ -102,7 +105,7 @@ const fixture = (health: HealthStatus = "Degraded") => {
 		},
 		{ list: listEvents, append: async () => {} },
 		{ getStatus: (_serviceId, _resourceId, containers) => (containers.length ? health : "Missing") },
-		{ follow: followLogs },
+		{ follow: followLogs, followControlPlane },
 	);
 	return {
 		service,
@@ -114,8 +117,24 @@ const fixture = (health: HealthStatus = "Degraded") => {
 		readServiceContainerLogs,
 		listEvents,
 		followLogs,
+		followControlPlane,
 	};
 };
+
+test("control-plane logs delegate safe tails without requiring a workload descriptor and sanitize failures", async () => {
+	const f = fixture();
+	const receive = vi.fn();
+	const signal = new AbortController().signal;
+	await f.service.followControlPlaneLogs(receive, signal);
+	expect(receive).toHaveBeenCalledWith({ containerId: "control", content: "safe control tail", tail: 200 });
+	expect(f.followControlPlane).toHaveBeenCalledWith(expect.any(Function), signal);
+	expect(f.fetchFile).not.toHaveBeenCalled();
+	f.followControlPlane.mockRejectedValueOnce(new Error("private Docker error"));
+	await expect(f.service.followControlPlaneLogs(receive, signal)).rejects.toMatchObject({
+		kind: "unavailable",
+		message: "Cluster data is unavailable; retry shortly",
+	});
+});
 
 test.each(["Progressing", "Missing", "Healthy", "Degraded", "Unknown"] as const)(
 	"service and resource snapshots expose %s resource health independently of container state",

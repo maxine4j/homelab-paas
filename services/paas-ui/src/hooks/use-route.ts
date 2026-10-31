@@ -6,6 +6,8 @@ export const parseRoute = (hash: string): Route => {
 	const parts = hash.replace(/^#/, "").split("/").filter(Boolean);
 	if (parts.length === 0 || (parts.length === 1 && parts.at(0) === "services")) return { page: "services" };
 	if (parts.length === 1 && parts.at(0) === "cluster") return { page: "cluster" };
+	if (parts.length === 2 && parts.at(0) === "cluster" && parts.at(1) === "logs")
+		return { page: "cluster", tab: "logs" };
 	const serviceId = parts.at(1);
 	const resourceId = parts.at(3);
 	const id = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;

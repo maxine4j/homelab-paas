@@ -11,6 +11,20 @@ import { ServiceEventsPage } from "./service-events-page.tsx";
 import { ServicePage } from "./service-page.tsx";
 import { ServicesPage } from "./services-page.tsx";
 
+test("cluster has Config and control-plane Logs tabs with direct navigation", () => {
+	expect(parseRoute("#/cluster/logs")).toEqual({ page: "cluster", tab: "logs" });
+	expect(parseRoute("#/cluster/unknown")).toEqual({ page: "missing" });
+	const html = renderToStaticMarkup(
+		<ClusterPage tab='logs' logs={{ containerId: "control", content: "control-plane ready", tail: 200 }} />,
+	);
+	expect(html).toContain('href="#/cluster"');
+	expect(html).toContain('href="#/cluster/logs" aria-current="page"');
+	expect(html).toContain("control-plane ready");
+	expect(html).toContain("Copy recent logs");
+	expect(html).not.toContain("Save configuration");
+	expect(renderToStaticMarkup(<ClusterPage tab='logs' logError='Logs unavailable' />)).toContain("Logs unavailable");
+});
+
 test("Descriptor tab routes to selectable redacted YAML with an unavailable fallback", () => {
 	expect(parseRoute("#/services/demo/descriptor")).toEqual({ page: "service", serviceId: "demo", tab: "descriptor" });
 	const service = {
@@ -119,7 +133,7 @@ test("cluster and service pages expose configuration, deployment status and reso
 		renderToStaticMarkup(
 			<ClusterPage cluster={{ clusterId: "local", config: { version: 1 }, revision: "r1", fields: [] }} />,
 		),
-	).toContain("Cluster configuration");
+	).toContain("<h1>Cluster</h1>");
 	const services = renderToStaticMarkup(
 		<ServicesPage services={[{ serviceId: "demo", sync: "OutOfSync", health: "Degraded" }]} />,
 	);

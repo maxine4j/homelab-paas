@@ -115,7 +115,8 @@ button:disabled {
 .config-field textarea[readonly] {
 	opacity: 0.65;
 }
-.config-actions {
+.config-actions,
+.log-actions {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;

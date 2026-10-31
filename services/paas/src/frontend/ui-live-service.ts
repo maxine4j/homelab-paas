@@ -1,4 +1,4 @@
-import type { UiLiveData, UiLiveServerMessage, UiLiveTarget } from "@homelab-paas/shared-contracts";
+import type { UiLiveData, UiLiveServerMessage, UiLiveTarget, UiLogs } from "@homelab-paas/shared-contracts";
 
 import type { IChangeBus } from "../events/change-bus.ts";
 import { createLogger } from "../util/logger.ts";
@@ -37,23 +37,26 @@ export class UiLiveService implements IUiLiveService {
 			});
 		};
 		const follow = (): void => {
-			if (target.kind !== "logs") return;
+			if (target.kind !== "logs" && target.kind !== "cluster-logs") return;
 			logController?.abort();
 			const stream = new AbortController();
 			logController = stream;
-			void this.logs
-				.followLogs(
-					target.serviceId,
-					target.resourceId,
-					target.containerId,
-					(data) => {
-						if (!stream.signal.aborted) send(data);
-					},
-					stream.signal,
-				)
-				.catch((err) => {
-					if (!stream.signal.aborted) failed(err);
-				});
+			const receiveLogs = (data: UiLogs): void => {
+				if (!stream.signal.aborted) send(data);
+			};
+			const following =
+				target.kind === "cluster-logs"
+					? this.logs.followControlPlaneLogs(receiveLogs, stream.signal)
+					: this.logs.followLogs(
+							target.serviceId,
+							target.resourceId,
+							target.containerId,
+							receiveLogs,
+							stream.signal,
+						);
+			void following.catch((err) => {
+				if (!stream.signal.aborted) failed(err);
+			});
 		};
 		const refresh = async (): Promise<void> => {
 			if (controller.signal.aborted) return;
@@ -73,13 +76,14 @@ export class UiLiveService implements IUiLiveService {
 			reading = false;
 		};
 		const unsubscribe = this.changes.subscribe((change) => {
+			if (target.kind === "cluster-logs" && change.serviceId) return;
 			if (change.serviceId && "serviceId" in target && change.serviceId !== target.serviceId) return;
 			if (change.event && change.serviceId && target.kind === "events")
 				receive({ type: "event", serviceId: change.serviceId, event: change.event });
-			if (target.kind !== "logs") void refresh();
+			if (target.kind !== "logs" && target.kind !== "cluster-logs") void refresh();
 			else if (!change.serviceId || change.refreshLogs) follow();
 		});
-		if (target.kind === "logs") {
+		if (target.kind === "logs" || target.kind === "cluster-logs") {
 			follow();
 		} else void refresh();
 		return () => {
@@ -101,6 +105,7 @@ export class UiLiveService implements IUiLiveService {
 			case "resource":
 				return this.ui.getResource(target.serviceId, target.resourceId);
 			case "logs":
+			case "cluster-logs":
 				throw new Error("Log subscriptions require a stream");
 		}
 	}

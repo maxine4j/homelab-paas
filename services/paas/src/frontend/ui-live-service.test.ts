@@ -5,6 +5,43 @@ import { sleep } from "../util/sleep.ts";
 import type { IPaasUiService } from "./paas-ui-service.ts";
 import { UiLiveService } from "./ui-live-service.ts";
 
+test("cluster logs stream independently and restart only for cluster configuration changes", async () => {
+	const changes = new ChangeBus();
+	const streams: {
+		signal: AbortSignal;
+		receive: (logs: { containerId: string; content: string; tail: 200 }) => void;
+	}[] = [];
+	const live = new UiLiveService(
+		{} as IPaasUiService,
+		{
+			followLogs: async () => {},
+			followControlPlaneLogs: async (receive, signal) => {
+				streams.push({ receive, signal });
+				receive({ containerId: "control", content: "ready", tail: 200 });
+			},
+		},
+		changes,
+	);
+	const receive = vi.fn();
+	const stop = live.subscribe("control", { kind: "cluster-logs" }, receive);
+	expect(receive).toHaveBeenCalledWith({
+		type: "snapshot",
+		id: "control",
+		target: { kind: "cluster-logs" },
+		data: { containerId: "control", content: "ready", tail: 200 },
+	});
+	changes.publish({ serviceId: "demo", refreshLogs: true });
+	expect(streams).toHaveLength(1);
+	changes.publish({});
+	expect(streams).toHaveLength(2);
+	expect(streams[0]?.signal.aborted).toBe(true);
+	const count = receive.mock.calls.length;
+	streams[0]?.receive({ containerId: "control", content: "stale", tail: 200 });
+	expect(receive).toHaveBeenCalledTimes(count);
+	stop();
+	expect(streams[1]?.signal.aborted).toBe(true);
+});
+
 test("subscribes with initial snapshots, coalesces invalidations and cancels stale delivery", async () => {
 	const changes = new ChangeBus();
 	let finish: (value: never[]) => void = () => {};
@@ -15,7 +52,7 @@ test("subscribes with initial snapshots, coalesces invalidations and cancels sta
 			}),
 	);
 	const ui = { listServices } as unknown as IPaasUiService;
-	const live = new UiLiveService(ui, { followLogs: async () => {} }, changes);
+	const live = new UiLiveService(ui, { followLogs: async () => {}, followControlPlaneLogs: async () => {} }, changes);
 	const receive = vi.fn();
 	const stop = live.subscribe("1", { kind: "services" }, receive);
 	changes.publish({ serviceId: "demo" });
@@ -37,6 +74,7 @@ test("log cancellation aborts actual stream and failures never serialize raw cau
 	const live = new UiLiveService(
 		{} as IPaasUiService,
 		{
+			followControlPlaneLogs: async () => {},
 			followLogs: async (_service, _resource, _container, receive, passed) => {
 				signal = passed;
 				receive({ containerId: "c", content: "safe", tail: 200 });
@@ -66,6 +104,7 @@ test("config/source changes replace log streams while health invalidations prese
 	const live = new UiLiveService(
 		{} as IPaasUiService,
 		{
+			followControlPlaneLogs: async () => {},
 			followLogs: async (_service, _resource, _container, receive, signal) => {
 				streams.push({ signal, receive });
 			},

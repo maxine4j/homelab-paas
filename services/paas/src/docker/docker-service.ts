@@ -97,6 +97,27 @@ export class DockerService implements IDockerService {
 		return container;
 	}
 
+	async inspectControlPlaneContainer(): Promise<DockerContainerDetails> {
+		const labels = { "homelab-paas.cluster": this.config.getClusterId(), "homelab-paas.role": "control-plane" };
+		const candidates = await this.client.listContainers({ all: false, labels });
+		const candidate = candidates.at(0);
+		if (
+			candidates.length !== 1
+			|| !candidate
+			|| Object.entries(labels).some(([key, value]) => candidate.labels[key] !== value)
+		)
+			throw new DockerServiceError("infrastructure");
+		const container = await this.client.inspectContainer(candidate.id);
+		if (
+			!container
+			|| container.id !== candidate.id
+			|| !container.running
+			|| Object.entries(labels).some(([key, value]) => container.labels[key] !== value)
+		)
+			throw new DockerServiceError("infrastructure");
+		return container;
+	}
+
 	async inspectServiceNetwork(serviceId: string): Promise<DockerNetwork | null> {
 		const network = await this.client.inspectNetwork(this.networkName(serviceId));
 		if (network) this.assertOwnership(serviceId, network.labels);

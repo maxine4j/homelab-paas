@@ -2,6 +2,27 @@ import { expect, test } from "vitest";
 
 import { uiLiveClientSchema, uiLiveServerSchema, uiLiveTargetFromPath } from "./ui-live.ts";
 
+test("cluster logs use a fixed target and bounded log snapshots", () => {
+	expect(uiLiveTargetFromPath("/cluster/logs")).toEqual({ kind: "cluster-logs" });
+	const message = {
+		type: "snapshot",
+		id: "1",
+		target: { kind: "cluster-logs" },
+		data: { containerId: "control", content: "ready", tail: 200 },
+	};
+	expect(uiLiveServerSchema.safeParse(message).success).toBe(true);
+	expect(
+		uiLiveServerSchema.safeParse({ ...message, data: { ...message.data, content: "x".repeat(131073) } }).success,
+	).toBe(false);
+	expect(
+		uiLiveClientSchema.safeParse({
+			type: "subscribe",
+			id: "1",
+			target: { kind: "cluster-logs", containerId: "arbitrary" },
+		}).success,
+	).toBe(false);
+});
+
 test("resource snapshots require independent Argo sync and health states", () => {
 	const snapshot = (health: unknown) => ({
 		type: "snapshot",

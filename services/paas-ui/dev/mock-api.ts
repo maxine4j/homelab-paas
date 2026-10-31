@@ -235,6 +235,13 @@ export const mockApi = (): Plugin => ({
 			const path = request.url?.split("?").at(0);
 			let data: unknown;
 			if (path === "/cluster") data = cluster;
+			if (path === "/cluster/logs")
+				data = {
+					containerId: "preview-control-plane",
+					tail: 200,
+					content:
+						"2026-10-31T00:00:00Z Control plane ready; background reconciliation enabled\n2026-10-31T00:00:05Z Reconciliation completed\n",
+				};
 			if (path === "/services") data = [service, { serviceId: "jellyfin", sync: "Unknown", health: "Unknown" }];
 			if (path === "/services/paperless") data = service;
 			if (path === "/services/jellyfin")
