@@ -43,7 +43,6 @@ resources:
         image: ghcr.io/maxine4j/homelab-paas/metrics-telegraf:${COMMIT_ID:40}
         rolloutStrategy: recreate
         healthcheckPort: 8080
-        healthcheckUrl: /
         limits:
             cpus: 0.1
             memoryMiB: 128
