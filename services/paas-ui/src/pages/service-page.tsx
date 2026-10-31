@@ -60,10 +60,10 @@ export const ServicePage = ({
 								href={`#/services/${service.serviceId}/resources/${resource.resourceId}`}
 							>
 								<div className='card-top'>
-									<span className='eyebrow'>{resource.type}</span>
+									<h3 title={resource.resourceId}>{resource.resourceId}</h3>
 									<StatusBadges health={resource.health} sync={resource.sync} />
 								</div>
-								<h3>{resource.resourceId}</h3>
+								<span className='eyebrow'>{resource.type}</span>
 							</a>
 						))}
 					</div>

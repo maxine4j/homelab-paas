@@ -496,6 +496,9 @@ test("service overview shows tabs and two recent events above compact resources 
 	expect(html).not.toContain("Oldest event");
 	expect(html).not.toContain("Inspect resource");
 	expect(html).toMatch(
+		/resource-link[^]*href="#\/services\/demo\/resources\/app"><div class="card-top"><h3 title="app">app<\/h3>[^]*badge-missing[^]*badge-outofsync[^]*<\/div><span class="eyebrow">web<\/span>/,
+	);
+	expect(html).toMatch(
 		/service-identity-block"><div class="service-identity"><h1>demo<\/h1>[^]*badge-healthy[^]*<\/div><\/div><a class="primary-web-link"/,
 	);
 	expect(html).toContain('href="https://demo.example.test" target="_blank" rel="noreferrer"');

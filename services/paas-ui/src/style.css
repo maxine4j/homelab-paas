@@ -396,7 +396,7 @@ p {
 	gap: 20px;
 }
 .resource-grid {
-	grid-template-columns: repeat(auto-fill, minmax(min(100%, 285px), 1fr));
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
 }
 .service-resource-list {
 	display: grid;
@@ -492,6 +492,22 @@ p {
 .resource-link:hover {
 	border-color: #748cb1;
 	background: #1a2230;
+}
+.resource-link .card-top {
+	flex-wrap: nowrap;
+}
+.resource-link .card-top h3 {
+	margin: 0;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.resource-link .status-badges {
+	flex-shrink: 0;
+}
+.resource-link > .eyebrow {
+	margin: 18px 0 0;
 }
 .card-top {
 	display: flex;

@@ -8,6 +8,8 @@ Without auth/TLS, the base hostname serves HTTP without authentication for trust
 
 Service detail begins with the service identity, without a separate “Service” label or “← Services” link. Navigation remains in the topbar breadcrumbs; Refresh and Redeploy belong to the shared service heading below.
 
+Overview resource cards place the resource ID at the left and health/sync badges at the right of the first row, with the resource type below. Long IDs truncate with their complete value available on hover, prioritising a shared first row with both badges. The grid uses a 360px minimum card width, reducing columns sooner as the viewport narrows; a single card retains one column's width on wide screens.
+
 Service detail has Overview, Resources, Events and [Secrets](#service-secrets) tabs; resource inspection has Overview, Logs and Events tabs. Event history uses the same identity heading and tab navigation as its parent detail view, with Events selected and no separate back link. History subscribes independently of inspection snapshots: identity and all tabs remain visible while events load, when history is empty or unavailable, and when Git or Docker inspection is unavailable. Service Events uses `#/services/:serviceId/events`; resource Events uses `#/services/:serviceId/resources/:resourceId/events`.
 
 Every event card, including recent-event previews, has a bottom-right “Copy JSON” action. It copies the complete already-redacted event object as formatted JSON, preserving diagnostics and event metadata. Clipboard success and failure have explicit feedback; failed copies can be retried.
