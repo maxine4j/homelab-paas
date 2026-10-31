@@ -1207,6 +1207,7 @@ footer {
 }
 .secrets-editor {
 	max-width: 960px;
+	background: #10151d;
 }
 .secret-row {
 	display: grid;

@@ -51,3 +51,9 @@ test("secrets page omits implementation prose and bulk controls", () => {
 	for (const text of ["Saved to", "/etc/", "drafts", "Reload", "Save secrets", "single-line"])
 		expect(html).not.toContain(text);
 });
+
+test("secrets heading appears outside the form card like other service tab headings", () => {
+	const html = renderToStaticMarkup(<SecretsPage serviceId='demo' />);
+	expect(html).toContain('<h2>Service secrets</h2><section class="card secrets-editor"');
+	expect(html).not.toMatch(/<section class="card secrets-editor"[^>]*><h2>/);
+});

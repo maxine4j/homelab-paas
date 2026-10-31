@@ -79,8 +79,8 @@ export const SecretsPage = ({
 	};
 	return (
 		<ServiceDetailShell serviceId={serviceId} service={service} tab='secrets' actions={actions}>
+			<h2>Service secrets</h2>
 			<section className='card secrets-editor'>
-				<h2>Service secrets</h2>
 				{error && <p role='alert'>{error}</p>}
 				{snapshot ? (
 					<SecretsForm snapshot={snapshot} disabled={busy || preview} onSet={save} />
