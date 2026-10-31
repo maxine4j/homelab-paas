@@ -122,6 +122,13 @@ test("secret saves send only selected write-only edits and provide safe conflict
 		[401, "session"],
 		[503, "Cannot save secrets"],
 	] as const) {
+		const failure = saveSecrets(
+			"demo",
+			update,
+			new AbortController().signal,
+			async () => new Response("private-secret", { status }),
+		);
+		await expect(failure).rejects.not.toThrow(/drafts|Reload|reload/);
 		await expect(
 			saveSecrets(
 				"demo",

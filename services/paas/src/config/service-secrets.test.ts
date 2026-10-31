@@ -52,10 +52,27 @@ test("returns declared names/status first and saved extras last without secret v
 	expect(JSON.stringify(result)).not.toContain("private-");
 	const next = await f.service.update("demo", {
 		revision: result.revision,
-		changes: [{ name: "MISSING", value: "" }],
+		changes: [{ name: "MISSING", value: "new-value" }],
 	});
 	expect(next.variables.at(0)).toEqual({ name: "MISSING", configured: true, used: true });
 	expect(JSON.stringify(next)).not.toContain("private-");
+});
+
+test("clearing a declared secret marks it missing and clearing an unused secret removes its row", async () => {
+	const f = fixture();
+	const current = await f.service.read("demo");
+	const next = await f.service.update("demo", {
+		revision: current.revision,
+		changes: [
+			{ name: "TOKEN", value: "" },
+			{ name: "EXTRA", value: "" },
+		],
+	});
+	expect(next.variables).toEqual([
+		{ name: "MISSING", configured: false, used: true },
+		{ name: "TOKEN", configured: false, used: true },
+	]);
+	expect(f.write).toHaveBeenCalledWith("/env/demo.env", "", { mode: 0o600 });
 });
 
 test("rejects invalid/unconfigured identities before accessing secrets or Git", async () => {

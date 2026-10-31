@@ -12,7 +12,7 @@ const fixture = (initial: string | undefined = "OTHER='retained'\nTOKEN=old\n") 
 	return { store: new SecretStore("/env", read, write), write, read, content: () => content };
 };
 
-test("merges edits atomically while retaining other values and valid empty values", async () => {
+test("merges edits atomically and removes empty submissions while retaining other values", async () => {
 	const f = fixture();
 	const current = await f.store.read("demo");
 	const next = await f.store.update("demo", current.revision, [
@@ -24,10 +24,24 @@ test("merges edits atomically while retaining other values and valid empty value
 		new Map([
 			["OTHER", "retained"],
 			["TOKEN", "new# $\\value"],
-			["EMPTY", ""],
 		]),
 	);
 	expect(f.write).toHaveBeenCalledWith("/env/demo.env", expect.any(String), { mode: 0o600 });
+});
+
+test("deletes existing declared and unused entries without changing unrelated empty assignments", async () => {
+	const f = fixture("TOKEN=old\nEXTRA=unused\nEMPTY=\nOTHER=retained\n");
+	const current = await f.store.read("demo");
+	await f.store.update("demo", current.revision, [
+		{ name: "TOKEN", value: "" },
+		{ name: "EXTRA", value: "" },
+	]);
+	expect(parseSecretEnv(f.content()!)).toEqual(
+		new Map([
+			["EMPTY", ""],
+			["OTHER", "retained"],
+		]),
+	);
 });
 
 test("serializes competing writers and rejects stale revisions", async () => {

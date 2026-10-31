@@ -95,7 +95,7 @@ test("authenticated secret editing persists private files, retains values, resol
 		const initial = await initialResponse.json();
 		const changes = [
 			{ name: "TOKEN", value: " private#$\\token " },
-			{ name: "EMPTY", value: "" },
+			{ name: "EMPTY", value: "initial" },
 			{ name: "FUTURE", value: "next-deployment" },
 		];
 		const saved = await fetch(url, {
@@ -123,7 +123,7 @@ test("authenticated secret editing persists private files, retains values, resol
 			]),
 		).toEqual([
 			{ name: "TOKEN", value: " private#$\\token " },
-			{ name: "EMPTY", value: "" },
+			{ name: "EMPTY", value: "initial" },
 		]);
 		const stale = await fetch(url, {
 			method: "PUT",
@@ -138,6 +138,27 @@ test("authenticated secret editing persists private files, retains values, resol
 		});
 		expect(merged.status).toBe(200);
 		expect(await readFile(join(envDirectory, "demo.env"))).toContain("FUTURE='next-deployment'");
+		const mergedMetadata = await merged.json();
+		const removed = await fetch(url, {
+			method: "PUT",
+			headers,
+			body: JSON.stringify({
+				revision: mergedMetadata.revision,
+				changes: [
+					{ name: "EMPTY", value: "" },
+					{ name: "FUTURE", value: "" },
+				],
+			}),
+		});
+		expect(removed.status).toBe(200);
+		expect((await removed.json()).variables).toEqual([
+			{ name: "EMPTY", configured: false, used: true },
+			{ name: "TOKEN", configured: true, used: true },
+		]);
+		expect(await readFile(join(envDirectory, "demo.env"))).not.toMatch(/EMPTY=|FUTURE=/);
+		await expect(resolver.resolve("demo", [{ name: "EMPTY", secret: true }])).rejects.toMatchObject({
+			details: { missingVariables: ["EMPTY"] },
+		});
 		await expect(
 			new EnvironmentResolver(envDirectory, readFile).resolve("demo", [
 				{ name: "A", secret: true },

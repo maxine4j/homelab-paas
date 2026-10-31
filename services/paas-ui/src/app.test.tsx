@@ -97,7 +97,7 @@ test("Secrets loads independently of unavailable Git/Docker snapshots and retain
 		/>,
 	);
 	expect(html).toContain("Service secrets");
-	expect(html).toContain("/etc/homelab-paas/env/demo.env");
+	expect(html).not.toContain("/etc/homelab-paas/env/demo.env");
 	expect(html).toContain('href="#/services/demo/secrets" aria-current="page"');
 	expect(html).not.toContain("Docker unavailable");
 });

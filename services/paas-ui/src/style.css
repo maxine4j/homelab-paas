@@ -555,6 +555,7 @@ p {
 	border-color: #48505c;
 }
 .badge-missing,
+.badge-warning,
 .badge-outofsync {
 	color: #f4c030;
 	background: #382f18;
@@ -1214,8 +1215,10 @@ footer {
 }
 .secret-row {
 	display: grid;
-	gap: 12px;
-	padding: 20px 0;
+	grid-template-columns: minmax(200px, 1fr) minmax(0, 1fr);
+	align-items: center;
+	gap: 8px;
+	padding: 12px 0;
 	border-bottom: 1px solid #282e38;
 }
 .secret-row-heading {
@@ -1224,17 +1227,14 @@ footer {
 	gap: 12px;
 	flex-wrap: wrap;
 }
-.secret-edit-toggle {
+.secret-value-controls {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	font-size: 0.85rem;
 }
-.secret-edit-toggle input {
-	width: auto;
-}
-.secret-row > input {
-	width: 100%;
+.secret-value-controls input {
+	flex: 1;
+	min-width: 0;
 }
 .secret-add {
 	display: flex;
@@ -1247,9 +1247,17 @@ footer {
 	display: grid;
 	gap: 8px;
 }
-.secrets-editor .form-actions {
-	display: flex;
-	gap: 12px;
-	flex-wrap: wrap;
-	margin-top: 24px;
+.new-secret {
+	margin-top: 16px;
+}
+.secret-error {
+	grid-column: 1 / -1;
+	margin: 0;
+	color: #fca5a5;
+	font-size: 0.85rem;
+}
+@media (max-width: 700px) {
+	.secret-row {
+		grid-template-columns: minmax(0, 1fr);
+	}
 }

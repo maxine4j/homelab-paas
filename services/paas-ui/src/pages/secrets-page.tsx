@@ -6,6 +6,35 @@ import { fetchUi, saveSecrets } from "../api.ts";
 import { SecretsForm } from "../components/secrets-form.tsx";
 import { ServiceDetailShell } from "../components/service-detail-shell.tsx";
 
+export const setSecret = async (
+	serviceId: string,
+	revision: string,
+	name: string,
+	value: string,
+	signal: AbortSignal,
+	request: typeof fetch,
+	updateSnapshot: (snapshot: UiSecrets) => void,
+): Promise<void> => {
+	try {
+		const saved = await saveSecrets(serviceId, { revision, changes: [{ name, value }] }, signal, request);
+		if (!signal.aborted) updateSnapshot(saved);
+	} catch (failure) {
+		if (!signal.aborted) {
+			try {
+				const latest = await fetchUi<UiSecrets>(
+					"/services/" + encodeURIComponent(serviceId) + "/secrets",
+					signal,
+					request,
+				);
+				if (!signal.aborted) updateSnapshot(latest);
+			} catch {
+				/* Preserve the original write failure if metadata is also unavailable. */
+			}
+		}
+		throw failure;
+	}
+};
+
 export const SecretsPage = ({
 	serviceId,
 	service,
@@ -17,78 +46,34 @@ export const SecretsPage = ({
 }) => {
 	const preview = import.meta.env.MODE === "mock";
 	const [snapshot, setSnapshot] = useState<UiSecrets>();
-	const [drafts, setDrafts] = useState<Record<string, string>>({});
-	const [busy, setBusy] = useState(true);
+	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState("");
-	const [message, setMessage] = useState("");
 	const controller = useRef<AbortController>(undefined);
-	const read = async (abort: AbortController) => {
-		try {
-			const latest = await fetchUi<UiSecrets>(`/services/${encodeURIComponent(serviceId)}/secrets`, abort.signal);
-			if (!abort.signal.aborted) setSnapshot(latest);
-		} catch (failure) {
-			if (!abort.signal.aborted)
-				setError(
-					failure instanceof Error
-						? failure.message
-						: "Cannot load secrets. Check service descriptor and env file access, then reload status. Drafts are retained.",
-				);
-		} finally {
-			if (!abort.signal.aborted) setBusy(false);
-		}
-	};
-	const load = async () => {
-		controller.current?.abort();
-		const abort = new AbortController();
-		controller.current = abort;
-		setBusy(true);
-		setError("");
-		setMessage("");
-		await read(abort);
-	};
+	const pending = useRef(false);
 	useEffect(() => {
 		const abort = new AbortController();
 		controller.current = abort;
-		void fetchUi<UiSecrets>(`/services/${encodeURIComponent(serviceId)}/secrets`, abort.signal)
-			.then((latest) => {
+		void fetchUi<UiSecrets>("/services/" + encodeURIComponent(serviceId) + "/secrets", abort.signal).then(
+			(latest) => {
 				if (!abort.signal.aborted) setSnapshot(latest);
-			})
-			.catch((failure: unknown) => {
-				if (!abort.signal.aborted)
-					setError(failure instanceof Error ? failure.message : "Cannot load secrets; retry shortly.");
-			})
-			.finally(() => {
-				if (!abort.signal.aborted) setBusy(false);
-			});
+			},
+			() => {
+				if (!abort.signal.aborted) setError("Unable to load secrets.");
+			},
+		);
 		return () => controller.current?.abort();
 	}, [serviceId]);
-	const save = async () => {
-		if (!snapshot || preview) return;
+	const save = async (name: string, value: string): Promise<void> => {
+		if (!snapshot || preview || pending.current) throw new Error("Unable to set secret. Try again.");
 		const abort = new AbortController();
 		controller.current?.abort();
 		controller.current = abort;
+		pending.current = true;
 		setBusy(true);
-		setError("");
-		setMessage("");
 		try {
-			const saved = await saveSecrets(
-				serviceId,
-				{
-					revision: snapshot.revision,
-					changes: Object.entries(drafts).map(([name, value]) => ({ name, value })),
-				},
-				abort.signal,
-			);
-			if (abort.signal.aborted) return;
-			setSnapshot(saved);
-			setDrafts({});
-			setMessage(
-				"Secrets saved. Regular reconciliation will apply changes; scheduled retry backoff still applies.",
-			);
-		} catch (failure) {
-			if (!abort.signal.aborted)
-				setError(failure instanceof Error ? failure.message : "Cannot save secrets. Drafts are retained.");
+			await setSecret(serviceId, snapshot.revision, name, value, abort.signal, fetch, setSnapshot);
 		} finally {
+			pending.current = false;
 			if (!abort.signal.aborted) setBusy(false);
 		}
 	};
@@ -96,56 +81,11 @@ export const SecretsPage = ({
 		<ServiceDetailShell serviceId={serviceId} service={service} tab='secrets' actions={actions}>
 			<section className='card secrets-editor'>
 				<h2>Service secrets</h2>
-				<p>
-					Saved to <code>/etc/homelab-paas/env/{serviceId}.env</code>. Changes apply through regular
-					reconciliation and its retry schedule.
-				</p>
-				<p className='muted'>
-					Use single-line values. Newlines, NUL and values containing both single and double quotes cannot be
-					stored in this dotenv format.
-				</p>
-				{preview && <p className='notice'>Mock preview is read-only.</p>}
-				{error && (
-					<p className='notice' role='alert'>
-						{error}
-					</p>
-				)}
-				{message && <p role='status'>{message}</p>}
+				{error && <p role='alert'>{error}</p>}
 				{snapshot ? (
-					<form
-						onSubmit={(event) => {
-							event.preventDefault();
-							void save();
-						}}
-					>
-						<SecretsForm
-							snapshot={snapshot}
-							drafts={drafts}
-							disabled={busy || preview}
-							onDraft={(name, value) =>
-								setDrafts((current) =>
-									value === undefined
-										? Object.fromEntries(Object.entries(current).filter(([key]) => key !== name))
-										: { ...current, [name]: value },
-								)
-							}
-						/>
-						<div className='form-actions'>
-							<button disabled={busy || preview || !Object.keys(drafts).length} type='submit'>
-								{busy ? "Saving…" : "Save secrets"}
-							</button>
-							<button type='button' disabled={busy} onClick={() => void load()}>
-								Reload status (keep drafts)
-							</button>
-						</div>
-					</form>
+					<SecretsForm snapshot={snapshot} disabled={busy || preview} onSet={save} />
 				) : (
-					<>
-						<p role='status'>{busy ? "Loading secrets…" : "Secret status unavailable."}</p>
-						<button type='button' disabled={busy} onClick={() => void load()}>
-							Reload status
-						</button>
-					</>
+					!error && <p role='status'>Loading secrets…</p>
 				)}
 			</section>
 		</ServiceDetailShell>

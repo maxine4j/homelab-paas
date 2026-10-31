@@ -25,10 +25,10 @@ export async function saveSecrets(
 			response.status === 401
 				? "A platform session is required. Sign in again."
 				: response.status === 409
-					? "Secrets changed. Reload status and reapply your edits; drafts are retained."
+					? "Secrets changed. Try again."
 					: response.status === 400 || response.status === 413
-						? "Invalid secrets. Use valid variable names and single-line values without NUL or both quote characters. Keep the request below 64 KiB."
-						: "Cannot save secrets. Check service env file access and retry. The request may have completed; reload status to check.",
+						? "Invalid secret name or single-line value."
+						: "Cannot save secrets. Try again.",
 		);
 	return response.json();
 }

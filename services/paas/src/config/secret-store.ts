@@ -7,7 +7,7 @@ import type { SecretDocument } from "./types.ts";
 export interface ISecretStore {
 	/** Reads validated values; public messages are safe. Infrastructure causes are for operator logs only. */
 	read(serviceId: string): Promise<SecretDocument>;
-	/** Serializes compare-and-merge writes; throws SecretEditError for invalid/conflicting/unavailable state. */
+	/** Serializes compare-and-merge writes; empty edits delete entries. Throws SecretEditError for invalid/conflicting/unavailable state. */
 	update(serviceId: string, revision: string, changes: { name: string; value: string }[]): Promise<SecretDocument>;
 }
 
@@ -20,7 +20,7 @@ export class SecretEditError extends Error {
 			kind === "invalid"
 				? "Invalid secrets: use valid variable names and single-line values without NUL or both quote characters"
 				: kind === "conflict"
-					? "Secrets changed; reload status and reapply your edits"
+					? "Secrets changed. Try again."
 					: kind === "not-found"
 						? "Service is not configured"
 						: "Secrets are unavailable; check service env file access and syntax",
@@ -73,7 +73,10 @@ export class SecretStore implements ISecretStore {
 				}
 				const current = await this.read(serviceId);
 				if (current.revision !== revision) throw new SecretEditError("conflict");
-				for (const change of changes) current.values.set(change.name, change.value);
+				for (const change of changes) {
+					if (change.value === "") current.values.delete(change.name);
+					else current.values.set(change.name, change.value);
+				}
 				try {
 					const content = serializeSecretEnv(current.values);
 					if (Buffer.byteLength(content) > 64 * 1024) throw new SecretEditError("invalid");
