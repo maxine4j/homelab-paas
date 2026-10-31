@@ -89,3 +89,15 @@ test("persists bounded redacted diagnostic text alongside legacy events", async 
 		"Cannot append service event",
 	);
 });
+test("retains every missing variable when the combined service has more than 1024 secrets", async () => {
+	const store = new ServiceEventStore(new InMemoryKeyValueStore<unknown>());
+	const missingVariables = Array.from({ length: 1025 }, (_, index) => `TOKEN_${index}`);
+	await store.append("demo", {
+		timestamp: 0,
+		level: "error",
+		event: "reconciliation.failed",
+		message: "Open Secrets",
+		secretFailure: { reason: "missing-variables", filePath: "/env/demo.env", missingVariables },
+	});
+	expect((await store.list("demo")).at(0)?.secretFailure?.missingVariables).toEqual(missingVariables);
+});

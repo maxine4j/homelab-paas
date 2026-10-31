@@ -1,4 +1,37 @@
-import type { UiConfigUpdate, UiEditableConfig, UiGitRefresh } from "@homelab-paas/shared-contracts";
+import type {
+	UiConfigUpdate,
+	UiEditableConfig,
+	UiGitRefresh,
+	UiSecrets,
+	UiSecretsUpdate,
+} from "@homelab-paas/shared-contracts";
+
+export async function saveSecrets(
+	serviceId: string,
+	update: UiSecretsUpdate,
+	signal: AbortSignal,
+	request: typeof fetch = fetch,
+): Promise<UiSecrets> {
+	const response = await request(`/api/ui/services/${encodeURIComponent(serviceId)}/secrets`, {
+		method: "PUT",
+		cache: "no-store",
+		credentials: "same-origin",
+		headers: { "content-type": "application/json", "x-paas-secrets": "1" },
+		body: JSON.stringify(update),
+		signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
+	});
+	if (!response.ok)
+		throw new Error(
+			response.status === 401
+				? "A platform session is required. Sign in again."
+				: response.status === 409
+					? "Secrets changed. Reload status and reapply your edits; drafts are retained."
+					: response.status === 400 || response.status === 413
+						? "Invalid secrets. Use valid variable names and single-line values without NUL or both quote characters. Keep the request below 64 KiB."
+						: "Cannot save secrets. Check service env file access and retry. The request may have completed; reload status to check.",
+		);
+	return response.json();
+}
 
 /** Cancellation stops waiting; an accepted rollout may still finish on the server. */
 export const redeployService = async (

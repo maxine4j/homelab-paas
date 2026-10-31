@@ -14,7 +14,7 @@ export const ServiceDetailShell = ({
 }: {
 	serviceId: string;
 	service?: UiService;
-	tab: "overview" | "resources" | "events";
+	tab: "overview" | "resources" | "events" | "secrets";
 	children: ReactNode;
 }) => {
 	const primaryUrl = service?.resources.find(

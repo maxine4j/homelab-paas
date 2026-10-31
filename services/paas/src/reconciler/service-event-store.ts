@@ -84,10 +84,7 @@ const eventSchema = z.strictObject({
 				.max(4096)
 				.regex(/^[^\0\r\n]+$/)
 				.optional(),
-			missingVariables: z
-				.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/))
-				.max(1024)
-				.optional(),
+			missingVariables: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/)).optional(),
 			line: z.number().int().positive().optional(),
 		})
 		.optional(),

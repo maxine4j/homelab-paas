@@ -20,6 +20,10 @@ export const ResourceEventsPage = ({
 			Matching events from the latest 200 service events, newest first. Retry times reflect the schedule at the
 			time of each event.
 		</p>
-		<ServiceEvents events={events?.filter((event) => event.resourceId === resourceId)} error={error} />
+		<ServiceEvents
+			serviceId={serviceId}
+			events={events?.filter((event) => event.resourceId === resourceId)}
+			error={error}
+		/>
 	</ResourceDetailShell>
 );

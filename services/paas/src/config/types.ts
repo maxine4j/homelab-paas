@@ -21,3 +21,7 @@ export interface PlatformConfig {
 	reconciliation: { retryBackoffSeconds: number; maxRetryBackoffSeconds: number };
 	services: Record<string, GitFileSource>;
 }
+export interface SecretDocument {
+	revision: string;
+	values: Map<string, string>;
+}

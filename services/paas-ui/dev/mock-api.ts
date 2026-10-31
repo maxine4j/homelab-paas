@@ -227,6 +227,16 @@ export const mockApi = (): Plugin => ({
 				};
 			if (path === "/services/paperless/events") data = events;
 			if (path === "/services/jellyfin/events") data = [];
+			if (path === "/services/paperless/secrets")
+				data = {
+					revision: "mock",
+					variables: [
+						{ name: "PAPERLESS_SECRET_KEY", configured: true, used: true },
+						{ name: "PAPERLESS_EMAIL_PASSWORD", configured: false, used: true },
+						{ name: "FUTURE_API_TOKEN", configured: true, used: false },
+					],
+				};
+			if (path === "/services/jellyfin/secrets") data = { revision: "mock", variables: [] };
 			for (const resource of resources) {
 				if (path === `/services/paperless/resources/${resource.resourceId}`) data = resource;
 				for (const container of resource.containers)

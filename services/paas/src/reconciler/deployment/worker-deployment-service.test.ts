@@ -275,10 +275,12 @@ test("a running desired worker detached from its network is replaced", async () 
 test("logs worker deployment outcomes without resolved environment values", async () => {
 	const f = fixture();
 	const logs = captureLogs();
+	const resolvedValue = "worker-environment-canary";
+	const input = { ...request, resource: { ...request.resource, env: [{ name: "TOKEN", value: resolvedValue }] } };
 	try {
-		await f.service.deploy(request);
+		await f.service.deploy(input);
 		vi.mocked(f.docker.resolveImage).mockRejectedValueOnce(new Error("registry failure"));
-		await expect(f.service.deploy({ ...request, spec: "changed" })).rejects.toThrow("registry failure");
+		await expect(f.service.deploy({ ...input, spec: "changed" })).rejects.toThrow("registry failure");
 	} finally {
 		logs.restore();
 	}
@@ -288,7 +290,7 @@ test("logs worker deployment outcomes without resolved environment values", asyn
 		"deployment.started",
 		"deployment.failed",
 	]);
-	expect(logs.lines.join("")).not.toContain("secret");
+	expect(logs.lines.join("")).not.toContain(resolvedValue);
 });
 
 test.each(["recreate", "surge"] as const)(

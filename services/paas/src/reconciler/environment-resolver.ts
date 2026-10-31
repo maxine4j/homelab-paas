@@ -1,5 +1,6 @@
 import type { EnvironmentVariable, UiSecretFailure } from "@homelab-paas/shared-contracts";
 
+import { parseSecretEnv, SecretFileSyntaxError } from "../config/secret-env.ts";
 import type { IHostPathResolver } from "../docker/docker-host-path-resolver.ts";
 import type { FileReader } from "../util/file.ts";
 import { createLogger } from "../util/logger.ts";
@@ -16,15 +17,9 @@ export class EnvironmentResolutionError extends Error {
 		options?: ErrorOptions,
 	) {
 		super(
-			`Cannot resolve application secrets; check the service env file and required variable names. ${details.reason}: ${details.hostFilePath ?? details.filePath}${details.line ? `, line ${details.line}` : ""}${details.missingVariables?.length ? `; missing variables: ${details.missingVariables.join(", ")}` : ""}`,
+			`Cannot resolve application secrets; check the service env file and required variable names. Open the service Secrets tab in the web GUI${details.missingVariables?.length ? ` and set: ${details.missingVariables.join(", ")}` : " to configure secrets"}. ${details.reason}: ${details.hostFilePath ?? details.filePath}${details.line ? `, line ${details.line}` : ""}${details.missingVariables?.length ? `; missing variables: ${details.missingVariables.join(", ")}` : ""}`,
 			options,
 		);
-	}
-}
-
-class SecretFileSyntaxError extends Error {
-	constructor(readonly line: number) {
-		super(`Invalid secret assignment at line ${line}`);
 	}
 }
 
@@ -53,7 +48,7 @@ export class EnvironmentResolver implements IEnvironmentResolver {
 				}
 				reason = "invalid-file";
 				if (content.includes("\0")) throw new Error("Secret file contains NUL bytes");
-				secrets = this.parse(content);
+				secrets = parseSecretEnv(content);
 				missingVariables = env
 					.filter((entry) => "secret" in entry && !secrets.has(entry.name))
 					.map((entry) => entry.name);
@@ -88,20 +83,5 @@ export class EnvironmentResolver implements IEnvironmentResolver {
 				{ cause },
 			);
 		}
-	}
-
-	private parse(content: string): Map<string, string> {
-		const values = new Map<string, string>();
-		for (const [index, line] of content.split(/\r?\n/).entries()) {
-			if (/^\s*(?:#.*)?$/.test(line)) continue;
-			// Single-line dotenv assignments; quoting is literal, without shell expansion.
-			const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:'([^']*)'|"([^"]*)"|([^'"#]*?))\s*(?:#.*)?$/.exec(
-				line,
-			);
-			const name = match?.at(1);
-			if (!name || values.has(name)) throw new SecretFileSyntaxError(index + 1);
-			values.set(name, match?.at(2) ?? match?.at(3) ?? match?.at(4)?.trim() ?? "");
-		}
-		return values;
 	}
 }

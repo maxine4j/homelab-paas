@@ -8,6 +8,8 @@ import { nanoid } from "nanoid";
 
 import { FileConfigStore } from "./config/config-store.ts";
 import { PaasConfig, decodeDescriptorYaml } from "./config/paas-config.ts";
+import { SecretStore } from "./config/secret-store.ts";
+import { ServiceSecrets } from "./config/service-secrets.ts";
 import { DockerClient } from "./docker/docker-client.ts";
 import { DockerHostPathResolver } from "./docker/docker-host-path-resolver.ts";
 import { DockerLogClient } from "./docker/docker-log-client.ts";
@@ -58,7 +60,7 @@ import { ServiceEventStore } from "./reconciler/service-event-store.ts";
 import { FileSystemKeyValueStore } from "./store/file-system-store.ts";
 import { PeriodicTaskRunner } from "./task/periodic.ts";
 import type { StartOptions } from "./types.ts";
-import { atomicWriteFile, lstat, mkdir, readFileBytes, readFile, rm, type FileWriter } from "./util/file.ts";
+import { atomicWriteFile, chmod, lstat, mkdir, readFileBytes, readFile, rm, type FileWriter } from "./util/file.ts";
 import { createHealthCheckRouter, probe } from "./util/healthcheck.ts";
 import type { Lifecycle } from "./util/lifecycle.ts";
 import { createRequestLogger, logger, withLogContext } from "./util/logger.ts";
@@ -198,7 +200,19 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		const port = httpsPort ?? httpPort;
 		return `${httpsPort ? "https" : "http"}://${baseDomain}${port === (httpsPort ? 443 : 80) ? "" : `:${port}`}`;
 	};
-	const ui = createPaasUiRouter(uiService, gitRefresh, sessions, managementOrigin, reconciler);
+	const secretDirectory = "/etc/homelab-paas/env";
+	const writeSecrets: FileWriter = async (path, content) => {
+		await mkdir(secretDirectory, { recursive: true, mode: 0o700 });
+		await chmod(secretDirectory, 0o700);
+		await atomicWriteFile(path, content, { mode: 0o600 });
+	};
+	const secrets = new ServiceSecrets(
+		config,
+		git,
+		decodeDescriptorYaml,
+		new SecretStore(secretDirectory, readFile, writeSecrets),
+	);
+	const ui = createPaasUiRouter(uiService, gitRefresh, sessions, managementOrigin, reconciler, secrets);
 	app.use(ui.routes()).use(ui.allowedMethods());
 	app.use(
 		createFrontendRouter(

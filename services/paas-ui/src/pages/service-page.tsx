@@ -44,7 +44,7 @@ export const ServicePage = ({
 							)}
 							{eventError && <a href={`#/services/${service.serviceId}/events`}>Event history</a>}
 						</div>
-						<ServiceEvents events={events?.slice(0, 2)} error={eventError} />
+						<ServiceEvents serviceId={service.serviceId} events={events?.slice(0, 2)} error={eventError} />
 					</section>
 					<h2>
 						Resources <span className='count'>{service.resources.length}</span>

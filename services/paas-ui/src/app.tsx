@@ -13,6 +13,7 @@ import { useRoute } from "./hooks/use-route.ts";
 import { ClusterPage } from "./pages/cluster-page.tsx";
 import { ResourceEventsPage } from "./pages/resource-events-page.tsx";
 import { ResourcePage } from "./pages/resource-page.tsx";
+import { SecretsPage } from "./pages/secrets-page.tsx";
 import { ServiceEventsPage } from "./pages/service-events-page.tsx";
 import { ServicePage } from "./pages/service-page.tsx";
 import { ServicesPage } from "./pages/services-page.tsx";
@@ -109,6 +110,7 @@ export const AppView = ({
 								{(route.page === "service"
 									|| route.page === "resource"
 									|| route.page === "events"
+									|| route.page === "secrets"
 									|| route.page === "resource-events") && (
 									<>
 										<span aria-hidden='true'>/</span>
@@ -132,10 +134,14 @@ export const AppView = ({
 										)}
 									</>
 								)}
-								{(route.page === "events" || route.page === "resource-events") && (
+								{(route.page === "events"
+									|| route.page === "resource-events"
+									|| route.page === "secrets") && (
 									<>
 										<span aria-hidden='true'>/</span>
-										<span aria-current='page'>Events</span>
+										<span aria-current='page'>
+											{route.page === "secrets" ? "Secrets" : "Events"}
+										</span>
 									</>
 								)}
 							</>
@@ -153,7 +159,9 @@ export const AppView = ({
 					)}
 				</header>
 				<main id='main-content'>
-					{route.page === "events" ? (
+					{route.page === "secrets" ? (
+						<SecretsPage key={route.serviceId} serviceId={route.serviceId} />
+					) : route.page === "events" ? (
 						<ServiceEventsPage serviceId={route.serviceId} events={events.data} error={events.error} />
 					) : route.page === "resource-events" ? (
 						<ResourceEventsPage
