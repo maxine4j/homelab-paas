@@ -1,5 +1,5 @@
 export type ResourceTab = "config" | "logs";
-export type ServiceTab = "overview" | "resources";
+export type ServiceTab = "overview" | "resources" | "descriptor";
 export type Route =
 	| { page: "services" }
 	| { page: "cluster" }

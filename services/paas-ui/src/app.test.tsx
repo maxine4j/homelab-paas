@@ -3,6 +3,37 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { App, AppView, viewPaths } from "./app.tsx";
 
+test.each(["events", "secrets"] as const)("%s retains both revision panels from optional service context", (page) => {
+	const html = renderToStaticMarkup(
+		<AppView
+			route={{ page, serviceId: "demo" }}
+			snapshot={{ refresh: () => {} }}
+			serviceSnapshot={{
+				data: {
+					serviceId: "demo",
+					phase: "ready",
+					source: {},
+					descriptorStatus: "available",
+					resources: [],
+					activeRevision: "active123",
+					descriptorRevision: "desired456",
+					activeRevisionMetadata: {
+						message: "Active commit",
+						authorName: "Alex",
+						authoredAt: "2026-10-31T00:00:00Z",
+					},
+				},
+			}}
+			events={{ data: [], refresh: () => {} }}
+			logs={{}}
+		/>,
+	);
+	expect(html).toContain("Active revision");
+	expect(html).toContain("Desired revision");
+	expect(html).toContain("Active commit");
+	expect(html).toContain('title="desired456"');
+});
+
 test("Secrets loads independently of unavailable Git/Docker snapshots and retains service tabs", () => {
 	expect(viewPaths({ page: "secrets", serviceId: "demo" })).toEqual({});
 	const html = renderToStaticMarkup(
@@ -73,6 +104,8 @@ test("service history retains service navigation without a Git snapshot", () => 
 		/>,
 	);
 	expect(html).toContain("<h1>demo</h1>");
+	expect(html).toMatch(/<nav class="breadcrumbs"[^>]*>[^]*<a href="#\/services\/demo">demo<\/a>/);
+	expect(html.match(/<nav class="breadcrumbs"[^>]*>.*?<\/nav>/)?.[0]).not.toContain("<h1>");
 	expect(html).toContain('aria-label="Service detail"');
 	expect(html).toContain('href="#/services/demo">Overview</a>');
 	expect(html).toContain('href="#/services/demo/resources">Resources</a>');
@@ -129,6 +162,8 @@ test("service Resources uses the service snapshot and renders detailed cards thr
 		/>,
 	);
 	expect(html).toContain("worker:2");
+	expect(html).toMatch(/service-identity"><h1>demo<\/h1><span class="badge badge-healthy"/);
+	expect(html.match(/<h1>/g)).toHaveLength(1);
 	expect(html).toContain('href="#/services/demo/resources" aria-current="page">Resources</a>');
 	expect(html).not.toContain("Recent events");
 });

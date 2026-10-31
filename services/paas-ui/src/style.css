@@ -284,14 +284,15 @@ main {
 }
 .service-heading-row {
 	display: flex;
-	align-items: flex-start;
+	flex-direction: column;
+	align-items: stretch;
 	flex-wrap: wrap;
 	column-gap: 24px;
 	row-gap: 20px;
 }
 .service-commit-panels {
 	display: flex;
-	flex: 1 1 480px;
+	width: 100%;
 	gap: 24px;
 	min-width: 0;
 }
@@ -337,11 +338,20 @@ main {
 	font-family: monospace;
 }
 .service-identity-block {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	column-gap: 24px;
+	row-gap: 8px;
 	min-width: 0;
 	max-width: 100%;
 }
+.service-identity-block > .service-identity {
+	flex-grow: 1;
+}
 .service-identity-block > .primary-web-link {
-	display: inline-block;
+	display: inline-flex;
+	gap: 4px;
 	max-width: 100%;
 	overflow-wrap: anywhere;
 }
@@ -750,7 +760,7 @@ p {
 	justify-content: flex-end;
 	align-items: center;
 	gap: 12px;
-	margin-top: 8px;
+	margin-left: auto;
 	font-size: 0.8rem;
 	color: #a9b5c6;
 }
@@ -776,9 +786,14 @@ p {
 .event-metadata {
 	margin-top: 16px;
 	display: flex;
+	align-items: center;
 	flex-wrap: wrap;
 	gap: 8px 20px;
 	line-height: 1.6;
+}
+.event-heading code {
+	font-size: 0.8rem;
+	overflow-wrap: anywhere;
 }
 dl {
 	margin: 0;

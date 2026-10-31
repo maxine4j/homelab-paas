@@ -36,6 +36,7 @@ export const ServiceEvents = ({
 					>
 						<div className='event-heading'>
 							<span className={`badge badge-${event.level}`}>{event.level}</span>
+							<code>{event.event}</code>
 							<time dateTime={new Date(event.timestamp).toISOString()}>
 								{new Date(event.timestamp).toLocaleString()}
 							</time>
@@ -95,7 +96,6 @@ export const ServiceEvents = ({
 							</div>
 						)}
 						<div className='event-metadata'>
-							<code>{event.event}</code>
 							{event.resourceId && <span>Resource: {event.resourceId}</span>}
 							{event.revision && (
 								<span>
@@ -111,8 +111,8 @@ export const ServiceEvents = ({
 									</time>
 								</span>
 							)}
+							<EventCopy event={event} />
 						</div>
-						<EventCopy event={event} />
 					</li>
 				);
 			})}

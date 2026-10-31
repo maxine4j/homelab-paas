@@ -46,6 +46,9 @@ export const App = () => {
 	const route = useRoute();
 	const paths = viewPaths(route);
 	const snapshot = useApi<Inspection>(paths.snapshot);
+	const serviceSnapshot = useApi<UiService>(
+		route.page === "events" || route.page === "secrets" ? `/services/${route.serviceId}` : undefined,
+	);
 	const containerId =
 		route.page === "resource"
 			? (route.containerId
@@ -57,7 +60,16 @@ export const App = () => {
 			? `${paths.snapshot}/containers/${encodeURIComponent(containerId)}/logs`
 			: undefined,
 	);
-	return <AppView route={route} snapshot={snapshot} events={events} logs={logs} containerId={containerId} />;
+	return (
+		<AppView
+			route={route}
+			snapshot={snapshot}
+			serviceSnapshot={serviceSnapshot}
+			events={events}
+			logs={logs}
+			containerId={containerId}
+		/>
+	);
 };
 
 export const AppView = ({
@@ -66,12 +78,14 @@ export const AppView = ({
 	events,
 	logs,
 	containerId,
+	serviceSnapshot,
 }: {
 	route: Route;
 	snapshot: ViewResult<Inspection>;
 	events: ViewResult<UiServiceEvent[]>;
 	logs: ApiResult<UiLogs>;
 	containerId?: string;
+	serviceSnapshot?: ApiResult<UiService>;
 }) => {
 	const buildSha = import.meta.env["VITE_BUILD_SHA"] || "unknown";
 	const path = viewPaths(route).snapshot;
@@ -160,9 +174,18 @@ export const AppView = ({
 				</header>
 				<main id='main-content'>
 					{route.page === "secrets" ? (
-						<SecretsPage key={route.serviceId} serviceId={route.serviceId} />
+						<SecretsPage
+							key={route.serviceId}
+							serviceId={route.serviceId}
+							service={serviceSnapshot?.data}
+						/>
 					) : route.page === "events" ? (
-						<ServiceEventsPage serviceId={route.serviceId} events={events.data} error={events.error} />
+						<ServiceEventsPage
+							serviceId={route.serviceId}
+							service={serviceSnapshot?.data}
+							events={events.data}
+							error={events.error}
+						/>
 					) : route.page === "resource-events" ? (
 						<ResourceEventsPage
 							serviceId={route.serviceId}

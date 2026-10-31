@@ -14,6 +14,14 @@ const event: UiServiceEvent = {
 	resourceId: "app",
 };
 
+test("event name follows severity and copy shares the metadata row", () => {
+	const html = renderToStaticMarkup(<ServiceEvents events={[{ ...event, revision: "abc123" }]} />);
+	expect(html).toMatch(/event-heading"><span[^>]*>error<\/span><code>reconciliation.failed<\/code><time/);
+	expect(html).toMatch(
+		/event-metadata">[^]*Revision: <code[^>]*>abc123[^]*event-copy[^]*Copy JSON<\/button>[^]*<\/div><\/div><\/li>/,
+	);
+});
+
 test("event cards offer a copy control and copy the complete event JSON", async () => {
 	const writeText = vi.fn<(value: string) => Promise<void>>().mockResolvedValue();
 	expect(renderToStaticMarkup(<ServiceEvents events={[event]} />)).toContain("Copy JSON</button>");

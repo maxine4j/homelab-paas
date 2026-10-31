@@ -67,6 +67,18 @@ export const ServicePage = ({
 				</>
 			)}
 			{tab === "resources" && <ServiceResources serviceId={service.serviceId} resources={service.resources} />}
+			{tab === "descriptor" && (
+				<section aria-label='Service descriptor'>
+					<h2>Service descriptor</h2>
+					{service.descriptorYaml ? (
+						<pre className='code-view' tabIndex={0} aria-label='Service descriptor YAML'>
+							{service.descriptorYaml}
+						</pre>
+					) : (
+						<p className='empty'>Descriptor YAML unavailable.</p>
+					)}
+				</section>
+			)}
 		</ServiceDetailShell>
 	);
 };

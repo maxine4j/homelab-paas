@@ -129,6 +129,22 @@ const service: UiService = {
 		metadata: { serviceId: "paperless", description: "Document management" },
 		resources: Object.fromEntries(resources.map((resource) => [resource.resourceId, resource.config!])),
 	},
+	descriptorYaml: `version: 1
+metadata:
+  serviceId: paperless
+  description: Document management
+resources:
+${resources
+	.map(
+		(resource) =>
+			`  ${resource.resourceId}:\n${resource
+				.configYaml!.trimEnd()
+				.split("\n")
+				.map((line) => `    ${line}`)
+				.join("\n")}`,
+	)
+	.join("\n")}
+`,
 	resources,
 };
 const events: UiServiceEvent[] = [

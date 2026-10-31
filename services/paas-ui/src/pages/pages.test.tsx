@@ -1,3 +1,4 @@
+import type { UiService } from "@homelab-paas/shared-contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 
@@ -10,6 +11,25 @@ import { ResourcePage } from "./resource-page.tsx";
 import { ServiceEventsPage } from "./service-events-page.tsx";
 import { ServicePage } from "./service-page.tsx";
 import { ServicesPage } from "./services-page.tsx";
+
+test("Descriptor tab routes to selectable redacted YAML with an unavailable fallback", () => {
+	expect(parseRoute("#/services/demo/descriptor")).toEqual({ page: "service", serviceId: "demo", tab: "descriptor" });
+	const service = {
+		serviceId: "demo",
+		phase: "ready",
+		source: {},
+		descriptorStatus: "available",
+		resources: [],
+		descriptorYaml: "serviceId: demo\n",
+	} satisfies UiService;
+	const html = renderToStaticMarkup(<ServicePage service={service} tab='descriptor' />);
+	expect(html).toContain('href="#/services/demo/descriptor" aria-current="page"');
+	expect(html).toContain('aria-label="Service descriptor YAML"');
+	expect(html).toContain("serviceId: demo");
+	expect(
+		renderToStaticMarkup(<ServicePage service={{ ...service, descriptorYaml: undefined }} tab='descriptor' />),
+	).toContain("Descriptor YAML unavailable");
+});
 
 test("Secrets is an independent service route and remains linked from service event pages", () => {
 	expect(parseRoute("#/services/demo/secrets")).toEqual({ page: "secrets", serviceId: "demo" });
@@ -199,7 +219,7 @@ test("service revisions link their own GitHub commits beside the identity and re
 	};
 	const html = renderToStaticMarkup(<ServicePage service={service} />);
 	expect(html).toMatch(
-		/service-heading-row[^]*<h1>demo<\/h1>[^]*Active revision[^]*>active1<\/a>[^]*Desired revision[^]*>descrip<\/a>/,
+		/service-heading-row[^]*Active revision[^]*>active1<\/a>[^]*Desired revision[^]*>descrip<\/a>/,
 	);
 	expect(html).toContain('title="active123"');
 	expect(html).toContain('title="descriptor456"');
@@ -291,7 +311,7 @@ test.each(["error", "info"] as const)(
 		const html = renderToStaticMarkup(<ServiceEvents events={[{ ...events[0]!, level }]} />);
 		expect(html).toMatch(
 			new RegExp(
-				`service-event-${level}"[^>]*><div class="event-heading"><span class="badge badge-${level}">${level}</span><time[^]*?</time></div><p class="event-message">`,
+				`service-event-${level}"[^>]*><div class="event-heading"><span class="badge badge-${level}">${level}</span><code>reconciliation.failed</code><time[^]*?</time></div><p class="event-message">`,
 			),
 		);
 	},
@@ -448,7 +468,9 @@ test("service overview shows tabs and two recent events above compact resources 
 	expect(html).toContain("Earlier event");
 	expect(html).not.toContain("Oldest event");
 	expect(html).not.toContain("Inspect resource");
-	expect(html).toMatch(/service-heading-row[^]*<h1>demo<\/h1>[^]*badge-healthy[^]*primary-web-link/);
+	expect(html).toMatch(
+		/service-identity-block"><div class="service-identity"><h1>demo<\/h1>[^]*badge-healthy[^]*<\/div><a class="primary-web-link"/,
+	);
 	expect(html).toContain('href="https://demo.example.test" target="_blank" rel="noreferrer"');
 	expect(html).toMatch(/primary-web-link[^>]*>demo.example.test[^<]*<span aria-hidden="true">↗<\/span><\/a>/);
 	expect(html).not.toContain("&quot;metadata&quot;");
