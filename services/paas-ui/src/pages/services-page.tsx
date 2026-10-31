@@ -30,23 +30,20 @@ export const ServicesPage = ({ services }: { services: UiServiceSummary[] }) => 
 									{service.serviceId}
 								</a>
 							</h2>
-							{service.primaryUrl && (
-								<a
-									className='primary-web-link'
-									href={service.primaryUrl}
-									target='_blank'
-									rel='noreferrer'
-									title={service.primaryUrl}
-								>
-									<span className='service-hostname'>{new URL(service.primaryUrl).host}</span>
-									<span aria-hidden='true'>↗</span>
-								</a>
-							)}
 							<StatusBadges health={service.health} sync={service.sync} />
 						</div>
-						<p className='service-description' title={service.description}>
-							{service.description}
-						</p>
+						{service.primaryUrl && (
+							<a
+								className='primary-web-link'
+								href={service.primaryUrl}
+								target='_blank'
+								rel='noreferrer'
+								title={service.primaryUrl}
+							>
+								<span className='service-hostname'>{new URL(service.primaryUrl).host}</span>
+								<span aria-hidden='true'>↗</span>
+							</a>
+						)}
 						<dl className='service-revisions'>
 							<div>
 								<dt>Revision</dt>

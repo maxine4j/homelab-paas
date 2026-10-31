@@ -163,7 +163,7 @@ test("service details omit the Service label and separate services back link", (
 	expect(html).toContain("badge-healthy");
 });
 
-test("service cards provide a full-card detail link, an independent web link, description and compact revision rows", () => {
+test("service cards show identity and statuses above ingress and compact revisions without descriptions", () => {
 	const html = renderToStaticMarkup(
 		<ServicesPage
 			services={[
@@ -184,11 +184,13 @@ test("service cards provide a full-card detail link, an independent web link, de
 			]}
 		/>,
 	);
-	expect(html).toMatch(/service-card-heading[^]*<h2>[^]*demo[^]*<\/h2>[^]*primary-web-link[^]*badge-healthy/);
+	expect(html).toMatch(
+		/service-card-heading[^]*<h2>[^]*demo[^]*<\/h2>[^]*badge-healthy[^]*badge-synced[^]*<\/span><\/div><a class="primary-web-link"/,
+	);
 	expect(html).toContain('class="service-card-link" href="#/services/demo"');
 	expect(html).toMatch(/href="https:\/\/demo.example.com" target="_blank" rel="noreferrer"/);
-	expect(html).toContain('class="service-description" title="Document &lt;archive&gt;">Document &lt;archive&gt;</p>');
-	expect(html).toMatch(/service-description[^]*Document &lt;archive&gt;[^]*<dt>Revision<\/dt>[^]*active123/);
+	expect(html).not.toContain("Document &lt;archive&gt;");
+	expect(html).toMatch(/service-hostname[^]*demo.example.com[^]*↗[^]*<dt>Revision<\/dt>[^]*active123/);
 	expect(html).toContain('class="revision-summary"');
 	expect(html).toContain('title="Deploy &lt;web&gt;\n\nFull details"');
 	expect(html).toContain("Alex");

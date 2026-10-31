@@ -575,7 +575,7 @@ p {
 .service-card {
 	position: relative;
 	display: grid;
-	grid-template-rows: minmax(44px, auto) 1.6em auto;
+	grid-template-rows: minmax(44px, auto) minmax(44px, auto) auto;
 	gap: 12px;
 	transition:
 		border-color 0.15s,
@@ -588,7 +588,6 @@ p {
 }
 .service-card-heading {
 	display: flex;
-	flex-wrap: wrap;
 	align-items: center;
 	gap: 12px;
 	min-width: 0;
@@ -596,13 +595,11 @@ p {
 .service-card-heading h2 {
 	margin: 0;
 	min-width: 0;
-	flex: 0 0 auto;
-	max-width: 50%;
+	flex: 1 1 auto;
 	font-size: 1.1rem;
 }
 .service-card-link,
-.service-hostname,
-.service-description {
+.service-hostname {
 	display: block;
 	min-width: 0;
 	overflow: hidden;
@@ -626,7 +623,8 @@ p {
 	position: relative;
 	z-index: 1;
 	min-width: 0;
-	flex: 0 1 auto;
+	justify-self: start;
+	max-width: 100%;
 	gap: 4px;
 }
 .service-card .primary-web-link > [aria-hidden] {
@@ -637,11 +635,8 @@ p {
 	flex-shrink: 0;
 	justify-content: flex-end;
 }
-.service-description {
-	margin: 0;
-	line-height: 1.6;
-}
 .service-revisions {
+	grid-row: 3;
 	min-width: 0;
 	margin: 0;
 	text-align: left;
