@@ -67,6 +67,12 @@ jobs:
                       dockerfile: services/test-service/Dockerfile
                     - image: control-plane
                       dockerfile: services/paas/Dockerfile
+                    - image: metrics-grafana
+                      dockerfile: services/paas-metrics/grafana.Dockerfile
+                    - image: metrics-victoriametrics
+                      dockerfile: services/paas-metrics/victoriametrics.Dockerfile
+                    - image: metrics-telegraf
+                      dockerfile: services/paas-metrics/telegraf.Dockerfile
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
             - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
