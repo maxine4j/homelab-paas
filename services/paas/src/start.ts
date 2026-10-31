@@ -20,9 +20,12 @@ import { EnvoyClient } from "./envoy/envoy-client.ts";
 import { EnvoyService } from "./envoy/envoy-service.ts";
 import { NodeEnvoyTransport } from "./envoy/envoy-transport.ts";
 import { ChangeBus } from "./events/change-bus.ts";
+import { CachedPaasUiService } from "./frontend/cached-paas-ui-service.ts";
 import { createFrontendRouter } from "./frontend/frontend-router.ts";
 import { FrontendService } from "./frontend/frontend-service.ts";
 import { DirectoryUiFiles } from "./frontend/frontend-store.ts";
+import { ManagementRefreshService } from "./frontend/management-refresh-service.ts";
+import { ManagementStateTask } from "./frontend/management-state-task.ts";
 import { createPaasUiRouter } from "./frontend/paas-ui-router.ts";
 import { PaasUiService } from "./frontend/paas-ui-service.ts";
 import { UiLiveService } from "./frontend/ui-live-service.ts";
@@ -144,7 +147,6 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		new EventDiagnostics(config),
 		changes,
 	);
-	const gitRefresh = new GitRefreshService(config, git, reconciler, changes);
 	const abort = new AbortController();
 	const pause = async (ms: number): Promise<void> => {
 		try {
@@ -198,7 +200,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 			() => provisioner.requiredDomains(),
 		);
 	}
-	const uiService = new PaasUiService(
+	const inspection = new PaasUiService(
 		new ResourceStatusService(new ResourceSpecification(), environment),
 		config,
 		git,
@@ -208,6 +210,12 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		events,
 		health,
 		dockerLogs,
+	);
+	const uiService = new CachedPaasUiService(inspection, config, changes);
+	const managementState = new ManagementStateTask(health, uiService);
+	const gitRefresh = new ManagementRefreshService(
+		new GitRefreshService(config, git, reconciler, changes),
+		managementState,
 	);
 	const managementOrigin = (): string => {
 		const { baseDomain, httpPort, httpsPort } = config.getIngressConfig();
@@ -240,7 +248,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		).routes(),
 	);
 	const server = app.listen(8080, "0.0.0.0");
-	const live = new UiWebSocket(new UiLiveService(uiService, uiService, changes), managementOrigin, sessions, sleep);
+	const live = new UiWebSocket(new UiLiveService(uiService, inspection, changes), managementOrigin, sessions, sleep);
 	live.attach(server);
 	lifecycle.registerShutdownHandler(
 		() =>
@@ -288,10 +296,10 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		}),
 		new PeriodicTaskRunner({
 			lifecycle,
-			periodMs: 5000,
+			periodMs: 30_000,
 			taskName: "resource-health",
 			generateTaskId: nanoid,
-			task: health,
+			task: managementState,
 			pause,
 			report: (err) => logger.error({ err }, "Resource health polling failed; check Docker access"),
 		}),

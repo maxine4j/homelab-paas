@@ -22,7 +22,9 @@ test("authenticated Envoy pushes deployment snapshots/events and follows new Doc
 	await page.goto(env.url("", "/#/services/public"));
 	await expect(page.getByText("Live · connected", { exact: true })).toBeVisible();
 	const identity = page.locator(".service-identity");
-	await expect(identity.getByLabel("Health: Healthy", { exact: true })).toHaveCSS("color", "rgb(24, 190, 148)");
+	await expect(identity.getByLabel("Health: Healthy", { exact: true })).toHaveCSS("color", "rgb(24, 190, 148)", {
+		timeout: 40_000,
+	});
 	await expect(identity.getByLabel("Sync: Synced", { exact: true })).toBeVisible();
 	for (const width of [320, 390, 1280]) {
 		await page.setViewportSize({ width, height: 900 });
@@ -36,7 +38,7 @@ test("authenticated Envoy pushes deployment snapshots/events and follows new Doc
 	await expect.poll(() => JSON.stringify(frames)).toContain('"event":"deployment.succeeded"');
 	await expect(
 		page.locator(".service-revision").filter({ hasText: "Active revision" }).getByTitle(revision, { exact: true }),
-	).toHaveText(revision.slice(0, 7));
+	).toHaveText(revision.slice(0, 7), { timeout: 40_000 });
 	await page.goto(env.url("", "/#/services/public/resources/app/logs"));
 	const logs = page.getByLabel("Container logs", { exact: true });
 	await expect(logs).toBeVisible();
@@ -72,9 +74,11 @@ test("failed surge shows Progressing in blue then preserves Healthy with OutOfSy
 }) => {
 	await page.goto(env.url("", "/#/services/public"));
 	const identity = page.locator(".service-identity");
-	await expect(identity.getByLabel("Health: Healthy", { exact: true })).toBeVisible();
+	await expect(identity.getByLabel("Health: Healthy", { exact: true })).toBeVisible({ timeout: 40_000 });
 	await env.update("public", "unready", "surge", false);
-	await expect(identity.getByLabel("Health: Progressing", { exact: true })).toHaveCSS("color", "rgb(13, 173, 234)");
+	await expect(identity.getByLabel("Health: Progressing", { exact: true })).toHaveCSS("color", "rgb(13, 173, 234)", {
+		timeout: 40_000,
+	});
 	await expect(identity.getByLabel("Sync: OutOfSync", { exact: true })).toHaveCSS("color", "rgb(244, 192, 48)");
 	await expect(identity.getByLabel("Health: Healthy", { exact: true })).toBeVisible({ timeout: 60_000 });
 	await expect(identity.getByLabel("Sync: OutOfSync", { exact: true })).toBeVisible();

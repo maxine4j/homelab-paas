@@ -2,12 +2,14 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 
 import { uiLiveServerSchema } from "@homelab-paas/shared-contracts";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { WebSocket } from "ws";
 
 import { decodeDescriptorYaml } from "../../src/config/paas-config.ts";
 import type { ServiceContainer } from "../../src/docker/types.ts";
 import { ChangeBus } from "../../src/events/change-bus.ts";
+import { CachedPaasUiService } from "../../src/frontend/cached-paas-ui-service.ts";
+import { ManagementStateTask } from "../../src/frontend/management-state-task.ts";
 import { PaasUiService } from "../../src/frontend/paas-ui-service.ts";
 import { UiLiveService } from "../../src/frontend/ui-live-service.ts";
 import { UiWebSocket } from "../../src/frontend/ui-websocket.ts";
@@ -53,7 +55,7 @@ test("HTTP health polling pushes resource health over WebSocket with independent
 		{ id: "c", resourceId: "app", imageId: "image", revision: "rev", state: "running", spec },
 	];
 	const docker = {
-		listServiceContainers: async () => containers,
+		listServiceContainers: vi.fn(async () => containers),
 		inspectServiceContainer: async () => ({
 			id: "c",
 			imageId: "image",
@@ -84,8 +86,10 @@ test("HTTP health polling pushes resource health over WebSocket with independent
 		{ list: async () => [], append: async () => {} },
 		health,
 	);
+	const cache = new CachedPaasUiService(ui, config, changes);
+	const task = new ManagementStateTask(health, cache);
 	const adapter = new UiWebSocket(
-		new UiLiveService(ui, ui, changes),
+		new UiLiveService(cache, ui, changes),
 		() => "http://management.test",
 		undefined,
 		sleep,
@@ -99,8 +103,13 @@ test("HTTP health polling pushes resource health over WebSocket with independent
 		if (!address || typeof address === "string") throw new Error("Missing listener");
 		socket = new WebSocket(`ws://127.0.0.1:${address.port}/api/ui/live`, { origin: "http://management.test" });
 		await once(socket, "open");
+		const received: unknown[] = [];
+		socket.on("message", (bytes) => received.push(uiLiveServerSchema.parse(JSON.parse(String(bytes)))));
+		const latest = async (expected: Record<string, unknown>) => {
+			await vi.waitFor(() => expect(received.at(-1)).toMatchObject(expected));
+		};
 		const next = async () => uiLiveServerSchema.parse(JSON.parse(String((await once(socket!, "message"))[0])));
-		let snapshot = next();
+		const snapshot = next();
 		socket.send(
 			JSON.stringify({
 				type: "subscribe",
@@ -112,31 +121,34 @@ test("HTTP health polling pushes resource health over WebSocket with independent
 			type: "snapshot",
 			data: { sync: "Synced", health: "Unknown", containers: [{ state: "running" }] },
 		});
+		const reads = docker.listServiceContainers.mock.calls.length;
+		await cache.getResource("demo", "app");
+		await cache.getResource("demo", "app");
+		expect(docker.listServiceContainers).toHaveBeenCalledTimes(reads);
 		for (const [isReady, expected] of [
 			[true, "Healthy"],
 			[false, "Degraded"],
 			[true, "Healthy"],
 		] as const) {
 			ready = isReady;
-			snapshot = next();
-			await health.run();
-			expect(await snapshot).toMatchObject({
+			await task.run();
+			await latest({
 				type: "snapshot",
 				data: { sync: "Synced", health: expected, containers: [{ state: "running" }] },
 			});
 		}
-		snapshot = next();
 		health.started("demo", "app");
-		expect(await snapshot).toMatchObject({ data: { health: "Progressing" } });
-		snapshot = next();
+		expect((await cache.getResource("demo", "app")).health).toBe("Healthy");
+		await task.run();
+		await latest({ data: { health: "Progressing" } });
 		health.finished("demo", "app");
-		expect(await snapshot).toMatchObject({ data: { health: "Unknown" } });
+		await task.run();
+		await latest({ data: { health: "Healthy" } });
 		containers.length = 0;
-		snapshot = next();
-		await health.run();
-		expect(await snapshot).toMatchObject({ data: { health: "Missing", containers: [] } });
-		expect(await ui.getService("demo")).toMatchObject({ sync: "OutOfSync", health: "Missing" });
-		expect(endpoint.requests.map(({ url }) => url.pathname)).toEqual(["/ready", "/ready", "/ready"]);
+		await task.run();
+		await latest({ data: { health: "Missing", containers: [] } });
+		expect(await cache.getService("demo")).toMatchObject({ sync: "OutOfSync", health: "Missing" });
+		expect(endpoint.requests.map(({ url }) => url.pathname)).toEqual(["/ready", "/ready", "/ready", "/ready"]);
 	} finally {
 		socket?.terminate();
 		await adapter.close();
