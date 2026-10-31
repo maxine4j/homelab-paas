@@ -11,11 +11,13 @@ export const ServiceDetailShell = ({
 	service,
 	tab,
 	children,
+	actions,
 }: {
 	serviceId: string;
 	service?: UiService;
 	tab: "overview" | "resources" | "events" | "secrets" | "descriptor";
 	children: ReactNode;
+	actions?: ReactNode;
 }) => {
 	const primaryUrl = service?.resources.find(
 		(resource) => resource.type === "web" && resource.primaryUrl,
@@ -30,12 +32,13 @@ export const ServiceDetailShell = ({
 								<h1>{serviceId}</h1>
 								{service && <StatusBadge status={service.phase} />}
 							</div>
-							{primaryUrl && (
-								<a className='primary-web-link' href={primaryUrl} target='_blank' rel='noreferrer'>
-									{new URL(primaryUrl).host} <span aria-hidden='true'>↗</span>
-								</a>
-							)}
+							{actions}
 						</div>
+						{primaryUrl && (
+							<a className='primary-web-link' href={primaryUrl} target='_blank' rel='noreferrer'>
+								{new URL(primaryUrl).host} <span aria-hidden='true'>↗</span>
+							</a>
+						)}
 						{service && (
 							<div className='service-commit-panels'>
 								<ServiceRevision

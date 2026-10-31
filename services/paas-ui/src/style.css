@@ -290,6 +290,11 @@ main {
 	column-gap: 24px;
 	row-gap: 20px;
 }
+.service-heading-row > .primary-web-link {
+	align-self: flex-start;
+	gap: 4px;
+	max-width: 100%;
+}
 .service-commit-panels {
 	display: flex;
 	width: 100%;
@@ -348,12 +353,6 @@ main {
 }
 .service-identity-block > .service-identity {
 	flex-grow: 1;
-}
-.service-identity-block > .primary-web-link {
-	display: inline-flex;
-	gap: 4px;
-	max-width: 100%;
-	overflow-wrap: anywhere;
 }
 h1 {
 	margin: 8px 0 12px;

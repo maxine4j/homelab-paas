@@ -1,11 +1,20 @@
 import type { UiSecrets, UiService } from "@homelab-paas/shared-contracts";
+import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { fetchUi, saveSecrets } from "../api.ts";
 import { SecretsForm } from "../components/secrets-form.tsx";
 import { ServiceDetailShell } from "../components/service-detail-shell.tsx";
 
-export const SecretsPage = ({ serviceId, service }: { serviceId: string; service?: UiService }) => {
+export const SecretsPage = ({
+	serviceId,
+	service,
+	actions,
+}: {
+	serviceId: string;
+	service?: UiService;
+	actions?: ReactNode;
+}) => {
 	const preview = import.meta.env.MODE === "mock";
 	const [snapshot, setSnapshot] = useState<UiSecrets>();
 	const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -84,7 +93,7 @@ export const SecretsPage = ({ serviceId, service }: { serviceId: string; service
 		}
 	};
 	return (
-		<ServiceDetailShell serviceId={serviceId} service={service} tab='secrets'>
+		<ServiceDetailShell serviceId={serviceId} service={service} tab='secrets' actions={actions}>
 			<section className='card secrets-editor'>
 				<h2>Service secrets</h2>
 				<p>

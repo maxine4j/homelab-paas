@@ -1,4 +1,5 @@
 import type { UiService, UiServiceEvent } from "@homelab-paas/shared-contracts";
+import type { ReactNode } from "react";
 
 import { ServiceDetailShell } from "../components/service-detail-shell.tsx";
 import { ServiceEvents } from "../components/service-events.tsx";
@@ -11,14 +12,16 @@ export const ServicePage = ({
 	events,
 	eventError,
 	tab = "overview",
+	actions,
 }: {
 	service: UiService;
 	events?: UiServiceEvent[];
 	eventError?: string;
 	tab?: ServiceTab;
+	actions?: ReactNode;
 }) => {
 	return (
-		<ServiceDetailShell serviceId={service.serviceId} service={service} tab={tab}>
+		<ServiceDetailShell serviceId={service.serviceId} service={service} tab={tab} actions={actions}>
 			{service.descriptorStatus === "unavailable" && (
 				<p className='notice' role='status'>
 					Descriptor unavailable. Showing observed resources; desired configuration could not be loaded.

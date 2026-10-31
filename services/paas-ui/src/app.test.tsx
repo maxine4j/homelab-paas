@@ -3,6 +3,55 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { App, AppView, viewPaths } from "./app.tsx";
 
+test("all service tabs share the same complete header with actions beside identity and ingress below", () => {
+	const service = {
+		serviceId: "demo",
+		phase: "ready" as const,
+		source: {},
+		descriptorStatus: "available" as const,
+		activeRevision: "active123",
+		descriptorRevision: "desired456",
+		descriptorYaml: "version: 1",
+		resources: [
+			{
+				resourceId: "web",
+				type: "web",
+				health: "healthy" as const,
+				primaryUrl: "https://demo.example.test",
+				containers: [],
+			},
+		],
+	};
+	const routes = [
+		{ page: "service", serviceId: "demo", tab: "overview" },
+		{ page: "service", serviceId: "demo", tab: "resources" },
+		{ page: "service", serviceId: "demo", tab: "descriptor" },
+		{ page: "events", serviceId: "demo" },
+		{ page: "secrets", serviceId: "demo" },
+	] as const;
+	const headers = routes.map((route) => {
+		const html = renderToStaticMarkup(
+			<AppView
+				route={route}
+				snapshot={{ data: service, refresh: () => {} }}
+				serviceSnapshot={{ data: service }}
+				events={{ data: [], refresh: () => {} }}
+				logs={{}}
+			/>,
+		);
+		const header = html.match(/<div class="page-heading service-heading">.*?(?=<nav class="tabs")/)?.[0];
+		expect(header).toMatch(
+			/service-identity[^]*<h1>demo<\/h1>[^]*badge-healthy[^]*git-refresh[^]*Refresh<\/button>[^]*Redeploy<\/button>/,
+		);
+		expect(header).toContain("Active revision");
+		expect(header).toContain("Desired revision");
+		expect(header).toContain('href="https://demo.example.test"');
+		expect(html.match(/<header class="topbar">.*?<\/header>/)?.[0]).not.toContain("git-refresh");
+		return header;
+	});
+	expect(new Set(headers).size).toBe(1);
+});
+
 test.each(["events", "secrets"] as const)("%s retains both revision panels from optional service context", (page) => {
 	const html = renderToStaticMarkup(
 		<AppView

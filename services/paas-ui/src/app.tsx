@@ -85,10 +85,22 @@ export const AppView = ({
 	events: ViewResult<UiServiceEvent[]>;
 	logs: ApiResult<UiLogs>;
 	containerId?: string;
-	serviceSnapshot?: ApiResult<UiService>;
+	serviceSnapshot?: ApiResult<UiService> & { refresh?(): void };
 }) => {
 	const buildSha = import.meta.env["VITE_BUILD_SHA"] || "unknown";
 	const path = viewPaths(route).snapshot;
+	const actions =
+		route.page === "service" || route.page === "events" || route.page === "secrets" ? (
+			<GitRefreshControl
+				key={`${route.page}:${route.serviceId}:${route.page === "service" ? (route.tab ?? "overview") : ""}`}
+				serviceId={route.serviceId}
+				onComplete={() => {
+					snapshot.refresh();
+					serviceSnapshot?.refresh?.();
+					events.refresh();
+				}}
+			/>
+		) : undefined;
 	return (
 		<div className='app-shell'>
 			<header className='primary-header'>
@@ -161,10 +173,9 @@ export const AppView = ({
 							</>
 						)}
 					</nav>
-					{(route.page === "services" || route.page === "service") && (
+					{route.page === "services" && (
 						<GitRefreshControl
 							key={path}
-							serviceId={route.page === "service" ? route.serviceId : undefined}
 							onComplete={() => {
 								snapshot.refresh();
 								events.refresh();
@@ -178,11 +189,13 @@ export const AppView = ({
 							key={route.serviceId}
 							serviceId={route.serviceId}
 							service={serviceSnapshot?.data}
+							actions={actions}
 						/>
 					) : route.page === "events" ? (
 						<ServiceEventsPage
 							serviceId={route.serviceId}
 							service={serviceSnapshot?.data}
+							actions={actions}
 							events={events.data}
 							error={events.error}
 						/>
@@ -212,6 +225,7 @@ export const AppView = ({
 					) : route.page === "service" ? (
 						<ServicePage
 							service={snapshot.data as UiService}
+							actions={actions}
 							tab={route.tab}
 							events={events.data}
 							eventError={events.error}
