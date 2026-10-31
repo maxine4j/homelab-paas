@@ -20,6 +20,7 @@ import { EndpointsStore } from "../../src/reconciler/networking/endpoints-store.
 import { NetworkingService } from "../../src/reconciler/networking/networking-service.ts";
 import { ReconcilerService } from "../../src/reconciler/reconciler-service.ts";
 import { ReconciliationStore } from "../../src/reconciler/reconciliation-store.ts";
+import { ResourceSpecification } from "../../src/reconciler/resource-specification.ts";
 import { WebResourceReconciler } from "../../src/reconciler/resources/web/web-reconciler.ts";
 import { WorkerResourceReconciler } from "../../src/reconciler/resources/worker/worker-reconciler.ts";
 import { ServiceEventStore } from "../../src/reconciler/service-event-store.ts";
@@ -78,11 +79,12 @@ export const inProcessPaas = async (
 		config,
 		git,
 		decodeDescriptorYaml,
-		new WebResourceReconciler(docker, deployments, networking, probe),
+		new WebResourceReconciler(new ResourceSpecification(), docker, deployments, networking, probe),
 		checkpoints,
 		now,
 		new EnvironmentResolver(`${directory}/env`, readFile),
 		new WorkerResourceReconciler(
+			new ResourceSpecification(),
 			docker,
 			new WorkerDeploymentService(docker, probe, pause, generateInstanceId),
 			probe,

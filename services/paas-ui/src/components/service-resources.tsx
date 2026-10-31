@@ -1,6 +1,6 @@
 import type { UiResource } from "@homelab-paas/shared-contracts";
 
-import { StatusBadge } from "./status-badge.tsx";
+import { StatusBadges } from "./status-badge.tsx";
 
 const IngressAccess = ({ isPublic }: { isPublic: boolean }) => (
 	<span className='ingress-access'>
@@ -67,7 +67,7 @@ export const ServiceResources = ({ serviceId, resources }: { serviceId: string; 
 									</h3>
 									<span className='eyebrow'>{resource.type}</span>
 								</div>
-								<StatusBadge status={resource.health} />
+								<StatusBadges health={resource.health} sync={resource.sync} />
 							</div>
 							<div className='resource-card-image'>
 								<span className='muted'>Image</span>

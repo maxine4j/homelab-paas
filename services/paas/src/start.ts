@@ -54,9 +54,11 @@ import { NetworkingService } from "./reconciler/networking/networking-service.ts
 import { ReconcilerService } from "./reconciler/reconciler-service.ts";
 import { ReconcilerTask } from "./reconciler/reconciler-task.ts";
 import { ReconciliationStore } from "./reconciler/reconciliation-store.ts";
+import { ResourceSpecification } from "./reconciler/resource-specification.ts";
 import { WebResourceReconciler } from "./reconciler/resources/web/web-reconciler.ts";
 import { WorkerResourceReconciler } from "./reconciler/resources/worker/worker-reconciler.ts";
 import { ServiceEventStore } from "./reconciler/service-event-store.ts";
+import { ResourceStatusService } from "./status/resource-status-service.ts";
 import { FileSystemKeyValueStore } from "./store/file-system-store.ts";
 import { PeriodicTaskRunner } from "./task/periodic.ts";
 import type { StartOptions } from "./types.ts";
@@ -119,19 +121,21 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		],
 		progress,
 	);
+	const environment = new EnvironmentResolver(
+		"/etc/homelab-paas/env",
+		readFile,
+		new DockerHostPathResolver(dockerClient, config.getClusterId()),
+	);
 	const reconciler = new ReconcilerService(
 		config,
 		git,
 		decodeDescriptorYaml,
-		new WebResourceReconciler(docker, deployment, networking, probe),
+		new WebResourceReconciler(new ResourceSpecification(), docker, deployment, networking, probe),
 		store,
 		Date.now,
-		new EnvironmentResolver(
-			"/etc/homelab-paas/env",
-			readFile,
-			new DockerHostPathResolver(dockerClient, config.getClusterId()),
-		),
+		environment,
 		new WorkerResourceReconciler(
+			new ResourceSpecification(),
 			docker,
 			new WorkerDeploymentService(docker, probe, sleep, () => nanoid(10), progress),
 			probe,
@@ -194,7 +198,17 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 			() => provisioner.requiredDomains(),
 		);
 	}
-	const uiService = new PaasUiService(config, git, decodeDescriptorYaml, docker, store, events, health, dockerLogs);
+	const uiService = new PaasUiService(
+		new ResourceStatusService(new ResourceSpecification(), environment),
+		config,
+		git,
+		decodeDescriptorYaml,
+		docker,
+		store,
+		events,
+		health,
+		dockerLogs,
+	);
 	const managementOrigin = (): string => {
 		const { baseDomain, httpPort, httpsPort } = config.getIngressConfig();
 		const port = httpsPort ?? httpPort;

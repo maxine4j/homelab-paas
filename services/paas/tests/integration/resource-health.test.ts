@@ -12,12 +12,14 @@ import { PaasUiService } from "../../src/frontend/paas-ui-service.ts";
 import { UiLiveService } from "../../src/frontend/ui-live-service.ts";
 import { UiWebSocket } from "../../src/frontend/ui-websocket.ts";
 import { ResourceHealthService } from "../../src/health/resource-health-service.ts";
+import { ResourceSpecification } from "../../src/reconciler/resource-specification.ts";
+import { ResourceStatusService } from "../../src/status/resource-status-service.ts";
 import { probe } from "../../src/util/healthcheck.ts";
 import { sleep } from "../../src/util/sleep.ts";
 import { testConfig } from "../../src/util/test/config.ts";
 import { MockHttpServer } from "../util/http-server.ts";
 
-test("HTTP health polling pushes resource health over WebSocket while retaining container state and service phase", async () => {
+test("HTTP health polling pushes resource health over WebSocket with independent sync while retaining container state", async () => {
 	let ready = true;
 	const endpoint = await new MockHttpServer((request) =>
 		request.url.pathname === "/ready" ? new Response("ready", { status: ready ? 200 : 503 }) : undefined,
@@ -43,8 +45,12 @@ test("HTTP health polling pushes resource health over WebSocket while retaining 
 		}),
 		readCommit: async () => ({ message: "Deploy app", authorName: "CI", authoredAt: "2026-10-30T00:00:00Z" }),
 	};
+	const file = await git.fetchFile();
+	const resource = decodeDescriptorYaml(file.content, "demo", file.revision).resources["app"];
+	if (resource?.type !== "web") throw new Error("Expected web fixture");
+	const spec = new ResourceSpecification().get("app", { ...resource, primary: true, env: [] });
 	const containers: ServiceContainer[] = [
-		{ id: "c", resourceId: "app", imageId: "image", revision: "rev", state: "running", spec: "s" },
+		{ id: "c", resourceId: "app", imageId: "image", revision: "rev", state: "running", spec },
 	];
 	const docker = {
 		listServiceContainers: async () => containers,
@@ -66,6 +72,10 @@ test("HTTP health polling pushes resource health over WebSocket while retaining 
 	};
 	const health = new ResourceHealthService(config, git, decodeDescriptorYaml, docker, probe, changes);
 	const ui = new PaasUiService(
+		new ResourceStatusService(new ResourceSpecification(), {
+			resolve: async (_serviceId, env) =>
+				env.map((entry) => ({ name: entry.name, value: "value" in entry ? entry.value : "test-secret" })),
+		}),
 		config,
 		git,
 		decodeDescriptorYaml,
@@ -100,32 +110,32 @@ test("HTTP health polling pushes resource health over WebSocket while retaining 
 		);
 		expect(await snapshot).toMatchObject({
 			type: "snapshot",
-			data: { health: "unhealthy", containers: [{ state: "running" }] },
+			data: { sync: "Synced", health: "Unknown", containers: [{ state: "running" }] },
 		});
 		for (const [isReady, expected] of [
-			[true, "healthy"],
-			[false, "unhealthy"],
-			[true, "healthy"],
+			[true, "Healthy"],
+			[false, "Degraded"],
+			[true, "Healthy"],
 		] as const) {
 			ready = isReady;
 			snapshot = next();
 			await health.run();
 			expect(await snapshot).toMatchObject({
 				type: "snapshot",
-				data: { health: expected, containers: [{ state: "running" }] },
+				data: { sync: "Synced", health: expected, containers: [{ state: "running" }] },
 			});
 		}
 		snapshot = next();
 		health.started("demo", "app");
-		expect(await snapshot).toMatchObject({ data: { health: "deploying" } });
+		expect(await snapshot).toMatchObject({ data: { health: "Progressing" } });
 		snapshot = next();
 		health.finished("demo", "app");
-		expect(await snapshot).toMatchObject({ data: { health: "unhealthy" } });
+		expect(await snapshot).toMatchObject({ data: { health: "Unknown" } });
 		containers.length = 0;
 		snapshot = next();
 		await health.run();
-		expect(await snapshot).toMatchObject({ data: { health: "missing", containers: [] } });
-		expect((await ui.getService("demo")).phase).toBe("ready");
+		expect(await snapshot).toMatchObject({ data: { health: "Missing", containers: [] } });
+		expect(await ui.getService("demo")).toMatchObject({ sync: "OutOfSync", health: "Missing" });
 		expect(endpoint.requests.map(({ url }) => url.pathname)).toEqual(["/ready", "/ready", "/ready"]);
 	} finally {
 		socket?.terminate();

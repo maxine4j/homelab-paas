@@ -1,4 +1,4 @@
-import type { ResourceHealth } from "@homelab-paas/shared-contracts";
+import type { HealthStatus } from "@homelab-paas/shared-contracts";
 
 import type { DockerContainerDetails, DockerNetwork, ServiceContainer } from "../docker/types.ts";
 
@@ -9,6 +9,6 @@ export interface HealthDocker {
 }
 
 export interface HealthObservation {
-	health: ResourceHealth;
+	health: HealthStatus;
 	signature: string;
 }

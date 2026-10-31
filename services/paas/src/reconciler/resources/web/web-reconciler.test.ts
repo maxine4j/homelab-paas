@@ -5,6 +5,7 @@ import type { DockerContainerDetails, ServiceContainer } from "../../../docker/t
 import { captureLogs } from "../../../util/test/logs.ts";
 import type { IDeploymentService } from "../../deployment/deployment-service.ts";
 import type { DeploymentRequest, DeploymentWebResource } from "../../deployment/strategy/types.ts";
+import { ResourceSpecification } from "../../resource-specification.ts";
 import { WebResourceReconciler } from "./web-reconciler.ts";
 
 const resource: DeploymentWebResource = { type: "web", image: "app:1", ingress: { public: true, port: 8080 } };
@@ -15,6 +16,7 @@ test.each([undefined, null])("unchanged web containers skip unconfigured HTTP ch
 	await f.converge();
 	const probe = vi.fn(async () => false);
 	const reconciler = new WebResourceReconciler(
+		new ResourceSpecification(),
 		f.docker,
 		{
 			deploy: async () => {
@@ -193,7 +195,13 @@ function fixture() {
 		setHealthy(value: boolean) {
 			healthy = value;
 		},
-		reconciler: new WebResourceReconciler(docker, deployment, networking, async () => healthy),
+		reconciler: new WebResourceReconciler(
+			new ResourceSpecification(),
+			docker,
+			deployment,
+			networking,
+			async () => healthy,
+		),
 		setContainers(value: ServiceContainer[]) {
 			containers = value;
 		},
@@ -415,6 +423,7 @@ test("observation failures do not deploy and deployment failures propagate", asy
 	await expect(f.reconciler.reconcile(input)).rejects.toThrow("observation failed");
 	expect(f.requests).toEqual([]);
 	const reconciler = new WebResourceReconciler(
+		new ResourceSpecification(),
 		fixture().docker,
 		{
 			async deploy() {

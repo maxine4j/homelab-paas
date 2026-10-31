@@ -27,9 +27,12 @@ export const uiLiveClientSchema = z.discriminatedUnion("type", [
 	z.strictObject({ type: z.literal("unsubscribe"), id: subscriptionId }),
 ]);
 const metadata = z.object({ authorName: z.string(), authoredAt: z.string(), message: z.string() });
+const sync = z.enum(["Synced", "OutOfSync", "Unknown"]);
+const health = z.enum(["Healthy", "Progressing", "Degraded", "Missing", "Unknown"]);
 const summary = z.object({
 	serviceId: identity,
-	phase: z.enum(["unknown", "deploying", "ready", "failed"]),
+	sync,
+	health,
 	description: z.string().optional(),
 	primaryUrl: z.string().optional(),
 	desiredRevision: z.string().optional(),
@@ -41,7 +44,8 @@ const summary = z.object({
 });
 const resource = z.object({
 	resourceId: identity,
-	health: z.enum(["deploying", "missing", "healthy", "unhealthy"]),
+	sync,
+	health,
 	type: z.string(),
 	url: z.string().optional(),
 	primaryUrl: z.string().optional(),

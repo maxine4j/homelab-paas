@@ -8,7 +8,14 @@ const renderResources = (resources: UiResource[]) =>
 	renderToStaticMarkup(
 		<ServicePage
 			tab='resources'
-			service={{ serviceId: "metrics", phase: "ready", source: {}, descriptorStatus: "available", resources }}
+			service={{
+				serviceId: "metrics",
+				sync: "Synced",
+				health: "Healthy",
+				source: {},
+				descriptorStatus: "available",
+				resources,
+			}}
 		/>,
 	);
 
@@ -19,7 +26,8 @@ test.each([true, false])(
 			{
 				resourceId: "grafana",
 				type: "web",
-				health: "healthy",
+				sync: "Synced",
+				health: "Healthy",
 				url: "https://grafana.metrics.example.test",
 				primaryUrl: "https://metrics.example.test",
 				config: {
@@ -45,9 +53,23 @@ test.each([true, false])(
 
 test("cards retain non-web and observed-only resources with explicit unavailable details", () => {
 	const html = renderResources([
-		{ resourceId: "db", type: "postgres", health: "deploying", config: { image: "postgres:17" }, containers: [] },
-		{ resourceId: "old", type: "unknown", health: "unhealthy", containers: [] },
-		{ resourceId: "app", type: "web", health: "missing", url: "https://app.metrics.example.test", containers: [] },
+		{
+			resourceId: "db",
+			type: "postgres",
+			sync: "OutOfSync",
+			health: "Progressing",
+			config: { image: "postgres:17" },
+			containers: [],
+		},
+		{ resourceId: "old", type: "unknown", sync: "OutOfSync", health: "Degraded", containers: [] },
+		{
+			resourceId: "app",
+			type: "web",
+			sync: "OutOfSync",
+			health: "Missing",
+			url: "https://app.metrics.example.test",
+			containers: [],
+		},
 	]);
 	expect(html).toContain('href="#/services/metrics/resources/db"');
 	expect(html).toContain('href="#/services/metrics/resources/old"');
@@ -55,8 +77,8 @@ test("cards retain non-web and observed-only resources with explicit unavailable
 	expect(html).toContain("postgres:17");
 	expect(html).toContain("Image unavailable");
 	expect(html).toContain("Ingress access unavailable");
-	expect(html).toContain("badge-deploying");
-	expect(html).toContain("badge-unhealthy");
+	expect(html).toContain("badge-progressing");
+	expect(html).toContain("badge-degraded");
 	expect(html).toContain("badge-missing");
 	expect(html).not.toContain("Private ingress");
 	expect(html).not.toContain("Public ingress");

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { ServiceDetailShell } from "../components/service-detail-shell.tsx";
 import { ServiceEvents } from "../components/service-events.tsx";
 import { ServiceResources } from "../components/service-resources.tsx";
-import { StatusBadge } from "../components/status-badge.tsx";
+import { StatusBadges } from "../components/status-badge.tsx";
 import type { ServiceTab } from "../types.ts";
 
 export const ServicePage = ({
@@ -61,7 +61,7 @@ export const ServicePage = ({
 							>
 								<div className='card-top'>
 									<span className='eyebrow'>{resource.type}</span>
-									<StatusBadge status={resource.health} />
+									<StatusBadges health={resource.health} sync={resource.sync} />
 								</div>
 								<h3>{resource.resourceId}</h3>
 							</a>

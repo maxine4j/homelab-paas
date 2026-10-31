@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 
 import { ServiceEvents } from "../components/service-events.tsx";
-import { StatusBadge } from "../components/status-badge.tsx";
 import { parseRoute } from "../hooks/use-route.ts";
 import { ClusterPage } from "./cluster-page.tsx";
 import { ResourceEventsPage } from "./resource-events-page.tsx";
@@ -16,7 +15,8 @@ test("Descriptor tab routes to selectable redacted YAML with an unavailable fall
 	expect(parseRoute("#/services/demo/descriptor")).toEqual({ page: "service", serviceId: "demo", tab: "descriptor" });
 	const service = {
 		serviceId: "demo",
-		phase: "ready",
+		sync: "Synced",
+		health: "Healthy",
 		source: {},
 		descriptorStatus: "available",
 		resources: [],
@@ -61,33 +61,35 @@ test("secret failure events link directly to the service Secrets editor", () => 
 	expect(html).toContain("FIRST, SECOND");
 });
 
-test.each(["deploying", "missing", "healthy", "unhealthy"] as const)(
+test.each(["Progressing", "Missing", "Healthy", "Degraded", "Unknown"] as const)(
 	"resource %s health sits beside its heading and replaces card container status",
 	(health) => {
 		const resource = {
 			resourceId: "app",
 			type: "web",
+			sync: "Synced" as const,
 			health,
 			containers: [
 				{ id: "c", resourceId: "app", imageId: "image", revision: "rev", state: "running", running: true },
 			],
 		};
 		const html = renderToStaticMarkup(<ResourcePage serviceId='demo' resource={resource} tab='config' />);
-		expect(html).toMatch(new RegExp(`class="service-identity"><h1>app</h1>[^]*?badge-${health}`));
+		expect(html).toMatch(new RegExp(`class="service-identity"><h1>app</h1>[^]*?badge-${health.toLowerCase()}`));
 		expect(html).toContain("badge-running");
 		expect(html).toContain("running");
 		const cards = renderToStaticMarkup(
 			<ServicePage
 				service={{
 					serviceId: "demo",
-					phase: "ready",
+					sync: "Synced",
+					health: "Healthy",
 					source: {},
 					descriptorStatus: "available",
 					resources: [resource],
 				}}
 			/>,
 		);
-		expect(cards).toMatch(new RegExp(`card resource-link[^]*?badge-${health}`));
+		expect(cards).toMatch(new RegExp(`card resource-link[^]*?badge-${health.toLowerCase()}`));
 		expect(cards).not.toContain("badge-running");
 	},
 );
@@ -99,7 +101,8 @@ test("web inspection links to the resource host and primary service alias", () =
 			tab='config'
 			resource={{
 				resourceId: "app",
-				health: "missing",
+				sync: "OutOfSync",
+				health: "Missing",
 				type: "web",
 				containers: [],
 				url: "https://app.demo.example.test",
@@ -117,18 +120,21 @@ test("cluster and service pages expose configuration, deployment status and reso
 			<ClusterPage cluster={{ clusterId: "local", config: { version: 1 }, revision: "r1", fields: [] }} />,
 		),
 	).toContain("Cluster configuration");
-	const services = renderToStaticMarkup(<ServicesPage services={[{ serviceId: "demo", phase: "failed" }]} />);
+	const services = renderToStaticMarkup(
+		<ServicesPage services={[{ serviceId: "demo", sync: "OutOfSync", health: "Degraded" }]} />,
+	);
 	expect(services).toContain("#/services/demo");
-	expect(services).toContain("unhealthy");
+	expect(services).toContain("Degraded");
 	expect(renderToStaticMarkup(<ServicesPage services={[]} />)).toContain("No services configured");
 	const detail = renderToStaticMarkup(
 		<ServicePage
 			service={{
 				serviceId: "demo",
-				phase: "ready",
+				sync: "Synced",
+				health: "Healthy",
 				source: {},
 				descriptorStatus: "unavailable",
-				resources: [{ resourceId: "app", type: "web", health: "missing", containers: [] }],
+				resources: [{ resourceId: "app", type: "web", sync: "OutOfSync", health: "Missing", containers: [] }],
 			}}
 		/>,
 	);
@@ -141,7 +147,14 @@ test("cluster and service pages expose configuration, deployment status and reso
 test("service details omit the Service label and separate services back link", () => {
 	const html = renderToStaticMarkup(
 		<ServicePage
-			service={{ serviceId: "demo", phase: "ready", source: {}, descriptorStatus: "available", resources: [] }}
+			service={{
+				serviceId: "demo",
+				sync: "Synced",
+				health: "Healthy",
+				source: {},
+				descriptorStatus: "available",
+				resources: [],
+			}}
 		/>,
 	);
 	expect(html).not.toContain('<p class="eyebrow">Service</p>');
@@ -150,24 +163,14 @@ test("service details omit the Service label and separate services back link", (
 	expect(html).toContain("badge-healthy");
 });
 
-test.each([
-	["ready", "healthy"],
-	["deploying", "deploying"],
-	["failed", "unhealthy"],
-	["unknown", "missing"],
-])("service phase %s displays %s", (phase, label) => {
-	const html = renderToStaticMarkup(<StatusBadge status={phase!} />);
-	expect(html).toContain(`badge-${label}`);
-	expect(html).toContain(` ${label}`);
-});
-
 test("service cards provide a full-card detail link, an independent web link, description and compact revision rows", () => {
 	const html = renderToStaticMarkup(
 		<ServicesPage
 			services={[
 				{
 					serviceId: "demo",
-					phase: "ready",
+					sync: "Synced",
+					health: "Healthy",
 					activeRevision: "active123",
 					desiredRevision: "desired456",
 					description: "Document <archive>",
@@ -200,7 +203,8 @@ test("service cards provide a full-card detail link, an independent web link, de
 test("service revisions link their own GitHub commits beside the identity and retain commit metadata", () => {
 	const service = {
 		serviceId: "demo",
-		phase: "ready" as const,
+		sync: "Synced" as const,
+		health: "Healthy" as const,
 		source: { remote: "https://github.com/owner/repo.git" },
 		descriptorStatus: "available" as const,
 		resources: [],
@@ -240,7 +244,8 @@ test("service revision hashes stay visible when metadata is unavailable", () => 
 		<ServicePage
 			service={{
 				serviceId: "demo",
-				phase: "ready",
+				sync: "Synced",
+				health: "Healthy",
 				source: {},
 				descriptorStatus: "available",
 				resources: [],
@@ -267,7 +272,8 @@ test("service cards show commit details only for the active revision", () => {
 			services={[
 				{
 					serviceId: "demo",
-					phase: "ready",
+					sync: "Synced",
+					health: "Healthy",
 					activeRevision: "active",
 					desiredRevision: "desired",
 					activeRevisionMetadata: metadata,
@@ -283,11 +289,21 @@ test("service cards show commit details only for the active revision", () => {
 	expect(html.match(/dateTime="2026-10-26T00:00:00Z"/g)).toHaveLength(1);
 	const unavailable = renderToStaticMarkup(
 		<ServicesPage
-			services={[{ serviceId: "demo", phase: "ready", activeRevision: "active", desiredRevision: "desired" }]}
+			services={[
+				{
+					serviceId: "demo",
+					sync: "Synced",
+					health: "Healthy",
+					activeRevision: "active",
+					desiredRevision: "desired",
+				},
+			]}
 		/>,
 	);
 	expect(unavailable.match(/Commit details unavailable/g)).toHaveLength(1);
-	const missing = renderToStaticMarkup(<ServicesPage services={[{ serviceId: "demo", phase: "unknown" }]} />);
+	const missing = renderToStaticMarkup(
+		<ServicesPage services={[{ serviceId: "demo", sync: "Unknown", health: "Unknown" }]} />,
+	);
 	expect(missing).toContain("Not deployed");
 	expect(missing).not.toContain('target="_blank"');
 });
@@ -379,7 +395,7 @@ test("resource overview shows two exact resource matches and event navigation", 
 	const html = renderToStaticMarkup(
 		<ResourcePage
 			serviceId='demo'
-			resource={{ resourceId: "app", type: "web", health: "missing", containers: [] }}
+			resource={{ resourceId: "app", type: "web", sync: "OutOfSync", health: "Missing", containers: [] }}
 			tab='config'
 			events={history}
 		/>,
@@ -418,7 +434,14 @@ test("resource history direct links show all exact matches without resource insp
 test("service details show recent failure events and link to service event history", () => {
 	const html = renderToStaticMarkup(
 		<ServicePage
-			service={{ serviceId: "demo", phase: "failed", source: {}, descriptorStatus: "unavailable", resources: [] }}
+			service={{
+				serviceId: "demo",
+				sync: "OutOfSync",
+				health: "Degraded",
+				source: {},
+				descriptorStatus: "unavailable",
+				resources: [],
+			}}
 			events={events}
 		/>,
 	);
@@ -431,7 +454,8 @@ test("service overview shows tabs and two recent events above compact resources 
 		<ServicePage
 			service={{
 				serviceId: "demo",
-				phase: "ready",
+				sync: "Synced",
+				health: "Healthy",
 				source: { remote: "https://github.com/example/demo.git", descriptorPath: "service.sd.yaml" },
 				descriptorStatus: "available",
 				descriptorRevision: "abc1234",
@@ -446,7 +470,8 @@ test("service overview shows tabs and two recent events above compact resources 
 					{
 						resourceId: "app",
 						type: "web",
-						health: "missing",
+						sync: "OutOfSync",
+						health: "Missing",
 						primaryUrl: "https://demo.example.test",
 						containers: [],
 					},
@@ -488,7 +513,14 @@ test("service resources tab supports direct links without changing resource insp
 	const html = renderToStaticMarkup(
 		<ServicePage
 			tab='resources'
-			service={{ serviceId: "demo", phase: "ready", source: {}, descriptorStatus: "available", resources: [] }}
+			service={{
+				serviceId: "demo",
+				sync: "Synced",
+				health: "Healthy",
+				source: {},
+				descriptorStatus: "available",
+				resources: [],
+			}}
 		/>,
 	);
 	expect(html).toContain('href="#/services/demo/resources" aria-current="page">Resources</a>');
@@ -544,7 +576,14 @@ test("both service event views show missing names, host edit path and safe synta
 	const full = renderToStaticMarkup(<ServiceEventsPage serviceId='demo' events={detailed} />);
 	const recent = renderToStaticMarkup(
 		<ServicePage
-			service={{ serviceId: "demo", phase: "failed", source: {}, descriptorStatus: "available", resources: [] }}
+			service={{
+				serviceId: "demo",
+				sync: "OutOfSync",
+				health: "Degraded",
+				source: {},
+				descriptorStatus: "available",
+				resources: [],
+			}}
 			events={detailed}
 		/>,
 	);
@@ -647,7 +686,8 @@ test("cluster presents identity and ingress above an editor limited to Git, reco
 
 test("resource inspection renders configuration, state and escaped log output", () => {
 	const resource = {
-		health: "healthy" as const,
+		sync: "Synced" as const,
+		health: "Healthy" as const,
 		resourceId: "app",
 		type: "web",
 		config: { image: "app:1" },
@@ -683,7 +723,8 @@ test("resource inspection renders configuration, state and escaped log output", 
 
 test("logs open without a container dropdown for default and explicit container links", () => {
 	const resource = {
-		health: "healthy" as const,
+		sync: "Synced" as const,
+		health: "Healthy" as const,
 		resourceId: "app",
 		type: "web",
 		containers: ["first", "second"].map((id) => ({

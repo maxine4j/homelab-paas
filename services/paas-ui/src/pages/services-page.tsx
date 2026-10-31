@@ -1,7 +1,7 @@
 import type { UiServiceSummary } from "@homelab-paas/shared-contracts";
 
 import { RevisionDetails } from "../components/revision-details.tsx";
-import { StatusBadge } from "../components/status-badge.tsx";
+import { StatusBadges } from "../components/status-badge.tsx";
 
 export const ServicesPage = ({ services }: { services: UiServiceSummary[] }) => (
 	<>
@@ -11,7 +11,7 @@ export const ServicesPage = ({ services }: { services: UiServiceSummary[] }) => 
 				<h1>
 					Services <span className='count'>{services.length}</span>
 				</h1>
-				<p>Configured services and their latest deployment status.</p>
+				<p>Configured services and their sync and health status.</p>
 			</div>
 		</div>
 		{services.length === 0 ? (
@@ -42,7 +42,7 @@ export const ServicesPage = ({ services }: { services: UiServiceSummary[] }) => 
 									<span aria-hidden='true'>↗</span>
 								</a>
 							)}
-							<StatusBadge status={service.phase} />
+							<StatusBadges health={service.health} sync={service.sync} />
 						</div>
 						<p className='service-description' title={service.description}>
 							{service.description}

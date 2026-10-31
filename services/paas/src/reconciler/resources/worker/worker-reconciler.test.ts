@@ -5,6 +5,7 @@ import type { ServiceContainer } from "../../../docker/types.ts";
 import { captureLogs } from "../../../util/test/logs.ts";
 import type { DeploymentWorkerResource } from "../../deployment/types.ts";
 import type { IWorkerDeploymentService } from "../../deployment/worker-deployment-service.ts";
+import { ResourceSpecification } from "../../resource-specification.ts";
 import { WorkerResourceReconciler } from "./worker-reconciler.ts";
 
 const resource: DeploymentWorkerResource = {
@@ -115,7 +116,7 @@ const fixture = () => {
 		removeServiceContainer: vi.fn(),
 		readServiceContainerLogs: vi.fn(),
 	};
-	const reconciler = new WorkerResourceReconciler(docker, { deploy }, probe);
+	const reconciler = new WorkerResourceReconciler(new ResourceSpecification(), docker, { deploy }, probe);
 	return {
 		reconciler,
 		docker,

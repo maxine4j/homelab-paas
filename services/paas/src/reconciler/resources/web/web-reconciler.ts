@@ -1,11 +1,10 @@
-import { createHash } from "node:crypto";
-
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { HttpProbe } from "../../../util/healthcheck.ts";
 import { createLogger } from "../../../util/logger.ts";
 import type { IDeploymentService } from "../../deployment/deployment-service.ts";
 import type { DeploymentWebResource } from "../../deployment/strategy/types.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
+import type { IResourceSpecification } from "../../resource-specification.ts";
 
 export interface WebReconciliationRequest {
 	force?: boolean;
@@ -30,6 +29,7 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 	readonly lifecycle = "deployment";
 
 	constructor(
+		private readonly specification: IResourceSpecification,
 		private readonly docker: IDockerService,
 		private readonly deployment: IDeploymentService,
 		private readonly networking: INetworkingService,
@@ -38,7 +38,7 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 
 	async reconcile(request: WebReconciliationRequest): Promise<void> {
 		const { serviceId, resourceId, resource } = request;
-		const spec = this.fingerprint(resourceId, resource);
+		const spec = this.specification.get(resourceId, resource);
 		const containers = await this.docker.listServiceContainers(serviceId, resourceId);
 		const current = containers.at(0);
 
@@ -86,52 +86,5 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 			"Detected web resource drift; deploying replacement",
 		);
 		await this.deployment.deploy({ ...request, spec });
-	}
-
-	private fingerprint(resourceId: string, resource: DeploymentWebResource): string {
-		const env = Object.entries(
-			Object.fromEntries((resource.env ?? []).map(({ name, value }) => [name, value])),
-		).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-		return createHash("sha256")
-			.update(
-				JSON.stringify([
-					resourceId,
-					{
-						image: resource.image,
-						...(resource.devices?.length
-							? {
-									devices: resource.devices.map(({ hostPath, mountPath, permissions }) => ({
-										hostPath,
-										mountPath,
-										permissions: permissions ?? "rwm",
-									})),
-								}
-							: {}),
-						...(resource.supplementaryGroups?.length
-							? { supplementaryGroups: [...resource.supplementaryGroups].sort((a, b) => a - b) }
-							: {}),
-						...(resource.hostPorts?.length ? { hostPorts: resource.hostPorts } : {}),
-						command: resource.command ?? null,
-						env,
-						volumes:
-							resource.volumes?.map(({ hostPath, mountPath, readOnly, ownership }) => ({
-								hostPath,
-								mountPath,
-								readOnly: readOnly ?? false,
-								selinux: "z",
-								...(!readOnly && ownership !== false
-									? { ownership: ownership ? `${ownership.uid}:${ownership.gid}` : "1000:1000" }
-									: {}),
-							})) ?? [],
-						limits: { cpus: resource.limits?.cpus, memoryMiB: resource.limits?.memoryMiB },
-						replicas: resource.replicas ?? 1,
-						rolloutStrategy: resource.rolloutStrategy ?? "recreate",
-						ingress: { public: resource.ingress.public, port: resource.ingress.port },
-						healthcheckUrl: resource.healthcheckUrl ?? null,
-						terminationTimeoutSeconds: resource.termination?.timeoutSeconds ?? 30,
-					},
-				]),
-			)
-			.digest("hex");
 	}
 }

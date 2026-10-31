@@ -1,4 +1,4 @@
-import type { Resource, ResourceHealth } from "@homelab-paas/shared-contracts";
+import type { Resource, HealthStatus } from "@homelab-paas/shared-contracts";
 
 import type { IPaasConfig } from "../config/paas-config.ts";
 import type { ServiceContainer } from "../docker/types.ts";
@@ -12,7 +12,7 @@ import type { HealthDocker, HealthObservation } from "./types.ts";
 
 export interface IResourceHealthReader {
 	/** Returns latest health only for the same observed container identities and states. */
-	getStatus(serviceId: string, resourceId: string, containers: readonly ServiceContainer[]): ResourceHealth;
+	getStatus(serviceId: string, resourceId: string, containers: readonly ServiceContainer[]): HealthStatus;
 }
 
 export interface IResourceHealthProgress {
@@ -36,12 +36,12 @@ export class ResourceHealthService implements IResourceHealthReader, IResourceHe
 		private readonly changes: IChangeBus,
 	) {}
 
-	getStatus(serviceId: string, resourceId: string, containers: readonly ServiceContainer[]): ResourceHealth {
+	getStatus(serviceId: string, resourceId: string, containers: readonly ServiceContainer[]): HealthStatus {
 		const key = `${serviceId}/${resourceId}`;
-		if (this.deploying.has(key)) return "deploying";
-		if (!containers.length) return "missing";
+		if (this.deploying.has(key)) return "Progressing";
+		if (!containers.length) return "Missing";
 		const observation = this.observations.get(key);
-		return observation?.signature === this.signature(containers) ? observation.health : "unhealthy";
+		return observation?.signature === this.signature(containers) ? observation.health : "Unknown";
 	}
 
 	started(serviceId: string, resourceId: string): void {
@@ -83,12 +83,12 @@ export class ResourceHealthService implements IResourceHealthReader, IResourceHe
 							const generation = this.generations.get(key);
 							const current = containers.filter((container) => container.resourceId === resourceId);
 							const signature = this.signature(current);
-							let health: ResourceHealth;
+							let health: HealthStatus;
 							try {
 								health = await this.check(serviceId, resources[resourceId], current);
 							} catch (err) {
 								this.log.error({ err, serviceId, resourceId }, "Cannot inspect resource health");
-								health = current.length ? "unhealthy" : "missing";
+								health = "Unknown";
 							}
 							if (this.generations.get(key) !== generation) return;
 							const previous = this.observations.get(key);
@@ -116,15 +116,15 @@ export class ResourceHealthService implements IResourceHealthReader, IResourceHe
 		serviceId: string,
 		resource: Resource | undefined,
 		containers: ServiceContainer[],
-	): Promise<ResourceHealth> {
-		if (!containers.length) return "missing";
-		if (!resource || (resource.type !== "web" && resource.type !== "worker")) return "unhealthy";
+	): Promise<HealthStatus> {
+		if (!containers.length) return "Missing";
+		if (!resource || (resource.type !== "web" && resource.type !== "worker")) return "Unknown";
 		if (containers.length !== (resource.replicas ?? 1) || containers.some(({ state }) => state !== "running"))
-			return "unhealthy";
-		if (!resource.healthcheckUrl) return "healthy";
+			return "Degraded";
+		if (!resource.healthcheckUrl) return "Healthy";
 		const healthcheckUrl = resource.healthcheckUrl;
 		const network = await this.docker.inspectServiceNetwork(serviceId);
-		if (!network) return "unhealthy";
+		if (!network) return "Degraded";
 		const results = await Promise.all(
 			containers.map(async ({ id }) => {
 				const container = await this.docker.inspectServiceContainer(serviceId, id);
@@ -141,7 +141,7 @@ export class ResourceHealthService implements IResourceHealthReader, IResourceHe
 				);
 			}),
 		);
-		return results.every(Boolean) ? "healthy" : "unhealthy";
+		return results.every(Boolean) ? "Healthy" : "Degraded";
 	}
 
 	private signature(containers: readonly ServiceContainer[]): string {

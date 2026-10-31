@@ -1,10 +1,8 @@
-import { createHash } from "node:crypto";
-
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { HttpProbe } from "../../../util/healthcheck.ts";
 import { createLogger } from "../../../util/logger.ts";
-import type { DeploymentWorkerResource } from "../../deployment/types.ts";
 import type { IWorkerDeploymentService } from "../../deployment/worker-deployment-service.ts";
+import type { IResourceSpecification } from "../../resource-specification.ts";
 import type { WorkerReconciliationRequest } from "./types.ts";
 
 export interface IWorkerResourceReconciler {
@@ -20,6 +18,7 @@ export class WorkerResourceReconciler implements IWorkerResourceReconciler {
 	readonly lifecycle = "deployment";
 
 	constructor(
+		private readonly specification: IResourceSpecification,
 		private readonly docker: IDockerService,
 		private readonly deployment: IWorkerDeploymentService,
 		private readonly probe: HttpProbe,
@@ -27,7 +26,7 @@ export class WorkerResourceReconciler implements IWorkerResourceReconciler {
 
 	async reconcile(request: WorkerReconciliationRequest): Promise<void> {
 		const { serviceId, resourceId, resource } = request;
-		const spec = this.fingerprint(resourceId, resource);
+		const spec = this.specification.get(resourceId, resource);
 		const containers = await this.docker.listServiceContainers(serviceId, resourceId);
 		if (
 			!request.force
@@ -65,53 +64,5 @@ export class WorkerResourceReconciler implements IWorkerResourceReconciler {
 			"Detected worker resource drift; reconciling replicas",
 		);
 		await this.deployment.deploy({ ...request, spec });
-	}
-
-	private fingerprint(resourceId: string, resource: DeploymentWorkerResource): string {
-		const env = Object.entries(
-			Object.fromEntries((resource.env ?? []).map(({ name, value }) => [name, value])),
-		).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-		return createHash("sha256")
-			.update(
-				JSON.stringify([
-					resourceId,
-					{
-						type: "worker",
-						image: resource.image,
-						...(resource.devices?.length
-							? {
-									devices: resource.devices.map(({ hostPath, mountPath, permissions }) => ({
-										hostPath,
-										mountPath,
-										permissions: permissions ?? "rwm",
-									})),
-								}
-							: {}),
-						...(resource.supplementaryGroups?.length
-							? { supplementaryGroups: [...resource.supplementaryGroups].sort((a, b) => a - b) }
-							: {}),
-						...(resource.hostPorts?.length ? { hostPorts: resource.hostPorts } : {}),
-						command: resource.command ?? null,
-						env,
-						volumes:
-							resource.volumes?.map(({ hostPath, mountPath, readOnly, ownership }) => ({
-								hostPath,
-								mountPath,
-								readOnly: readOnly ?? false,
-								selinux: "z",
-								...(!readOnly && ownership !== false
-									? { ownership: ownership ? `${ownership.uid}:${ownership.gid}` : "1000:1000" }
-									: {}),
-							})) ?? [],
-						limits: { cpus: resource.limits?.cpus, memoryMiB: resource.limits?.memoryMiB },
-						replicas: resource.replicas ?? 1,
-						rolloutStrategy: resource.rolloutStrategy ?? "recreate",
-						healthcheckPort: resource.healthcheckPort,
-						healthcheckUrl: resource.healthcheckUrl ?? null,
-						terminationTimeoutSeconds: resource.termination?.timeoutSeconds ?? 30,
-					},
-				]),
-			)
-			.digest("hex");
 	}
 }

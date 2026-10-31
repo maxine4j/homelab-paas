@@ -5,7 +5,8 @@ const revision = "b7e92a43c0d851fa6e129b0d2c7a8e5409631fba";
 const resources: UiResource[] = [
 	{
 		resourceId: "web",
-		health: "healthy",
+		sync: "Synced",
+		health: "Healthy",
 		type: "web",
 		url: "https://web.paperless.example.test",
 		primaryUrl: "https://paperless.example.test",
@@ -70,7 +71,8 @@ egress:
 	},
 	{
 		resourceId: "database",
-		health: "healthy",
+		sync: "Synced",
+		health: "Healthy",
 		type: "postgres",
 		configYaml: "type: postgres\nimage: postgres:17\nlimits:\n  cpus: 1\n  memoryMiB: 1024\n",
 		config: { type: "postgres", image: "postgres:17", limits: { cpus: 1, memoryMiB: 1024 } },
@@ -88,7 +90,8 @@ egress:
 	},
 	{
 		resourceId: "broker",
-		health: "healthy",
+		sync: "Synced",
+		health: "Healthy",
 		type: "rabbitmq",
 		configYaml: "type: rabbitmq\nimage: rabbitmq:4\nlimits:\n  memoryMiB: 512\n",
 		config: { type: "rabbitmq", image: "rabbitmq:4", limits: { memoryMiB: 512 } },
@@ -114,7 +117,8 @@ const service: UiService = {
 		authorName: "Alex",
 		authoredAt: "2026-10-28T01:00:00Z",
 	},
-	phase: "ready",
+	sync: "Synced",
+	health: "Healthy",
 	activeRevision: revision,
 	desiredRevision: revision,
 	descriptorRevision: revision,
@@ -231,12 +235,13 @@ export const mockApi = (): Plugin => ({
 			const path = request.url?.split("?").at(0);
 			let data: unknown;
 			if (path === "/cluster") data = cluster;
-			if (path === "/services") data = [service, { serviceId: "jellyfin", phase: "unknown" }];
+			if (path === "/services") data = [service, { serviceId: "jellyfin", sync: "Unknown", health: "Unknown" }];
 			if (path === "/services/paperless") data = service;
 			if (path === "/services/jellyfin")
 				data = {
 					serviceId: "jellyfin",
-					phase: "unknown",
+					sync: "Unknown",
+					health: "Unknown",
 					source: {},
 					descriptorStatus: "unavailable",
 					resources: [],

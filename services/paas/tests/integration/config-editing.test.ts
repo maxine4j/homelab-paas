@@ -9,6 +9,8 @@ import { PaasConfig, decodeDescriptorYaml } from "../../src/config/paas-config.t
 import { createPaasUiRouter } from "../../src/frontend/paas-ui-router.ts";
 import { PaasUiService } from "../../src/frontend/paas-ui-service.ts";
 import { JwtClient } from "../../src/ingress/auth/jwt-client.ts";
+import { ResourceSpecification } from "../../src/reconciler/resource-specification.ts";
+import { ResourceStatusService } from "../../src/status/resource-status-service.ts";
 import { atomicWriteFile, mkdtemp, readFile, rm, stat } from "../../src/util/file.ts";
 import { testConfigValue } from "../../src/util/test/config.ts";
 import { startTestApi } from "../../src/util/test/router.ts";
@@ -28,10 +30,18 @@ test("authenticated config edits persist on disk and update existing JWT and ser
 	const tokens = new JwtClient(config, Date.now);
 	const token = tokens.issue({ userId: "Alice" }, "session");
 	const ui = new PaasUiService(
+		new ResourceStatusService(new ResourceSpecification(), {
+			resolve: async (_serviceId, env) =>
+				env.map((entry) => ({ name: entry.name, value: "value" in entry ? entry.value : "test-secret" })),
+		}),
 		config,
 		{ fetchFile: vi.fn(), readCommit: vi.fn() },
 		decodeDescriptorYaml,
-		{ listServiceContainers: vi.fn(), inspectServiceContainer: vi.fn(), readServiceContainerLogs: vi.fn() },
+		{
+			listServiceContainers: vi.fn(async () => []),
+			inspectServiceContainer: vi.fn(),
+			readServiceContainerLogs: vi.fn(),
+		},
 		{ read: async () => undefined, write: vi.fn() },
 		{ append: async () => {}, list: async () => [] },
 		{ getStatus: vi.fn() },
@@ -80,7 +90,7 @@ test("authenticated config edits persist on disk and update existing JWT and ser
 			auth: { session: { signingKey: "new-key-".repeat(8) } },
 			services: { demo: { accessToken: "repository-access-token" } },
 		});
-		expect(await ui.listServices()).toEqual([{ serviceId: "demo", phase: "unknown" }]);
+		expect(await ui.listServices()).toEqual([{ serviceId: "demo", sync: "Unknown", health: "Unknown" }]);
 		expect(tokens.verify(token, "session")).toBeUndefined();
 		const denied = await fetch(`${server.origin}/api/ui/cluster`, {
 			headers: { cookie: `__Secure-paas_session=${token}` },

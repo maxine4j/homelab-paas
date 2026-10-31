@@ -40,7 +40,7 @@ const fixture = async (authenticated = true) => {
 		},
 		async getResource(...args) {
 			calls.push(args);
-			return { resourceId: args[1], type: "web", health: "missing", containers: [] };
+			return { resourceId: args[1], type: "web", sync: "OutOfSync", health: "Missing", containers: [] };
 		},
 		async getLogs(...args) {
 			calls.push(args);

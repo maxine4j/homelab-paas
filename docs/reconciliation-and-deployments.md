@@ -18,7 +18,7 @@ The runtime checks configured services at startup and periodically, serializes r
 
 New workload containers are named `paas-{clusterId}-{serviceId}-{resourceId}-{specPrefix}`, where `specPrefix` is the first 12 characters of the resource specification hash. These names make `docker ps` readable; Docker labels remain authoritative for programmatic identification and reconciliation.
 
-Valid web and worker deployments whose desired revision differs from the active revision (including initial deployments) retain the `deploying` phase while failed resource operations retry for five minutes. This allows CI to publish images after a commit is detected. The window starts before resource reconciliation, persists as `deploymentStartedAt` across retries and restarts, and resets for a newer desired revision. Existing checkpoints without this timestamp start their window on the next valid deployment attempt. A failed attempt at or after five minutes sets `failed` (unhealthy in the management UI); retries continue with normal bounded backoff on eligible polling passes. Successful reconciliation clears the window and retry state. Git, descriptor, capability, secret and checkpoint failures, and resource failures on an already-current revision, still fail immediately. Failed attempts retain their diagnostics and service events throughout the window.
+Valid web and worker deployments whose desired revision differs from the active revision (including initial deployments) retain the `deploying` phase while failed resource operations retry for five minutes. This allows CI to publish images after a commit is detected. The window starts before resource reconciliation, persists as `deploymentStartedAt` across retries and restarts, and resets for a newer desired revision. Existing checkpoints without this timestamp start their window on the next valid deployment attempt. A failed attempt at or after five minutes sets the internal deployment phase to `failed`; retries continue with normal bounded backoff on eligible polling passes. Successful reconciliation clears the window and retry state. Git, descriptor, capability, secret and checkpoint failures, and resource failures on an already-current revision, still fail immediately. Failed attempts retain their diagnostics and service events throughout the window.
 
 Worker names append a fresh instance ID to distinguish replicas and overlapping attempts. `WorkerResourceReconciler` observes replica counts, specification labels, container state, connectivity and private HTTP readiness. `WorkerDeploymentService` repairs missing/stopped replicas while retaining healthy containers with the desired specification; specification changes replace the replica set. Recreate resolves the image before retiring predecessors. Surge probes every replacement before retiring predecessors; a failed startup cleans up new candidates and preserves previous workers. Retirement failures retain ready replacements, which the next pass rechecks and reuses. Worker deployment never publishes or withdraws a web route. A mixed service is reconciled resource by resource, with a service-level ready checkpoint only after all resources succeed; it is not an atomic rollout across resources.
 
@@ -40,16 +40,23 @@ Persistence adapters retain existing filenames and YAML shapes, including `{serv
 
 `ResourceHealthService` independently polls web and worker containers at startup and every five seconds, using cached committed descriptors and the existing two-second HTTP probe. Deployment retry backoff and long-running rollouts do not delay this polling. Health changes invalidate management snapshots through the existing change bus; the browser does not poll HTTP. This observation does not restart workloads or change service deployment checkpoints.
 
+Management snapshots expose independent `sync` and `health` fields on services and resources, using Argo CD's vocabulary without Suspended. Deployment phase remains an internal persisted checkpoint for retries and recovery, separate from both statuses.
+
+Sync is `Synced` when observed containers match the desired specification and replica count, `OutOfSync` when containers are missing, extra or differ, and `Unknown` when the descriptor, Docker observation or required secrets cannot be read, or the resource type is unsupported. Observed resources absent from an available descriptor are OutOfSync. Comparison reuses reconciliation's specification fingerprints, including resolved secrets and effective primary-web policy. Fingerprints and resolved values remain internal. Runtime readiness and container source revisions do not affect sync; unchanged specifications may retain containers from older commits. Sync comparison is read-only.
+
+Service sync is Unknown if any resource comparison is Unknown, otherwise OutOfSync if any resource differs, otherwise Synced. No observations yields Unknown. Desired configuration and desired revision come from the latest valid committed descriptor. The service list retains active revision metadata and reports Unknown statuses when Docker observation fails.
+
 Each resource has one health status:
 
-- `deploying`: its rollout is in progress, including startup readiness. This takes precedence over missing containers during recreate. It ends on rollout success or failure; other resources retain their own health.
-- `missing`: no containers are observed outside an active rollout.
-- `healthy`: exactly the expected number of replicas are running. When an HTTP check is configured, each must also be attached to the service network with an address and return HTTP `200`.
-- `unhealthy`: containers exist but readiness fails, the replica count differs from the expected count, a container is stopped, a configured HTTP check cannot reach its container, or health cannot be determined.
+- `Progressing`: its rollout is in progress, including startup readiness. This takes precedence over missing containers during recreate. It ends on rollout success or failure; other resources retain their own health.
+- `Missing`: no containers are observed outside an active rollout.
+- `Healthy`: exactly the expected number of replicas are running. When an HTTP check is configured, each must also be attached to the service network with an address and return HTTP `200`.
+- `Degraded`: containers exist but readiness fails, the replica count differs from the expected count, a container is stopped, or a configured connectivity or HTTP check fails.
+- `Unknown`: health has not been observed for the current container identities and states, inspection fails, or existing containers belong to an unsupported or observed-only resource.
 
-Web checks use the ingress port; worker checks use `healthcheckPort`. HTTP checks run only for an explicitly configured `healthcheckUrl`; see [health checks](#health-checks-and-termination). Health observations live in memory and apply only to the observed container identities and states. Existing containers remain unhealthy until first checked after startup, replacement or rollout completion. Stale probes overlapping a rollout cannot restore old health. Inspection failures invalidate previous healthy observations and do not prevent other resources or services from being checked. Observed-only resources and unsupported managed resources cannot report healthy solely from Docker lifecycle state.
+Web checks use the ingress port; worker checks use `healthcheckPort`. HTTP checks run only for an explicitly configured `healthcheckUrl`; see [health checks](#health-checks-and-termination). Health observations live in memory and apply only to the observed container identities and states. Existing containers remain Unknown until first checked after startup, replacement or rollout completion. Stale probes overlapping a rollout cannot restore old health. Inspection failures invalidate previous healthy observations and do not prevent other resources or services from being checked. Observed-only resources and unsupported managed resources cannot report Healthy solely from Docker lifecycle state.
 
-Service health still represents its persisted reconciliation phase, including the deployment grace window above. Resource health represents live readiness. See [management UI](management-ui.md) for badges, placement and API representation.
+Service health aggregates resource health using Argo CD's worst-state precedence: Unknown, Degraded, Missing, Progressing, Healthy. No observations yields Unknown. A working old deployment can be Healthy and OutOfSync; an applied configuration with failing readiness can be Synced and Degraded. Deployment failure events and retry metadata remain independent of both statuses. See [management UI](management-ui.md) for badges, placement and API representation.
 
 ## Service events
 
@@ -160,7 +167,7 @@ The reconciler must:
 - Label Docker objects with service, resource, and revision identities.
 - Persist deployment state so interrupted operations can resume safely.
 - Retry failed operations with bounded backoff.
-- Expose desired revision, active revision, deployment phase, and actionable errors.
+- Expose desired revision, active revision, independent sync and health statuses, and actionable errors.
 
 Git failures and invalid descriptors preserve the last working deployment.
 

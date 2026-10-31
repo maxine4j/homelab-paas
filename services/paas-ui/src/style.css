@@ -303,6 +303,7 @@ main {
 }
 .service-identity {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 16px;
 	min-width: 0;
@@ -524,33 +525,46 @@ p {
 	white-space: nowrap;
 }
 .badge-healthy,
+.badge-synced,
 .badge-running {
-	color: #8fdbba;
+	color: #18be94;
 	background: #16382e;
 	border-color: #2b5648;
 }
-.badge-unhealthy,
+.badge-degraded,
 .badge-dead,
 .badge-error,
 .badge-exited {
-	color: #f4abb4;
+	color: #e96d76;
 	background: #3a222b;
 	border-color: #62404a;
 }
 .badge-restarting,
-.badge-deploying,
+.badge-progressing,
 .badge-info {
-	color: #abcaff;
+	color: #0dadea;
 	background: #1e304c;
 	border-color: #3d5b86;
 }
 .badge-paused,
 .badge-created,
 .badge-mixed,
-.badge-missing {
-	color: #b8c2ce;
+.badge-unknown {
+	color: #ccd6dd;
 	background: #282e38;
 	border-color: #48505c;
+}
+.badge-missing,
+.badge-outofsync {
+	color: #f4c030;
+	background: #382f18;
+	border-color: #665324;
+}
+.status-badges {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: center;
 }
 .card-top h2 {
 	margin: 0;
@@ -560,7 +574,7 @@ p {
 .service-card {
 	position: relative;
 	display: grid;
-	grid-template-rows: 44px 1.6em auto;
+	grid-template-rows: minmax(44px, auto) 1.6em auto;
 	gap: 12px;
 	transition:
 		border-color 0.15s,
@@ -573,6 +587,7 @@ p {
 }
 .service-card-heading {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 12px;
 	min-width: 0;
@@ -616,9 +631,10 @@ p {
 .service-card .primary-web-link > [aria-hidden] {
 	flex-shrink: 0;
 }
-.service-card-heading .badge {
+.service-card-heading > .status-badges {
 	margin-left: auto;
 	flex-shrink: 0;
+	justify-content: flex-end;
 }
 .service-description {
 	margin: 0;
@@ -840,6 +856,7 @@ dd {
 }
 .tabs {
 	display: flex;
+	overflow-x: auto;
 	gap: 20px;
 	margin-bottom: 24px;
 	border-bottom: 1px solid #303844;

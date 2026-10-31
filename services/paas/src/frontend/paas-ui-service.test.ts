@@ -1,8 +1,10 @@
-import type { ResourceHealth, UiServiceEvent } from "@homelab-paas/shared-contracts";
+import type { HealthStatus, UiServiceEvent } from "@homelab-paas/shared-contracts";
 import { expect, test, vi } from "vitest";
 
 import { parseConfig, decodeDescriptorYaml } from "../config/paas-config.ts";
 import type { DockerContainerDetails } from "../docker/types.ts";
+import { ResourceSpecification } from "../reconciler/resource-specification.ts";
+import { ResourceStatusService } from "../status/resource-status-service.ts";
 import { testConfig } from "../util/test/config.ts";
 import { captureLogs } from "../util/test/logs.ts";
 import { parseYaml } from "../util/yaml.ts";
@@ -22,7 +24,7 @@ const descriptor = {
 		db: { type: "postgres", image: "postgres:17" },
 	},
 };
-const fixture = (health: ResourceHealth = "unhealthy") => {
+const fixture = (health: HealthStatus = "Degraded") => {
 	const config = parseConfig({
 		version: 1,
 		metadata: { clusterId: "local" },
@@ -73,6 +75,10 @@ const fixture = (health: ResourceHealth = "unhealthy") => {
 		},
 	]);
 	const service = new PaasUiService(
+		new ResourceStatusService(new ResourceSpecification(), {
+			resolve: async (_serviceId, env) =>
+				env.map((entry) => ({ name: entry.name, value: "value" in entry ? entry.value : "test-secret" })),
+		}),
 		testConfig(config),
 		{ fetchFile, readCommit },
 		decodeDescriptorYaml,
@@ -95,7 +101,7 @@ const fixture = (health: ResourceHealth = "unhealthy") => {
 			async write() {},
 		},
 		{ list: listEvents, append: async () => {} },
-		{ getStatus: (_serviceId, _resourceId, containers) => (containers.length ? health : "missing") },
+		{ getStatus: (_serviceId, _resourceId, containers) => (containers.length ? health : "Missing") },
 		{ follow: followLogs },
 	);
 	return {
@@ -111,7 +117,7 @@ const fixture = (health: ResourceHealth = "unhealthy") => {
 	};
 };
 
-test.each(["deploying", "missing", "healthy", "unhealthy"] as const)(
+test.each(["Progressing", "Missing", "Healthy", "Degraded", "Unknown"] as const)(
 	"service and resource snapshots expose %s resource health independently of container state",
 	async (health) => {
 		const f = fixture(health);
@@ -126,10 +132,10 @@ test.each(["deploying", "missing", "healthy", "unhealthy"] as const)(
 );
 
 test("resource inspection cannot retain healthy status after its container disappears or stops", async () => {
-	const f = fixture("healthy");
+	const f = fixture("Healthy");
 	f.inspectServiceContainer.mockResolvedValueOnce(null);
 	expect(await f.service.getResource("demo", "app")).toMatchObject({
-		health: "missing",
+		health: "Missing",
 		containers: [{ state: "missing" }],
 	});
 	f.inspectServiceContainer.mockResolvedValueOnce({
@@ -140,7 +146,7 @@ test("resource inspection cannot retain healthy status after its container disap
 		networks: {},
 	});
 	expect(await f.service.getResource("demo", "app")).toMatchObject({
-		health: "unhealthy",
+		health: "Degraded",
 		containers: [{ running: false }],
 	});
 });
@@ -205,7 +211,7 @@ test("resource supplies YAML matching its sanitized configuration and omits it f
 	expect(await f.service.getResource("demo", "old")).not.toHaveProperty("configYaml", expect.anything());
 });
 
-test("service list includes redacted metadata for active and desired commits without Docker", async () => {
+test("service list includes redacted metadata for active and desired commits with live status", async () => {
 	const f = fixture();
 	expect(await f.service.listServices()).toMatchObject([
 		{
@@ -219,7 +225,7 @@ test("service list includes redacted metadata for active and desired commits wit
 		},
 	]);
 	expect(f.readCommit.mock.calls.map((call) => call[2])).toEqual(["old", "new"]);
-	expect(f.listServiceContainers).not.toHaveBeenCalled();
+	expect(f.listServiceContainers).toHaveBeenCalled();
 });
 
 test("service list preserves deployment status when Git is unavailable", async () => {
@@ -228,7 +234,7 @@ test("service list preserves deployment status when Git is unavailable", async (
 	f.readCommit.mockRejectedValue(new Error("private-metadata-error"));
 	const summaries = await f.service.listServices();
 	expect(summaries).toMatchObject([
-		{ serviceId: "demo", phase: "failed", activeRevision: "old", desiredRevision: "new" },
+		{ serviceId: "demo", sync: "Unknown", activeRevision: "old", desiredRevision: "new" },
 	]);
 	expect(summaries[0]).not.toHaveProperty("activeRevisionMetadata", expect.anything());
 	expect(JSON.stringify(summaries)).not.toContain("private-metadata-error");
@@ -258,7 +264,7 @@ test.each([
 		description: "app" in resources ? "Archive [redacted]" : "Archive env-canary",
 		primaryUrl,
 	});
-	expect(f.listServiceContainers).not.toHaveBeenCalled();
+	expect(f.listServiceContainers).toHaveBeenCalled();
 });
 
 test("unavailable metadata preserves hashes, descriptor and observed resources", async () => {
@@ -420,7 +426,7 @@ test("cluster config is allowlisted and configured services include deployment s
 	expect(await f.service.listServices()).toMatchObject([
 		{
 			serviceId: "demo",
-			phase: "failed",
+			sync: "Unknown",
 			desiredRevision: "new",
 			activeRevision: "old",
 			failures: 1,
@@ -435,6 +441,10 @@ test("cluster inspection and edits delegate configuration policy to the config s
 	configuration.getEditableConfig = vi.fn(() => snapshot);
 	configuration.updateConfig = vi.fn(async () => snapshot);
 	const service = new PaasUiService(
+		new ResourceStatusService(new ResourceSpecification(), {
+			resolve: async (_serviceId, env) =>
+				env.map((entry) => ({ name: entry.name, value: "value" in entry ? entry.value : "test-secret" })),
+		}),
 		configuration,
 		{ fetchFile: vi.fn(), readCommit: vi.fn() },
 		decodeDescriptorYaml,
@@ -547,4 +557,54 @@ test("Git failures preserve live resource visibility and disable logs when redac
 	expect(detail).not.toHaveProperty("descriptor", expect.anything());
 	expect(detail.resources.map((r) => r.resourceId)).toEqual(["app", "old"]);
 	await expect(f.service.getLogs("demo", "app", "c")).rejects.toMatchObject({ kind: "unavailable" });
+});
+
+test("list and detail aggregate live health independently of failed deployment checkpoints", async () => {
+	const f = fixture("Healthy");
+	f.fetchFile.mockResolvedValue({
+		revision: "new",
+		content: JSON.stringify({ ...descriptor, resources: { app: descriptor.resources.app } }),
+	});
+	f.listServiceContainers.mockResolvedValue([
+		{ id: "c", resourceId: "app", imageId: "sha256:a", revision: "old", spec: "s", state: "running" },
+	]);
+	expect(await f.service.listServices()).toMatchObject([{ sync: "OutOfSync", health: "Healthy" }]);
+	expect(await f.service.getService("demo")).toMatchObject({
+		sync: "OutOfSync",
+		health: "Healthy",
+		resources: [{ sync: "OutOfSync", health: "Healthy" }],
+	});
+});
+
+test("service list preserves revisions when Docker observation fails without claiming Missing", async () => {
+	const f = fixture();
+	f.listServiceContainers.mockRejectedValue(new Error("Docker unavailable"));
+	expect(await f.service.listServices()).toMatchObject([
+		{ activeRevision: "old", sync: "Unknown", health: "Unknown" },
+	]);
+});
+
+test("failing readiness does not make an applied specification OutOfSync", async () => {
+	const f = fixture("Degraded");
+	const content = JSON.stringify({ ...descriptor, resources: { app: descriptor.resources.app } });
+	f.fetchFile.mockResolvedValue({ revision: "new", content });
+	const resource = decodeDescriptorYaml(content, "demo", "new").resources["app"];
+	if (resource?.type !== "web") throw new Error("Expected web fixture");
+	const spec = new ResourceSpecification().get("app", {
+		...resource,
+		primary: true,
+		env: descriptor.resources.app.env,
+	});
+	f.listServiceContainers.mockResolvedValue([
+		{ id: "c", resourceId: "app", imageId: "sha256:a", revision: "old", spec, state: "running" },
+	]);
+	expect(await f.service.listServices()).toMatchObject([{ sync: "Synced", health: "Degraded" }]);
+	expect(await f.service.getService("demo")).toMatchObject({ sync: "Synced", health: "Degraded" });
+});
+
+test("a disappearing container does not claim a known sync comparison when the descriptor is unavailable", async () => {
+	const f = fixture("Healthy");
+	f.fetchFile.mockRejectedValue(new Error("Git unavailable"));
+	f.inspectServiceContainer.mockResolvedValueOnce(null);
+	expect(await f.service.getResource("demo", "app")).toMatchObject({ sync: "Unknown", health: "Missing" });
 });

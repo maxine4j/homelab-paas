@@ -11,6 +11,8 @@ import { createPaasUiRouter } from "../../src/frontend/paas-ui-router.ts";
 import { PaasUiService } from "../../src/frontend/paas-ui-service.ts";
 import { JwtClient } from "../../src/ingress/auth/jwt-client.ts";
 import { EnvironmentResolver } from "../../src/reconciler/environment-resolver.ts";
+import { ResourceSpecification } from "../../src/reconciler/resource-specification.ts";
+import { ResourceStatusService } from "../../src/status/resource-status-service.ts";
 import { atomicWriteFile, chmod, mkdir, mkdtemp, readFile, rm, stat, type FileWriter } from "../../src/util/file.ts";
 import { testConfig } from "../../src/util/test/config.ts";
 import { startTestApi } from "../../src/util/test/router.ts";
@@ -52,6 +54,10 @@ test("authenticated secret editing persists private files, retains values, resol
 		new SecretStore(envDirectory, readFile, write),
 	);
 	const ui = new PaasUiService(
+		new ResourceStatusService(new ResourceSpecification(), {
+			resolve: async (_serviceId, env) =>
+				env.map((entry) => ({ name: entry.name, value: "value" in entry ? entry.value : "test-secret" })),
+		}),
 		config,
 		git,
 		decodeDescriptorYaml,

@@ -6,7 +6,8 @@ import { App, AppView, viewPaths } from "./app.tsx";
 test("all service tabs share the same complete header with actions beside identity and ingress below", () => {
 	const service = {
 		serviceId: "demo",
-		phase: "ready" as const,
+		sync: "Synced" as const,
+		health: "Healthy" as const,
 		source: {},
 		descriptorStatus: "available" as const,
 		activeRevision: "active123",
@@ -16,7 +17,8 @@ test("all service tabs share the same complete header with actions beside identi
 			{
 				resourceId: "web",
 				type: "web",
-				health: "healthy" as const,
+				sync: "Synced" as const,
+				health: "Healthy" as const,
 				primaryUrl: "https://demo.example.test",
 				containers: [],
 			},
@@ -60,7 +62,8 @@ test.each(["events", "secrets"] as const)("%s retains both revision panels from 
 			serviceSnapshot={{
 				data: {
 					serviceId: "demo",
-					phase: "ready",
+					sync: "Synced",
+					health: "Healthy",
 					source: {},
 					descriptorStatus: "available",
 					resources: [],
@@ -191,14 +194,16 @@ test("service Resources uses the service snapshot and renders detailed cards thr
 			snapshot={{
 				data: {
 					serviceId: "demo",
-					phase: "ready",
+					sync: "Synced",
+					health: "Healthy",
 					source: {},
 					descriptorStatus: "available",
 					resources: [
 						{
 							resourceId: "worker",
 							type: "worker",
-							health: "healthy",
+							sync: "Synced",
+							health: "Healthy",
 							config: { image: "worker:2" },
 							containers: [],
 						},
@@ -211,7 +216,9 @@ test("service Resources uses the service snapshot and renders detailed cards thr
 		/>,
 	);
 	expect(html).toContain("worker:2");
-	expect(html).toMatch(/service-identity"><h1>demo<\/h1><span class="badge badge-healthy"/);
+	expect(html).toMatch(
+		/service-identity"><h1>demo<\/h1><span class="status-badges"><span class="badge badge-healthy"/,
+	);
 	expect(html.match(/<h1>/g)).toHaveLength(1);
 	expect(html).toContain('href="#/services/demo/resources" aria-current="page">Resources</a>');
 	expect(html).not.toContain("Recent events");

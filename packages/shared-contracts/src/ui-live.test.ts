@@ -2,18 +2,28 @@ import { expect, test } from "vitest";
 
 import { uiLiveClientSchema, uiLiveServerSchema, uiLiveTargetFromPath } from "./ui-live.ts";
 
-test("resource snapshots require one of the four health states and retain container state", () => {
+test("resource snapshots require independent Argo sync and health states", () => {
 	const snapshot = (health: unknown) => ({
 		type: "snapshot",
 		id: "1",
 		target: { kind: "resource", serviceId: "demo", resourceId: "app" },
-		data: { resourceId: "app", type: "web", health, containers: [] },
+		data: { resourceId: "app", type: "web", sync: "Synced", health, containers: [] },
 	});
-	for (const health of ["deploying", "missing", "healthy", "unhealthy"]) {
+	for (const health of ["Healthy", "Progressing", "Degraded", "Missing", "Unknown"]) {
 		expect(uiLiveServerSchema.parse(snapshot(health))).toMatchObject({ data: { health } });
 	}
-	for (const health of [undefined, "running", "mixed"])
+	for (const health of [undefined, "running", "mixed", "Suspended", "deploying", "unhealthy"])
 		expect(uiLiveServerSchema.safeParse(snapshot(health)).success).toBe(false);
+	for (const sync of ["Synced", "OutOfSync", "Unknown"])
+		expect(
+			uiLiveServerSchema.safeParse({ ...snapshot("Healthy"), data: { ...snapshot("Healthy").data, sync } })
+				.success,
+		).toBe(true);
+	for (const sync of [undefined, "Syncing", "Failed"])
+		expect(
+			uiLiveServerSchema.safeParse({ ...snapshot("Healthy"), data: { ...snapshot("Healthy").data, sync } })
+				.success,
+		).toBe(false);
 });
 
 test("live protocol restricts subscription targets, identities and safe server envelope", () => {

@@ -2,7 +2,7 @@ import type { UiResource } from "@homelab-paas/shared-contracts";
 import type { ReactNode } from "react";
 
 import { ResourceDetailTabs } from "./detail-tabs.tsx";
-import { StatusBadge } from "./status-badge.tsx";
+import { StatusBadges } from "./status-badge.tsx";
 
 export const ResourceDetailShell = ({
 	serviceId,
@@ -23,7 +23,7 @@ export const ResourceDetailShell = ({
 				{resource && <p className='eyebrow'>{resource.type} resource</p>}
 				<div className='service-identity'>
 					<h1>{resourceId}</h1>
-					{resource && <StatusBadge status={resource.health} />}
+					{resource && <StatusBadges health={resource.health} sync={resource.sync} />}
 				</div>
 				{resource && (
 					<>

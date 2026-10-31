@@ -60,7 +60,13 @@ test("resource views filter immediate and persisted service events identically a
 				renderToStaticMarkup(
 					createElement(ResourcePage, {
 						serviceId: "demo",
-						resource: { resourceId: "app", type: "web", health: "unhealthy", containers: [] },
+						resource: {
+							resourceId: "app",
+							type: "web",
+							sync: "OutOfSync",
+							health: "Degraded",
+							containers: [],
+						},
 						tab: "config",
 						events,
 					}),

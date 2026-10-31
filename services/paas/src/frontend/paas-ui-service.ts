@@ -17,6 +17,7 @@ import type { IGitRevisionService } from "../git/git-service.ts";
 import type { IResourceHealthReader } from "../health/resource-health-service.ts";
 import type { IServiceEventStore } from "../reconciler/service-event-store.ts";
 import type { DescriptorDecoder, IReconciliationStateStore } from "../reconciler/types.ts";
+import type { IResourceStatusService } from "../status/resource-status-service.ts";
 import { createLogger } from "../util/logger.ts";
 import { stringifyYaml } from "../util/yaml.ts";
 import type { UiDocker } from "./types.ts";
@@ -60,6 +61,7 @@ export class PaasUiError extends Error {
 export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 	private readonly log = createLogger(PaasUiService.name);
 	constructor(
+		private readonly status: IResourceStatusService,
 		private readonly config: IPaasConfig,
 		private readonly git: IGitRevisionService,
 		private readonly decode: DescriptorDecoder,
@@ -124,38 +126,19 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 				Object.keys(this.config.getServices())
 					.sort()
 					.map(async (serviceId) => {
-						const state = await this.state.read(serviceId);
-						const file = await this.descriptor(serviceId);
-						const secrets = this.secrets(file?.descriptor);
-						const webResources = Object.values(file?.descriptor.resources ?? {}).filter(
-							(resource) => resource.type === "web",
-						);
-						const metadata = await this.revisionMetadata(
-							serviceId,
-							[state?.activeRevision, state?.desiredRevision],
-							secrets,
-						);
+						const snapshot = await this.serviceSnapshot(serviceId, true, true);
 						return {
 							serviceId,
-							description:
-								file?.descriptor.metadata.description === undefined
-									? undefined
-									: this.config.redact(file.descriptor.metadata.description, secrets),
-							primaryUrl:
-								webResources.length === 1 || webResources.some((resource) => resource.primary)
-									? this.ingressUrl(serviceId)
-									: undefined,
-							phase: state?.phase ?? "unknown",
-							desiredRevision: state?.desiredRevision,
-							activeRevision: state?.activeRevision,
-							activeRevisionMetadata: state?.activeRevision
-								? metadata.get(state.activeRevision)
-								: undefined,
-							desiredRevisionMetadata: state?.desiredRevision
-								? metadata.get(state.desiredRevision)
-								: undefined,
-							failures: state?.failures,
-							retryAt: state?.retryAt,
+							sync: snapshot.sync,
+							health: snapshot.health,
+							description: snapshot.description,
+							primaryUrl: snapshot.primaryUrl,
+							desiredRevision: snapshot.desiredRevision,
+							activeRevision: snapshot.activeRevision,
+							activeRevisionMetadata: snapshot.activeRevisionMetadata,
+							desiredRevisionMetadata: snapshot.desiredRevisionMetadata,
+							failures: snapshot.failures,
+							retryAt: snapshot.retryAt,
 						};
 					}),
 			);
@@ -186,14 +169,19 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 				}),
 			);
 			const health =
-				resource.health === "deploying"
-					? "deploying"
+				resource.health === "Progressing"
+					? "Progressing"
 					: !containers.length || containers.every(({ state }) => state === "missing")
-						? "missing"
+						? "Missing"
 						: containers.some(({ running }) => !running)
-							? "unhealthy"
+							? "Degraded"
 							: resource.health;
-			return { ...resource, health, containers };
+			const sync =
+				resource.sync !== "Unknown"
+				&& (health === "Missing" || containers.some(({ state }) => state === "missing"))
+					? "OutOfSync"
+					: resource.sync;
+			return { ...resource, sync, health, containers };
 		} catch (cause) {
 			throw new PaasUiError("unavailable", { cause });
 		}
@@ -218,44 +206,65 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 		}
 	}
 
-	private async serviceSnapshot(serviceId: string, includeRevisionMetadata: boolean): Promise<UiService> {
+	private async serviceSnapshot(
+		serviceId: string,
+		includeRevisionMetadata: boolean,
+		tolerateDockerFailure = false,
+	): Promise<UiService> {
 		this.assertService(serviceId);
 		try {
+			let dockerAvailable = true;
 			const [state, containers, file] = await Promise.all([
 				this.state.read(serviceId),
-				this.docker.listServiceContainers(serviceId),
+				this.docker.listServiceContainers(serviceId).catch((err: unknown) => {
+					if (!tolerateDockerFailure) throw err;
+					this.log.error({ err, serviceId }, "Cannot observe management service containers");
+					dockerAvailable = false;
+					return [];
+				}),
 				this.descriptor(serviceId),
 			]);
 			const resources = file?.descriptor.resources ?? {};
 			const webCount = Object.values(resources).filter((resource) => resource.type === "web").length;
 			const secrets = this.secrets(file?.descriptor);
 			const metadata = includeRevisionMetadata
-				? await this.revisionMetadata(serviceId, [state?.activeRevision, file?.revision], secrets)
+				? await this.revisionMetadata(
+						serviceId,
+						[
+							state?.activeRevision,
+							file?.revision ?? (tolerateDockerFailure ? state?.desiredRevision : undefined),
+						],
+						secrets,
+					)
 				: new Map<string, UiRevisionMetadata>();
 			const ids = [
 				...new Set([...Object.keys(resources), ...containers.map((container) => container.resourceId)]),
 			].sort();
-			return {
-				serviceId,
-				phase: state?.phase ?? "unknown",
-				desiredRevision: state?.desiredRevision,
-				activeRevision: state?.activeRevision,
-				failures: state?.failures,
-				retryAt: state?.retryAt,
-				source: this.config.sanitize(this.config.getServices()[serviceId], secrets),
-				descriptorRevision: file?.revision,
-				activeRevisionMetadata: state?.activeRevision ? metadata.get(state.activeRevision) : undefined,
-				descriptorRevisionMetadata: file ? metadata.get(file.revision) : undefined,
-				descriptorStatus: file ? "available" : "unavailable",
-				descriptor: file ? this.config.sanitize(file.descriptor) : undefined,
-				descriptorYaml: file ? stringifyYaml(this.config.sanitize(file.descriptor)) : undefined,
-				resources: ids.map((resourceId) => ({
+			const observedResources = await Promise.all(
+				ids.map(async (resourceId): Promise<UiResource> => ({
 					resourceId,
-					health: this.health.getStatus(
-						serviceId,
-						resourceId,
-						containers.filter((container) => container.resourceId === resourceId),
-					),
+					sync: dockerAvailable
+						? await this.status.getSync({
+								serviceId,
+								resourceId,
+								descriptorAvailable: Boolean(file),
+								resource:
+									resources[resourceId]?.type === "web"
+										? {
+												...resources[resourceId],
+												primary: webCount === 1 || resources[resourceId].primary === true,
+											}
+										: resources[resourceId],
+								containers: containers.filter((container) => container.resourceId === resourceId),
+							})
+						: "Unknown",
+					health: dockerAvailable
+						? this.health.getStatus(
+								serviceId,
+								resourceId,
+								containers.filter((container) => container.resourceId === resourceId),
+							)
+						: "Unknown",
 					url:
 						resources[resourceId]?.type === "web"
 							? this.ingressUrl(`${resourceId}.${serviceId}`)
@@ -280,6 +289,33 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 							revision: container.revision,
 						})),
 				})),
+			);
+
+			return {
+				serviceId,
+				...this.status.aggregate(observedResources),
+				description:
+					file?.descriptor.metadata.description === undefined
+						? undefined
+						: this.config.redact(file.descriptor.metadata.description, secrets),
+				primaryUrl: Object.values(resources).some(
+					(resource) => resource.type === "web" && (webCount === 1 || resource.primary),
+				)
+					? this.ingressUrl(serviceId)
+					: undefined,
+				desiredRevision: file?.revision ?? state?.desiredRevision,
+				activeRevision: state?.activeRevision,
+				failures: state?.failures,
+				retryAt: state?.retryAt,
+				source: this.config.sanitize(this.config.getServices()[serviceId], secrets),
+				descriptorRevision: file?.revision,
+				activeRevisionMetadata: state?.activeRevision ? metadata.get(state.activeRevision) : undefined,
+				descriptorRevisionMetadata: file ? metadata.get(file.revision) : undefined,
+				desiredRevisionMetadata: metadata.get(file?.revision ?? state?.desiredRevision ?? ""),
+				descriptorStatus: file ? "available" : "unavailable",
+				descriptor: file ? this.config.sanitize(file.descriptor) : undefined,
+				descriptorYaml: file ? stringifyYaml(this.config.sanitize(file.descriptor)) : undefined,
+				resources: observedResources,
 			};
 		} catch (error) {
 			if (error instanceof PaasUiError) throw error;

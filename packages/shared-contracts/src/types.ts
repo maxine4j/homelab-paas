@@ -29,7 +29,8 @@ export interface UiServiceSummary {
 	description?: string;
 	/** Desired primary web ingress; presence does not imply readiness. */
 	primaryUrl?: string;
-	phase: "unknown" | "deploying" | "ready" | "failed";
+	sync: SyncStatus;
+	health: HealthStatus;
 	desiredRevision?: string;
 	activeRevision?: string;
 	activeRevisionMetadata?: UiRevisionMetadata;
@@ -82,11 +83,13 @@ export interface UiContainer {
 	networks?: Record<string, { address: string; aliases: string[] }>;
 }
 
-export type ResourceHealth = "deploying" | "missing" | "healthy" | "unhealthy";
+export type SyncStatus = "Synced" | "OutOfSync" | "Unknown";
+export type HealthStatus = "Healthy" | "Progressing" | "Degraded" | "Missing" | "Unknown";
 
 export interface UiResource {
 	resourceId: string;
-	health: ResourceHealth;
+	sync: SyncStatus;
+	health: HealthStatus;
 	type: string;
 	/** Desired web ingress URLs; presence does not imply readiness. */
 	url?: string;

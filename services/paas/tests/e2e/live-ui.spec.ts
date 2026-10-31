@@ -21,6 +21,15 @@ test("authenticated Envoy pushes deployment snapshots/events and follows new Doc
 	);
 	await page.goto(env.url("", "/#/services/public"));
 	await expect(page.getByText("Live · connected", { exact: true })).toBeVisible();
+	const identity = page.locator(".service-identity");
+	await expect(identity.getByLabel("Health: Healthy", { exact: true })).toHaveCSS("color", "rgb(24, 190, 148)");
+	await expect(identity.getByLabel("Sync: Synced", { exact: true })).toBeVisible();
+	for (const width of [320, 390, 1280]) {
+		await page.setViewportSize({ width, height: 900 });
+		await expect(identity.getByLabel("Health: Healthy", { exact: true })).toBeVisible();
+		await expect(identity.getByLabel("Sync: Synced", { exact: true })).toBeVisible();
+		expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+	}
 	const revision = await env.update("public", "live-v2");
 	await expect.poll(() => JSON.stringify(frames)).toContain('"event":"deployment.started"');
 	await env.waitReady("public", "live-v2");
@@ -55,4 +64,19 @@ test("authenticated Envoy pushes deployment snapshots/events and follows new Doc
 			.first(),
 	).toBeVisible();
 	expect(reads).toEqual([]);
+});
+
+test("failed surge shows Progressing in blue then preserves Healthy with OutOfSync", async ({
+	environment: env,
+	page,
+}) => {
+	await page.goto(env.url("", "/#/services/public"));
+	const identity = page.locator(".service-identity");
+	await expect(identity.getByLabel("Health: Healthy", { exact: true })).toBeVisible();
+	await env.update("public", "unready", "surge", false);
+	await expect(identity.getByLabel("Health: Progressing", { exact: true })).toHaveCSS("color", "rgb(13, 173, 234)");
+	await expect(identity.getByLabel("Sync: OutOfSync", { exact: true })).toHaveCSS("color", "rgb(244, 192, 48)");
+	await expect(identity.getByLabel("Health: Healthy", { exact: true })).toBeVisible({ timeout: 60_000 });
+	await expect(identity.getByLabel("Sync: OutOfSync", { exact: true })).toBeVisible();
+	expect((await env.checkpoint("public"))?.phase).toBe("deploying");
 });

@@ -14,6 +14,8 @@ import { UiWebSocket } from "../../src/frontend/ui-websocket.ts";
 import { GitClient } from "../../src/git/git-client.ts";
 import { GitService } from "../../src/git/git-service.ts";
 import { NodeGitTransport } from "../../src/git/git-transport.ts";
+import { ResourceSpecification } from "../../src/reconciler/resource-specification.ts";
+import { ResourceStatusService } from "../../src/status/resource-status-service.ts";
 import { mkdtemp, rm } from "../../src/util/file.ts";
 import { sleep } from "../../src/util/sleep.ts";
 import { testConfig } from "../../src/util/test/config.ts";
@@ -55,6 +57,10 @@ test("cold live subscription serves persisted Git objects while background remot
 		const cold = new GitService(new OfflineClient(transport), cacheDirectory);
 		settle = () => cold.refreshFile("demo", source).catch(() => {});
 		const ui = new PaasUiService(
+			new ResourceStatusService(new ResourceSpecification(), {
+				resolve: async (_serviceId, env) =>
+					env.map((entry) => ({ name: entry.name, value: "value" in entry ? entry.value : "test-secret" })),
+			}),
 			config,
 			cold,
 			decodeDescriptorYaml,
@@ -68,7 +74,7 @@ test("cold live subscription serves persisted Git objects while background remot
 				write: async () => {},
 			},
 			{ append: async () => {}, list: async () => [] },
-			{ getStatus: () => "missing" },
+			{ getStatus: () => "Missing" },
 		);
 		adapter = new UiWebSocket(
 			new UiLiveService(ui, ui, new ChangeBus()),
@@ -98,7 +104,8 @@ test("cold live subscription serves persisted Git objects while background remot
 			data: [
 				{
 					serviceId: "demo",
-					phase: "ready",
+					sync: "OutOfSync",
+					health: "Missing",
 					activeRevision: revision,
 					activeRevisionMetadata: { authorName: "CI" },
 				},

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { ServiceDetailTabs } from "./detail-tabs.tsx";
 import { gitCommitLink } from "./git-source-link.ts";
 import { ServiceRevision } from "./service-revision.tsx";
-import { StatusBadge } from "./status-badge.tsx";
+import { StatusBadges } from "./status-badge.tsx";
 
 export const ServiceDetailShell = ({
 	serviceId,
@@ -30,7 +30,7 @@ export const ServiceDetailShell = ({
 						<div className='service-identity-block'>
 							<div className='service-identity'>
 								<h1>{serviceId}</h1>
-								{service && <StatusBadge status={service.phase} />}
+								{service && <StatusBadges health={service.health} sync={service.sync} />}
 							</div>
 							{actions}
 						</div>
