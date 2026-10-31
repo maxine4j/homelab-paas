@@ -51,7 +51,6 @@ test("all service tabs share the same complete header with actions beside identi
 			<AppView
 				route={route}
 				snapshot={{ data: service, refresh: () => {} }}
-				serviceSnapshot={{ data: service }}
 				events={{ data: [], refresh: () => {} }}
 				logs={{}}
 			/>,
@@ -69,12 +68,15 @@ test("all service tabs share the same complete header with actions beside identi
 	expect(new Set(headers).size).toBe(1);
 });
 
-test.each(["events", "secrets"] as const)("%s retains both revision panels from optional service context", (page) => {
+test.each(["events", "secrets"] as const)("%s reuses the service snapshot subscription and revision panels", (page) => {
+	expect(viewPaths({ page, serviceId: "demo" }).snapshot).toBe(
+		viewPaths({ page: "service", serviceId: "demo" }).snapshot,
+	);
 	const html = renderToStaticMarkup(
 		<AppView
 			route={{ page, serviceId: "demo" }}
-			snapshot={{ refresh: () => {} }}
-			serviceSnapshot={{
+			snapshot={{
+				refresh: () => {},
 				data: {
 					serviceId: "demo",
 					sync: "Synced",
@@ -102,7 +104,7 @@ test.each(["events", "secrets"] as const)("%s retains both revision panels from 
 });
 
 test("Secrets loads independently of unavailable Git/Docker snapshots and retains service tabs", () => {
-	expect(viewPaths({ page: "secrets", serviceId: "demo" })).toEqual({});
+	expect(viewPaths({ page: "secrets", serviceId: "demo" })).toEqual({ snapshot: "/services/demo" });
 	const html = renderToStaticMarkup(
 		<AppView
 			route={{ page: "secrets", serviceId: "demo" }}
@@ -115,6 +117,44 @@ test("Secrets loads independently of unavailable Git/Docker snapshots and retain
 	expect(html).not.toContain("/etc/homelab-paas/env/demo.env");
 	expect(html).toContain('href="#/services/demo/secrets" aria-current="page"');
 	expect(html).not.toContain("Docker unavailable");
+});
+
+test("Secrets reports the service subscription connection in the footer", () => {
+	const html = renderToStaticMarkup(
+		<AppView
+			route={{ page: "secrets", serviceId: "demo" }}
+			snapshot={{ connected: true, refresh: () => {} }}
+			events={{ refresh: () => {} }}
+			logs={{}}
+		/>,
+	);
+	expect(html).toContain("Live · connected");
+});
+
+test.each([
+	{ page: "service", serviceId: "demo", tab: "overview" },
+	{ page: "service", serviceId: "demo", tab: "resources" },
+	{ page: "service", serviceId: "demo", tab: "descriptor" },
+	{ page: "events", serviceId: "demo" },
+	{ page: "secrets", serviceId: "demo" },
+] as const)("$page $tab retains revision panels during loading and service errors", (route) => {
+	for (const error of [undefined, "Cluster data is unavailable; retry shortly"]) {
+		const html = renderToStaticMarkup(
+			<AppView
+				route={route}
+				snapshot={{ error, refresh: () => {} }}
+				events={{ data: [], refresh: () => {} }}
+				logs={{}}
+			/>,
+		);
+		expect(html).toContain("Active revision");
+		expect(html).toContain("Desired revision");
+		expect(html).toContain('aria-label="Service detail"');
+		if (error) {
+			expect(html).toContain("Revision data unavailable");
+			expect(html).not.toContain("Loading…");
+		} else expect(html.match(/Loading…/g)).toHaveLength(2);
+	}
 });
 
 test("resource overview and history share the service events stream while history avoids inspection", () => {

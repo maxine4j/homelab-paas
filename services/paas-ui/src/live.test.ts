@@ -7,6 +7,33 @@ import { subscribeUi, type BrowserSocket } from "./live.ts";
 import { ResourceEventsPage } from "./pages/resource-events-page.tsx";
 import { ResourcePage } from "./pages/resource-page.tsx";
 
+test.each(["/cluster", "/services", "/services/demo", "/services/demo/resources/app", "/services/demo/events"])(
+	"%s requests its initial snapshot as soon as the socket opens",
+	(path) => {
+		vi.useFakeTimers();
+		try {
+			const socket: BrowserSocket = {
+				onopen: null,
+				onclose: null,
+				onerror: null,
+				onmessage: null,
+				send: vi.fn(),
+				close: vi.fn(),
+			};
+			const create = vi.fn(() => socket);
+			const stop = subscribeUi(path, () => {}, create, "https://cluster.test");
+			expect(create).toHaveBeenCalledExactlyOnceWith("wss://cluster.test/api/ui/live");
+			socket.onopen?.(new Event("open"));
+			expect(socket.send).toHaveBeenCalledTimes(1);
+			expect(JSON.parse(vi.mocked(socket.send).mock.calls.at(0)![0])).toMatchObject({ type: "subscribe" });
+			expect(vi.getTimerCount()).toBe(0);
+			stop();
+		} finally {
+			vi.useRealTimers();
+		}
+	},
+);
+
 test("resource views filter immediate and persisted service events identically across reconnect and navigation", async () => {
 	vi.useFakeTimers();
 	try {

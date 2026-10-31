@@ -9,12 +9,14 @@ import { StatusBadges } from "./status-badge.tsx";
 export const ServiceDetailShell = ({
 	serviceId,
 	service,
+	serviceError,
 	tab,
 	children,
 	actions,
 }: {
 	serviceId: string;
 	service?: UiService;
+	serviceError?: string;
 	tab: "overview" | "resources" | "events" | "secrets" | "descriptor";
 	children: ReactNode;
 	actions?: ReactNode;
@@ -22,6 +24,7 @@ export const ServiceDetailShell = ({
 	const primaryUrl = service?.resources.find(
 		(resource) => resource.type === "web" && resource.primaryUrl,
 	)?.primaryUrl;
+	const pendingRevision = serviceError ? "Revision data unavailable" : "Loading…";
 	return (
 		<>
 			<div className='page-heading service-heading'>
@@ -39,24 +42,22 @@ export const ServiceDetailShell = ({
 								{new URL(primaryUrl).host} <span aria-hidden='true'>↗</span>
 							</a>
 						)}
-						{service && (
-							<div className='service-commit-panels'>
-								<ServiceRevision
-									label='Active revision'
-									revision={service.activeRevision}
-									href={gitCommitLink(service.source, service.activeRevision)}
-									metadata={service.activeRevisionMetadata}
-									fallback='Not deployed'
-								/>
-								<ServiceRevision
-									label='Desired revision'
-									revision={service.descriptorRevision}
-									href={gitCommitLink(service.source, service.descriptorRevision)}
-									metadata={service.descriptorRevisionMetadata}
-									fallback='Unavailable'
-								/>
-							</div>
-						)}
+						<div className='service-commit-panels'>
+							<ServiceRevision
+								label='Active revision'
+								revision={service?.activeRevision}
+								href={service && gitCommitLink(service.source, service.activeRevision)}
+								metadata={service?.activeRevisionMetadata}
+								fallback={service ? "Not deployed" : pendingRevision}
+							/>
+							<ServiceRevision
+								label='Desired revision'
+								revision={service?.descriptorRevision}
+								href={service && gitCommitLink(service.source, service.descriptorRevision)}
+								metadata={service?.descriptorRevisionMetadata}
+								fallback={service ? "Unavailable" : pendingRevision}
+							/>
+						</div>
 					</div>
 				</div>
 			</div>

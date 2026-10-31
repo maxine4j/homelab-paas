@@ -8,6 +8,7 @@ import type {
 } from "@homelab-paas/shared-contracts";
 
 import { GitRefreshControl } from "./components/git-refresh.tsx";
+import { ServiceDetailShell } from "./components/service-detail-shell.tsx";
 import { useApi } from "./hooks/use-api.ts";
 import { useRoute } from "./hooks/use-route.ts";
 import { ClusterPage } from "./pages/cluster-page.tsx";
@@ -28,7 +29,7 @@ export const viewPaths = (route: Route): { snapshot?: string; events?: string } 
 			? "/cluster"
 			: route.page === "services"
 				? "/services"
-				: route.page === "service"
+				: route.page === "service" || route.page === "events" || route.page === "secrets"
 					? `/services/${route.serviceId}`
 					: route.page === "resource"
 						? `/services/${route.serviceId}/resources/${route.resourceId}`
@@ -46,9 +47,6 @@ export const App = () => {
 	const route = useRoute();
 	const paths = viewPaths(route);
 	const snapshot = useApi<Inspection>(paths.snapshot);
-	const serviceSnapshot = useApi<UiService>(
-		route.page === "events" || route.page === "secrets" ? `/services/${route.serviceId}` : undefined,
-	);
 	const containerId =
 		route.page === "resource"
 			? (route.containerId
@@ -62,16 +60,7 @@ export const App = () => {
 				? `${paths.snapshot}/containers/${encodeURIComponent(containerId)}/logs`
 				: undefined,
 	);
-	return (
-		<AppView
-			route={route}
-			snapshot={snapshot}
-			serviceSnapshot={serviceSnapshot}
-			events={events}
-			logs={logs}
-			containerId={containerId}
-		/>
-	);
+	return <AppView route={route} snapshot={snapshot} events={events} logs={logs} containerId={containerId} />;
 };
 
 export const AppView = ({
@@ -80,14 +69,12 @@ export const AppView = ({
 	events,
 	logs,
 	containerId,
-	serviceSnapshot,
 }: {
 	route: Route;
 	snapshot: ViewResult<Inspection>;
 	events: ViewResult<UiServiceEvent[]>;
 	logs: ApiResult<UiLogs>;
 	containerId?: string;
-	serviceSnapshot?: ApiResult<UiService> & { refresh?(): void };
 }) => {
 	const buildSha = import.meta.env["VITE_BUILD_SHA"] || "unknown";
 	const path = viewPaths(route).snapshot;
@@ -98,7 +85,6 @@ export const AppView = ({
 				serviceId={route.serviceId}
 				onComplete={() => {
 					snapshot.refresh();
-					serviceSnapshot?.refresh?.();
 					events.refresh();
 				}}
 			/>
@@ -198,13 +184,15 @@ export const AppView = ({
 						<SecretsPage
 							key={route.serviceId}
 							serviceId={route.serviceId}
-							service={serviceSnapshot?.data}
+							service={snapshot.data as UiService | undefined}
+							serviceError={snapshot.error}
 							actions={actions}
 						/>
 					) : route.page === "events" ? (
 						<ServiceEventsPage
 							serviceId={route.serviceId}
-							service={serviceSnapshot?.data}
+							service={snapshot.data as UiService | undefined}
+							serviceError={snapshot.error}
 							actions={actions}
 							events={events.data}
 							error={events.error}
@@ -216,6 +204,24 @@ export const AppView = ({
 							events={events.data}
 							error={events.error}
 						/>
+					) : route.page === "service" && !snapshot.data ? (
+						<ServiceDetailShell
+							serviceId={route.serviceId}
+							tab={route.tab ?? "overview"}
+							serviceError={snapshot.error}
+							actions={actions}
+						>
+							{snapshot.error ? (
+								<div className='empty' role='alert'>
+									<p>{snapshot.error}</p>
+									<button onClick={snapshot.refresh}>Retry</button>
+								</div>
+							) : (
+								<p role='status' className='empty'>
+									Loading service data…
+								</p>
+							)}
+						</ServiceDetailShell>
 					) : snapshot.error ? (
 						<div className='empty' role='alert'>
 							<h1>Unable to load cluster data</h1>

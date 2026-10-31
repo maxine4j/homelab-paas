@@ -38,10 +38,12 @@ export const setSecret = async (
 export const SecretsPage = ({
 	serviceId,
 	service,
+	serviceError,
 	actions,
 }: {
 	serviceId: string;
 	service?: UiService;
+	serviceError?: string;
 	actions?: ReactNode;
 }) => {
 	const preview = import.meta.env.MODE === "mock";
@@ -78,7 +80,13 @@ export const SecretsPage = ({
 		}
 	};
 	return (
-		<ServiceDetailShell serviceId={serviceId} service={service} tab='secrets' actions={actions}>
+		<ServiceDetailShell
+			serviceId={serviceId}
+			service={service}
+			serviceError={serviceError}
+			tab='secrets'
+			actions={actions}
+		>
 			<h2>Service secrets</h2>
 			<section className='card secrets-editor'>
 				{error && <p role='alert'>{error}</p>}
