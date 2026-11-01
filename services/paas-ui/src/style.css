@@ -560,7 +560,14 @@ main {
 	max-width: 100%;
 }
 .service-identity-block > .service-identity {
+	/* Keep inline actions compact; let their group grow when it wraps onto its own row. */
+	flex-grow: 999;
+}
+.service-identity-block > .git-refresh {
 	flex-grow: 1;
+}
+.service-identity-block .service-actions {
+	width: 100%;
 }
 h1 {
 	margin: 8px 0 12px;
