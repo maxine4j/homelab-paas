@@ -1,0 +1,26 @@
+version: 1
+metadata:
+    serviceId: git
+resources:
+    forgejo:
+        type: web
+        image: codeberg.org/forgejo/forgejo:17.0.1
+        rolloutStrategy: recreate
+        ingress:
+            public: false
+            port: 3000
+        hostPorts:
+            - protocol: tcp
+              containerPort: 22
+              hostPort: 2222
+              bindAddress: 0.0.0.0
+        env:
+            - name: USER_UID
+              value: "1000"
+            - name: USER_GID
+              value: "1000"
+            - name: FORGEJO__server__SSH_PORT
+              value: "2222"
+        volumes:
+            - hostPath: forgejo
+              mountPath: /data
