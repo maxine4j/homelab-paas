@@ -4,6 +4,7 @@ import { expect, test, vi } from "vitest";
 import { parseConfig, decodeDescriptorYaml } from "../config/paas-config.ts";
 import type { DockerContainerDetails } from "../docker/types.ts";
 import type { IResourceHealthReader } from "../health/resource-health-service.ts";
+import { ResourceRoutingPolicy } from "../reconciler/networking/resource-routing-policy.ts";
 import { ResourceSpecification } from "../reconciler/resource-specification.ts";
 import { ResourceStatusService } from "../status/resource-status-service.ts";
 import { testConfig } from "../util/test/config.ts";
@@ -100,6 +101,7 @@ const fixture = (health: HealthStatus = "Degraded") => {
 	]);
 	const refineStatus = vi.fn<IResourceHealthReader["refineStatus"]>((status) => status);
 	const service = new PaasUiService(
+		new ResourceRoutingPolicy(),
 		new ResourceStatusService(new ResourceSpecification(), {
 			resolve: async (_serviceId, env) =>
 				env.map((entry) => ({ name: entry.name, value: "value" in entry ? entry.value : "test-secret" })),
@@ -522,6 +524,7 @@ test("cluster inspection and edits delegate configuration policy to the config s
 	configuration.getEditableConfig = vi.fn(() => snapshot);
 	configuration.updateConfig = vi.fn(async () => snapshot);
 	const service = new PaasUiService(
+		new ResourceRoutingPolicy(),
 		new ResourceStatusService(new ResourceSpecification(), {
 			resolve: async (_serviceId, env) =>
 				env.map((entry) => ({ name: entry.name, value: "value" in entry ? entry.value : "test-secret" })),

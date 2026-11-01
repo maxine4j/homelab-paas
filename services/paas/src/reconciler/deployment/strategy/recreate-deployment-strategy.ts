@@ -1,5 +1,6 @@
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
+import type { IResourceRoutingPolicy } from "../../networking/resource-routing-policy.ts";
 import type { IDeploymentContainers } from "../deployment-containers.ts";
 import type { DeploymentRequest, DeploymentStrategy } from "./types.ts";
 
@@ -10,6 +11,7 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 	readonly name = "recreate";
 
 	constructor(
+		private readonly routing: IResourceRoutingPolicy,
 		private readonly docker: IDockerService,
 		private readonly networking: INetworkingService,
 		private readonly containers: IDeploymentContainers,
@@ -39,12 +41,6 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 			resource,
 		});
 		// Publication may succeed before confirmation fails. Keep the ready container.
-		await this.networking.routeTo(`${resourceId}.${serviceId}`, {
-			address,
-			port: resource.ingress.port,
-			healthcheckPath: resource.healthcheckUrl ?? undefined,
-			public: resource.ingress.public ?? false,
-			primary: resource.primary ?? true,
-		});
+		await this.networking.routeTo(`${resourceId}.${serviceId}`, this.routing.webEndpoint(resource, address));
 	}
 }

@@ -3,7 +3,26 @@ import { expect, test, vi } from "vitest";
 import type { DockerContainerDetails, DockerNetwork, ServiceContainer } from "../docker/types.ts";
 import { testConfig } from "../util/test/config.ts";
 import { DriftAudit } from "./drift-audit.ts";
+import { ResourceRoutingPolicy } from "./networking/resource-routing-policy.ts";
+import type { Endpoint } from "./networking/types.ts";
 import { ResourceSpecification } from "./resource-specification.ts";
+
+test.each([
+	{ address: "10.0.0.9" },
+	{ port: 9090 },
+	{ public: false },
+	{ primary: false },
+	{ healthcheckPath: "/different" },
+	{ static: true },
+])("web route policy drift schedules repair: %j", async (change: Partial<Endpoint>) => {
+	const f = fixture();
+	f.routes.getAll.mockResolvedValue({
+		"app.demo": { address: "10.0.0.2", port: 8080, public: true, primary: true, ...change },
+		"unsupported.removed": { address: "10.0.0.3", port: 80, public: false },
+	});
+	await f.audit.run();
+	expect(f.scheduler.invalidate).toHaveBeenCalledWith("demo");
+});
 
 test("static-only audits repair file and route drift without requiring a service network", async () => {
 	const inspect = vi.fn(async () => "current" as "current" | "different");
@@ -16,6 +35,7 @@ test("static-only audits repair file and route drift without requiring a service
 	const peers = { inspectServiceInfrastructure: vi.fn(async () => false) };
 	const routes = { "site.demo": { address: "127.0.0.1", port: 8081, static: true, public: false, primary: true } };
 	const audit = new DriftAudit(
+		new ResourceRoutingPolicy(),
 		testConfig({ services: { demo: { remote: "repo", descriptorPath: "sd.yaml" } } }),
 		{
 			read: async () => ({
@@ -47,6 +67,30 @@ test("static-only audits repair file and route drift without requiring a service
 	routes["site.demo"].primary = false;
 	await audit.run();
 	expect(invalidate).toHaveBeenCalledWith("demo");
+	for (const change of [
+		{ address: "10.0.0.9" },
+		{ port: 80 },
+		{ public: true },
+		{ primary: false },
+		{ static: false },
+		{ healthcheckPath: "/wrong" },
+	]) {
+		Object.assign(
+			routes["site.demo"],
+			{
+				address: "127.0.0.1",
+				port: 8081,
+				static: true,
+				public: false,
+				primary: true,
+				healthcheckPath: undefined,
+			},
+			change,
+		);
+		invalidate.mockClear();
+		await audit.run();
+		expect(invalidate).toHaveBeenCalledWith("demo");
+	}
 });
 
 const fixture = () => {
@@ -90,7 +134,7 @@ const fixture = () => {
 	};
 	const peers = { inspectServiceInfrastructure: vi.fn(async () => true) };
 	const routes = {
-		getAll: vi.fn(async () => ({
+		getAll: vi.fn(async (): Promise<Record<string, Endpoint>> => ({
 			"app.demo": { address: "10.0.0.2", port: 8080, public: true, primary: true },
 			"unsupported.removed": { address: "10.0.0.3", port: 80, public: false },
 		})),
@@ -102,6 +146,7 @@ const fixture = () => {
 	const cleanup = { run: vi.fn(async () => {}) };
 	const config = testConfig({ services: { demo: { remote: "repo", descriptorPath: "sd.yaml" } } });
 	const audit = new DriftAudit(
+		new ResourceRoutingPolicy(),
 		config,
 		inputs,
 		docker,
@@ -164,6 +209,16 @@ test("unchanged audit verifies routing without scheduling replacement or overwri
 	expect(f.scheduler.invalidate).not.toHaveBeenCalled();
 	expect(f.routing.verifyRoutes.mock.calls).toEqual([[]]);
 	expect(f.remember).toHaveBeenCalledWith("network-id", "demo");
+});
+
+test("equivalent persisted defaults and null healthchecks do not schedule deployment", async () => {
+	const f = fixture();
+	f.routes.getAll.mockResolvedValue({
+		"app.demo": { address: "10.0.0.2", port: 8080, public: true, static: false, healthcheckPath: null },
+		"unsupported.removed": { address: "10.0.0.3", port: 80, public: false },
+	});
+	await f.audit.run();
+	expect(f.scheduler.invalidate).not.toHaveBeenCalled();
 });
 
 test.each(["stop", "missing", "network", "alias", "limits", "peer", "route"])(

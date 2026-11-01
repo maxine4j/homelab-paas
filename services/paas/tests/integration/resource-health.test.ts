@@ -15,6 +15,7 @@ import { UiLiveService } from "../../src/frontend/ui-live-service.ts";
 import { UiWebSocket } from "../../src/frontend/ui-websocket.ts";
 import { ResourceHealthService } from "../../src/health/resource-health-service.ts";
 import { RuntimeObservations } from "../../src/observation/runtime-observations.ts";
+import { ResourceRoutingPolicy } from "../../src/reconciler/networking/resource-routing-policy.ts";
 import { ResourceSpecification } from "../../src/reconciler/resource-specification.ts";
 import { ResourceStatusService } from "../../src/status/resource-status-service.ts";
 import { probe } from "../../src/util/healthcheck.ts";
@@ -84,6 +85,7 @@ test("HTTP health polling pushes resource health over WebSocket with independent
 		observations,
 	);
 	const ui = new PaasUiService(
+		new ResourceRoutingPolicy(),
 		new ResourceStatusService(new ResourceSpecification(), {
 			resolve: async (_serviceId, env) =>
 				env.map((entry) => ({ name: entry.name, value: "value" in entry ? entry.value : "test-secret" })),

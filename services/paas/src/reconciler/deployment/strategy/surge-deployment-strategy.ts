@@ -1,5 +1,6 @@
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
+import type { IResourceRoutingPolicy } from "../../networking/resource-routing-policy.ts";
 import type { IDeploymentContainers } from "../deployment-containers.ts";
 import type { DeploymentRequest, DeploymentStrategy } from "./types.ts";
 
@@ -11,6 +12,7 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 	readonly name = "surge";
 
 	constructor(
+		private readonly routing: IResourceRoutingPolicy,
 		private readonly docker: IDockerService,
 		private readonly networking: INetworkingService,
 		private readonly containers: IDeploymentContainers,
@@ -37,13 +39,7 @@ export class SurgeDeploymentStrategy implements DeploymentStrategy {
 		});
 		// A rejected publication can have an uncertain outcome. Keep both revisions
 		// alive rather than deleting a replacement that may already receive traffic.
-		await this.networking.routeTo(`${resourceId}.${serviceId}`, {
-			address,
-			port: resource.ingress.port,
-			healthcheckPath: resource.healthcheckUrl ?? undefined,
-			public: resource.ingress.public ?? false,
-			primary: resource.primary ?? true,
-		});
+		await this.networking.routeTo(`${resourceId}.${serviceId}`, this.routing.webEndpoint(resource, address));
 		if (current.length === 0) return;
 		const timeoutSeconds = resource.termination?.timeoutSeconds ?? 30;
 		await this.containers.retire(

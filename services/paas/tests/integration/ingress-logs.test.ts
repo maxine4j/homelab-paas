@@ -17,6 +17,7 @@ import { ChangeBus } from "../../src/events/change-bus.ts";
 import { PaasUiService } from "../../src/frontend/paas-ui-service.ts";
 import { UiLiveService } from "../../src/frontend/ui-live-service.ts";
 import { UiWebSocket } from "../../src/frontend/ui-websocket.ts";
+import { ResourceRoutingPolicy } from "../../src/reconciler/networking/resource-routing-policy.ts";
 import { ResourceSpecification } from "../../src/reconciler/resource-specification.ts";
 import { ResourceStatusService } from "../../src/status/resource-status-service.ts";
 import { mkdtemp, rm } from "../../src/util/file.ts";
@@ -74,6 +75,7 @@ test("ingress subscription discovers owned Envoy and streams bounded redacted Do
 	const docker = new DockerService(new DockerClient(transport), config);
 	const logs = new DockerLogService(docker, new DockerLogClient(transport), config);
 	const ui = new PaasUiService(
+		new ResourceRoutingPolicy(),
 		new ResourceStatusService(new ResourceSpecification(), { resolve: async () => [] }),
 		config,
 		{ fetchFile: vi.fn(), readCommit: vi.fn() },

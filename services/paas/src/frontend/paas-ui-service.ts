@@ -15,6 +15,7 @@ import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IDockerLogService } from "../docker/docker-log-service.ts";
 import type { IGitRevisionService } from "../git/git-service.ts";
 import type { IResourceHealthReader } from "../health/resource-health-service.ts";
+import type { IResourceRoutingPolicy } from "../reconciler/networking/resource-routing-policy.ts";
 import type { IServiceEventStore } from "../reconciler/service-event-store.ts";
 import type { DescriptorDecoder, IReconciliationStateStore } from "../reconciler/types.ts";
 import type { IResourceStatusService } from "../status/resource-status-service.ts";
@@ -65,6 +66,7 @@ export class PaasUiError extends Error {
 export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 	private readonly log = createLogger(PaasUiService.name);
 	constructor(
+		private readonly routing: IResourceRoutingPolicy,
 		private readonly status: IResourceStatusService,
 		private readonly config: IPaasConfig,
 		private readonly git: IGitRevisionService,
@@ -244,9 +246,7 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 				this.descriptor(serviceId),
 			]);
 			const resources = file?.descriptor.resources ?? {};
-			const webCount = Object.values(resources).filter(
-				(resource) => resource.type === "web" || resource.type === "static",
-			).length;
+			const primary = this.routing.primaryResource(resources);
 			const secrets = this.secrets(file?.descriptor);
 			const metadata = includeRevisionMetadata
 				? await this.revisionMetadata(
@@ -274,7 +274,7 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 									resources[resourceId]?.type === "web"
 										? {
 												...resources[resourceId],
-												primary: webCount === 1 || resources[resourceId].primary === true,
+												primary: resourceId === primary,
 											}
 										: resources[resourceId],
 								containers: containers.filter((container) => container.resourceId === resourceId),
@@ -293,7 +293,7 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 							: undefined,
 					primaryUrl:
 						(resources[resourceId]?.type === "web" || resources[resourceId]?.type === "static")
-						&& (webCount === 1 || resources[resourceId].primary === true)
+						&& resourceId === primary
 							? this.ingressUrl(serviceId)
 							: undefined,
 					type: resources[resourceId]?.type ?? "unknown",
@@ -320,12 +320,7 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 					file?.descriptor.metadata.description === undefined
 						? undefined
 						: this.config.redact(file.descriptor.metadata.description, secrets),
-				primaryUrl: Object.values(resources).some(
-					(resource) =>
-						(resource.type === "web" || resource.type === "static") && (webCount === 1 || resource.primary),
-				)
-					? this.ingressUrl(serviceId)
-					: undefined,
+				primaryUrl: primary !== undefined ? this.ingressUrl(serviceId) : undefined,
 				desiredRevision: file?.revision ?? state?.desiredRevision,
 				activeRevision: state?.activeRevision,
 				failures: state?.failures,

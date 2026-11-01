@@ -5,6 +5,7 @@ import type { IStaticStore } from "../static/static-store.ts";
 import { createLogger, withLogContext } from "../util/logger.ts";
 import { DesiredInputError, type IDesiredInputs } from "./desired-inputs.ts";
 import type { IRouteVerifier } from "./networking/networking-service.ts";
+import type { IResourceRoutingPolicy } from "./networking/resource-routing-policy.ts";
 import type { Endpoint } from "./networking/types.ts";
 import type { IOrphanCleanup } from "./orphan-cleanup.ts";
 import type { IResourceSpecification } from "./resource-specification.ts";
@@ -31,6 +32,7 @@ export class DriftAudit implements IDriftAudit {
 	private stopped = false;
 
 	constructor(
+		private readonly routing: IResourceRoutingPolicy,
 		private readonly config: IPaasConfig,
 		private readonly inputs: { read: IDesiredInputs["read"] },
 		private readonly docker: IAuditDocker,
@@ -136,10 +138,7 @@ export class DriftAudit implements IDriftAudit {
 						revision: desired.revision,
 						path: resource.path,
 					})) !== "current"
-					|| !actual?.static
-					|| actual.port !== 8081
-					|| actual.public !== (resource.ingress?.public ?? false)
-					|| actual.primary !== (resource.primary ?? false)
+					|| !this.routing.matches(this.routing.staticEndpoint(resource), actual)
 				)
 					drift = true;
 				continue;
@@ -157,23 +156,9 @@ export class DriftAudit implements IDriftAudit {
 					continue;
 				}
 				if (resource.type === "web" && network && details) {
-					const expected = {
-						address: details.networks[network.name]!.address,
-						port: resource.ingress.port,
-						public: resource.ingress.public ?? false,
-						primary: resource.primary ?? true,
-						healthcheckPath: resource.healthcheckUrl ?? undefined,
-					};
+					const expected = this.routing.webEndpoint(resource, details.networks[network.name]!.address);
 					const actual = routes[`${resourceId}.${serviceId}`];
-					if (
-						!actual
-						|| expected.address !== actual.address
-						|| expected.port !== actual.port
-						|| expected.public !== actual.public
-						|| expected.primary !== (actual.primary ?? true)
-						|| expected.healthcheckPath !== (actual.healthcheckPath ?? undefined)
-					)
-						drift = true;
+					if (!this.routing.matches(expected, actual)) drift = true;
 				}
 			}
 		}

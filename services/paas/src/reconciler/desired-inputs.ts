@@ -5,6 +5,7 @@ import type { ServiceDescriptor, StaticResource, WebResource, WorkerResource } f
 import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IGitService } from "../git/git-service.ts";
 import type { IEnvironmentResolver } from "./environment-resolver.ts";
+import type { IResourceRoutingPolicy } from "./networking/resource-routing-policy.ts";
 import type { DescriptorDecoder, DesiredService } from "./types.ts";
 
 export interface IDesiredInputs {
@@ -39,6 +40,7 @@ export class DesiredInputs implements IDesiredInputs {
 	private readonly pending = new Map<string, Promise<DesiredService>>();
 
 	constructor(
+		private readonly routing: IResourceRoutingPolicy,
 		private readonly config: IPaasConfig,
 		private readonly git: IGitService,
 		private readonly decode: DescriptorDecoder,
@@ -147,13 +149,13 @@ export class DesiredInputs implements IDesiredInputs {
 
 	private resources(descriptor: ServiceDescriptor): [string, WebResource | WorkerResource | StaticResource][] {
 		const entries = Object.entries(descriptor.resources);
-		const webCount = entries.filter(([, resource]) => resource.type === "web" || resource.type === "static").length;
+		const primary = this.routing.primaryResource(descriptor.resources);
 		if (!entries.length) throw new Error("Runtime requires at least one workload resource");
 		return entries.map(([id, resource]) => {
 			if (resource.type === "static") {
 				if (!this.config.getAuthConfig() && resource.ingress?.public !== true)
 					throw new Error("Private ingress requires auth/TLS");
-				return [id, { ...resource, primary: webCount === 1 || resource.primary === true }];
+				return [id, { ...resource, primary: id === primary }];
 			}
 			if (
 				(resource.type !== "web" && resource.type !== "worker")
@@ -163,12 +165,7 @@ export class DesiredInputs implements IDesiredInputs {
 				|| resource.egress !== undefined
 			)
 				throw new Error("Resource requires unsupported runtime capabilities");
-			return [
-				id,
-				resource.type === "web"
-					? { ...resource, primary: webCount === 1 || resource.primary === true }
-					: resource,
-			];
+			return [id, resource.type === "web" ? { ...resource, primary: id === primary } : resource];
 		});
 	}
 

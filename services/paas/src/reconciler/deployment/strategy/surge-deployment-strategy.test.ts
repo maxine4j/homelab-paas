@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { DockerContainerDetails, ServiceContainer } from "../../../docker/types.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
+import { ResourceRoutingPolicy } from "../../networking/resource-routing-policy.ts";
 import { DeploymentContainers } from "../deployment-containers.ts";
 import { SurgeDeploymentStrategy } from "./surge-deployment-strategy.ts";
 import type { DeploymentRequest } from "./types.ts";
@@ -91,6 +92,7 @@ test.each([
 					networks: condition === "address" ? {} : { network: { address: "10.0.0.2", aliases: [] } },
 				};
 	const strategy = new SurgeDeploymentStrategy(
+		new ResourceRoutingPolicy(),
 		f.docker,
 		f.routes,
 		new DeploymentContainers(f.docker, async () => false, f.sleep),
@@ -179,6 +181,7 @@ function fixture() {
 		sleep,
 		generateInstanceId,
 		strategy: new SurgeDeploymentStrategy(
+			new ResourceRoutingPolicy(),
 			docker,
 			routes,
 			new DeploymentContainers(docker, probe, sleep),
@@ -307,6 +310,7 @@ test("readiness retries absence, stopped containers, missing addresses and faile
 	};
 	let probes = 0;
 	const strategy = new SurgeDeploymentStrategy(
+		new ResourceRoutingPolicy(),
 		f.docker,
 		f.routes,
 		new DeploymentContainers(
@@ -329,6 +333,7 @@ test("readiness exhaustion preserves the previous revision and removes only the 
 	const f = fixture();
 	let probes = 0;
 	const strategy = new SurgeDeploymentStrategy(
+		new ResourceRoutingPolicy(),
 		f.docker,
 		f.routes,
 		new DeploymentContainers(
@@ -413,6 +418,7 @@ test("accepts the thirtieth readiness check before retiring the previous revisio
 	const f = fixture();
 	let probes = 0;
 	const strategy = new SurgeDeploymentStrategy(
+		new ResourceRoutingPolicy(),
 		f.docker,
 		f.routes,
 		new DeploymentContainers(f.docker, async () => ++probes === 30, f.sleep),

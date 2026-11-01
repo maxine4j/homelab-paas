@@ -3,6 +3,7 @@ import { expect, test, vi } from "vitest";
 import { decodeDescriptorYaml } from "../config/paas-config.ts";
 import { testConfig } from "../util/test/config.ts";
 import { DesiredInputs } from "./desired-inputs.ts";
+import { ResourceRoutingPolicy } from "./networking/resource-routing-policy.ts";
 
 const fixture = () => {
 	const sources = { demo: { remote: "local", descriptorPath: "/repo/demo.yaml", accessToken: "one" } };
@@ -24,7 +25,7 @@ const fixture = () => {
 	}));
 	const decode = vi.fn(decodeDescriptorYaml);
 	const resolve = vi.fn(async () => [{ name: "TOKEN", value: "secret-one" }]);
-	const inputs = new DesiredInputs(config, { fetchFile }, decode, { resolve });
+	const inputs = new DesiredInputs(new ResourceRoutingPolicy(), config, { fetchFile }, decode, { resolve });
 	return { sources, config, fetchFile, decode, resolve, inputs };
 };
 

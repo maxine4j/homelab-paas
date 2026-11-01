@@ -6,3 +6,8 @@ export interface StaticIdentity {
 }
 
 export type StaticSnapshot = "current" | "missing" | "different";
+
+export interface StaticPublicationOptions {
+	/** Replaces files even when the existing bytes match the freshly exported bundle. */
+	force?: boolean;
+}

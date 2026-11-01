@@ -6,11 +6,13 @@ import { z } from "zod";
 import type { GitDirectoryFile } from "../git/types.ts";
 import type { IStorageAccess } from "../store/internal-storage.ts";
 import type * as files from "../util/file.ts";
-import type { StaticIdentity, StaticSnapshot } from "./types.ts";
+import type { StaticIdentity, StaticPublicationOptions, StaticSnapshot } from "./types.ts";
 
 export interface IStaticStore {
-	/** Stages a complete bundle before replacement. Throws StaticStoreError; prior content survives staging failures. */
-	publish(identity: StaticIdentity, bundle: GitDirectoryFile[]): Promise<void>;
+	/** Reuses exactly matching on-disk files unless forced; otherwise stages a complete bundle before replacement.
+	 * Identity is refreshed atomically. Throws StaticStoreError; prior content survives staging or reuse failures.
+	 */
+	publish(identity: StaticIdentity, bundle: GitDirectoryFile[], options?: StaticPublicationOptions): Promise<void>;
 	/** Checks published identity and every file. Throws StaticStoreError on I/O failures. */
 	inspect(identity: StaticIdentity): Promise<StaticSnapshot>;
 	/** Reads regular files only; unsafe paths and missing files return undefined. Throws StaticStoreError on I/O failures. */
@@ -31,7 +33,7 @@ export class StaticStore implements IStaticStore {
 		private readonly fs: typeof files,
 		private readonly storage?: IStorageAccess,
 	) {}
-	publish(identity: StaticIdentity, bundle: GitDirectoryFile[]): Promise<void> {
+	publish(identity: StaticIdentity, bundle: GitDirectoryFile[], options?: StaticPublicationOptions): Promise<void> {
 		return this.serialize(identity.serviceId, identity.resourceId, async () => {
 			if (
 				bundle.some((file) => !this.safePath(file.path))
@@ -41,8 +43,20 @@ export class StaticStore implements IStaticStore {
 			const parent = join(this.root, identity.serviceId);
 			await this.fs.mkdir(parent, { recursive: true, mode: 0o700 });
 			if (!(await this.fs.lstat(parent)).isDirectory()) throw new Error("Invalid static service directory");
-			const temporary = await this.fs.mkdtemp(join(parent, ".staging-"));
 			const target = join(parent, identity.resourceId);
+			if (!options?.force) {
+				let current: GitDirectoryFile[] | undefined;
+				try {
+					current = await this.scan(target);
+				} catch (error) {
+					if (!this.fs.isFileError(error, "ENOENT")) throw error;
+				}
+				if (current && JSON.stringify(this.digests(current)) === JSON.stringify(this.digests(bundle))) {
+					await this.writeIdentity(parent, identity, bundle);
+					return;
+				}
+			}
+			const temporary = await this.fs.mkdtemp(join(parent, ".staging-"));
 			const backup = `${temporary}.previous`;
 			let previous = false;
 			let published = false;
@@ -65,14 +79,7 @@ export class StaticStore implements IStaticStore {
 					if (previous) await this.fs.rename(backup, target);
 					throw error;
 				}
-				await this.fs.atomicWriteFile(
-					join(parent, `.${identity.resourceId}.json`),
-					JSON.stringify({
-						revision: identity.revision,
-						path: identity.path,
-						files: this.digests(bundle),
-					}),
-				);
+				await this.writeIdentity(parent, identity, bundle);
 			} finally {
 				await this.fs.rm(temporary, { recursive: true, force: true });
 				if (published) await this.fs.rm(backup, { recursive: true, force: true });
@@ -125,6 +132,13 @@ export class StaticStore implements IStaticStore {
 				throw error;
 			}
 		});
+	}
+
+	private async writeIdentity(parent: string, identity: StaticIdentity, bundle: GitDirectoryFile[]): Promise<void> {
+		await this.fs.atomicWriteFile(
+			join(parent, `.${identity.resourceId}.json`),
+			JSON.stringify({ revision: identity.revision, path: identity.path, files: this.digests(bundle) }),
+		);
 	}
 
 	private async scan(directory: string, prefix = ""): Promise<GitDirectoryFile[] | undefined> {

@@ -8,6 +8,7 @@ import { TlsCertProvisionService } from "../ingress/tls/cert-provision-service.t
 import { DigitalOceanDnsAcmeChallengeProvider } from "../ingress/tls/dns-challenge/digitalocean-dns-challenge-provider.ts";
 import { DesiredInputs } from "../reconciler/desired-inputs.ts";
 import { EventDiagnostics } from "../reconciler/event-diagnostics.ts";
+import { ResourceRoutingPolicy } from "../reconciler/networking/resource-routing-policy.ts";
 import { ReconcilerService } from "../reconciler/reconciler-service.ts";
 import { ResourceSpecification } from "../reconciler/resource-specification.ts";
 import type { ReconciliationState } from "../reconciler/types.ts";
@@ -106,7 +107,9 @@ test("existing reconciler and UI discover reloaded service sources and retry bou
 	const reconcile = vi.fn(async () => {});
 	const service = new ReconcilerService(
 		f.config,
-		new DesiredInputs(f.config, { fetchFile }, decodeDescriptorYaml, { resolve: async () => [] }),
+		new DesiredInputs(new ResourceRoutingPolicy(), f.config, { fetchFile }, decodeDescriptorYaml, {
+			resolve: async () => [],
+		}),
 		{ type: "web", lifecycle: "deployment", reconcile },
 		state,
 		() => 0,
@@ -115,6 +118,7 @@ test("existing reconciler and UI discover reloaded service sources and retry bou
 		new EventDiagnostics(f.config),
 	);
 	const ui = new PaasUiService(
+		new ResourceRoutingPolicy(),
 		new ResourceStatusService(new ResourceSpecification(), {
 			resolve: async (_serviceId, env) =>
 				env.map((entry) => ({ name: entry.name, value: "value" in entry ? entry.value : "test-secret" })),

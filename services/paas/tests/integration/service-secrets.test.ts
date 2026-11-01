@@ -14,6 +14,7 @@ import { JwtClient } from "../../src/ingress/auth/jwt-client.ts";
 import { DesiredInputs } from "../../src/reconciler/desired-inputs.ts";
 import { EnvironmentResolver } from "../../src/reconciler/environment-resolver.ts";
 import { EventDiagnostics } from "../../src/reconciler/event-diagnostics.ts";
+import { ResourceRoutingPolicy } from "../../src/reconciler/networking/resource-routing-policy.ts";
 import { ReconcilerService } from "../../src/reconciler/reconciler-service.ts";
 import { ReconciliationScheduler } from "../../src/reconciler/reconciliation-scheduler.ts";
 import { ReconciliationStore } from "../../src/reconciler/reconciliation-store.ts";
@@ -74,6 +75,7 @@ test("authenticated secret editing persists private files, retains values, resol
 		),
 	);
 	const desiredInputs = new DesiredInputs(
+		new ResourceRoutingPolicy(),
 		config,
 		git,
 		decodeDescriptorYaml,
@@ -103,6 +105,7 @@ test("authenticated secret editing persists private files, retains values, resol
 	);
 	await scheduler.start();
 	const ui = new PaasUiService(
+		new ResourceRoutingPolicy(),
 		new ResourceStatusService(new ResourceSpecification(), {
 			resolve: async (_serviceId, env) =>
 				env.map((entry) => ({ name: entry.name, value: "value" in entry ? entry.value : "test-secret" })),

@@ -9,6 +9,7 @@ import { captureLogs } from "../util/test/logs.ts";
 import { DesiredInputs } from "./desired-inputs.ts";
 import { EnvironmentResolver } from "./environment-resolver.ts";
 import { EventDiagnostics } from "./event-diagnostics.ts";
+import { ResourceRoutingPolicy } from "./networking/resource-routing-policy.ts";
 import { ReconcilerService } from "./reconciler-service.ts";
 import type { ReconciliationState } from "./types.ts";
 import { serviceEventMessages } from "./types.ts";
@@ -216,6 +217,7 @@ function fixture() {
 		return new ReconcilerService(
 			config,
 			new DesiredInputs(
+				new ResourceRoutingPolicy(),
 				config,
 				deps.git,
 				deps.decode,

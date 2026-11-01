@@ -9,6 +9,7 @@ import { testConfigValue } from "../util/test/config.ts";
 import { DesiredInputs } from "./desired-inputs.ts";
 import { EnvironmentResolver } from "./environment-resolver.ts";
 import { EventDiagnostics } from "./event-diagnostics.ts";
+import { ResourceRoutingPolicy } from "./networking/resource-routing-policy.ts";
 import { ReconcilerService } from "./reconciler-service.ts";
 import { ReconciliationScheduler } from "./reconciliation-scheduler.ts";
 import type { WebReconciliationRequest } from "./resources/web/web-reconciler.ts";
@@ -48,6 +49,7 @@ const fixture = async () => {
 		secretText = String(content);
 	});
 	const inputs = new DesiredInputs(
+		new ResourceRoutingPolicy(),
 		config,
 		{ fetchFile },
 		decodeDescriptorYaml,

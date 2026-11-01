@@ -14,6 +14,7 @@ import { UiWebSocket } from "../../src/frontend/ui-websocket.ts";
 import { GitClient } from "../../src/git/git-client.ts";
 import { GitService } from "../../src/git/git-service.ts";
 import { NodeGitTransport } from "../../src/git/git-transport.ts";
+import { ResourceRoutingPolicy } from "../../src/reconciler/networking/resource-routing-policy.ts";
 import { ResourceSpecification } from "../../src/reconciler/resource-specification.ts";
 import { ResourceStatusService } from "../../src/status/resource-status-service.ts";
 import { mkdtemp, rm } from "../../src/util/file.ts";
@@ -57,6 +58,7 @@ test("cold live subscription serves persisted Git objects while background remot
 		const cold = new GitService(new OfflineClient(transport), cacheDirectory);
 		settle = () => cold.refreshFile("demo", source).catch(() => {});
 		const ui = new PaasUiService(
+			new ResourceRoutingPolicy(),
 			new ResourceStatusService(new ResourceSpecification(), {
 				resolve: async (_serviceId, env) =>
 					env.map((entry) => ({ name: entry.name, value: "value" in entry ? entry.value : "test-secret" })),

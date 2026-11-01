@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { DockerContainerDetails, ServiceContainer } from "../../../docker/types.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
+import { ResourceRoutingPolicy } from "../../networking/resource-routing-policy.ts";
 import { DeploymentContainers } from "../deployment-containers.ts";
 import { RecreateDeploymentStrategy } from "./recreate-deployment-strategy.ts";
 import type { DeploymentRequest } from "./types.ts";
@@ -50,6 +51,7 @@ test.each([
 					networks: condition === "address" ? {} : { network: { address: "10.0.0.2", aliases: [] } },
 				};
 	const strategy = new RecreateDeploymentStrategy(
+		new ResourceRoutingPolicy(),
 		f.docker,
 		f.routes,
 		new DeploymentContainers(f.docker, async () => false, f.pause),
@@ -132,7 +134,12 @@ function fixture() {
 		docker,
 		calls,
 		routes,
-		strategy: new RecreateDeploymentStrategy(docker, routes, new DeploymentContainers(docker, probe, pause)),
+		strategy: new RecreateDeploymentStrategy(
+			new ResourceRoutingPolicy(),
+			docker,
+			routes,
+			new DeploymentContainers(docker, probe, pause),
+		),
 		probe,
 		pause,
 	};
@@ -320,6 +327,7 @@ test("readiness exhaustion is bounded and never publishes an unready endpoint", 
 	const f = fixture();
 	let probes = 0;
 	const strategy = new RecreateDeploymentStrategy(
+		new ResourceRoutingPolicy(),
 		f.docker,
 		f.routes,
 		new DeploymentContainers(
@@ -345,6 +353,7 @@ test("publishes when the thirtieth readiness check succeeds", async () => {
 	const f = fixture();
 	let probes = 0;
 	const strategy = new RecreateDeploymentStrategy(
+		new ResourceRoutingPolicy(),
 		f.docker,
 		f.routes,
 		new DeploymentContainers(f.docker, async () => ++probes === 30, f.pause),

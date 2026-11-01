@@ -31,6 +31,7 @@ import { EnvironmentResolver } from "../../src/reconciler/environment-resolver.t
 import { EventDiagnostics } from "../../src/reconciler/event-diagnostics.ts";
 import { EndpointsStore } from "../../src/reconciler/networking/endpoints-store.ts";
 import { NetworkingService } from "../../src/reconciler/networking/networking-service.ts";
+import { ResourceRoutingPolicy } from "../../src/reconciler/networking/resource-routing-policy.ts";
 import { ReconcilerService } from "../../src/reconciler/reconciler-service.ts";
 import { ReconciliationScheduler } from "../../src/reconciler/reconciliation-scheduler.ts";
 import { ReconciliationStore } from "../../src/reconciler/reconciliation-store.ts";
@@ -97,16 +98,18 @@ export const inProcessPaas = async (
 	);
 	await envoy.bootstrap();
 	const networking = new NetworkingService(endpoints, envoy);
+	const routing = new ResourceRoutingPolicy();
 	let instance = 0;
 	const generateInstanceId = () => `integration-${++instance}`;
 	const deploymentContainers = new DeploymentContainers(docker, probe, pause);
 	const deployments = new DeploymentService([
-		new RecreateDeploymentStrategy(docker, networking, deploymentContainers),
-		new SurgeDeploymentStrategy(docker, networking, deploymentContainers, generateInstanceId),
+		new RecreateDeploymentStrategy(routing, docker, networking, deploymentContainers),
+		new SurgeDeploymentStrategy(routing, docker, networking, deploymentContainers, generateInstanceId),
 	]);
 	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${directory}/git`);
 	const staticStore = new StaticStore(`${directory}/static`, staticFiles);
 	const desiredInputs = new DesiredInputs(
+		routing,
 		config,
 		git,
 		decodeDescriptorYaml,
@@ -115,7 +118,7 @@ export const inProcessPaas = async (
 	const reconciler = new ReconcilerService(
 		config,
 		desiredInputs,
-		new WebResourceReconciler(new ResourceSpecification(), docker, deployments, networking, probe),
+		new WebResourceReconciler(routing, new ResourceSpecification(), docker, deployments, networking, probe),
 		checkpoints,
 		now,
 		new WorkerResourceReconciler(
@@ -128,7 +131,7 @@ export const inProcessPaas = async (
 		new EventDiagnostics(config),
 		changes,
 		undefined,
-		new StaticResourceReconciler(git, staticStore, networking),
+		new StaticResourceReconciler(routing, git, staticStore, networking),
 	);
 	const scheduler = new ReconciliationScheduler(
 		config,
@@ -153,6 +156,7 @@ export const inProcessPaas = async (
 		staticStore,
 	);
 	const inspection = new PaasUiService(
+		routing,
 		new ResourceStatusService(
 			new ResourceSpecification(),
 			new EnvironmentResolver(`${directory}/env`, readFile),
@@ -169,6 +173,7 @@ export const inProcessPaas = async (
 	const cache = new CachedPaasUiService(inspection, config, changes);
 	const management = new ManagementStateTask(health, cache);
 	const audit = new DriftAudit(
+		routing,
 		config,
 		desiredInputs,
 		docker,

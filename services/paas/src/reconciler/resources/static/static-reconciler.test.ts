@@ -3,6 +3,7 @@ import { expect, test, vi } from "vitest";
 import { InMemoryKeyValueStore } from "../../../store/in-memory-store.ts";
 import { EndpointsStore } from "../../networking/endpoints-store.ts";
 import { NetworkingService } from "../../networking/networking-service.ts";
+import { ResourceRoutingPolicy } from "../../networking/resource-routing-policy.ts";
 import { StaticResourceReconciler } from "./static-reconciler.ts";
 
 const fixture = () => {
@@ -13,6 +14,7 @@ const fixture = () => {
 	const routes = new EndpointsStore(new InMemoryKeyValueStore<unknown>());
 	const configureRoutes = vi.fn(async () => {});
 	const reconciler = new StaticResourceReconciler(
+		new ResourceRoutingPolicy(),
 		{ readDirectory },
 		{ inspect, publish },
 		new NetworkingService(routes, { bootstrap: async () => {}, configureRoutes }),
@@ -34,6 +36,7 @@ test("publishes the exact bundle before routing with private ingress by default"
 	expect(f.publish).toHaveBeenCalledWith(
 		{ serviceId: "demo", resourceId: "site", revision: f.request.revision, path: "dist" },
 		f.bundle,
+		{ force: undefined },
 	);
 	expect(f.publish.mock.invocationCallOrder[0]).toBeLessThan(f.configureRoutes.mock.invocationCallOrder[0]!);
 	expect(await f.routes.getAll()).toEqual({
@@ -49,6 +52,7 @@ test("publishes the exact bundle before routing with private ingress by default"
 	expect((await f.routes.getAll())["site.demo"]).toMatchObject({ public: true, primary: false });
 	await f.reconciler.reconcile({ ...f.request, force: true });
 	expect(f.publish).toHaveBeenCalledTimes(1);
+	expect(f.publish).toHaveBeenCalledWith(expect.anything(), f.bundle, { force: true });
 });
 
 test("export and disk failures never publish a new route; route failures propagate for retry", async () => {

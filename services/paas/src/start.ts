@@ -63,6 +63,7 @@ import { EnvironmentResolver } from "./reconciler/environment-resolver.ts";
 import { EventDiagnostics } from "./reconciler/event-diagnostics.ts";
 import { EndpointsStore } from "./reconciler/networking/endpoints-store.ts";
 import { NetworkingService } from "./reconciler/networking/networking-service.ts";
+import { ResourceRoutingPolicy } from "./reconciler/networking/resource-routing-policy.ts";
 import { OrphanCleanup } from "./reconciler/orphan-cleanup.ts";
 import { ReconcilerService } from "./reconciler/reconciler-service.ts";
 import { ReconciliationScheduler } from "./reconciler/reconciliation-scheduler.ts";
@@ -140,6 +141,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	);
 	await envoy.bootstrap();
 	const networking = new NetworkingService(endpoints, envoy);
+	const routing = new ResourceRoutingPolicy();
 	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/git`, storage);
 	const staticStore = new StaticStore(`${STATE_DIRECTORY}/static`, staticFiles, storage);
 	const internalCleanup = new InternalCleanup(config, git, decodeDescriptorYaml, networking, storage, Date.now);
@@ -160,8 +162,8 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const deploymentContainers = new DeploymentContainers(docker, probe, sleep);
 	const deployment = new DeploymentService(
 		[
-			new RecreateDeploymentStrategy(docker, networking, deploymentContainers),
-			new SurgeDeploymentStrategy(docker, networking, deploymentContainers, () => nanoid(10)),
+			new RecreateDeploymentStrategy(routing, docker, networking, deploymentContainers),
+			new SurgeDeploymentStrategy(routing, docker, networking, deploymentContainers, () => nanoid(10)),
 		],
 		progress,
 	);
@@ -170,11 +172,11 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		readFile,
 		new DockerHostPathResolver(dockerClient, config.getClusterId()),
 	);
-	const desiredInputs = new DesiredInputs(config, git, decodeDescriptorYaml, environment);
+	const desiredInputs = new DesiredInputs(routing, config, git, decodeDescriptorYaml, environment);
 	const reconciler = new ReconcilerService(
 		config,
 		desiredInputs,
-		new WebResourceReconciler(new ResourceSpecification(), docker, deployment, networking, probe),
+		new WebResourceReconciler(routing, new ResourceSpecification(), docker, deployment, networking, probe),
 		store,
 		Date.now,
 		new WorkerResourceReconciler(
@@ -193,7 +195,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		new EventDiagnostics(config),
 		changes,
 		metrics,
-		new StaticResourceReconciler(git, staticStore, networking),
+		new StaticResourceReconciler(routing, git, staticStore, networking),
 	);
 	const scheduler = new ReconciliationScheduler(
 		config,
@@ -255,6 +257,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		);
 	}
 	const inspection = new PaasUiService(
+		routing,
 		new ResourceStatusService(new ResourceSpecification(), environment, staticStore),
 		config,
 		git,
@@ -272,6 +275,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	orphanCleanup.initialize();
 	lifecycle.registerShutdownHandler(() => orphanCleanup.stop());
 	const audit = new DriftAudit(
+		routing,
 		config,
 		desiredInputs,
 		docker,

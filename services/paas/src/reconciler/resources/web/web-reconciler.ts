@@ -4,6 +4,7 @@ import { createLogger } from "../../../util/logger.ts";
 import type { IDeploymentService } from "../../deployment/deployment-service.ts";
 import type { DeploymentWebResource } from "../../deployment/strategy/types.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
+import type { IResourceRoutingPolicy } from "../../networking/resource-routing-policy.ts";
 import type { IResourceSpecification } from "../../resource-specification.ts";
 
 export interface WebReconciliationRequest {
@@ -29,6 +30,7 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 	readonly lifecycle = "deployment";
 
 	constructor(
+		private readonly routing: IResourceRoutingPolicy,
 		private readonly specification: IResourceSpecification,
 		private readonly docker: IDockerService,
 		private readonly deployment: IDeploymentService,
@@ -49,13 +51,7 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 			if (address && this.specification.matchesRuntime(resourceId, resource, container, network)) {
 				// A restarted control plane may need attaching to an existing service network.
 				await this.docker.prepareServiceNetwork(serviceId);
-				const endpoint = {
-					address,
-					port: resource.ingress.port,
-					healthcheckPath: resource.healthcheckUrl ?? undefined,
-					public: resource.ingress.public ?? false,
-					primary: resource.primary ?? true,
-				};
+				const endpoint = this.routing.webEndpoint(resource, address);
 				if (
 					endpoint.healthcheckPath
 					&& !(await this.probe(endpoint.address, endpoint.port, endpoint.healthcheckPath))
