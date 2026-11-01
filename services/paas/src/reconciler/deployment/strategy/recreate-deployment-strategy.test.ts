@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { DockerContainerDetails, ServiceContainer } from "../../../docker/types.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
+import { DeploymentContainers } from "../deployment-containers.ts";
 import { RecreateDeploymentStrategy } from "./recreate-deployment-strategy.ts";
 import type { DeploymentRequest } from "./types.ts";
 
@@ -48,7 +49,11 @@ test.each([
 					running: condition !== "stopped",
 					networks: condition === "address" ? {} : { network: { address: "10.0.0.2", aliases: [] } },
 				};
-	const strategy = new RecreateDeploymentStrategy(f.docker, f.routes, async () => false, f.pause);
+	const strategy = new RecreateDeploymentStrategy(
+		f.docker,
+		f.routes,
+		new DeploymentContainers(f.docker, async () => false, f.pause),
+	);
 	await expect(strategy.deploy(request)).rejects.toThrow(`Container readiness failed after 30 checks: ${reason}`);
 });
 
@@ -127,7 +132,7 @@ function fixture() {
 		docker,
 		calls,
 		routes,
-		strategy: new RecreateDeploymentStrategy(docker, routes, probe, pause),
+		strategy: new RecreateDeploymentStrategy(docker, routes, new DeploymentContainers(docker, probe, pause)),
 		probe,
 		pause,
 	};
@@ -317,11 +322,14 @@ test("readiness exhaustion is bounded and never publishes an unready endpoint", 
 	const strategy = new RecreateDeploymentStrategy(
 		f.docker,
 		f.routes,
-		async () => {
-			probes++;
-			return false;
-		},
-		f.pause,
+		new DeploymentContainers(
+			f.docker,
+			async () => {
+				probes++;
+				return false;
+			},
+			f.pause,
+		),
 	);
 	await expect(strategy.deploy(request)).rejects.toThrow("Container readiness failed");
 	expect(probes).toBe(30);
@@ -331,6 +339,20 @@ test("readiness exhaustion is bounded and never publishes an unready endpoint", 
 		{ action: "stop", args: ["demo", "new", 45] },
 		{ action: "remove", args: ["demo", "new"] },
 	]);
+});
+
+test("publishes when the thirtieth readiness check succeeds", async () => {
+	const f = fixture();
+	let probes = 0;
+	const strategy = new RecreateDeploymentStrategy(
+		f.docker,
+		f.routes,
+		new DeploymentContainers(f.docker, async () => ++probes === 30, f.pause),
+	);
+	await strategy.deploy(request);
+	expect(probes).toBe(30);
+	expect(f.calls.filter(({ action }) => action === "pause")).toHaveLength(29);
+	expect(f.calls.at(-1)?.action).toBe("route");
 });
 
 test("route publication failures propagate for the caller to retry", async () => {
@@ -344,3 +366,27 @@ test("route publication failures propagate for the caller to retry", async () =>
 		{ action: "remove", args: ["demo", "old"] },
 	]);
 });
+
+test.each(["stopServiceContainer", "removeServiceContainer"] as const)(
+	"retains startup and candidate cleanup failures: %s",
+	async (method) => {
+		const f = fixture();
+		const startup = new Error("start failed");
+		const cleanup = new Error("cleanup failed");
+		f.docker.startServiceContainer = async () => {
+			throw startup;
+		};
+		const original = f.docker[method];
+		f.docker[method] = async (serviceId: string, id: string, timeout: number = 30) => {
+			if (id === "new") throw cleanup;
+			await original(serviceId, id, timeout);
+		};
+		await expect(f.strategy.deploy(request)).rejects.toMatchObject({
+			message: "Replacement startup and cleanup failed",
+			errors: [startup, expect.objectContaining({ errors: [cleanup] })],
+		});
+		expect(f.calls.filter(({ action }) => action === "route")).toHaveLength(1);
+		if (method === "stopServiceContainer")
+			expect(f.calls.some(({ action, args }) => action === "remove" && args.at(1) === "new")).toBe(false);
+	},
+);

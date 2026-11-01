@@ -10,6 +10,7 @@ import { GitClient } from "../../src/git/git-client.ts";
 import { GitRefreshService } from "../../src/git/git-refresh-service.ts";
 import { GitService } from "../../src/git/git-service.ts";
 import { NodeGitTransport } from "../../src/git/git-transport.ts";
+import { DeploymentContainers } from "../../src/reconciler/deployment/deployment-containers.ts";
 import { DeploymentService } from "../../src/reconciler/deployment/deployment-service.ts";
 import { RecreateDeploymentStrategy } from "../../src/reconciler/deployment/strategy/recreate-deployment-strategy.ts";
 import { SurgeDeploymentStrategy } from "../../src/reconciler/deployment/strategy/surge-deployment-strategy.ts";
@@ -70,9 +71,10 @@ export const inProcessPaas = async (
 	const networking = new NetworkingService(endpoints, envoy);
 	let instance = 0;
 	const generateInstanceId = () => `integration-${++instance}`;
+	const deploymentContainers = new DeploymentContainers(docker, probe, pause);
 	const deployments = new DeploymentService([
-		new RecreateDeploymentStrategy(docker, networking, probe, pause),
-		new SurgeDeploymentStrategy(docker, networking, probe, pause, generateInstanceId),
+		new RecreateDeploymentStrategy(docker, networking, deploymentContainers),
+		new SurgeDeploymentStrategy(docker, networking, deploymentContainers, generateInstanceId),
 	]);
 	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${directory}/git`);
 	const reconciler = new ReconcilerService(
@@ -86,7 +88,7 @@ export const inProcessPaas = async (
 		new WorkerResourceReconciler(
 			new ResourceSpecification(),
 			docker,
-			new WorkerDeploymentService(docker, probe, pause, generateInstanceId),
+			new WorkerDeploymentService(docker, deploymentContainers, generateInstanceId),
 			probe,
 		),
 		events,

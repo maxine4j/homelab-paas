@@ -1,8 +1,7 @@
 import type { IDockerService } from "../../docker/docker-service.ts";
-import type { HttpProbe } from "../../util/healthcheck.ts";
 import { createLogger } from "../../util/logger.ts";
-import type { ISleep } from "../../util/sleep.ts";
 import type { IDeploymentProgress } from "../deployment-progress.ts";
+import type { IDeploymentContainers } from "./deployment-containers.ts";
 import type { WorkerDeploymentRequest } from "./types.ts";
 
 export interface IWorkerDeploymentService {
@@ -17,8 +16,7 @@ export class WorkerDeploymentService implements IWorkerDeploymentService {
 	private readonly log = createLogger(WorkerDeploymentService.name);
 	constructor(
 		private readonly docker: IDockerService,
-		private readonly probe: HttpProbe,
-		private readonly sleep: ISleep,
+		private readonly containers: IDeploymentContainers,
 		private readonly generateInstanceId: () => string,
 		private readonly progress?: IDeploymentProgress,
 	) {}
@@ -91,48 +89,40 @@ export class WorkerDeploymentService implements IWorkerDeploymentService {
 				await this.waitReady(request, id, network.name);
 			}
 		} catch (failure) {
-			try {
-				await this.retire(request, created);
-			} catch (cleanupFailure) {
-				throw new AggregateError([failure, cleanupFailure], "Worker startup and cleanup failed");
-			}
-			throw failure;
+			return this.containers.cleanupFailed(
+				serviceId,
+				created,
+				resource.termination?.timeoutSeconds ?? 30,
+				failure,
+				"Worker startup and cleanup failed",
+			);
 		}
 		if (resource.rolloutStrategy === "surge") await this.retire(request, retiring);
 	}
 
 	private async waitReady(request: WorkerDeploymentRequest, id: string, networkName: string): Promise<void> {
-		let reason = "private health check did not pass";
-		for (let attempt = 0; attempt < 30; attempt++) {
-			const container = await this.docker.inspectServiceContainer(request.serviceId, id);
-			const address = container?.networks[networkName]?.address;
-			if (!container) reason = "container is no longer present";
-			else if (!container.running) reason = "container is not running";
-			else if (!address) reason = "container has no address on the service network";
-			else if (
-				!request.resource.healthcheckUrl
-				|| (await this.probe(address, request.resource.healthcheckPort, request.resource.healthcheckUrl))
-			)
-				return;
-			else
-				reason = `private health check on port ${request.resource.healthcheckPort} at ${request.resource.healthcheckUrl} did not pass`;
-			if (attempt < 29) await this.sleep(1000);
-		}
-		throw new Error(`Worker readiness failed after 30 checks: ${reason}`);
+		const { serviceId, resource } = request;
+		await this.containers.waitReady({
+			serviceId,
+			containerId: id,
+			networkName,
+			failureMessage: "Worker readiness failed",
+			healthcheck: resource.healthcheckUrl
+				? {
+						port: resource.healthcheckPort,
+						path: resource.healthcheckUrl,
+						failureMessage: `private health check on port ${resource.healthcheckPort} at ${resource.healthcheckUrl} did not pass`,
+					}
+				: undefined,
+		});
 	}
 
 	private async retire(request: WorkerDeploymentRequest, ids: string[]): Promise<void> {
-		const results = await Promise.allSettled(
-			ids.map(async (id) => {
-				await this.docker.stopServiceContainer(
-					request.serviceId,
-					id,
-					request.resource.termination?.timeoutSeconds ?? 30,
-				);
-				await this.docker.removeServiceContainer(request.serviceId, id);
-			}),
+		await this.containers.retire(
+			request.serviceId,
+			ids,
+			request.resource.termination?.timeoutSeconds ?? 30,
+			"Worker retirement failed",
 		);
-		const failures = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []));
-		if (failures.length) throw new AggregateError(failures, "Worker retirement failed");
 	}
 }

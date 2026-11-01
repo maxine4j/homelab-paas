@@ -113,6 +113,8 @@ If replacement readiness fails, the previous revision remains active.
 
 For recreate deployments, the previous containers are stopped first. A failed replacement is reported and retried; uninterrupted availability is not guaranteed.
 
+Web and worker deployments share startup readiness and candidate cleanup mechanics. Readiness allows 30 checks per container with one second between unsuccessful checks. Failed startup removes only candidates created by that attempt; cleanup attempts every candidate, removing each only after its graceful stop succeeds. If cleanup also fails, the reported aggregate retains both the original startup failure and cleanup failures. Ready web candidates remain running after uncertain route publication, and accepted replacements remain running when predecessor retirement fails.
+
 ### Replicas and load balancing
 
 Web and worker resources may specify `replicas`, defaulting to `1`.

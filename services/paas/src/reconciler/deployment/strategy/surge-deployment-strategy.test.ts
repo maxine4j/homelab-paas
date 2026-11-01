@@ -3,6 +3,7 @@ import { expect, test } from "vitest";
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { DockerContainerDetails, ServiceContainer } from "../../../docker/types.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
+import { DeploymentContainers } from "../deployment-containers.ts";
 import { SurgeDeploymentStrategy } from "./surge-deployment-strategy.ts";
 import type { DeploymentRequest } from "./types.ts";
 
@@ -92,8 +93,7 @@ test.each([
 	const strategy = new SurgeDeploymentStrategy(
 		f.docker,
 		f.routes,
-		async () => false,
-		f.sleep,
+		new DeploymentContainers(f.docker, async () => false, f.sleep),
 		() => "instance",
 	);
 	await expect(strategy.deploy(request)).rejects.toThrow(`Container readiness failed after 30 checks: ${reason}`);
@@ -178,7 +178,12 @@ function fixture() {
 		probe,
 		sleep,
 		generateInstanceId,
-		strategy: new SurgeDeploymentStrategy(docker, routes, probe, sleep, generateInstanceId),
+		strategy: new SurgeDeploymentStrategy(
+			docker,
+			routes,
+			new DeploymentContainers(docker, probe, sleep),
+			generateInstanceId,
+		),
 	};
 }
 
@@ -304,12 +309,15 @@ test("readiness retries absence, stopped containers, missing addresses and faile
 	const strategy = new SurgeDeploymentStrategy(
 		f.docker,
 		f.routes,
-		async () => ++probes > 1,
-		async (ms) => {
-			expect(ms).toBe(1000);
-			expect(f.calls.some((c) => ["route", "stop", "remove"].includes(c.action))).toBe(false);
-			await f.sleep(ms);
-		},
+		new DeploymentContainers(
+			f.docker,
+			async () => ++probes > 1,
+			async (ms) => {
+				expect(ms).toBe(1000);
+				expect(f.calls.some((c) => ["route", "stop", "remove"].includes(c.action))).toBe(false);
+				await f.sleep(ms);
+			},
+		),
 		f.generateInstanceId,
 	);
 	await strategy.deploy(request);
@@ -323,11 +331,14 @@ test("readiness exhaustion preserves the previous revision and removes only the 
 	const strategy = new SurgeDeploymentStrategy(
 		f.docker,
 		f.routes,
-		async () => {
-			probes++;
-			return false;
-		},
-		f.sleep,
+		new DeploymentContainers(
+			f.docker,
+			async () => {
+				probes++;
+				return false;
+			},
+			f.sleep,
+		),
 		f.generateInstanceId,
 	);
 	await expect(strategy.deploy(request)).rejects.toThrow("Container readiness failed");
@@ -376,4 +387,39 @@ test("candidate cleanup failures are reported together with the startup failure"
 	};
 	await expect(f.strategy.deploy(request)).rejects.toThrow("Replacement startup and cleanup failed");
 	expect(f.calls.some((c) => c.action === "route")).toBe(false);
+});
+
+test.each(["stopServiceContainer", "removeServiceContainer"] as const)(
+	"preserves the original startup and cleanup errors: %s",
+	async (method) => {
+		const f = fixture();
+		const startup = new Error("start failed");
+		const cleanup = new Error("cleanup failed");
+		f.docker.startServiceContainer = async () => {
+			throw startup;
+		};
+		f.docker[method] = async () => {
+			throw cleanup;
+		};
+		await expect(f.strategy.deploy(request)).rejects.toMatchObject({
+			message: "Replacement startup and cleanup failed",
+			errors: [startup, expect.objectContaining({ errors: [cleanup] })],
+		});
+		expect(f.calls.some(({ action }) => action === "route")).toBe(false);
+	},
+);
+
+test("accepts the thirtieth readiness check before retiring the previous revision", async () => {
+	const f = fixture();
+	let probes = 0;
+	const strategy = new SurgeDeploymentStrategy(
+		f.docker,
+		f.routes,
+		new DeploymentContainers(f.docker, async () => ++probes === 30, f.sleep),
+		f.generateInstanceId,
+	);
+	await strategy.deploy(request);
+	expect(probes).toBe(30);
+	expect(f.calls.filter(({ action }) => action === "sleep")).toHaveLength(29);
+	expect(f.calls.slice(-3).map(({ action }) => action)).toEqual(["route", "stop", "remove"]);
 });
