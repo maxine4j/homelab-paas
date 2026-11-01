@@ -1,5 +1,10 @@
 export type Labels = Record<string, string>;
 
+export interface ClusterWorkload {
+	id: string;
+	serviceId: string;
+}
+
 /** Invalidation hint only; consumers must freshly inspect before repairing. */
 export interface DockerEvent {
 	type: "container" | "network";

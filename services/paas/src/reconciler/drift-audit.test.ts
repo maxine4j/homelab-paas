@@ -99,8 +99,10 @@ const fixture = () => {
 	const health = { invalidateService: vi.fn() };
 	const state = { refresh: vi.fn(async () => {}) };
 	const remember = vi.fn();
+	const cleanup = { run: vi.fn(async () => {}) };
+	const config = testConfig({ services: { demo: { remote: "repo", descriptorPath: "sd.yaml" } } });
 	const audit = new DriftAudit(
-		testConfig({ services: { demo: { remote: "repo", descriptorPath: "sd.yaml" } } }),
+		config,
 		inputs,
 		docker,
 		peers,
@@ -112,9 +114,13 @@ const fixture = () => {
 		state,
 		remember,
 		() => "audit-id",
+		undefined,
+		cleanup,
 	);
 	return {
 		audit,
+		config,
+		cleanup,
 		docker,
 		current,
 		details,
@@ -129,6 +135,27 @@ const fixture = () => {
 		remember,
 	};
 };
+
+test("every audit checks orphan workloads even when desired-input observation fails", async () => {
+	const f = fixture();
+	await f.audit.run();
+	expect(f.cleanup.run).toHaveBeenCalledTimes(1);
+	f.inputs.read.mockRejectedValueOnce(new Error("unavailable"));
+	await expect(f.audit.run()).rejects.toThrow("Safety audit failed");
+	expect(f.cleanup.run).toHaveBeenCalledTimes(2);
+	f.cleanup.run.mockRejectedValueOnce(new Error("cleanup unavailable"));
+	await expect(f.audit.run()).rejects.toThrow("Safety audit failed");
+	expect(f.routing.verifyRoutes).toHaveBeenCalledTimes(3);
+});
+
+test("startup and subsequent audits clean orphan workloads when the last configured service was removed", async () => {
+	const f = fixture();
+	delete f.config.getServices()["demo"];
+	await f.audit.run();
+	await f.audit.run();
+	expect(f.cleanup.run).toHaveBeenCalledTimes(2);
+	expect(f.inputs.read).not.toHaveBeenCalled();
+});
 
 test("unchanged audit verifies routing without scheduling replacement or overwriting incomplete route inventory", async () => {
 	const f = fixture();

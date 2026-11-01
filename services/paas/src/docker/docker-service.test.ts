@@ -8,6 +8,25 @@ import type { DockerContainer, DockerContainerDetails, DockerNetwork } from "./t
 
 const ownership = { "homelab-paas.cluster": "local", "homelab-paas.service": "demo" };
 
+test("inventories running and stopped cluster workloads while excluding infrastructure, foreign and incomplete identities", async () => {
+	const f = fixture({
+		listContainers: async (query) => {
+			expect(query).toEqual({ all: true, labels: { "homelab-paas.cluster": "local" } });
+			return [
+				container,
+				{ ...container, id: "stopped", state: "exited" },
+				{ ...container, labels: { ...container.labels, "homelab-paas.cluster": "other" } },
+				{ ...container, labels: { ...container.labels, "homelab-paas.role": "control-plane" } },
+				{ ...container, labels: ownership },
+			];
+		},
+	});
+	expect(await f.service.listClusterWorkloads()).toEqual([
+		{ id: "c", serviceId: "demo" },
+		{ id: "stopped", serviceId: "demo" },
+	]);
+});
+
 test("discovers and inspects only the unique running control-plane container in this cluster", async () => {
 	const labels = { "homelab-paas.cluster": "local", "homelab-paas.role": "control-plane" };
 	const f = fixture({

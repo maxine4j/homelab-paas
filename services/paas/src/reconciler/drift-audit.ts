@@ -6,6 +6,7 @@ import { createLogger, withLogContext } from "../util/logger.ts";
 import { DesiredInputError, type IDesiredInputs } from "./desired-inputs.ts";
 import type { IRouteVerifier } from "./networking/networking-service.ts";
 import type { Endpoint } from "./networking/types.ts";
+import type { IOrphanCleanup } from "./orphan-cleanup.ts";
 import type { IResourceSpecification } from "./resource-specification.ts";
 
 export interface IAuditDocker {
@@ -46,6 +47,7 @@ export class DriftAudit implements IDriftAudit {
 		private readonly rememberNetwork: (networkId: string, serviceId: string) => void,
 		private readonly generateTaskId: () => string,
 		private readonly staticStore?: { inspect: IStaticStore["inspect"] },
+		private readonly orphanCleanup?: { run: IOrphanCleanup["run"] },
 	) {}
 
 	run(serviceId?: string): Promise<void> {
@@ -93,6 +95,11 @@ export class DriftAudit implements IDriftAudit {
 						}
 					}
 					if (!this.stopped) {
+						try {
+							await this.orphanCleanup?.run();
+						} catch (err) {
+							failures.push(err);
+						}
 						try {
 							await this.networking.verifyRoutes();
 						} catch (err) {

@@ -3,7 +3,7 @@ import type { ResourceDevice, ResourceHostPort, ResourceLimits, ResourceVolume }
 import type { IPaasConfig } from "../config/paas-config.ts";
 import { DockerClientError } from "./docker-client.ts";
 import type { IDockerClient } from "./docker-client.ts";
-import type { DockerContainerDetails, DockerNetwork, Labels, ServiceContainer } from "./types.ts";
+import type { ClusterWorkload, DockerContainerDetails, DockerNetwork, Labels, ServiceContainer } from "./types.ts";
 
 export interface CreateResourceContainerOptions {
 	serviceId: string;
@@ -46,6 +46,13 @@ export interface IDockerInfrastructure {
 	inspectServiceInfrastructure(serviceId: string): Promise<boolean>;
 }
 
+export interface IClusterWorkloads {
+	/** Includes stopped workloads with complete deployment identity; excludes infrastructure and other clusters.
+	 * DockerClientError propagates on inventory failure.
+	 */
+	listClusterWorkloads(): Promise<ClusterWorkload[]>;
+}
+
 export class DockerServiceError extends Error {
 	override readonly name = "DockerServiceError";
 	constructor(public readonly kind: "ownership" | "invalid-identity" | "infrastructure" | "not-found") {
@@ -54,11 +61,32 @@ export class DockerServiceError extends Error {
 }
 
 /** Platform conventions and scoped Docker helpers; rollout decisions belong to reconcilers. */
-export class DockerService implements IDockerService, IDockerInfrastructure {
+export class DockerService implements IDockerService, IDockerInfrastructure, IClusterWorkloads {
 	constructor(
 		private readonly client: IDockerClient,
 		private readonly config: IPaasConfig,
 	) {}
+
+	async listClusterWorkloads(): Promise<ClusterWorkload[]> {
+		const clusterId = this.config.getClusterId();
+		const containers = await this.client.listContainers({
+			all: true,
+			labels: { "homelab-paas.cluster": clusterId },
+		});
+		return containers.flatMap(({ id, labels }) => {
+			const serviceId = labels["homelab-paas.service"];
+			if (
+				labels["homelab-paas.cluster"] !== clusterId
+				|| labels["homelab-paas.role"]
+				|| !serviceId
+				|| !labels["homelab-paas.resource"]
+				|| !labels["homelab-paas.revision"]
+				|| !labels["homelab-paas.spec"]
+			)
+				return [];
+			return [{ id, serviceId }];
+		});
+	}
 
 	private labels(serviceId: string): Labels {
 		return { "homelab-paas.cluster": this.config.getClusterId(), "homelab-paas.service": serviceId };

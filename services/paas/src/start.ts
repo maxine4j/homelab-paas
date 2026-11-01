@@ -62,6 +62,7 @@ import { EnvironmentResolver } from "./reconciler/environment-resolver.ts";
 import { EventDiagnostics } from "./reconciler/event-diagnostics.ts";
 import { EndpointsStore } from "./reconciler/networking/endpoints-store.ts";
 import { NetworkingService } from "./reconciler/networking/networking-service.ts";
+import { OrphanCleanup } from "./reconciler/orphan-cleanup.ts";
 import { ReconcilerService } from "./reconciler/reconciler-service.ts";
 import { ReconciliationScheduler } from "./reconciler/reconciliation-scheduler.ts";
 import { ReconciliationStore } from "./reconciler/reconciliation-store.ts";
@@ -256,6 +257,9 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const uiService = new CachedPaasUiService(inspection, config, changes);
 	serviceSnapshots = () => uiService.listServices();
 	const managementState = new ManagementStateTask(health, uiService);
+	const orphanCleanup = new OrphanCleanup(config, docker, scheduler, changes, nanoid);
+	orphanCleanup.initialize();
+	lifecycle.registerShutdownHandler(() => orphanCleanup.stop());
 	const audit = new DriftAudit(
 		config,
 		desiredInputs,
@@ -270,6 +274,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		(id, serviceId) => watcher.rememberNetwork(id, serviceId),
 		nanoid,
 		staticStore,
+		orphanCleanup,
 	);
 	const watcher = new DockerEventWatcher(
 		new DockerEventClient(dockerTransport),
