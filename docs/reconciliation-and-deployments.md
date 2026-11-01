@@ -157,6 +157,8 @@ For recreate deployments, the previous containers are stopped first. A failed re
 
 Web and worker deployments share startup readiness and candidate cleanup mechanics. Readiness allows 30 checks per container with one second between unsuccessful checks. Failed startup removes only candidates created by that attempt; cleanup attempts every candidate, removing each only after its graceful stop succeeds. If cleanup also fails, the reported aggregate retains both the original startup failure and cleanup failures. Ready web candidates remain running after uncertain route publication, and accepted replacements remain running when predecessor retirement fails.
 
+`DeploymentContainers` owns creation-option mapping, startup, readiness configuration and cleanup of each failed candidate. Callers supply resolved environment values, image and network identities and retain rollout ordering and route publication. Worker rollout keeps a ledger of earlier ready candidates so a later replica's creation or startup failure also cleans those candidates, preserving all failures. Readiness checks for retained workers do not take ownership of their cleanup.
+
 ### Replicas and load balancing
 
 Web and worker resources may specify `replicas`, defaulting to `1`.

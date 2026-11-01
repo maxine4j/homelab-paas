@@ -75,58 +75,40 @@ export class WorkerDeploymentService implements IWorkerDeploymentService {
 		const retiring = current.filter(({ id }) => !retainedIds.has(id)).map(({ id }) => id);
 		const missing = (resource.replicas ?? 1) - retained.length;
 		const imageId = missing > 0 ? await this.docker.resolveImage(resource.image) : undefined;
-		for (const { id } of retained) await this.waitReady(request, id, network.name);
+		for (const { id } of retained)
+			await this.containers.waitReady({
+				serviceId,
+				containerId: id,
+				networkName: network.name,
+				resource,
+			});
 		if ((resource.rolloutStrategy ?? "recreate") === "recreate") await this.retire(request, retiring);
-		const created: string[] = [];
+		// startReady owns a failed replica; this ledger owns earlier ready replicas.
+		const readyCandidates: string[] = [];
 		try {
 			for (let replica = 0; replica < missing; replica++) {
-				const id = await this.docker.createResourceContainer({
+				const { id } = await this.containers.startReady({
 					serviceId,
 					resourceId,
 					revision: request.revision,
 					spec: request.spec,
 					instanceId: this.generateInstanceId(),
 					imageId: imageId!,
-					command: resource.command,
-					env: Object.fromEntries((resource.env ?? []).map(({ name, value }) => [name, value])),
-					volumes: resource.volumes,
-					devices: resource.devices,
-					supplementaryGroups: resource.supplementaryGroups,
-					selinuxLabeling: resource.selinuxLabeling,
-					hostPorts: resource.hostPorts,
-					limits: resource.limits,
+					networkName: network.name,
+					resource,
 				});
-				created.push(id);
-				await this.docker.startServiceContainer(serviceId, id);
-				await this.waitReady(request, id, network.name);
+				readyCandidates.push(id);
 			}
 		} catch (failure) {
 			return this.containers.cleanupFailed(
 				serviceId,
-				created,
+				readyCandidates,
 				resource.termination?.timeoutSeconds ?? 30,
 				failure,
 				"Worker startup and cleanup failed",
 			);
 		}
 		if (resource.rolloutStrategy === "surge") await this.retire(request, retiring);
-	}
-
-	private async waitReady(request: WorkerDeploymentRequest, id: string, networkName: string): Promise<void> {
-		const { serviceId, resource } = request;
-		await this.containers.waitReady({
-			serviceId,
-			containerId: id,
-			networkName,
-			failureMessage: "Worker readiness failed",
-			healthcheck: resource.healthcheckUrl
-				? {
-						port: resource.healthcheckPort,
-						path: resource.healthcheckUrl,
-						failureMessage: `private health check on port ${resource.healthcheckPort} at ${resource.healthcheckUrl} did not pass`,
-					}
-				: undefined,
-		});
 	}
 
 	private async retire(request: WorkerDeploymentRequest, ids: string[]): Promise<void> {

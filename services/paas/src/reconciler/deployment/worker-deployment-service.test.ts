@@ -269,7 +269,11 @@ test.each(["stopServiceContainer", "removeServiceContainer"] as const)(
 				f.containers.get(id)!.state = "running";
 			})
 			.mockRejectedValueOnce(startup);
-		vi.mocked(f.docker[method]).mockRejectedValueOnce(cleanup);
+		const retire = vi.mocked(f.docker[method]).getMockImplementation()!;
+		vi.mocked(f.docker[method]).mockImplementation(async (serviceId, id) => {
+			if (id === "new-1") throw cleanup;
+			await retire(serviceId, id, 60);
+		});
 		await expect(
 			f.service.deploy({ ...request, resource: { ...request.resource, rolloutStrategy: "surge" } }),
 		).rejects.toMatchObject({
@@ -281,6 +285,53 @@ test.each(["stopServiceContainer", "removeServiceContainer"] as const)(
 		expect(f.docker.stopServiceContainer).not.toHaveBeenCalledWith("demo", "old", expect.anything());
 	},
 );
+
+test("failure to create the second replica cleans the earlier success and preserves predecessors", async () => {
+	const f = fixture();
+	f.old();
+	const failure = new Error("second create failed");
+	const create = vi.mocked(f.docker.createResourceContainer).getMockImplementation()!;
+	vi.mocked(f.docker.createResourceContainer).mockImplementationOnce(create).mockRejectedValueOnce(failure);
+	await expect(
+		f.service.deploy({ ...request, resource: { ...request.resource, rolloutStrategy: "surge" } }),
+	).rejects.toBe(failure);
+	expect([...f.containers.keys()]).toEqual(["old"]);
+	expect(f.docker.stopServiceContainer).toHaveBeenCalledExactlyOnceWith("demo", "new-1", 60);
+	expect(f.docker.removeServiceContainer).toHaveBeenCalledExactlyOnceWith("demo", "new-1");
+});
+
+test("failed replica cleanup and prior-success cleanup both preserve their failures without duplicate retirement", async () => {
+	const f = fixture();
+	f.old();
+	const startup = new Error("second start failed");
+	const failedCandidateCleanup = new Error("second stop failed");
+	const priorSuccessCleanup = new Error("first remove failed");
+	const start = vi.mocked(f.docker.startServiceContainer).getMockImplementation()!;
+	vi.mocked(f.docker.startServiceContainer).mockImplementationOnce(start).mockRejectedValueOnce(startup);
+	const stop = vi.mocked(f.docker.stopServiceContainer).getMockImplementation()!;
+	vi.mocked(f.docker.stopServiceContainer).mockImplementation(async (serviceId, id, timeout) => {
+		if (id === "new-2") throw failedCandidateCleanup;
+		await stop(serviceId, id, timeout);
+	});
+	vi.mocked(f.docker.removeServiceContainer).mockRejectedValueOnce(priorSuccessCleanup);
+	await expect(
+		f.service.deploy({ ...request, resource: { ...request.resource, rolloutStrategy: "surge" } }),
+	).rejects.toMatchObject({
+		message: "Worker startup and cleanup failed",
+		errors: [
+			expect.objectContaining({
+				errors: [startup, expect.objectContaining({ errors: [failedCandidateCleanup] })],
+			}),
+			expect.objectContaining({ errors: [priorSuccessCleanup] }),
+		],
+	});
+	expect(vi.mocked(f.docker.stopServiceContainer).mock.calls).toEqual([
+		["demo", "new-2", 60],
+		["demo", "new-1", 60],
+	]);
+	expect(f.docker.removeServiceContainer).toHaveBeenCalledExactlyOnceWith("demo", "new-1");
+	expect([...f.containers.keys()]).toEqual(["old", "new-1", "new-2"]);
+});
 
 test("allows thirty readiness checks separately for each replica", async () => {
 	const f = fixture();
