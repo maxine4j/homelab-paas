@@ -235,13 +235,42 @@ test("observed-only and unsupported resources never report health from container
 	});
 	f.containers.push({ ...f.containers[0]!, id: "db", resourceId: "db" });
 	await f.health.run();
-	for (const resourceId of ["app", "db"])
-		expect(
-			f.health.getStatus(
-				"demo",
-				resourceId,
-				f.containers.filter((container) => container.resourceId === resourceId),
-			),
-		).toBe("Unknown");
+	for (const resourceId of ["app", "db"]) {
+		const health = f.health.getStatus(
+			"demo",
+			resourceId,
+			f.containers.filter((container) => container.resourceId === resourceId),
+		);
+		expect(health).toBe("Unknown");
+		expect(f.health.refineStatus(health, [{ running: false }])).toBe("Unknown");
+	}
 	expect(f.probe).not.toHaveBeenCalled();
+});
+
+test.each(["Healthy", "Degraded", "Missing", "Unknown", "Progressing"] as const)(
+	"inspection refinement preserves %s assessment for running containers",
+	(health) => {
+		expect(fixture().health.refineStatus(health, [{ running: true }])).toBe(health);
+	},
+);
+
+test("inspection refinement detects disappearance and stopped containers without overriding Unknown or rollout", async () => {
+	const f = fixture();
+	await f.health.run();
+	expect(f.health.refineStatus(f.health.getStatus("demo", "app", f.containers), [{ running: false }])).toBe(
+		"Degraded",
+	);
+	expect(f.health.refineStatus("Healthy", [{ running: true }, {}])).toBe("Degraded");
+	for (const containers of [[], [{}], [{ running: false }], [{ running: true }, {}]]) {
+		expect(f.health.refineStatus("Progressing", containers)).toBe("Progressing");
+	}
+	for (const containers of [[], [{}]]) {
+		expect(f.health.refineStatus("Healthy", containers)).toBe("Missing");
+		expect(f.health.refineStatus("Unknown", containers)).toBe("Missing");
+	}
+	f.health.finished("demo", "app");
+	const unobserved = f.health.getStatus("demo", "app", f.containers);
+	expect(unobserved).toBe("Unknown");
+	expect(f.health.refineStatus(unobserved, [{ running: false }])).toBe("Unknown");
+	expect(f.health.refineStatus("Unknown", [{ running: true }, {}])).toBe("Unknown");
 });

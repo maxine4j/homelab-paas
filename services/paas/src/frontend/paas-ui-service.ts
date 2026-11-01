@@ -183,14 +183,7 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 					};
 				}),
 			);
-			const health =
-				resource.health === "Progressing"
-					? "Progressing"
-					: !containers.length || containers.every(({ state }) => state === "missing")
-						? "Missing"
-						: containers.some(({ running }) => !running)
-							? "Degraded"
-							: resource.health;
+			const health = this.health.refineStatus(resource.health, containers);
 			const sync =
 				resource.sync !== "Unknown"
 				&& (health === "Missing" || containers.some(({ state }) => state === "missing"))

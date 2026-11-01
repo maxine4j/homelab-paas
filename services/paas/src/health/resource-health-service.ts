@@ -8,11 +8,13 @@ import type { DescriptorDecoder } from "../reconciler/types.ts";
 import type { PeriodicTask } from "../task/periodic.ts";
 import type { HttpProbe } from "../util/healthcheck.ts";
 import { createLogger } from "../util/logger.ts";
-import type { HealthDocker, HealthObservation } from "./types.ts";
+import type { HealthContainerInspection, HealthDocker, HealthObservation } from "./types.ts";
 
 export interface IResourceHealthReader {
 	/** Returns latest health only for the same observed container identities and states. */
 	getStatus(serviceId: string, resourceId: string, containers: readonly ServiceContainer[]): HealthStatus;
+	/** Refines an assessment with inspection; preserves Progressing and extant Unknown resources. */
+	refineStatus(health: HealthStatus, containers: readonly HealthContainerInspection[]): HealthStatus;
 }
 
 export interface IResourceHealthProgress {
@@ -42,6 +44,13 @@ export class ResourceHealthService implements IResourceHealthReader, IResourceHe
 		if (!containers.length) return "Missing";
 		const observation = this.observations.get(key);
 		return observation?.signature === this.signature(containers) ? observation.health : "Unknown";
+	}
+
+	refineStatus(health: HealthStatus, containers: readonly HealthContainerInspection[]): HealthStatus {
+		if (health === "Progressing") return health;
+		if (!containers.length || containers.every(({ running }) => running === undefined)) return "Missing";
+		if (health === "Unknown") return health;
+		return containers.some(({ running }) => !running) ? "Degraded" : health;
 	}
 
 	started(serviceId: string, resourceId: string): void {

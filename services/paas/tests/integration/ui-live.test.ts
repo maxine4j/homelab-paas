@@ -74,7 +74,7 @@ test("cold live subscription serves persisted Git objects while background remot
 				write: async () => {},
 			},
 			{ append: async () => {}, list: async () => [] },
-			{ getStatus: () => "Missing" },
+			{ getStatus: () => "Missing", refineStatus: (health) => health },
 		);
 		adapter = new UiWebSocket(
 			new UiLiveService(ui, ui, new ChangeBus()),

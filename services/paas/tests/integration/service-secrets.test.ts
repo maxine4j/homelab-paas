@@ -64,7 +64,7 @@ test("authenticated secret editing persists private files, retains values, resol
 		{ listServiceContainers: vi.fn(), inspectServiceContainer: vi.fn(), readServiceContainerLogs: vi.fn() },
 		{ read: async () => undefined, write: vi.fn() },
 		{ append: vi.fn(), list: async () => [] },
-		{ getStatus: vi.fn() },
+		{ getStatus: vi.fn(), refineStatus: vi.fn() },
 	);
 	const tokens = new JwtClient(config, Date.now);
 	const token = tokens.issue({ userId: "Alice" }, "session");
