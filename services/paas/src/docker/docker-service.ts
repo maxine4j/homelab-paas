@@ -1,3 +1,5 @@
+import { posix } from "node:path";
+
 import type { ResourceDevice, ResourceHostPort, ResourceLimits, ResourceVolume } from "@homelab-paas/shared-contracts";
 
 import type { IPaasConfig } from "../config/paas-config.ts";
@@ -252,8 +254,14 @@ export class DockerService implements IDockerService, IDockerInfrastructure, ICl
 	}
 
 	async createResourceContainer(options: CreateResourceContainerOptions): Promise<string> {
+		const volumes = options.volumes?.map((volume) => ({
+			...volume,
+			hostPath: posix.isAbsolute(volume.hostPath)
+				? volume.hostPath
+				: posix.join("/var/homelab-paas", options.serviceId, volume.hostPath),
+		}));
 		const ownershipGroups = new Map<string, Set<string>>();
-		for (const { hostPath, readOnly, ownership } of options.volumes ?? []) {
+		for (const { hostPath, readOnly, ownership } of volumes ?? []) {
 			if (readOnly || ownership === false) continue;
 			const owner = ownership ? `${ownership.uid}:${ownership.gid}` : "1000:1000";
 			const paths = ownershipGroups.get(owner) ?? new Set<string>();
@@ -288,7 +296,7 @@ export class DockerService implements IDockerService, IDockerInfrastructure, ICl
 			image: options.imageId,
 			command: options.command,
 			env: options.env,
-			volumes: options.volumes,
+			volumes,
 			devices: options.devices,
 			supplementaryGroups: options.supplementaryGroups,
 			selinuxLabeling: options.selinuxLabeling,

@@ -60,7 +60,7 @@ Host paths:
 
 The control-plane container mounts the Docker socket and the required configuration and state directories. Paths supplied to Docker for bind mounts refer to the **host filesystem**.
 
-Application volumes may bind arbitrary absolute Docker host paths using `hostPath` and `mountPath`; they are not confined to the platform-managed storage directory. See [configuration](configuration.md#volumes-and-resource-limits) for mount semantics and operator responsibilities.
+Application volumes support service-relative and arbitrary absolute Docker host paths using `hostPath` and `mountPath`. See [configuration](configuration.md#volumes-and-resource-limits) for path resolution, mount semantics and operator responsibilities.
 
 Configuration and credential files must have restricted permissions. Secrets must not appear in status responses. Operator logs retain full failure diagnostics under the [backend logging contract](development.md#backend-logging).
 

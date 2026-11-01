@@ -18,7 +18,11 @@ const absolutePath = z
 	.startsWith("/")
 	.refine((path) => !path.includes("\0") && !path.includes(":"));
 const volume = z.strictObject({
-	hostPath: absolutePath,
+	hostPath: z
+		.string()
+		.min(1)
+		.refine((path) => !path.includes("\0") && !path.includes(":"))
+		.refine((path) => path.startsWith("/") || !path.split("/").includes("..")),
 	mountPath: absolutePath.refine((path) => path !== "/"),
 	readOnly: z.boolean().optional(),
 	ownership: z

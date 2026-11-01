@@ -109,6 +109,56 @@ test("prepares only writable opted-in mounts using the uniquely identified contr
 	]);
 });
 
+test.each(["metrics", "other-service"])("resolves %s volumes before ownership and mounting", async (serviceId) => {
+	const f = fixture({
+		async listContainers() {
+			return [
+				{ ...container, labels: { "homelab-paas.cluster": "local", "homelab-paas.role": "control-plane" } },
+			];
+		},
+	});
+	const volumes = [
+		{ hostPath: "grafana", mountPath: "/data", ownership: { uid: 472, gid: 0 } },
+		{ hostPath: "./nested/config", mountPath: "/config", readOnly: true },
+		{ hostPath: "unowned", mountPath: "/unowned", ownership: false as const },
+		{ hostPath: "/var/run/docker.sock", mountPath: "/var/run/docker.sock", readOnly: true },
+	];
+	await f.service.createResourceContainer({
+		serviceId,
+		resourceId: "app",
+		revision: "rev",
+		spec: "spec",
+		imageId: "image",
+		volumes,
+	});
+	expect(f.calls.find(({ operation }) => operation === "prepareVolumeOwnership")?.args).toEqual([
+		container.imageId,
+		[`/var/homelab-paas/${serviceId}/grafana`],
+		{
+			"homelab-paas.cluster": "local",
+			"homelab-paas.owner-service": serviceId,
+			"homelab-paas.role": "volume-init",
+		},
+		"472:0",
+	]);
+	expect(f.calls.find(({ operation }) => operation === "createContainer")?.args).toEqual([
+		expect.objectContaining({
+			volumes: [
+				{ ...volumes.at(0), hostPath: `/var/homelab-paas/${serviceId}/grafana` },
+				{ ...volumes.at(1), hostPath: `/var/homelab-paas/${serviceId}/nested/config` },
+				{ ...volumes.at(2), hostPath: `/var/homelab-paas/${serviceId}/unowned` },
+				volumes.at(3),
+			],
+		}),
+	]);
+	expect(volumes.map(({ hostPath }) => hostPath)).toEqual([
+		"grafana",
+		"./nested/config",
+		"unowned",
+		"/var/run/docker.sock",
+	]);
+});
+
 test("preserves descriptor mounts and resource limits for the Docker adapter", async () => {
 	const f = fixture();
 	const volumes = [{ hostPath: "/mnt/external drive", mountPath: "/data", readOnly: true }];

@@ -424,8 +424,8 @@ test.each([
 	).toThrow("Invalid service descriptor");
 });
 
-test.each(["/srv/media", "/mnt/other disk/data", "/etc/application.conf"])(
-	"accepts arbitrary absolute Docker host paths: %s",
+test.each(["/srv/media", "/mnt/other disk/data", "/etc/application.conf", "grafana", "nested/data", "./data"])(
+	"accepts absolute and service-relative Docker host paths: %s",
 	(hostPath) => {
 		expect(
 			parseDescriptor(
@@ -440,7 +440,12 @@ test.each(["/srv/media", "/mnt/other disk/data", "/etc/application.conf"])(
 );
 
 test.each([
-	{ volumes: [{ hostPath: "relative", mountPath: "/data" }] },
+	{ volumes: [{ hostPath: "", mountPath: "/data" }] },
+	{ volumes: [{ hostPath: "../data", mountPath: "/data" }] },
+	{ volumes: [{ hostPath: "nested/../data", mountPath: "/data" }] },
+	{ volumes: [{ hostPath: "nested/..", mountPath: "/data" }] },
+	{ volumes: [{ hostPath: "bad\0path", mountPath: "/data" }] },
+	{ volumes: [{ hostPath: "data:ro", mountPath: "/data" }] },
 	{ volumes: [{ hostPath: "/data", mountPath: "relative" }] },
 	{ volumes: [{ hostPath: "/bad\0path", mountPath: "/data" }] },
 	{ volumes: [{ hostPath: "/data", mountPath: "/bad\0path" }] },
