@@ -2,7 +2,7 @@
 
 Static resources participate in resource inspection, service aggregation and ingress links alongside web resources. Their cards show the configured bundle path, public/private policy and resource or primary link, without an image placeholder. They have no containers or container logs. The primary link is selected across web and static resources together. Snapshot-based health and sync are defined in [static publication](reconciliation-and-deployments.md#static-publication).
 
-The browser favicon is the 🍝 emoji.
+The browser favicon is the 🍝 emoji. The navbar emoji sits on a dark neutral background with a subtle border to preserve its contrast.
 
 The React management UI is served by the control plane at the cluster's base hostname. It supports platform configuration edits, service secret edits and read-only service/resource inspection. With auth/TLS configured, open `https://{baseDomain}` (including a nonstandard HTTPS port). Envoy requires the existing GitHub allowlisted session before serving the UI or its API; missing or invalid sessions redirect to login, including API requests. OAuth accepts this hostname as a return target. Platform cookies are retained only for the management upstream; workload cookie stripping is unchanged. The authentication hostname still exposes only login and callback routes. Management ingress blocks API paths outside `/api/ui/`.
 
@@ -17,6 +17,8 @@ Cluster uses the shared detail-tab navigation: Config at `#/cluster` (the defaul
 Every log viewer has a “Copy recent logs” button that copies the latest redacted tail, up to 200 lines, even while the displayed view is paused. The button is disabled until output is available and reports clipboard success or failure, allowing retries.
 
 Service detail begins with the service identity, without a separate “Service” label or “← Services” link. Navigation remains in the topbar breadcrumbs; Refresh and Redeploy belong to the shared service heading below.
+
+Refresh and Redeploy disable together while a request is processing, with rotating action icons and an accessible progress status that does not occupy heading space. Completion and error feedback appears in a fixed bottom-left toast, spanning the bottom with inset edges on phone widths. Toasts dismiss after five seconds or with their labelled close button. Hover pauses dismissal; leaving starts a fresh five-second countdown. Starting another action or navigating away clears the previous feedback and timer.
 
 Overview resource cards place the resource ID at the left and health/sync badges at the right of the first row, with the resource type below. Long IDs truncate with their complete value available on hover, prioritising a shared first row with both badges. The grid uses a 360px minimum card width, reducing columns sooner as the viewport narrows; a single card retains one column's width on wide screens.
 

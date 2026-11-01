@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { refreshGit, redeployService } from "../api.ts";
 import type { GitRefreshState } from "../types.ts";
+import { ActionToast } from "./action-toast.tsx";
 
 /** One user action; a cancelled view must not update feedback or reload another view. */
 export const runGitRefresh = async (
@@ -69,18 +70,24 @@ export const GitRefreshFeedback = ({
 	<div className='git-refresh'>
 		<div className='service-actions'>
 			<button className='action-info' type='button' disabled={pending} onClick={onRefresh}>
-				<RefreshCw aria-hidden='true' />
+				<RefreshCw className={pending ? "action-spinner" : undefined} aria-hidden='true' />
 				{serviceId ? "Refresh" : "Refresh all"}
 			</button>
 			{serviceId && onRedeploy && (
 				<button className='action-warning' type='button' disabled={pending} onClick={onRedeploy}>
-					<RotateCcw aria-hidden='true' />
+					<RotateCcw className={pending ? "action-spinner" : undefined} aria-hidden='true' />
 					Redeploy
 				</button>
 			)}
 		</div>
-		{message && <p role='status'>{message}</p>}
-		{error && <p role='alert'>{error}</p>}
+		{pending && message && (
+			<p className='action-pending' role='status'>
+				{message}
+			</p>
+		)}
+		{!pending && (error || message) && (
+			<ActionToast key={error || message} message={error ?? message ?? ""} error={!!error} />
+		)}
 	</div>
 );
 

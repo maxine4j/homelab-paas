@@ -12,6 +12,7 @@ test("service actions include warning redeploy and info refresh, disabled togeth
 	expect(html).toContain("Redeploy</button>");
 	expect(html).toContain("Refresh</button>");
 	expect(html.match(/disabled/g)).toHaveLength(2);
+	expect(html.match(/action-spinner/g)).toHaveLength(2);
 	expect(renderToStaticMarkup(<GitRefreshFeedback onRefresh={() => {}} />)).not.toContain("Redeploy");
 });
 
@@ -53,13 +54,20 @@ test("refresh feedback distinguishes scope, progress and safe failures", () => {
 		<GitRefreshFeedback serviceId='demo' pending message='Fetching Git and reconciling…' onRefresh={() => {}} />,
 	);
 	expect(pending).toContain("disabled");
-	expect(pending).toContain('role="status"');
+	expect(pending).toContain('class="action-pending" role="status"');
 	expect(pending).toContain("Fetching Git and reconciling");
 	const failed = renderToStaticMarkup(
 		<GitRefreshFeedback serviceId='demo' error='Cannot refresh Git' onRefresh={() => {}} />,
 	);
 	expect(failed).toContain("Refresh</button>");
-	expect(failed).toContain('role="alert">Cannot refresh Git');
+	expect(failed).toContain('class="action-toast action-toast-error"');
+	expect(failed).toContain('role="alert"');
+	expect(failed).toContain("Cannot refresh Git");
+	expect(failed).toContain('aria-label="Dismiss notification"');
+	const complete = renderToStaticMarkup(<GitRefreshFeedback message='Refresh complete' onRefresh={() => {}} />);
+	expect(complete).toContain('class="action-toast"');
+	expect(complete).toContain('role="status"');
+	expect(pending).not.toContain('class="action-toast');
 });
 
 test("refresh action reports pending, partial and success feedback and reloads snapshots", async () => {
