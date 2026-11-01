@@ -5,6 +5,34 @@ import { EnvoyService } from "./envoy-service.ts";
 import { EnvoyClientError, type EnvoyConfiguration } from "./types.ts";
 
 test.each([undefined, 443])(
+	"all ingress listeners emit structured access logs without queries or credentials (HTTPS %s)",
+	async (httpsPort) => {
+		let configuration: EnvoyConfiguration | undefined;
+		await new EnvoyService(
+			{
+				bootstrap: async () => {},
+				apply: async (value) => {
+					configuration = value;
+				},
+			},
+			testConfig({ ingress: { baseDomain: "example.test", httpPort: 80, httpsPort } }),
+		).configureRoutes({});
+		const listeners: { filter_chains: { filters: { typed_config: { access_log?: unknown[] } }[] }[] }[] =
+			JSON.parse(JSON.stringify(configuration!.listeners));
+		for (const listener of listeners)
+			for (const chain of listener.filter_chains)
+				for (const filter of chain.filters) {
+					const logs = JSON.stringify(filter.typed_config.access_log);
+					expect(logs).toContain("envoy.access_loggers.stdout");
+					expect(logs).toContain("%REQ_WITHOUT_QUERY(:PATH)%");
+					expect(logs).toContain("%UPSTREAM_CLUSTER%");
+					expect(logs).toContain("%RESPONSE_CODE_DETAILS%");
+					expect(logs).not.toMatch(/cookie|authorization|location|REQ\(:PATH\)|X-ENVOY-ORIGINAL-PATH/i);
+				}
+	},
+);
+
+test.each([undefined, 443])(
 	"static routes use the isolated serving listener and shared primary host, TLS %s",
 	async (httpsPort) => {
 		let configuration: EnvoyConfiguration | undefined;

@@ -3,11 +3,85 @@ import { request as httpRequest } from "node:http";
 import Koa from "koa";
 import { expect, test, vi } from "vitest";
 
+import { createLogger, createRequestLogger } from "../../util/logger.ts";
 import { testConfig } from "../../util/test/config.ts";
 import { captureLogs } from "../../util/test/logs.ts";
 import { startTestApi } from "../../util/test/router.ts";
 import { createAuthRouter } from "./auth-router.ts";
 import type { IAuthService } from "./auth-service.ts";
+
+test("request logs identify validated auth targets and fixed decisions without credentials", async () => {
+	const lines: string[] = [];
+	const log = createLogger("http", { write: (line: string) => lines.push(line) });
+	log.level = "debug";
+	let decision: "allowed" | "login" | "missing" = "allowed";
+	let fail = false;
+	const auth: IAuthService = {
+		authorize: async () => {
+			if (fail) throw new Error("store unavailable");
+			return decision;
+		},
+		verifyAuthCookie: () => undefined,
+		beginLogin: vi.fn(),
+		completeLogin: vi.fn(),
+	};
+	const api = await startTestApi(
+		new Koa().use(createRequestLogger(log)).use(
+			createAuthRouter(
+				auth,
+				testConfig({
+					services: {
+						demo: { remote: "local", descriptorPath: "/repo/demo.yaml" },
+						other: { remote: "local", descriptorPath: "/repo/other.yaml" },
+					},
+				}),
+			).routes(),
+		),
+	);
+	try {
+		for (decision of ["allowed", "login", "missing"] as const)
+			await requestWithHost(`${api.origin}/auth/check/api/github?token=SECRET`, {
+				host: "app.demo.example.test",
+				cookie: "__Secure-paas_session=SECRET",
+			});
+		fail = true;
+		await requestWithHost(`${api.origin}/auth/check/api/github`, { host: "app.demo.example.test" });
+		await requestWithHost(`${api.origin}/auth/check/api/github`, { host: "SECRET.invalid" });
+		await requestWithHost(`${api.origin}/auth/check/api/github`, { host: "example.test" });
+		fail = false;
+		decision = "login";
+		await requestWithHost(`${api.origin}/auth/check//invalid`, { host: "app.demo.example.test" });
+		decision = "allowed";
+		await requestWithHost(`${api.origin}/auth/check/api/github`, { host: "other.example.test" });
+		const records = lines.map((line) => JSON.parse(line));
+		expect(records.slice(0, 4).map((record) => record.authReason)).toEqual([
+			"allowed",
+			"login-required",
+			"endpoint-missing",
+			"authorization-error",
+		]);
+		for (const record of records.slice(0, 4))
+			expect(record).toMatchObject({
+				targetHost: "app.demo.example.test",
+				serviceId: "demo",
+				targetId: "app.demo",
+			});
+		expect(records.at(4)).toMatchObject({ authReason: "unknown-host", status: 403 });
+		expect(records.at(4)).not.toHaveProperty("targetHost");
+		expect(records.at(5)).toMatchObject({ targetHost: "example.test", authReason: "login-required" });
+		expect(records.at(5)).not.toHaveProperty("serviceId");
+		expect(records.at(6)).toMatchObject({ authReason: "invalid-path", status: 403 });
+		expect(records.at(7)).toMatchObject({
+			targetHost: "other.example.test",
+			serviceId: "other",
+			targetId: "other",
+			authReason: "allowed",
+		});
+		expect(lines.join("")).not.toContain("SECRET");
+	} finally {
+		await api.close();
+	}
+});
 
 const requestWithHost = (url: string, headers: Record<string, string>): Promise<Response> =>
 	new Promise((resolve, reject) => {

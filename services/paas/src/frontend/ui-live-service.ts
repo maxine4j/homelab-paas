@@ -17,6 +17,7 @@ export class UiLiveService implements IUiLiveService {
 		private readonly changes: IChangeBus,
 	) {}
 	subscribe(id: string, target: UiLiveTarget, receive: (message: UiLiveServerMessage) => void): () => void {
+		const clusterLogs = target.kind === "cluster-logs" || target.kind === "ingress-logs";
 		const controller = new AbortController();
 		let reading = false;
 		let dirty = false;
@@ -37,7 +38,7 @@ export class UiLiveService implements IUiLiveService {
 			});
 		};
 		const follow = (): void => {
-			if (target.kind !== "logs" && target.kind !== "cluster-logs") return;
+			if (target.kind !== "logs" && target.kind !== "cluster-logs" && target.kind !== "ingress-logs") return;
 			logController?.abort();
 			const stream = new AbortController();
 			logController = stream;
@@ -47,13 +48,15 @@ export class UiLiveService implements IUiLiveService {
 			const following =
 				target.kind === "cluster-logs"
 					? this.logs.followControlPlaneLogs(receiveLogs, stream.signal)
-					: this.logs.followLogs(
-							target.serviceId,
-							target.resourceId,
-							target.containerId,
-							receiveLogs,
-							stream.signal,
-						);
+					: target.kind === "ingress-logs"
+						? this.logs.followIngressLogs(receiveLogs, stream.signal)
+						: this.logs.followLogs(
+								target.serviceId,
+								target.resourceId,
+								target.containerId,
+								receiveLogs,
+								stream.signal,
+							);
 			void following.catch((err) => {
 				if (!stream.signal.aborted) failed(err);
 			});
@@ -76,14 +79,14 @@ export class UiLiveService implements IUiLiveService {
 			reading = false;
 		};
 		const unsubscribe = this.changes.subscribe((change) => {
-			if (target.kind === "cluster-logs" && change.serviceId) return;
+			if (clusterLogs && change.serviceId) return;
 			if (change.serviceId && "serviceId" in target && change.serviceId !== target.serviceId) return;
 			if (change.event && change.serviceId && target.kind === "events")
 				receive({ type: "event", serviceId: change.serviceId, event: change.event });
-			if (target.kind !== "logs" && target.kind !== "cluster-logs") void refresh();
+			if (target.kind !== "logs" && !clusterLogs) void refresh();
 			else if (!change.serviceId || change.refreshLogs) follow();
 		});
-		if (target.kind === "logs" || target.kind === "cluster-logs") {
+		if (target.kind === "logs" || clusterLogs) {
 			follow();
 		} else void refresh();
 		return () => {
@@ -106,6 +109,7 @@ export class UiLiveService implements IUiLiveService {
 				return this.ui.getResource(target.serviceId, target.resourceId);
 			case "logs":
 			case "cluster-logs":
+			case "ingress-logs":
 				throw new Error("Log subscriptions require a stream");
 		}
 	}

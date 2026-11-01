@@ -2,7 +2,7 @@ export type ResourceTab = "config" | "logs";
 export type ServiceTab = "overview" | "resources" | "descriptor";
 export type Route =
 	| { page: "services" }
-	| { page: "cluster"; tab?: "config" | "logs" }
+	| { page: "cluster"; tab?: "config" | "logs" | "ingress-logs" }
 	| { page: "missing" }
 	| { page: "service"; serviceId: string; tab?: ServiceTab }
 	| { page: "events"; serviceId: string }

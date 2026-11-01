@@ -90,6 +90,9 @@ const fixture = (health: HealthStatus = "Degraded") => {
 	const followControlPlane = vi.fn(async (receive: (id: string, content: string) => void, _signal: AbortSignal) => {
 		receive("control", "safe control tail");
 	});
+	const followIngress = vi.fn(async (receive: (id: string, content: string) => void, _signal: AbortSignal) => {
+		receive("envoy", "safe ingress tail");
+	});
 	const listEvents = vi.fn(async (): Promise<UiServiceEvent[]> => [
 		{
 			timestamp: 100,
@@ -130,7 +133,7 @@ const fixture = (health: HealthStatus = "Degraded") => {
 		},
 		{ list: listEvents, append: async () => {} },
 		{ getStatus: (_serviceId, _resourceId, containers) => (containers.length ? health : "Missing"), refineStatus },
-		{ follow: followLogs, followControlPlane },
+		{ follow: followLogs, followControlPlane, followIngress },
 	);
 	return {
 		service,
@@ -143,6 +146,7 @@ const fixture = (health: HealthStatus = "Degraded") => {
 		listEvents,
 		followLogs,
 		followControlPlane,
+		followIngress,
 		refineStatus,
 	};
 };
@@ -157,6 +161,21 @@ test("control-plane logs delegate safe tails without requiring a workload descri
 	expect(f.fetchFile).not.toHaveBeenCalled();
 	f.followControlPlane.mockRejectedValueOnce(new Error("private Docker error"));
 	await expect(f.service.followControlPlaneLogs(receive, signal)).rejects.toMatchObject({
+		kind: "unavailable",
+		message: "Cluster data is unavailable; retry shortly",
+	});
+});
+
+test("ingress logs delegate safe tails without descriptors and sanitize failures", async () => {
+	const f = fixture();
+	const receive = vi.fn();
+	const signal = new AbortController().signal;
+	await f.service.followIngressLogs(receive, signal);
+	expect(receive).toHaveBeenCalledWith({ containerId: "envoy", content: "safe ingress tail", tail: 200 });
+	expect(f.followIngress).toHaveBeenCalledWith(expect.any(Function), signal);
+	expect(f.fetchFile).not.toHaveBeenCalled();
+	f.followIngress.mockRejectedValueOnce(new Error("private Docker error"));
+	await expect(f.service.followIngressLogs(receive, signal)).rejects.toMatchObject({
 		kind: "unavailable",
 		message: "Cluster data is unavailable; retry shortly",
 	});

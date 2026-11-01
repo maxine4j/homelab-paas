@@ -127,6 +127,7 @@ export interface UiLogs {
 export type UiLiveTarget =
 	| { kind: "cluster" | "services" }
 	| { kind: "cluster-logs" }
+	| { kind: "ingress-logs" }
 	| { kind: "service" | "events"; serviceId: string }
 	| { kind: "resource"; serviceId: string; resourceId: string }
 	| { kind: "logs"; serviceId: string; resourceId: string; containerId: string };

@@ -6,11 +6,15 @@ import type { DockerContainerDetails } from "./types.ts";
 export interface LogContainerInspector {
 	/** Requires one running control plane with matching cluster/role labels; throws DockerServiceError otherwise. */
 	inspectControlPlaneContainer(): Promise<DockerContainerDetails>;
+	/** Requires one running Envoy with matching cluster/role labels. */
+	inspectEnvoyContainer(): Promise<DockerContainerDetails>;
 	inspectServiceContainer(serviceId: string, containerId: string): Promise<DockerContainerDetails | null>;
 }
 export interface IDockerLogService {
 	/** Discovers the owned control plane and streams redacted replacement tails; cancellation closes the stream. */
 	followControlPlane(receive: (containerId: string, content: string) => void, signal: AbortSignal): Promise<void>;
+	/** Discovers the owned Envoy and streams redacted replacement tails. */
+	followIngress(receive: (containerId: string, content: string) => void, signal: AbortSignal): Promise<void>;
 	/** Receives safe replacement tails; cancellation closes the underlying stream. */
 	follow(
 		serviceId: string,
@@ -44,6 +48,11 @@ export class DockerLogService implements IDockerLogService {
 		signal: AbortSignal,
 	): Promise<void> {
 		const container = await this.docker.inspectControlPlaneContainer();
+		await this.followContainer(container, [], (content) => receive(container.id, content), signal);
+	}
+
+	async followIngress(receive: (containerId: string, content: string) => void, signal: AbortSignal): Promise<void> {
+		const container = await this.docker.inspectEnvoyContainer();
 		await this.followContainer(container, [], (content) => receive(container.id, content), signal);
 	}
 

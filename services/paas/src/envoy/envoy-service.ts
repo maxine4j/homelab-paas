@@ -92,6 +92,7 @@ export class EnvoyService implements IEnvoyService {
 											"@type":
 												"type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
 											stat_prefix: "http",
+											access_log: this.accessLogs(),
 											upgrade_configs: [{ upgrade_type: "websocket", enabled: false }],
 											route_config: {
 												name: "services",
@@ -125,6 +126,40 @@ export class EnvoyService implements IEnvoyService {
 			},
 			verify,
 		);
+	}
+
+	private accessLogs() {
+		return [
+			{
+				name: "envoy.access_loggers.stdout",
+				typed_config: {
+					"@type": "type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog",
+					log_format: {
+						json_format: {
+							component: "ingress",
+							time: "%START_TIME%",
+							method: "%REQ(:METHOD)%",
+							host: "%REQ(:AUTHORITY)%",
+							path: "%REQ_WITHOUT_QUERY(:PATH)%",
+							status: "%RESPONSE_CODE%",
+							durationMs: "%DURATION%",
+							upstreamCluster: "%UPSTREAM_CLUSTER%",
+							responseFlags: "%RESPONSE_FLAGS%",
+							responseCodeDetails: "%RESPONSE_CODE_DETAILS%",
+						},
+						formatters: [
+							{
+								name: "envoy.formatter.req_without_query",
+								typed_config: {
+									"@type":
+										"type.googleapis.com/envoy.extensions.formatter.req_without_query.v3.ReqWithoutQuery",
+								},
+							},
+						],
+					},
+				},
+			},
+		];
 	}
 
 	private resourceHost(id: string, endpoint: Endpoint) {
@@ -219,6 +254,7 @@ export class EnvoyService implements IEnvoyService {
 				"@type":
 					"type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
 				stat_prefix: name,
+				access_log: this.accessLogs(),
 				upgrade_configs: [{ upgrade_type: "websocket", enabled: false }],
 				route_config: { name, virtual_hosts: virtualHosts },
 				http_filters: filters,

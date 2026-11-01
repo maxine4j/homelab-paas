@@ -3,17 +3,17 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { App, AppView, viewPaths } from "./app.tsx";
 
-test("Cluster navigation and logs remain usable when configuration is unavailable", () => {
+test.each(["logs", "ingress-logs"] as const)("Cluster %s remains usable when configuration is unavailable", (tab) => {
 	const html = renderToStaticMarkup(
 		<AppView
-			route={{ page: "cluster", tab: "logs" }}
+			route={{ page: "cluster", tab }}
 			snapshot={{ error: "Config unavailable", refresh: () => {} }}
 			events={{ refresh: () => {} }}
 			logs={{ data: { containerId: "controller", content: "ready", tail: 200 } }}
 		/>,
 	);
 	expect(html).toContain('href="#/cluster" aria-current="page">Cluster</a>');
-	expect(html).toContain("Control-plane logs");
+	expect(html).toContain(tab === "logs" ? "PaaS logs" : "Ingress logs");
 	expect(html).toContain("ready");
 	expect(html).not.toContain("Cluster config");
 });

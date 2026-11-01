@@ -19,10 +19,25 @@ test("cluster has Config and control-plane Logs tabs with direct navigation", ()
 	);
 	expect(html).toContain('href="#/cluster"');
 	expect(html).toContain('href="#/cluster/logs" aria-current="page"');
+	expect(html).toContain(">PaaS logs</a>");
 	expect(html).toContain("control-plane ready");
 	expect(html).toContain("Copy recent logs");
 	expect(html).not.toContain("Save configuration");
 	expect(renderToStaticMarkup(<ClusterPage tab='logs' logError='Logs unavailable' />)).toContain("Logs unavailable");
+});
+
+test("cluster ingress logs have their own route and work without configuration", () => {
+	expect(parseRoute("#/cluster/ingress-logs")).toEqual({ page: "cluster", tab: "ingress-logs" });
+	const html = renderToStaticMarkup(
+		<ClusterPage tab='ingress-logs' logs={{ containerId: "envoy", content: "ingress ready", tail: 200 }} />,
+	);
+	expect(html).toContain('href="#/cluster/ingress-logs" aria-current="page">Ingress logs</a>');
+	expect(html).toContain('aria-label="Ingress logs"');
+	expect(html).toContain("ingress ready");
+	expect(html).not.toContain("Save configuration");
+	expect(renderToStaticMarkup(<ClusterPage tab='ingress-logs' logError='Ingress unavailable' />)).toContain(
+		"Ingress unavailable",
+	);
 });
 
 test("Descriptor tab routes to selectable redacted YAML with an unavailable fallback", () => {

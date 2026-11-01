@@ -54,8 +54,8 @@ export const App = () => {
 			: undefined;
 	const events = useApi<UiServiceEvent[]>(paths.events);
 	const logs = useApi<UiLogs>(
-		route.page === "cluster" && route.tab === "logs"
-			? "/cluster/logs"
+		route.page === "cluster" && (route.tab === "logs" || route.tab === "ingress-logs")
+			? `/cluster/${route.tab}`
 			: route.page === "resource" && route.tab === "logs" && containerId
 				? `${paths.snapshot}/containers/${encodeURIComponent(containerId)}/logs`
 				: undefined,

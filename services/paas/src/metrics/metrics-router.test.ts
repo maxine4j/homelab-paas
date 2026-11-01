@@ -1,9 +1,35 @@
 import Koa from "koa";
 import { expect, test } from "vitest";
 
+import { createLogger, createRequestLogger } from "../util/logger.ts";
 import { startTestApi } from "../util/test/router.ts";
 import { createMetricsMiddleware, createMetricsRouter } from "./metrics-router.ts";
 import { MetricsService } from "./metrics-service.ts";
+
+test("quiet authorization checks retain request counts and latency metrics", async () => {
+	const lines: string[] = [];
+	let time = 0;
+	const metrics = new MetricsService("local", "unknown", async () => []);
+	const log = createLogger("http", { write: (line: string) => lines.push(line) });
+	const app = new Koa()
+		.use(createMetricsMiddleware(metrics, () => time))
+		.use(createRequestLogger(log, () => time))
+		.use((ctx) => {
+			time += 5;
+			ctx.status = 200;
+		});
+	const api = await startTestApi(app);
+	try {
+		await fetch(`${api.origin}/auth/check/api/github?token=secret`);
+		expect(lines).toEqual([]);
+		const output = await metrics.render();
+		expect(output).toContain('status="200"} 1');
+		expect(output).toContain('status="200"} 0.005');
+		expect(output).not.toMatch(/github|secret/);
+	} finally {
+		await api.close();
+	}
+});
 
 test("records successful and thrown HTTP outcomes without URLs or secrets", async () => {
 	let time = 0;

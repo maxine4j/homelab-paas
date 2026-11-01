@@ -17,6 +17,7 @@ const subscriptionId = z
 export const uiLiveTargetSchema = z.discriminatedUnion("kind", [
 	z.strictObject({ kind: z.literal("cluster") }),
 	z.strictObject({ kind: z.literal("cluster-logs") }),
+	z.strictObject({ kind: z.literal("ingress-logs") }),
 	z.strictObject({ kind: z.literal("services") }),
 	z.strictObject({ kind: z.literal("service"), serviceId: identity }),
 	z.strictObject({ kind: z.literal("events"), serviceId: identity }),
@@ -133,6 +134,11 @@ const snapshot = z
 				content: z.string().max(131072),
 				tail: z.literal(200),
 			}),
+			"ingress-logs": z.object({
+				containerId: z.string(),
+				content: z.string().max(131072),
+				tail: z.literal(200),
+			}),
 		}[value.target.kind];
 		if (!schema.safeParse(value.data).success) context.addIssue({ code: "custom", message: "Invalid snapshot" });
 	});
@@ -162,6 +168,7 @@ export const uiLiveTargetFromPath = (path: string): UiLiveTarget | undefined => 
 	let target: unknown;
 	if (path === "/cluster") target = { kind: "cluster" };
 	else if (path === "/cluster/logs") target = { kind: "cluster-logs" };
+	else if (path === "/cluster/ingress-logs") target = { kind: "ingress-logs" };
 	else if (path === "/services") target = { kind: "services" };
 	else if (root === "services" && parts.length === 2) target = { kind: "service", serviceId };
 	else if (root === "services" && section === "events" && parts.length === 3) target = { kind: "events", serviceId };

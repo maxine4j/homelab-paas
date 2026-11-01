@@ -3,6 +3,38 @@ import { expect, test, vi } from "vitest";
 import { testConfig } from "../util/test/config.ts";
 import { DockerLogService } from "./docker-log-service.ts";
 
+test("ingress logs follow only the discovered Envoy, redact secrets and honor cancellation", async () => {
+	const controller = new AbortController();
+	const follow = vi.fn(async (id: string, receive: (text: string) => void, signal: AbortSignal) => {
+		expect(id).toBe("envoy");
+		expect(signal).toBe(controller.signal);
+		receive("envoy-secret\nready\n");
+		controller.abort();
+		receive("stale\n");
+	});
+	const inspector = {
+		inspectServiceContainer: async () => null,
+		inspectControlPlaneContainer: vi.fn(),
+		inspectEnvoyContainer: vi.fn(async () => ({
+			id: "envoy",
+			imageId: "image",
+			running: true,
+			labels: {},
+			networks: {},
+			env: { PASSWORD: "envoy-secret" },
+		})),
+	};
+	const service = new DockerLogService(inspector, { follow }, testConfig());
+	const receive = vi.fn();
+	await service.followIngress(receive, controller.signal);
+	expect(receive).toHaveBeenCalledWith("envoy", expect.stringContaining("ready"));
+	expect(JSON.stringify(receive.mock.calls)).not.toMatch(/envoy-secret|stale/);
+	expect(inspector.inspectControlPlaneContainer).not.toHaveBeenCalled();
+	inspector.inspectEnvoyContainer.mockRejectedValueOnce(new Error("unavailable"));
+	await expect(service.followIngress(receive, new AbortController().signal)).rejects.toThrow("unavailable");
+	expect(follow).toHaveBeenCalledTimes(1);
+});
+
 test("control-plane logs redact actual environment and platform secrets before emitting bounded tails", async () => {
 	const config = testConfig();
 	const inspected = {
@@ -23,7 +55,11 @@ test("control-plane logs redact actual environment and platform secrets before e
 		for (let index = 0; index < 210; index++) receive(`line ${index}\n`);
 	});
 	const service = new DockerLogService(
-		{ inspectServiceContainer: async () => null, inspectControlPlaneContainer: async () => inspected },
+		{
+			inspectServiceContainer: async () => null,
+			inspectControlPlaneContainer: async () => inspected,
+			inspectEnvoyContainer: vi.fn(),
+		},
 		{ follow },
 		config,
 	);
@@ -47,7 +83,11 @@ test("redacts actual env and descriptor secrets across chunks before bounded sna
 	};
 	const signal = new AbortController().signal;
 	const service = new DockerLogService(
-		{ inspectServiceContainer: async () => inspected, inspectControlPlaneContainer: async () => inspected },
+		{
+			inspectServiceContainer: async () => inspected,
+			inspectControlPlaneContainer: async () => inspected,
+			inspectEnvoyContainer: vi.fn(),
+		},
 		{
 			follow: async (_id, receive, passed) => {
 				expect(passed).toBe(signal);
@@ -82,6 +122,7 @@ test("ownership failures and absence never open a stream", async () => {
 		const service = new DockerLogService(
 			{
 				inspectServiceContainer,
+				inspectEnvoyContainer: vi.fn(),
 				inspectControlPlaneContainer: async () => {
 					throw new Error("not available");
 				},

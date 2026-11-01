@@ -2,12 +2,15 @@ import { expect, test } from "vitest";
 
 import { uiLiveClientSchema, uiLiveServerSchema, uiLiveTargetFromPath } from "./ui-live.ts";
 
-test("cluster logs use a fixed target and bounded log snapshots", () => {
-	expect(uiLiveTargetFromPath("/cluster/logs")).toEqual({ kind: "cluster-logs" });
+test.each([
+	["/cluster/logs", "cluster-logs"],
+	["/cluster/ingress-logs", "ingress-logs"],
+])("%s uses a fixed target and bounded log snapshots", (path, kind) => {
+	expect(uiLiveTargetFromPath(path)).toEqual({ kind });
 	const message = {
 		type: "snapshot",
 		id: "1",
-		target: { kind: "cluster-logs" },
+		target: { kind },
 		data: { containerId: "control", content: "ready", tail: 200 },
 	};
 	expect(uiLiveServerSchema.safeParse(message).success).toBe(true);
@@ -18,7 +21,7 @@ test("cluster logs use a fixed target and bounded log snapshots", () => {
 		uiLiveClientSchema.safeParse({
 			type: "subscribe",
 			id: "1",
-			target: { kind: "cluster-logs", containerId: "arbitrary" },
+			target: { kind, containerId: "arbitrary" },
 		}).success,
 	).toBe(false);
 });

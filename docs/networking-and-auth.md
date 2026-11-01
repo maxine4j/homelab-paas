@@ -110,6 +110,12 @@ Sessions use the secure, HTTP-only `__Secure-paas_session` cookie scoped to the 
 
 Public ingress is the compatibility option for applications whose native clients cannot complete platform login.
 
+## Ingress access logs
+
+Every external HTTP connection manager, including HTTP redirects and HTTPS ingress, writes structured JSON access logs to Envoy stdout. Records include `component: ingress`, start time, method, host, path without query, final response status, duration in milliseconds, upstream cluster, response flags and response-code details. They exclude cookies, authorization headers, response headers, request bodies and query strings. The upstream cluster identifies the selected workload; requests rejected before upstream selection may have none. These records describe the actual ingress response; control-plane `/auth/check` records describe only the authorization decision. WebSocket access records normally complete when the connection closes.
+
+The management UI exposes the redacted Envoy container tail under [Cluster → Ingress logs](management-ui.md). PaaS logs remains the control-plane stream. Authorization-check log severity and retained metrics follow the [backend logging contract](development.md#backend-logging).
+
 ## TLS
 
 The control plane provisions and renews one Let’s Encrypt certificate covering:

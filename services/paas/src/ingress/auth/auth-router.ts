@@ -2,6 +2,7 @@ import Router from "@koa/router";
 
 import type { IPaasConfig } from "../../config/paas-config.ts";
 import { logger } from "../../util/logger.ts";
+import type { AuthorizationLogFields } from "../../util/types.ts";
 import type { IAuthService } from "./auth-service.ts";
 import { AuthenticationError } from "./auth-service.ts";
 
@@ -58,10 +59,15 @@ export const createAuthRouter = (auth: IAuthService, config: IPaasConfig) => {
 			ctx.set("Cache-Control", "no-store");
 			const serviceId = routeIdentity(ctx.get("host"));
 			const management = ctx.get("host") === managementAuthority;
+			const fields: AuthorizationLogFields = { authReason: "unknown-host" };
+			ctx.state["authorization"] = fields;
 			if (!serviceId && !management) {
 				ctx.status = 403;
 				return;
 			}
+			fields.targetHost = ctx.get("host");
+			fields.targetId = serviceId ?? "management";
+			if (serviceId) fields.serviceId = serviceId.split(".").at(-1);
 			try {
 				const token = cookie(ctx.get("cookie"), sessionCookie);
 				const decision = management
@@ -70,12 +76,15 @@ export const createAuthRouter = (auth: IAuthService, config: IPaasConfig) => {
 						: "login"
 					: await auth.authorize(serviceId!, token);
 				if (decision === "missing") {
+					fields.authReason = "endpoint-missing";
 					ctx.status = 403;
 					return;
 				}
 				if (decision === "login") {
+					fields.authReason = "login-required";
 					const path = ctx.originalUrl.slice("/auth/check".length);
 					if (!path.startsWith("/") || path.startsWith("//")) {
+						fields.authReason = "invalid-path";
 						ctx.status = 403;
 						return;
 					}
@@ -92,8 +101,10 @@ export const createAuthRouter = (auth: IAuthService, config: IPaasConfig) => {
 								.filter((part) => ![sessionCookie, stateCookie].includes(part.split("=").at(0) ?? ""))
 								.join("; "),
 				);
+				fields.authReason = "allowed";
 				ctx.status = 200;
 			} catch (err) {
+				fields.authReason = "authorization-error";
 				logger.error({ err }, "Authorization check failed");
 				ctx.status = 503;
 			}

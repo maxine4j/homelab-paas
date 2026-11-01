@@ -12,7 +12,7 @@ export const ClusterPage = ({
 	error,
 }: {
 	cluster?: UiCluster;
-	tab?: "config" | "logs";
+	tab?: "config" | "logs" | "ingress-logs";
 	logs?: UiLogs;
 	logError?: string;
 	error?: string;
@@ -26,15 +26,16 @@ export const ClusterPage = ({
 		<DetailTabs
 			base='#/cluster'
 			label='Cluster detail'
-			current={tab === "logs" ? "/logs" : ""}
+			current={tab === "config" ? "" : `/${tab}`}
 			tabs={[
 				{ path: "", label: "Config" },
-				{ path: "/logs", label: "Logs" },
+				{ path: "/logs", label: "PaaS logs" },
+				{ path: "/ingress-logs", label: "Ingress logs" },
 			]}
 		/>
-		{tab === "logs" ? (
-			<section aria-label='Control-plane logs'>
-				<h2>Control-plane logs</h2>
+		{tab !== "config" ? (
+			<section aria-label={tab === "logs" ? "PaaS logs" : "Ingress logs"}>
+				<h2>{tab === "logs" ? "PaaS logs" : "Ingress logs"}</h2>
 				{logError ? (
 					<p role='alert'>{logError}</p>
 				) : (

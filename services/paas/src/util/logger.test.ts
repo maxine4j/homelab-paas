@@ -76,3 +76,36 @@ test("request logs include failures and quiet successful health checks", async (
 	expect(JSON.parse(lines.at(1)!)).toMatchObject({ status: 500, level: 50, err: { message: "SECRET" } });
 	expect(JSON.parse(lines.at(2)!)).toMatchObject({ status: 401, level: 40 });
 });
+
+test("authorization successes use DEBUG except slow checks; redirects, denials and failures stay visible", async () => {
+	const lines: string[] = [];
+	const log = createLogger("http", { write: (line: string) => lines.push(line) });
+	log.level = "debug";
+	let now = 0;
+	const app = new Koa().use(createRequestLogger(log, () => now)).use((ctx) => {
+		now += ctx.path.endsWith("slow") ? 250 : 249;
+		ctx.status = ctx.path.endsWith("redirect")
+			? 302
+			: ctx.path.endsWith("denied")
+				? 403
+				: ctx.path.endsWith("failure")
+					? 503
+					: 200;
+	});
+	const api = await startTestApi(app);
+	try {
+		for (const path of [
+			"/auth/check",
+			"/auth/check/slow",
+			"/auth/check/redirect",
+			"/auth/check/denied",
+			"/auth/check/failure",
+			"/auth/checker",
+		])
+			await fetch(`${api.origin}${path}`, { redirect: "manual" });
+	} finally {
+		await api.close();
+	}
+	expect(lines.map((line) => JSON.parse(line).level)).toEqual([20, 30, 30, 40, 50, 30]);
+	expect(JSON.parse(lines.at(1)!)).toMatchObject({ durationMs: 250 });
+});

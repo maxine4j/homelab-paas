@@ -134,24 +134,11 @@ export class DockerService implements IDockerService, IDockerInfrastructure, ICl
 	}
 
 	async inspectControlPlaneContainer(): Promise<DockerContainerDetails> {
-		const labels = { "homelab-paas.cluster": this.config.getClusterId(), "homelab-paas.role": "control-plane" };
-		const candidates = await this.client.listContainers({ all: false, labels });
-		const candidate = candidates.at(0);
-		if (
-			candidates.length !== 1
-			|| !candidate
-			|| Object.entries(labels).some(([key, value]) => candidate.labels[key] !== value)
-		)
-			throw new DockerServiceError("infrastructure");
-		const container = await this.client.inspectContainer(candidate.id);
-		if (
-			!container
-			|| container.id !== candidate.id
-			|| !container.running
-			|| Object.entries(labels).some(([key, value]) => container.labels[key] !== value)
-		)
-			throw new DockerServiceError("infrastructure");
-		return container;
+		return this.inspectInfrastructureContainer("control-plane");
+	}
+
+	async inspectEnvoyContainer(): Promise<DockerContainerDetails> {
+		return this.inspectInfrastructureContainer("envoy");
 	}
 
 	async inspectServiceNetwork(serviceId: string): Promise<DockerNetwork | null> {
@@ -338,5 +325,26 @@ export class DockerService implements IDockerService, IDockerInfrastructure, ICl
 		} catch (error) {
 			if (!(error instanceof DockerClientError && error.kind === "not-found")) throw error;
 		}
+	}
+
+	private async inspectInfrastructureContainer(role: "control-plane" | "envoy"): Promise<DockerContainerDetails> {
+		const labels = { "homelab-paas.cluster": this.config.getClusterId(), "homelab-paas.role": role };
+		const candidates = await this.client.listContainers({ all: false, labels });
+		const candidate = candidates.at(0);
+		if (
+			candidates.length !== 1
+			|| !candidate
+			|| Object.entries(labels).some(([key, value]) => candidate.labels[key] !== value)
+		)
+			throw new DockerServiceError("infrastructure");
+		const container = await this.client.inspectContainer(candidate.id);
+		if (
+			!container
+			|| container.id !== candidate.id
+			|| !container.running
+			|| Object.entries(labels).some(([key, value]) => container.labels[key] !== value)
+		)
+			throw new DockerServiceError("infrastructure");
+		return container;
 	}
 }
