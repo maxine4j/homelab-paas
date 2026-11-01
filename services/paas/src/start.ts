@@ -48,6 +48,7 @@ import { DigitalOceanDnsAcmeChallengeProvider } from "./ingress/tls/dns-challeng
 import { createMetricsMiddleware, createMetricsRouter } from "./metrics/metrics-router.ts";
 import { MetricsService } from "./metrics/metrics-service.ts";
 import { DeploymentProgress } from "./reconciler/deployment-progress.ts";
+import { DeploymentContainers } from "./reconciler/deployment/deployment-containers.ts";
 import { DeploymentService } from "./reconciler/deployment/deployment-service.ts";
 import { RecreateDeploymentStrategy } from "./reconciler/deployment/strategy/recreate-deployment-strategy.ts";
 import { SurgeDeploymentStrategy } from "./reconciler/deployment/strategy/surge-deployment-strategy.ts";
@@ -121,10 +122,11 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/git`);
 	const health = new ResourceHealthService(config, git, decodeDescriptorYaml, docker, probe, changes);
 	const progress = new DeploymentProgress(store, events, changes, Date.now, health);
+	const deploymentContainers = new DeploymentContainers(docker, probe, sleep);
 	const deployment = new DeploymentService(
 		[
-			new RecreateDeploymentStrategy(docker, networking, probe, sleep),
-			new SurgeDeploymentStrategy(docker, networking, probe, sleep, () => nanoid(10)),
+			new RecreateDeploymentStrategy(docker, networking, deploymentContainers),
+			new SurgeDeploymentStrategy(docker, networking, deploymentContainers, () => nanoid(10)),
 		],
 		progress,
 	);
@@ -144,7 +146,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		new WorkerResourceReconciler(
 			new ResourceSpecification(),
 			docker,
-			new WorkerDeploymentService(docker, probe, sleep, () => nanoid(10), progress),
+			new WorkerDeploymentService(docker, deploymentContainers, () => nanoid(10), progress),
 			probe,
 		),
 		events,

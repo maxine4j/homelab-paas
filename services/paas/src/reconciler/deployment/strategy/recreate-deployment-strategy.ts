@@ -1,12 +1,10 @@
 import type { IDockerService } from "../../../docker/docker-service.ts";
-import type { HttpProbe } from "../../../util/healthcheck.ts";
-import type { ISleep } from "../../../util/sleep.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
 import type { Endpoint } from "../../networking/types.ts";
+import type { IDeploymentContainers } from "../deployment-containers.ts";
 import type { DeploymentRequest, DeploymentStrategy } from "./types.ts";
 
 const DEFAULT_TERMINATION_TIMEOUT_SEC = 30;
-const MAX_STARTUP_PROBE_ATTEMPTS = 30;
 
 /** Recreate owns replacement sequencing; callers own serialization and retries. */
 export class RecreateDeploymentStrategy implements DeploymentStrategy {
@@ -15,8 +13,7 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 	constructor(
 		private readonly docker: IDockerService,
 		private readonly networking: INetworkingService,
-		private readonly probe: HttpProbe,
-		private readonly sleep: ISleep,
+		private readonly containers: IDeploymentContainers,
 	) {}
 
 	async deploy(request: DeploymentRequest): Promise<void> {
@@ -27,20 +24,12 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 		const network = await this.docker.inspectServiceNetwork(serviceId);
 		if (!network) throw new Error("Service network is unavailable");
 		await this.networking.withdraw(`${resourceId}.${serviceId}`);
-		const retirements = await Promise.allSettled(
-			current.map(async (container) => {
-				await this.docker.stopServiceContainer(
-					serviceId,
-					container.id,
-					resource.termination?.timeoutSeconds ?? DEFAULT_TERMINATION_TIMEOUT_SEC,
-				);
-				await this.docker.removeServiceContainer(serviceId, container.id);
-			}),
+		await this.containers.retire(
+			serviceId,
+			current.map(({ id }) => id),
+			resource.termination?.timeoutSeconds ?? DEFAULT_TERMINATION_TIMEOUT_SEC,
+			"Container retirement failed",
 		);
-		const failures: unknown[] = retirements.flatMap((result) =>
-			result.status === "rejected" ? [result.reason] : [],
-		);
-		if (failures.length > 0) throw new AggregateError(failures, "Container retirement failed");
 		const containerId = await this.docker.createResourceContainer({
 			serviceId,
 			resourceId,
@@ -62,16 +51,13 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 			endpoint = await this.waitReady(request, containerId, network.name);
 		} catch (error) {
 			// A failed replacement must not look converged on the next observation.
-			try {
-				await this.docker.stopServiceContainer(
-					serviceId,
-					containerId,
-					resource.termination?.timeoutSeconds ?? 30,
-				);
-			} finally {
-				await this.docker.removeServiceContainer(serviceId, containerId);
-			}
-			throw error;
+			return this.containers.cleanupFailed(
+				serviceId,
+				[containerId],
+				resource.termination?.timeoutSeconds ?? DEFAULT_TERMINATION_TIMEOUT_SEC,
+				error,
+				"Replacement startup and cleanup failed",
+			);
 		}
 		// Publication may succeed before confirmation fails. Keep the ready container.
 		await this.networking.routeTo(`${resourceId}.${serviceId}`, endpoint);
@@ -79,31 +65,25 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 
 	private async waitReady(request: DeploymentRequest, containerId: string, networkName: string): Promise<Endpoint> {
 		const { serviceId, resource } = request;
-		let reason = "container is no longer present";
-		for (let attempt = 0; attempt < MAX_STARTUP_PROBE_ATTEMPTS; attempt++) {
-			const container = await this.docker.inspectServiceContainer(serviceId, containerId);
-			const address = container?.networks[networkName]?.address;
-			if (!container) reason = "container is no longer present";
-			else if (!container.running) reason = "container is not running";
-			else if (!address) reason = "container has no address on the service network";
-			else
-				reason = `HTTP health check on port ${resource.ingress.port} at ${resource.healthcheckUrl} did not pass`;
-			if (container?.running && address) {
-				const endpoint: Endpoint = {
-					address,
-					port: resource.ingress.port,
-					healthcheckPath: resource.healthcheckUrl ?? undefined,
-					public: resource.ingress.public ?? false,
-					primary: resource.primary ?? true,
-				};
-				if (
-					!endpoint.healthcheckPath
-					|| (await this.probe(endpoint.address, endpoint.port, endpoint.healthcheckPath))
-				)
-					return endpoint;
-			}
-			if (attempt < 29) await this.sleep(1000);
-		}
-		throw new Error(`Container readiness failed after 30 checks: ${reason}`);
+		const address = await this.containers.waitReady({
+			serviceId,
+			containerId,
+			networkName,
+			failureMessage: "Container readiness failed",
+			healthcheck: resource.healthcheckUrl
+				? {
+						port: resource.ingress.port,
+						path: resource.healthcheckUrl,
+						failureMessage: `HTTP health check on port ${resource.ingress.port} at ${resource.healthcheckUrl} did not pass`,
+					}
+				: undefined,
+		});
+		return {
+			address,
+			port: resource.ingress.port,
+			healthcheckPath: resource.healthcheckUrl ?? undefined,
+			public: resource.ingress.public ?? false,
+			primary: resource.primary ?? true,
+		};
 	}
 }

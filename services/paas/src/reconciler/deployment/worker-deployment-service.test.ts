@@ -3,6 +3,7 @@ import { expect, test, vi } from "vitest";
 import type { IDockerService } from "../../docker/docker-service.ts";
 import type { ServiceContainer } from "../../docker/types.ts";
 import { captureLogs } from "../../util/test/logs.ts";
+import { DeploymentContainers } from "./deployment-containers.ts";
 import type { WorkerDeploymentRequest } from "./types.ts";
 import { WorkerDeploymentService } from "./worker-deployment-service.ts";
 
@@ -61,7 +62,12 @@ test("failed worker rollout clears deploying health", async () => {
 	const f = fixture();
 	const progress = { started: vi.fn(), succeeded: vi.fn(), failed: vi.fn() };
 	vi.mocked(f.docker.resolveImage).mockRejectedValue(new Error("pull failed"));
-	const service = new WorkerDeploymentService(f.docker, f.probe, f.sleep, () => "id", progress);
+	const service = new WorkerDeploymentService(
+		f.docker,
+		new DeploymentContainers(f.docker, f.probe, f.sleep),
+		() => "id",
+		progress,
+	);
 	await expect(service.deploy(request)).rejects.toThrow("pull failed");
 	expect(progress.failed).toHaveBeenCalledWith("demo", "jobs", "rev2");
 });
@@ -145,7 +151,11 @@ const fixture = () => {
 		docker,
 		probe,
 		sleep,
-		service: new WorkerDeploymentService(docker, probe, sleep, () => `instance-${++instance}`),
+		service: new WorkerDeploymentService(
+			docker,
+			new DeploymentContainers(docker, probe, sleep),
+			() => `instance-${++instance}`,
+		),
 		old(id = "old", spec = "previous", state = "running") {
 			containers.set(id, { id, spec, state, resourceId: "jobs", revision: "rev1", imageId: "old-image" });
 		},
@@ -225,6 +235,48 @@ test("failure of the second replica cleans every new candidate", async () => {
 		f.service.deploy({ ...request, resource: { ...request.resource, rolloutStrategy: "surge" } }),
 	).rejects.toThrow("Worker readiness failed");
 	expect([...f.containers.keys()]).toEqual(["old"]);
+});
+
+test.each(["stopServiceContainer", "removeServiceContainer"] as const)(
+	"cleans all failed candidates and preserves startup and cleanup failures: %s",
+	async (method) => {
+		const f = fixture();
+		f.old();
+		const startup = new Error("second start failed");
+		const cleanup = new Error("first cleanup failed");
+		vi.mocked(f.docker.startServiceContainer)
+			.mockImplementationOnce(async (_serviceId, id) => {
+				f.containers.get(id)!.state = "running";
+			})
+			.mockRejectedValueOnce(startup);
+		vi.mocked(f.docker[method]).mockRejectedValueOnce(cleanup);
+		await expect(
+			f.service.deploy({ ...request, resource: { ...request.resource, rolloutStrategy: "surge" } }),
+		).rejects.toMatchObject({
+			message: "Worker startup and cleanup failed",
+			errors: [startup, expect.objectContaining({ errors: [cleanup] })],
+		});
+		expect(f.docker.stopServiceContainer).toHaveBeenCalledWith("demo", "new-2", 60);
+		expect(f.docker.removeServiceContainer).toHaveBeenCalledWith("demo", "new-2");
+		expect(f.docker.stopServiceContainer).not.toHaveBeenCalledWith("demo", "old", expect.anything());
+	},
+);
+
+test("allows thirty readiness checks separately for each replica", async () => {
+	const f = fixture();
+	const attempts = new Map<string, number>();
+	f.probe.mockImplementation(async (address) => {
+		const attempt = (attempts.get(address) ?? 0) + 1;
+		attempts.set(address, attempt);
+		return attempt === 30;
+	});
+	await f.service.deploy(request);
+	expect([...attempts.entries()]).toEqual([
+		["new-1", 30],
+		["new-2", 30],
+	]);
+	expect(f.sleep).toHaveBeenCalledTimes(58);
+	expect(f.sleep).toHaveBeenCalledWith(1000);
 });
 
 test("surge resumes ready desired replicas after interrupted predecessor retirement", async () => {
