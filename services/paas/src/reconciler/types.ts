@@ -1,7 +1,6 @@
 import type { ServiceDescriptor, StaticResource } from "@homelab-paas/shared-contracts";
 
-import type { DeploymentWebResource } from "./deployment/strategy/types.ts";
-import type { DeploymentWorkerResource } from "./deployment/types.ts";
+import type { DeploymentWebResource, DeploymentWorkerResource } from "./deployment/types.ts";
 
 /** Internal only: contains resolved secrets. Never persist or send to logs/status. */
 export interface DesiredService {

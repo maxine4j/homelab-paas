@@ -4,7 +4,7 @@ import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { DockerContainerDetails, ServiceContainer } from "../../../docker/types.ts";
 import { captureLogs } from "../../../util/test/logs.ts";
 import type { IDeploymentService } from "../../deployment/deployment-service.ts";
-import type { DeploymentRequest, DeploymentWebResource } from "../../deployment/strategy/types.ts";
+import type { DeploymentWebResource, WorkloadDeploymentRequest } from "../../deployment/types.ts";
 import { ResourceRoutingPolicy } from "../../networking/resource-routing-policy.ts";
 import { ResourceSpecification } from "../../resource-specification.ts";
 import { WebResourceReconciler } from "./web-reconciler.ts";
@@ -135,7 +135,7 @@ test("logs drift with an action and stays silent once converged", async () => {
 });
 
 function fixture() {
-	const requests: DeploymentRequest[] = [];
+	const requests: WorkloadDeploymentRequest[] = [];
 	const queries: unknown[] = [];
 	let containers: ServiceContainer[] = [];
 	const routes: unknown[] = [];

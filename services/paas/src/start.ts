@@ -56,7 +56,7 @@ import { DeploymentContainers } from "./reconciler/deployment/deployment-contain
 import { DeploymentService } from "./reconciler/deployment/deployment-service.ts";
 import { RecreateDeploymentStrategy } from "./reconciler/deployment/strategy/recreate-deployment-strategy.ts";
 import { SurgeDeploymentStrategy } from "./reconciler/deployment/strategy/surge-deployment-strategy.ts";
-import { WorkerDeploymentService } from "./reconciler/deployment/worker-deployment-service.ts";
+import { WorkerDeploymentStrategy } from "./reconciler/deployment/strategy/worker-deployment-strategy.ts";
 import { DesiredInputs } from "./reconciler/desired-inputs.ts";
 import { DriftAudit } from "./reconciler/drift-audit.ts";
 import { EnvironmentResolver } from "./reconciler/environment-resolver.ts";
@@ -164,6 +164,16 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		[
 			new RecreateDeploymentStrategy(routing, docker, networking, deploymentContainers),
 			new SurgeDeploymentStrategy(routing, docker, networking, deploymentContainers, () => nanoid(10)),
+			...(["recreate", "surge"] as const).map(
+				(name) =>
+					new WorkerDeploymentStrategy(
+						name,
+						docker,
+						deploymentContainers,
+						() => nanoid(10),
+						new ResourceSpecification(),
+					),
+			),
 		],
 		progress,
 	);
@@ -179,18 +189,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		new WebResourceReconciler(routing, new ResourceSpecification(), docker, deployment, networking, probe),
 		store,
 		Date.now,
-		new WorkerResourceReconciler(
-			new ResourceSpecification(),
-			docker,
-			new WorkerDeploymentService(
-				docker,
-				deploymentContainers,
-				() => nanoid(10),
-				new ResourceSpecification(),
-				progress,
-			),
-			probe,
-		),
+		new WorkerResourceReconciler(new ResourceSpecification(), docker, deployment, probe),
 		events,
 		new EventDiagnostics(config),
 		changes,

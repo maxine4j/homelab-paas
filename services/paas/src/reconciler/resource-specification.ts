@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { DockerContainerDetails, DockerNetwork } from "../docker/types.ts";
-import type { DeploymentWebResource } from "./deployment/strategy/types.ts";
-import type { DeploymentWorkerResource } from "./deployment/types.ts";
+import type { DeploymentWebResource, DeploymentWorkerResource } from "./deployment/types.ts";
 
 export interface IResourceSpecification {
 	/** Hashes resolved deployment configuration; revision and runtime health are excluded. */

@@ -1,12 +1,13 @@
 import { expect, test, vi } from "vitest";
 
-import type { IDockerService } from "../../docker/docker-service.ts";
-import type { ServiceContainer } from "../../docker/types.ts";
-import { captureLogs } from "../../util/test/logs.ts";
-import { ResourceSpecification } from "../resource-specification.ts";
-import { DeploymentContainers } from "./deployment-containers.ts";
-import type { WorkerDeploymentRequest } from "./types.ts";
-import { WorkerDeploymentService } from "./worker-deployment-service.ts";
+import type { IDockerService } from "../../../docker/docker-service.ts";
+import type { ServiceContainer } from "../../../docker/types.ts";
+import { captureLogs } from "../../../util/test/logs.ts";
+import { ResourceSpecification } from "../../resource-specification.ts";
+import { DeploymentContainers } from "../deployment-containers.ts";
+import { DeploymentService } from "../deployment-service.ts";
+import type { WorkerDeploymentRequest } from "../types.ts";
+import { WorkerDeploymentStrategy } from "./worker-deployment-strategy.ts";
 
 const request: WorkerDeploymentRequest = {
 	serviceId: "demo",
@@ -79,11 +80,16 @@ test("failed worker rollout clears deploying health", async () => {
 	const f = fixture();
 	const progress = { started: vi.fn(), succeeded: vi.fn(), failed: vi.fn() };
 	vi.mocked(f.docker.resolveImage).mockRejectedValue(new Error("pull failed"));
-	const service = new WorkerDeploymentService(
-		f.docker,
-		new DeploymentContainers(f.docker, f.probe, f.sleep),
-		() => "id",
-		new ResourceSpecification(),
+	const service = new DeploymentService(
+		[
+			new WorkerDeploymentStrategy(
+				"recreate",
+				f.docker,
+				new DeploymentContainers(f.docker, f.probe, f.sleep),
+				() => "id",
+				new ResourceSpecification(),
+			),
+		],
 		progress,
 	);
 	await expect(service.deploy(request)).rejects.toThrow("pull failed");
@@ -170,11 +176,17 @@ const fixture = () => {
 		docker,
 		probe,
 		sleep,
-		service: new WorkerDeploymentService(
-			docker,
-			new DeploymentContainers(docker, probe, sleep),
-			() => `instance-${++instance}`,
-			new ResourceSpecification(),
+		service: new DeploymentService(
+			(["recreate", "surge"] as const).map(
+				(name) =>
+					new WorkerDeploymentStrategy(
+						name,
+						docker,
+						new DeploymentContainers(docker, probe, sleep),
+						() => "instance-" + ++instance,
+						new ResourceSpecification(),
+					),
+			),
 		),
 		old(id = "old", spec = "previous", state = "running") {
 			containers.set(id, { id, spec, state, resourceId: "jobs", revision: "rev1", imageId: "old-image" });

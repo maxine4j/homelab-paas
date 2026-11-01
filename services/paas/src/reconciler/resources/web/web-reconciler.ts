@@ -2,7 +2,7 @@ import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { HttpProbe } from "../../../util/healthcheck.ts";
 import { createLogger } from "../../../util/logger.ts";
 import type { IDeploymentService } from "../../deployment/deployment-service.ts";
-import type { DeploymentWebResource } from "../../deployment/strategy/types.ts";
+import type { DeploymentWebResource } from "../../deployment/types.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
 import type { IResourceRoutingPolicy } from "../../networking/resource-routing-policy.ts";
 import type { IResourceSpecification } from "../../resource-specification.ts";

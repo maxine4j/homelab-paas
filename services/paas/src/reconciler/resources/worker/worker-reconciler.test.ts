@@ -3,8 +3,8 @@ import { expect, test, vi } from "vitest";
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { ServiceContainer } from "../../../docker/types.ts";
 import { captureLogs } from "../../../util/test/logs.ts";
+import type { IDeploymentService } from "../../deployment/deployment-service.ts";
 import type { DeploymentWorkerResource } from "../../deployment/types.ts";
-import type { IWorkerDeploymentService } from "../../deployment/worker-deployment-service.ts";
 import { ResourceSpecification } from "../../resource-specification.ts";
 import { WorkerResourceReconciler } from "./worker-reconciler.ts";
 
@@ -97,7 +97,7 @@ test("device paths, access and supplementary groups affect replacement while omi
 
 const fixture = () => {
 	let containers: ServiceContainer[] = [];
-	const deploy = vi.fn<IWorkerDeploymentService["deploy"]>(async () => {});
+	const deploy = vi.fn<IDeploymentService["deploy"]>(async () => {});
 	const probe = vi.fn(async () => true);
 	const docker: IDockerService = {
 		listServiceContainers: vi.fn(async () => containers),

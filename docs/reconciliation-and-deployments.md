@@ -137,6 +137,8 @@ PostgreSQL and RabbitMQ always use recreate deployment.
 
 Surge requires sufficient spare capacity and an application that tolerates overlapping instances. For workers, this includes tolerating concurrent execution across revisions.
 
+One `DeploymentService` dispatches web and worker rollouts by resource type and configured strategy, and owns deployment progress and outcome logging. Web recreate/surge strategies own route withdrawal and acceptance; the worker strategy owns replica retention, replacement and retirement without routing. Both use `DeploymentContainers` for candidate creation, readiness and cleanup. Reconcilers own drift detection and retry scheduling.
+
 `SurgeDeploymentStrategy` implements one web replacement and is registered alongside recreate at startup. It uses a unique instance suffix on the container name so even identical resource specifications can overlap; identity labels remain authoritative. The strategy sleeps one second between unsuccessful readiness checks while keeping the previous containers active. Startup or readiness failures remove only the replacement. An uncertain route-publication outcome retains both revisions. After the [networking service](networking-and-auth.md#networking) confirms route acceptance, the strategy gracefully stops the previous containers with the full termination timeout and removes them. There is no separate drain delay or active-request inspection. Retirement failures are reported without removing the newly routed replacement. Recreate also retains its ready replacement after uncertain publication and aborts replacement creation if retiring existing containers fails.
 
 ### Web rollout sequence

@@ -1,6 +1,17 @@
-import type { WorkerResource } from "@homelab-paas/shared-contracts";
+import type { WebResource, WorkerResource } from "@homelab-paas/shared-contracts";
 
-import type { DeploymentWebResource } from "./strategy/types.ts";
+/** Environment references must be resolved and validated before invoking deployment adapters. */
+export type DeploymentWebResource = Omit<WebResource, "env"> & {
+	env?: { name: string; value: string }[];
+};
+
+export interface DeploymentRequest {
+	serviceId: string;
+	resourceId: string;
+	revision: string;
+	spec: string;
+	resource: DeploymentWebResource;
+}
 
 /** Image, environment and network identities are resolved before candidate creation. */
 export interface ResolvedCandidate {
@@ -39,3 +50,5 @@ export interface WorkerDeploymentRequest {
 	spec: string;
 	resource: DeploymentWorkerResource;
 }
+
+export type WorkloadDeploymentRequest = DeploymentRequest | WorkerDeploymentRequest;

@@ -1,22 +1,12 @@
-import type { WebResource } from "@homelab-paas/shared-contracts";
+import type { DeploymentRequest, WorkerDeploymentRequest } from "../types.ts";
 
-/** Environment references must be resolved and validated before invoking deployment adapters. */
-export type DeploymentWebResource = Omit<WebResource, "env"> & {
-	env?: { name: string; value: string }[];
-};
-
-export interface DeploymentRequest {
-	serviceId: string;
-	resourceId: string;
-	revision: string;
-	spec: string;
-	resource: DeploymentWebResource;
-}
-
-/** A complete rollout. Resolves only after the replacement is ready and routed.
+/** A complete rollout. Web replacements must also have their route accepted.
  * Failures propagate to the caller, which owns retry scheduling and status.
  */
-export interface DeploymentStrategy {
+export interface DeploymentStrategy<T extends DeploymentRequest | WorkerDeploymentRequest = DeploymentRequest> {
+	readonly resourceType: T["resource"]["type"];
 	readonly name: "recreate" | "surge" | "eternal";
-	deploy(request: DeploymentRequest): Promise<void>;
+	deploy(request: T): Promise<void>;
 }
+
+export type RegisteredDeploymentStrategy = DeploymentStrategy | DeploymentStrategy<WorkerDeploymentRequest>;

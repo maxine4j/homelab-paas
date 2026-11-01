@@ -5,8 +5,8 @@ import type { DockerContainerDetails, ServiceContainer } from "../../../docker/t
 import type { INetworkingService } from "../../networking/networking-service.ts";
 import { ResourceRoutingPolicy } from "../../networking/resource-routing-policy.ts";
 import { DeploymentContainers } from "../deployment-containers.ts";
+import type { DeploymentRequest } from "../types.ts";
 import { SurgeDeploymentStrategy } from "./surge-deployment-strategy.ts";
-import type { DeploymentRequest } from "./types.ts";
 
 const request: DeploymentRequest = {
 	serviceId: "demo",

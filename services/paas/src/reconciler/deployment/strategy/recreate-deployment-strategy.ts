@@ -2,12 +2,14 @@ import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
 import type { IResourceRoutingPolicy } from "../../networking/resource-routing-policy.ts";
 import type { IDeploymentContainers } from "../deployment-containers.ts";
-import type { DeploymentRequest, DeploymentStrategy } from "./types.ts";
+import type { DeploymentRequest } from "../types.ts";
+import type { DeploymentStrategy } from "./types.ts";
 
 const DEFAULT_TERMINATION_TIMEOUT_SEC = 30;
 
 /** Recreate owns replacement sequencing; callers own serialization and retries. */
 export class RecreateDeploymentStrategy implements DeploymentStrategy {
+	readonly resourceType = "web";
 	readonly name = "recreate";
 
 	constructor(

@@ -1,7 +1,6 @@
 import { expect, test } from "vitest";
 
-import type { DeploymentWebResource } from "./deployment/strategy/types.ts";
-import type { DeploymentWorkerResource } from "./deployment/types.ts";
+import type { DeploymentWebResource, DeploymentWorkerResource } from "./deployment/types.ts";
 import { ResourceSpecification } from "./resource-specification.ts";
 
 const specification = new ResourceSpecification();

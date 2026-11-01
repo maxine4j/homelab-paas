@@ -24,7 +24,7 @@ import { DeploymentContainers } from "../../src/reconciler/deployment/deployment
 import { DeploymentService } from "../../src/reconciler/deployment/deployment-service.ts";
 import { RecreateDeploymentStrategy } from "../../src/reconciler/deployment/strategy/recreate-deployment-strategy.ts";
 import { SurgeDeploymentStrategy } from "../../src/reconciler/deployment/strategy/surge-deployment-strategy.ts";
-import { WorkerDeploymentService } from "../../src/reconciler/deployment/worker-deployment-service.ts";
+import { WorkerDeploymentStrategy } from "../../src/reconciler/deployment/strategy/worker-deployment-strategy.ts";
 import { DesiredInputs } from "../../src/reconciler/desired-inputs.ts";
 import { DriftAudit } from "../../src/reconciler/drift-audit.ts";
 import { EnvironmentResolver } from "../../src/reconciler/environment-resolver.ts";
@@ -105,6 +105,16 @@ export const inProcessPaas = async (
 	const deployments = new DeploymentService([
 		new RecreateDeploymentStrategy(routing, docker, networking, deploymentContainers),
 		new SurgeDeploymentStrategy(routing, docker, networking, deploymentContainers, generateInstanceId),
+		...(["recreate", "surge"] as const).map(
+			(name) =>
+				new WorkerDeploymentStrategy(
+					name,
+					docker,
+					deploymentContainers,
+					generateInstanceId,
+					new ResourceSpecification(),
+				),
+		),
 	]);
 	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${directory}/git`);
 	const staticStore = new StaticStore(`${directory}/static`, staticFiles);
@@ -121,12 +131,7 @@ export const inProcessPaas = async (
 		new WebResourceReconciler(routing, new ResourceSpecification(), docker, deployments, networking, probe),
 		checkpoints,
 		now,
-		new WorkerResourceReconciler(
-			new ResourceSpecification(),
-			docker,
-			new WorkerDeploymentService(docker, deploymentContainers, generateInstanceId, new ResourceSpecification()),
-			probe,
-		),
+		new WorkerResourceReconciler(new ResourceSpecification(), docker, deployments, probe),
 		events,
 		new EventDiagnostics(config),
 		changes,

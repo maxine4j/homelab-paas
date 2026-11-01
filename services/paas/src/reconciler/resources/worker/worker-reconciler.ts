@@ -1,7 +1,7 @@
 import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { HttpProbe } from "../../../util/healthcheck.ts";
 import { createLogger } from "../../../util/logger.ts";
-import type { IWorkerDeploymentService } from "../../deployment/worker-deployment-service.ts";
+import type { IDeploymentService } from "../../deployment/deployment-service.ts";
 import type { IResourceSpecification } from "../../resource-specification.ts";
 import type { WorkerReconciliationRequest } from "./types.ts";
 
@@ -20,7 +20,7 @@ export class WorkerResourceReconciler implements IWorkerResourceReconciler {
 	constructor(
 		private readonly specification: IResourceSpecification,
 		private readonly docker: IDockerService,
-		private readonly deployment: IWorkerDeploymentService,
+		private readonly deployment: IDeploymentService,
 		private readonly probe: HttpProbe,
 	) {}
 

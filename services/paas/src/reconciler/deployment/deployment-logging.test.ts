@@ -8,6 +8,7 @@ test("records deployment action, completion and full failure with resource ident
 	let fail = false;
 	const deployment = new DeploymentService([
 		{
+			resourceType: "web",
 			name: "recreate",
 			async deploy() {
 				if (fail) throw new Error("SECRET");

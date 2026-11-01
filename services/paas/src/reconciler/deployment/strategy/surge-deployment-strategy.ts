@@ -2,13 +2,15 @@ import type { IDockerService } from "../../../docker/docker-service.ts";
 import type { INetworkingService } from "../../networking/networking-service.ts";
 import type { IResourceRoutingPolicy } from "../../networking/resource-routing-policy.ts";
 import type { IDeploymentContainers } from "../deployment-containers.ts";
-import type { DeploymentRequest, DeploymentStrategy } from "./types.ts";
+import type { DeploymentRequest } from "../types.ts";
+import type { DeploymentStrategy } from "./types.ts";
 
 /** Keeps the old revision until the replacement is ready and its route accepted.
  * Callers serialize deployments and schedule retries. Retirement failures retain
  * the routed replacement; old containers receive their full graceful-stop timeout.
  */
 export class SurgeDeploymentStrategy implements DeploymentStrategy {
+	readonly resourceType = "web";
 	readonly name = "surge";
 
 	constructor(
