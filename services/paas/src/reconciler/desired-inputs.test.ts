@@ -5,6 +5,33 @@ import { testConfig } from "../util/test/config.ts";
 import { DesiredInputs } from "./desired-inputs.ts";
 import { ResourceRoutingPolicy } from "./networking/resource-routing-policy.ts";
 
+test("re-expands domain environment values after a base domain reload without a new commit", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "rev",
+		content: JSON.stringify({
+			version: 1,
+			metadata: { serviceId: "demo" },
+			resources: {
+				app: {
+					type: "web",
+					image: "app:1",
+					ingress: { port: 80, public: true },
+					env: [{ name: "URL", value: "https://${SERVICE_DOMAIN}/" }],
+				},
+			},
+		}),
+	});
+	expect((await f.inputs.read("demo")).resources.at(0)?.[1]).toMatchObject({
+		env: [{ name: "URL", value: "https://demo.example.test/" }],
+	});
+	f.config.getIngressConfig = () => ({ baseDomain: "new.test", httpPort: 80, httpsPort: 443 });
+	expect(await f.inputs.refresh("demo")).toBe(true);
+	expect((await f.inputs.read("demo")).resources.at(0)?.[1]).toMatchObject({
+		env: [{ name: "URL", value: "https://demo.new.test/" }],
+	});
+});
+
 const fixture = () => {
 	const sources = { demo: { remote: "local", descriptorPath: "/repo/demo.yaml", accessToken: "one" } };
 	const config = testConfig({ services: sources });

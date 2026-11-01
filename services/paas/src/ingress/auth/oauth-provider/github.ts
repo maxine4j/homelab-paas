@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { IPaasConfig } from "../../../config/paas-config.ts";
+import { authenticatedUserSchema } from "../identity.ts";
 import type { AuthedUserDetails } from "../types.ts";
 import type { GitHubEndpoints, Oauth2Provider } from "./types.ts";
 export class GitHubOauth2Provider implements Oauth2Provider {
@@ -11,6 +12,7 @@ export class GitHubOauth2Provider implements Oauth2Provider {
 			authorization: "https://github.com/login/oauth/authorize",
 			token: "https://github.com/login/oauth/access_token",
 			profile: "https://api.github.com/user",
+			emails: "https://api.github.com/user/emails",
 		},
 	) {}
 	getLoginUrl(state: string, callbackUrl: string): string {
@@ -19,6 +21,7 @@ export class GitHubOauth2Provider implements Oauth2Provider {
 			client_id: this.config.getAuthConfig()!.github.clientId,
 			redirect_uri: callbackUrl,
 			state,
+			scope: "user:email",
 		}).toString();
 		return url.href;
 	}
@@ -57,7 +60,31 @@ export class GitHubOauth2Provider implements Oauth2Provider {
 			});
 			if (!response.ok)
 				throw new Error(`GitHub profile lookup failed: HTTP ${response.status}: ${await response.text()}`);
-			return { userId: z.object({ login: z.string().min(1) }).parse(await response.json()).login };
+			const profile = z
+				.object({ login: z.string().min(1), name: z.string().nullish() })
+				.parse(await response.json());
+			const emailsResponse = await this.request(this.endpoints.emails, {
+				headers: {
+					Accept: "application/vnd.github+json",
+					Authorization: `Bearer ${token}`,
+					"X-GitHub-Api-Version": "2022-11-28",
+					"User-Agent": "homelab-paas",
+				},
+				signal: AbortSignal.timeout(10_000),
+			});
+			if (!emailsResponse.ok)
+				throw new Error(
+					`GitHub email lookup failed: HTTP ${emailsResponse.status}: ${await emailsResponse.text()}`,
+				);
+			const emails = z
+				.array(z.object({ email: z.string().email(), primary: z.boolean(), verified: z.boolean() }))
+				.parse(await emailsResponse.json());
+			const email = emails.find((entry) => entry.primary && entry.verified)?.email;
+			return authenticatedUserSchema.parse({
+				userId: profile.login,
+				...(profile.name ? { name: profile.name } : {}),
+				...(email ? { email } : {}),
+			});
 		} catch (cause) {
 			throw new Error("GitHub authentication unavailable", { cause });
 		}

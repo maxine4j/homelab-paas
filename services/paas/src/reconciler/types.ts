@@ -45,9 +45,10 @@ export interface IReconciliationStateStore {
 	write(serviceId: string, state: ReconciliationState): Promise<void>;
 }
 
-/** Resolves image tags at the source revision and rejects invalid descriptors with a sanitized error.
- * Revision is required when image variables are present; runtime capabilities are checked separately.
+/** Resolves image tags at the source revision and literal environment domain templates.
+ * Revision/baseDomain are required for their respective templates; errors are sanitized.
+ * Runtime capabilities are checked separately.
  */
 export interface DescriptorDecoder {
-	(content: string, serviceId: string, revision?: string): ServiceDescriptor;
+	(content: string, serviceId: string, revision?: string, baseDomain?: string): ServiceDescriptor;
 }

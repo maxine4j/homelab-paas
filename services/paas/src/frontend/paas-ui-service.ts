@@ -384,7 +384,15 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 	): Promise<{ revision: string; descriptor: ServiceDescriptor } | undefined> {
 		try {
 			const file = await this.git.fetchFile(serviceId, this.config.getServices()[serviceId]!);
-			return { revision: file.revision, descriptor: this.decode(file.content, serviceId, file.revision) };
+			return {
+				revision: file.revision,
+				descriptor: this.decode(
+					file.content,
+					serviceId,
+					file.revision,
+					this.config.getIngressConfig().baseDomain,
+				),
+			};
 		} catch (err) {
 			this.log.error({ err, serviceId }, "Cannot load management UI descriptor");
 			return undefined;

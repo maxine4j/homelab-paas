@@ -101,7 +101,15 @@ export const createAuthRouter = (auth: IAuthService, config: IPaasConfig) => {
 								.filter((part) => ![sessionCookie, stateCookie].includes(part.split("=").at(0) ?? ""))
 								.join("; "),
 				);
+				if (typeof decision === "object") {
+					ctx.set("X-WEBAUTH-USER", decision.userId);
+					if (decision.email) ctx.set("X-WEBAUTH-EMAIL", decision.email);
+					if (decision.name)
+						ctx.set("X-WEBAUTH-FULLNAME", Buffer.from(decision.name, "utf8").toString("latin1"));
+				}
 				fields.authReason = "allowed";
+				// A byte body preserves raw UTF-8 header bytes when Node serializes the response.
+				ctx.body = Buffer.alloc(0);
 				ctx.status = 200;
 			} catch (err) {
 				fields.authReason = "authorization-error";

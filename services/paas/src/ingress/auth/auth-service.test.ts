@@ -7,6 +7,17 @@ import { JwtClient } from "./jwt-client.ts";
 
 const session = { issuer: "paas", audience: "paas", signingKey: "a".repeat(32), ttlSeconds: 3600 };
 
+test("retains identity only for authenticated private workloads", async () => {
+	const f = fixture();
+	const user = { userId: "alice", email: "alice@example.test", name: "Alice Smith" };
+	f.provider.fetchUserDetails.mockResolvedValue(user);
+	const login = f.service.beginLogin("https://private.example.test/");
+	const result = await f.service.completeLogin("code", login.state, "random-nonce");
+	expect(f.service.verifyAuthCookie(result.session)).toEqual(user);
+	expect(await f.service.authorize("private", result.session)).toEqual(user);
+	expect(await f.service.authorize("public", result.session)).toBe("allowed");
+});
+
 test("uses each resource's policy and the primary policy for the service alias", async () => {
 	const f = fixture();
 	f.getAll.mockResolvedValue({
@@ -121,7 +132,7 @@ test("authorizes public and private routed services locally, and denies unknown 
 	expect(await f.service.authorize("missing", undefined)).toBe("missing");
 	const login = f.service.beginLogin("https://private.example.test/");
 	const { session } = await f.service.completeLogin("code", login.state, "random-nonce");
-	expect(await f.service.authorize("private", session)).toBe("allowed");
+	expect(await f.service.authorize("private", session)).toEqual({ userId: "alice" });
 	f.getAll.mockRejectedValue(new Error("unavailable"));
 	await expect(f.service.authorize("public", session)).rejects.toThrow();
 	expect(f.provider.fetchUserDetails).toHaveBeenCalledTimes(1);

@@ -100,7 +100,12 @@ export class DesiredInputs implements IDesiredInputs {
 			let desired = this.descriptors.get(serviceId);
 			if (desired?.identity !== identity) {
 				stage = "descriptor";
-				const descriptor = this.decode(file.content, serviceId, file.revision);
+				const descriptor = this.decode(
+					file.content,
+					serviceId,
+					file.revision,
+					this.config.getIngressConfig().baseDomain,
+				);
 				stage = "capabilities";
 				desired = { identity, resources: this.resources(descriptor) };
 				this.descriptors.set(serviceId, desired);

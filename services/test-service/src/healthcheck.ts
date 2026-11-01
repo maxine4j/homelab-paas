@@ -14,6 +14,13 @@ export const createHealthCheckRouter = (options = { ready: true, version: "dev" 
 		.get("/version", (ctx) => {
 			ctx.body = { version: options.version };
 		})
+		.get("/identity", (ctx) => {
+			ctx.body = {
+				user: ctx.get("x-webauth-user"),
+				email: ctx.get("x-webauth-email"),
+				name: ctx.get("x-webauth-fullname"),
+			};
+		})
 		.get("/inspect", (ctx) => {
 			ctx.body = { version: options.version, cookie: ctx.get("cookie") };
 		});

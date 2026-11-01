@@ -77,6 +77,7 @@ test("real OAuth composition enforces state, provider protocol, allowlist and co
 			["GET", "/authorize"],
 			["POST", "/token"],
 			["GET", "/user"],
+			["GET", "/user/emails"],
 		]);
 		expect(JSON.parse(github.server.requests.at(1)!.body)).toEqual({
 			client_id: "test-client",
@@ -91,6 +92,12 @@ test("real OAuth composition enforces state, provider protocol, allowlist and co
 		);
 		expect(allowed.status).toBe(200);
 		expect(allowed.headers.get("cookie")).toBe("app=yes");
+		expect(allowed.headers.get("x-webauth-user")).toBe("Alice");
+		expect(allowed.headers.get("x-webauth-email")).toBe("alice@example.test");
+		expect(allowed.headers.get("x-webauth-fullname")).toBe("Alice Smith");
+		const publicResponse = await request("/auth/check/", "other.example.test", session);
+		for (const header of ["x-webauth-user", "x-webauth-email", "x-webauth-fullname"])
+			expect(publicResponse.headers.get(header)).toBeNull();
 		expect((await request("/auth/check/", "example.test", session)).headers.get("cookie")).toBe(session);
 		for (const cookie of [
 			"",

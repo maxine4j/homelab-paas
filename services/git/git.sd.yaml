@@ -21,6 +21,23 @@ resources:
               value: "1000"
             - name: FORGEJO__server__SSH_PORT
               value: "2222"
+            - name: FORGEJO__server__ROOT_URL
+              value: https://${SERVICE_DOMAIN}/
+            - name: FORGEJO__server__DOMAIN
+              value: ${SERVICE_DOMAIN}
+            - name: FORGEJO__server__SSH_DOMAIN
+              value: ${SERVICE_DOMAIN}
+            - name: FORGEJO__service__ENABLE_REVERSE_PROXY_AUTHENTICATION
+              value: "true"
+            - name: FORGEJO__service__ENABLE_REVERSE_PROXY_AUTO_REGISTRATION
+              value: "true"
+            - name: FORGEJO__service__ENABLE_REVERSE_PROXY_EMAIL
+              value: "true"
+            - name: FORGEJO__service__ENABLE_REVERSE_PROXY_FULL_NAME
+              value: "true"
+            # Envoy reaches Forgejo over a private Docker IPv4 network.
+            - name: FORGEJO__security__REVERSE_PROXY_TRUSTED_PROXIES
+              value: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
         volumes:
             - hostPath: forgejo
               mountPath: /data

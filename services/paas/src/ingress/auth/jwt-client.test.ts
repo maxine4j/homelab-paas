@@ -4,6 +4,14 @@ import { expect, test } from "vitest";
 import { testConfig } from "../../util/test/config.ts";
 import { JwtClient } from "./jwt-client.ts";
 
+test("preserves authenticated identity and rejects unsafe header values", () => {
+	const client = new JwtClient(testConfig(), () => 10_000);
+	const user = { userId: "alice", name: "Alice Smith", email: "alice@example.test" };
+	expect(client.verify(client.issue(user, "session"), "session")).toEqual(user);
+	for (const change of [{ name: "Alice\r\nX-Injected: yes" }, { email: "invalid" }, { userId: "alice\n" }])
+		expect(client.verify(client.issue({ ...user, ...change }, "session"), "session")).toBeUndefined();
+});
+
 test("validates algorithm, issuer, audience, expiration, purpose and user payload", () => {
 	const config = { issuer: "issuer", audience: "audience", signingKey: "a".repeat(32), ttlSeconds: 60 };
 	const client = new JwtClient(

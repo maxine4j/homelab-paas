@@ -5,6 +5,59 @@ import { EnvoyService } from "./envoy-service.ts";
 import { EnvoyClientError, type EnvoyConfiguration } from "./types.ts";
 
 test.each([undefined, 443])(
+	"strips supplied identity before authorization on every listener, TLS %s",
+	async (httpsPort) => {
+		let configuration: EnvoyConfiguration | undefined;
+		await new EnvoyService(
+			{
+				bootstrap: async () => {},
+				apply: async (value) => {
+					configuration = value;
+				},
+			},
+			testConfig({ ingress: { baseDomain: "example.test", httpPort: 80, httpsPort } }),
+		).configureRoutes({});
+		const listeners: {
+			filter_chains: {
+				filters: { typed_config: { http_filters: { name: string; typed_config: unknown }[] } }[];
+			}[];
+		}[] = JSON.parse(JSON.stringify(configuration!.listeners));
+		for (const listener of listeners)
+			for (const chain of listener.filter_chains)
+				for (const filter of chain.filters) {
+					const filters = filter.typed_config.http_filters;
+					expect(filters.at(0)).toMatchObject({
+						name: "envoy.filters.http.header_mutation",
+						typed_config: {
+							mutations: {
+								request_mutations: [
+									{ remove: "x-webauth-user" },
+									{ remove: "x-webauth-email" },
+									{ remove: "x-webauth-fullname" },
+								],
+							},
+						},
+					});
+					const auth = filters.find((entry) => entry.name === "envoy.filters.http.ext_authz");
+					if (auth)
+						expect(auth.typed_config).toMatchObject({
+							http_service: {
+								authorization_response: {
+									allowed_upstream_headers: {
+										patterns: expect.arrayContaining([
+											{ exact: "x-webauth-user" },
+											{ exact: "x-webauth-email" },
+											{ exact: "x-webauth-fullname" },
+										]),
+									},
+								},
+							},
+						});
+				}
+	},
+);
+
+test.each([undefined, 443])(
 	"all ingress listeners emit structured access logs without queries or credentials (HTTPS %s)",
 	async (httpsPort) => {
 		let configuration: EnvoyConfiguration | undefined;
@@ -131,9 +184,9 @@ test.each([undefined, 443])(
 		);
 		expect(text).toContain('"upgrade_type":"websocket","enabled":false');
 		if (httpsPort) {
-			expect(text).toContain('"http_filters":[{"name":"envoy.filters.http.ext_authz"');
+			expect(text).toContain('"name":"envoy.filters.http.ext_authz"');
 			expect(text).toContain('"failure_mode_allow":false');
-			expect(text).toContain('"allowed_upstream_headers":{"patterns":[{"exact":"cookie"},{"exact":"location"}]}');
+			expect(text).toContain('"allowed_upstream_headers":{"patterns":[{"exact":"cookie"},{"exact":"location"},');
 		}
 	},
 );
@@ -283,7 +336,7 @@ test("secures external traffic with SDS, fail-closed authorization and isolated 
 	expect(text).toContain("/var/homelab-paas/_paas/envoy/sds.yaml");
 	expect(text).toContain('"failure_mode_allow":false');
 	expect(text).toContain('"path_prefix":"/auth/check"');
-	expect(text).toContain('"allowed_upstream_headers":{"patterns":[{"exact":"cookie"},{"exact":"location"}]}');
+	expect(text).toContain('"allowed_upstream_headers":{"patterns":[{"exact":"cookie"},{"exact":"location"},');
 	expect(text).toContain('"name":"management","domains":["apps.example.com","apps.example.com:*"]');
 	expect(text).toContain('"match":{"prefix":"/"},"route":{"cluster":"paas"}');
 	expect(text).toContain('"match":{"prefix":"/auth/"},"direct_response":{"status":404}');

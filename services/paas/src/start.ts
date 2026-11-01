@@ -75,6 +75,7 @@ import { StaticResourceReconciler } from "./reconciler/resources/static/static-r
 import { WebResourceReconciler } from "./reconciler/resources/web/web-reconciler.ts";
 import { WorkerResourceReconciler } from "./reconciler/resources/worker/worker-reconciler.ts";
 import { ServiceEventStore } from "./reconciler/service-event-store.ts";
+import type { DescriptorDecoder } from "./reconciler/types.ts";
 import { createStaticRouter } from "./static/static-router.ts";
 import { StaticService } from "./static/static-service.ts";
 import { StaticStore } from "./static/static-store.ts";
@@ -97,6 +98,8 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const changes = new ChangeBus();
 	const config = new PaasConfig(new FileConfigStore(readFile, atomicWriteFile), process.env, changes);
 	await config.load();
+	const decodeDescriptor: DescriptorDecoder = (content, serviceId, revision) =>
+		decodeDescriptorYaml(content, serviceId, revision, config.getIngressConfig().baseDomain);
 	const storage = new InternalStorage("/var/homelab-paas", staticFiles);
 	await storage.initialize();
 	let serviceSnapshots: IPaasUiService["listServices"] = async () => [];
@@ -146,12 +149,12 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const routing = new ResourceRoutingPolicy();
 	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/git`, storage);
 	const staticStore = new StaticStore(`${STATE_DIRECTORY}/static`, staticFiles, storage);
-	const internalCleanup = new InternalCleanup(config, git, decodeDescriptorYaml, networking, storage, Date.now);
+	const internalCleanup = new InternalCleanup(config, git, decodeDescriptor, networking, storage, Date.now);
 	const observations = new RuntimeObservations(docker, Date.now);
 	const health = new ResourceHealthService(
 		config,
 		git,
-		decodeDescriptorYaml,
+		decodeDescriptor,
 		observations,
 		probe,
 		changes,
@@ -184,7 +187,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		readFile,
 		new DockerHostPathResolver(dockerClient, config.getClusterId()),
 	);
-	const desiredInputs = new DesiredInputs(routing, config, git, decodeDescriptorYaml, environment);
+	const desiredInputs = new DesiredInputs(routing, config, git, decodeDescriptor, environment);
 	const reconciler = new ReconcilerService(
 		config,
 		desiredInputs,
@@ -262,7 +265,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		new ResourceStatusService(new ResourceSpecification(), environment, staticStore),
 		config,
 		git,
-		decodeDescriptorYaml,
+		decodeDescriptor,
 		observations,
 		store,
 		events,
@@ -328,7 +331,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const secrets = new ServiceSecrets(
 		config,
 		git,
-		decodeDescriptorYaml,
+		decodeDescriptor,
 		new SecretStore(secretDirectory, readFile, writeSecrets),
 		changes,
 	);

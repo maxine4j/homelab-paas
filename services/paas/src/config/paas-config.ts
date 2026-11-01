@@ -13,6 +13,7 @@ import type { GitFileSource } from "../git/types.ts";
 import { createLogger } from "../util/logger.ts";
 import { parseYaml } from "../util/yaml.ts";
 import type { IConfigStore } from "./config-store.ts";
+import { resolveDomainTemplate } from "./domain-template-resolver.ts";
 import { resolveImageTag } from "./image-tag-resolver.ts";
 import { LogRedactor, type ILogRedactor } from "./log-redactor.ts";
 import { redactSecrets } from "./secret-redaction.ts";
@@ -346,11 +347,23 @@ export class PaasConfig implements IPaasConfig {
 	}
 }
 
-export function decodeDescriptorYaml(content: string, serviceId: string, revision?: string): ServiceDescriptor {
+export function decodeDescriptorYaml(
+	content: string,
+	serviceId: string,
+	revision?: string,
+	baseDomain?: string,
+): ServiceDescriptor {
 	try {
 		const descriptor = parseDescriptor(parseYaml(content, `${serviceId}.sd.yaml`), serviceId);
-		for (const resource of Object.values(descriptor.resources)) {
+		for (const [resourceId, resource] of Object.entries(descriptor.resources)) {
 			if (resource.type !== "static") resource.image = resolveImageTag(resource.image, revision);
+			if (resource.type === "web" || resource.type === "worker") {
+				resource.env = resource.env?.map((entry) =>
+					"value" in entry
+						? { ...entry, value: resolveDomainTemplate(entry.value, serviceId, resourceId, baseDomain) }
+						: entry,
+				);
+			}
 		}
 		return descriptor;
 	} catch (cause) {

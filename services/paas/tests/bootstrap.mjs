@@ -10,6 +10,7 @@ runProcess((lifecycle) =>
 			authorization: `${process.env["MOCK_GITHUB_BROWSER_ORIGIN"]}/authorize`,
 			token: `${origin}/token`,
 			profile: `${origin}/user`,
+			emails: `${origin}/user/emails`,
 		},
 	}),
 );

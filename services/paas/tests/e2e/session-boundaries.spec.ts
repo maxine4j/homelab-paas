@@ -4,6 +4,40 @@ import { testConfig } from "../../src/util/test/config.ts";
 import { test, expect } from "../util/browser-fixtures.ts";
 import { waitFor } from "../util/wait.ts";
 
+test("ingress replaces spoofed identity for private workloads and strips it from public workloads", async ({
+	environment: env,
+}) => {
+	const name = "Alice 李";
+	const token = new JwtClient(testConfig(env.config), Date.now).issue(
+		{ userId: "Alice", email: "alice@example.test", name },
+		"session",
+	);
+	const headers = {
+		"X-WEBAUTH-USER": "Mallory",
+		"X-WEBAUTH-EMAIL": "mallory@example.test",
+		"X-WEBAUTH-FULLNAME": "Mallory",
+	};
+	for (const service of ["private", "second"]) {
+		const response = await env.request(env.url(service, "/identity"), `__Secure-paas_session=${token}`, {
+			headers,
+		});
+		expect(response.status).toBe(200);
+		const body = await response.json();
+		expect(body).toEqual({
+			user: "Alice",
+			email: "alice@example.test",
+			name: Buffer.from(name, "utf8").toString("latin1"),
+		});
+	}
+	for (const cookie of ["", `__Secure-paas_session=${token}`]) {
+		const response = await env.request(env.url("public", "/identity"), cookie, { headers });
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({ user: "", email: "", name: "" });
+	}
+	const response = await env.request(env.url("private", "/identity"), "", { headers });
+	expect(response.status).toBe(302);
+});
+
 test("ingress strips platform cookies and rejects invalid sessions and return targets", async ({
 	environment: env,
 }) => {

@@ -162,7 +162,21 @@ image: ghcr.io/example/foo:git-${COMMIT_ID:7}
 
 PaaS replaces the variable with the first `N` characters of the exact Git commit used to read the descriptor. For a remote repository on branch `main`, this is the tip of `main` resolved by that fetch, even if the branch advances while reconciliation runs. Local sources use their resolved `HEAD` or explicit branch under the [Git source contract](#implemented-deployment-mvp). This is the source repository commit, not the last commit that changed the descriptor file.
 
-Tags may combine literal text and multiple variables. Expansion applies only to resource image tags; other descriptor values remain literal. Variables in registry names, repository paths or image digests, unknown variables, malformed expressions, invalid lengths and expanded tags outside Docker's tag syntax (at most 128 characters) fail descriptor loading before workloads change. Literal image references retain existing behavior. Deployment and management inspection use the same expansion rules and each read's fetched revision. The image must already be published under the resolved tag; PaaS does not build or publish images.
+Tags may combine literal text and multiple variables. Commit expansion applies only to resource image tags; literal environment values support the separate [domain templates](#environment-domain-templates). Variables in registry names, repository paths or image digests, unknown variables, malformed expressions, invalid lengths and expanded tags outside Docker's tag syntax (at most 128 characters) fail descriptor loading before workloads change. Literal image references retain existing behavior. Deployment and management inspection use the same expansion rules and each read's fetched revision. The image must already be published under the resolved tag; PaaS does not build or publish images.
+
+### Environment domain templates
+
+Literal `env[].value` strings on web and worker resources support these templates:
+
+| Template             | Expansion                               |
+| -------------------- | --------------------------------------- |
+| `${BASE_DOMAIN}`     | Configured `ingress.baseDomain`         |
+| `${SERVICE_DOMAIN}`  | `{serviceId}.{baseDomain}`              |
+| `${RESOURCE_DOMAIN}` | `{resourceId}.{serviceId}.{baseDomain}` |
+
+Values are hostnames without a scheme, port or trailing slash. For example, `value: https://${SERVICE_DOMAIN}/` on service `git` with base domain `apps.example.com` becomes `https://git.apps.example.com/`. Include a nonstandard external port explicitly when needed. The resource domain is computed for workers too, but does not create an ingress route or DNS record.
+
+Templates can appear multiple times alongside literal text. Unknown or malformed `${...}` expressions fail descriptor validation before workloads change. Image commit variables are not supported in environment values. Secret-file contents, commands, volumes and other descriptor fields are never interpolated. Deployment, health/status comparisons and management inspection use the same expansion and configured domain; changing the base domain requires a control-plane restart under the configuration reload contract.
 
 ## Host ports
 

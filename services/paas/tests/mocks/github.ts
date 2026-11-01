@@ -4,6 +4,8 @@ import { MockHttpServer } from "../util/http-server.ts";
 
 export class MockGitHub {
 	user = "Alice";
+	name = "Alice Smith";
+	email = "alice@example.test";
 	failToken = false;
 	failProfile = false;
 	private readonly codes = new Map<string, { callback: string; user: string }>();
@@ -44,7 +46,7 @@ export class MockGitHub {
 			this.tokens.set(token, authorization.user);
 			return Response.json({ access_token: token, token_type: "bearer" });
 		}
-		if (method === "GET" && url.pathname === "/user") {
+		if (method === "GET" && (url.pathname === "/user" || url.pathname === "/user/emails")) {
 			if (this.failProfile) return new Response("Profile unavailable", { status: 503 });
 			const user = this.tokens.get(headers.authorization?.replace(/^Bearer /, "") ?? "");
 			if (
@@ -54,12 +56,21 @@ export class MockGitHub {
 				|| headers.accept !== "application/vnd.github+json"
 			)
 				return new Response("Bad profile request", { status: 401 });
-			return Response.json({ login: user });
+			return Response.json(
+				url.pathname === "/user"
+					? { login: user, name: this.name }
+					: [{ email: this.email, primary: true, verified: true }],
+			);
 		}
 		return undefined;
 	});
 
 	endpoints(origin = this.server.url) {
-		return { authorization: `${origin}/authorize`, token: `${origin}/token`, profile: `${origin}/user` };
+		return {
+			authorization: `${origin}/authorize`,
+			token: `${origin}/token`,
+			profile: `${origin}/user`,
+			emails: `${origin}/user/emails`,
+		};
 	}
 }

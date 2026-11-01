@@ -32,6 +32,15 @@ test("reports controlled readiness and version without exposing arbitrary header
 		const response = await fetch(`${url}/inspect`, { headers: { cookie: "app=yes", authorization: "secret" } });
 		expect(await response.json()).toEqual({ version: "v2", cookie: "app=yes" });
 		expect(await (await fetch(`${url}/version`)).json()).toEqual({ version: "v2" });
+		const identity = await fetch(`${url}/identity`, {
+			headers: {
+				"X-WEBAUTH-USER": "alice",
+				"X-WEBAUTH-EMAIL": "alice@example.test",
+				"X-WEBAUTH-FULLNAME": "Alice Smith",
+				authorization: "secret",
+			},
+		});
+		expect(await identity.json()).toEqual({ user: "alice", email: "alice@example.test", name: "Alice Smith" });
 	} finally {
 		await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 	}

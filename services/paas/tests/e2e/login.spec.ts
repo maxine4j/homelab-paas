@@ -9,7 +9,12 @@ test("browser OAuth returns to the original private URL and shares a session wit
 	const response = await page.goto(target);
 	await expect(page).toHaveURL(target);
 	expect(await response!.json()).toEqual({ version: "v1" });
-	expect(env.github.server.requests.map((r) => r.url.pathname)).toEqual(["/authorize", "/token", "/user"]);
+	expect(env.github.server.requests.map((r) => r.url.pathname)).toEqual([
+		"/authorize",
+		"/token",
+		"/user",
+		"/user/emails",
+	]);
 	const cookies = await context.cookies();
 	expect(cookies.find((c) => c.name === "__Secure-paas_session")).toMatchObject({
 		domain: `.${env.config.ingress.baseDomain}`,

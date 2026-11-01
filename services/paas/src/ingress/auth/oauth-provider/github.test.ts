@@ -3,15 +3,40 @@ import { expect, test, vi } from "vitest";
 import { testConfig } from "../../../util/test/config.ts";
 import { GitHubOauth2Provider } from "./github.ts";
 
+test("requests email consent and returns only the primary verified email with the profile name", async () => {
+	const request = vi
+		.fn<typeof fetch>()
+		.mockResolvedValueOnce(Response.json({ login: "alice", name: "Alice Smith", email: "untrusted@example.test" }))
+		.mockResolvedValueOnce(
+			Response.json([
+				{ email: "unverified@example.test", primary: true, verified: false },
+				{ email: "other@example.test", primary: false, verified: true },
+				{ email: "alice@example.test", primary: true, verified: true },
+			]),
+		);
+	const provider = new GitHubOauth2Provider(testConfig(), request);
+	expect(
+		new URL(provider.getLoginUrl("state", "https://auth.example.test/auth/callback")).searchParams.get("scope"),
+	).toBe("user:email");
+	expect(await provider.fetchUserDetails("token")).toEqual({
+		userId: "alice",
+		name: "Alice Smith",
+		email: "alice@example.test",
+	});
+	expect(request.mock.calls.at(1)?.at(0)).toBe("https://api.github.com/user/emails");
+});
+
 test("uses explicit provider endpoints without changing credentials or protocol", async () => {
 	const request = vi
 		.fn<typeof fetch>()
 		.mockResolvedValueOnce(Response.json({ access_token: "token", token_type: "bearer" }))
-		.mockResolvedValueOnce(Response.json({ login: "alice" }));
+		.mockResolvedValueOnce(Response.json({ login: "alice" }))
+		.mockResolvedValueOnce(Response.json([]));
 	const provider = new GitHubOauth2Provider(testConfig(), request, {
 		authorization: "http://localhost:9000/authorize",
 		token: "http://localhost:9000/token",
 		profile: "http://localhost:9000/user",
+		emails: "http://localhost:9000/user/emails",
 	});
 	expect(new URL(provider.getLoginUrl("state", "https://auth.example.test/auth/callback")).origin).toBe(
 		"http://localhost:9000",
@@ -27,7 +52,8 @@ test("uses the service-supplied callback, encodes state and validates GitHub res
 	const request = vi
 		.fn<typeof fetch>()
 		.mockResolvedValueOnce(Response.json({ access_token: "token", token_type: "bearer" }))
-		.mockResolvedValueOnce(Response.json({ login: "alice" }));
+		.mockResolvedValueOnce(Response.json({ login: "alice" }))
+		.mockResolvedValueOnce(Response.json([]));
 	const provider = new GitHubOauth2Provider(
 		testConfig({
 			auth: {

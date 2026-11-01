@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import { z } from "zod";
 
 import type { IPaasConfig } from "../../config/paas-config.ts";
+import { authenticatedUserSchema } from "./identity.ts";
 import type { TokenClaims } from "./types.ts";
 export interface IJwtClient {
 	issue(claims: TokenClaims, purpose: "session" | "state"): string;
@@ -33,7 +34,7 @@ export class JwtClient implements IJwtClient {
 			});
 			const common = z.object({ purpose: z.literal(purpose), exp: z.number().finite() });
 			return purpose === "session"
-				? { userId: common.extend({ userId: z.string().min(1) }).parse(payload).userId }
+				? authenticatedUserSchema.parse(common.passthrough().parse(payload))
 				: common.extend({ nonce: z.string().min(1), redirectUri: z.string().min(1) }).parse(payload);
 		} catch {
 			return undefined;

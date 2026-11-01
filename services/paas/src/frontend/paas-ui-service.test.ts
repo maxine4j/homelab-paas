@@ -394,10 +394,19 @@ test("inspection resolves image tags from the fetched descriptor commit", async 
 		revision: "abcdef0123456789abcdef0123456789abcdef01",
 		content: JSON.stringify({
 			...descriptor,
-			resources: { app: { ...descriptor.resources.app, image: "app:${COMMIT_ID:7}" } },
+			resources: {
+				app: {
+					...descriptor.resources.app,
+					image: "app:${COMMIT_ID:7}",
+					env: [{ name: "URL", value: "https://${SERVICE_DOMAIN}/${RESOURCE_DOMAIN}" }],
+				},
+			},
 		}),
 	});
 	expect(await f.service.getResource("demo", "app")).toMatchObject({ config: { image: "app:abcdef0" } });
+	expect(await f.service.getResource("demo", "app")).toMatchObject({
+		config: { env: [{ name: "URL", value: "https://demo.example.com/app.demo.example.com" }] },
+	});
 });
 
 test("events remain readable without Git or Docker and unknown services cannot access history", async () => {

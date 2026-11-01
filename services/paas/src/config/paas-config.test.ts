@@ -4,6 +4,55 @@ import { TestPaasConfig as PaasConfig } from "../util/test/config.ts";
 import { captureLogs } from "../util/test/logs.ts";
 import { decodeDescriptorYaml, parseConfig } from "./paas-config.ts";
 
+test("expands domain templates per resource only in literal environment values", () => {
+	const content = JSON.stringify({
+		version: 1,
+		metadata: { serviceId: "git" },
+		resources: {
+			forgejo: {
+				type: "web",
+				image: "forgejo:1",
+				ingress: { port: 3000 },
+				env: [
+					{
+						name: "URL",
+						value: "https://${SERVICE_DOMAIN}/?base=${BASE_DOMAIN}&resource=${RESOURCE_DOMAIN}",
+					},
+					{ name: "TOKEN", secret: true },
+				],
+			},
+			jobs: {
+				type: "worker",
+				image: "jobs:1",
+				healthcheckPort: 80,
+				env: [{ name: "HOST", value: "${RESOURCE_DOMAIN}" }],
+			},
+		},
+	});
+	const decoded = decodeDescriptorYaml(content, "git", undefined, "example.test");
+	expect(decoded.resources["forgejo"]).toMatchObject({
+		env: [
+			{ name: "URL", value: "https://git.example.test/?base=example.test&resource=forgejo.git.example.test" },
+			{ name: "TOKEN", secret: true },
+		],
+	});
+	expect(decoded.resources["jobs"]).toMatchObject({ env: [{ name: "HOST", value: "jobs.git.example.test" }] });
+	expect(() => decodeDescriptorYaml(content, "git")).toThrow("Invalid service descriptor");
+});
+
+test.each(["${UNKNOWN}", "${BASE_DOMAIN", "${SERVICE_DOMAIN:7}", "${}"])(
+	"rejects invalid env templates %s",
+	(value) => {
+		const content = JSON.stringify({
+			...descriptor,
+			resources: { app: { ...descriptor.resources.app, env: [{ name: "URL", value }] } },
+		});
+		expect(() => decodeDescriptorYaml(content, "test-service", undefined, "example.test")).toThrow(
+			"Invalid service descriptor",
+		);
+	},
+);
+
 const descriptor = {
 	version: 1,
 	metadata: { serviceId: "test-service" },
@@ -77,9 +126,7 @@ test("resolves only resource image tags using the descriptor commit", () => {
 					image: "app:${COMMIT_ID:7}",
 					...(type === "web" ? { ingress: { public: true, port: 8080 } } : {}),
 					...(type === "worker" ? { healthcheckPort: 8080 } : {}),
-					...(type === "web" || type === "worker"
-						? { env: [{ name: "LITERAL", value: "${COMMIT_ID:7}" }] }
-						: {}),
+					...(type === "web" || type === "worker" ? { env: [{ name: "LITERAL", value: "$COMMIT_ID" }] } : {}),
 				},
 			]),
 		),
@@ -92,7 +139,7 @@ test("resolves only resource image tags using the descriptor commit", () => {
 	expect(
 		Object.values(parsed.resources).map((resource) => (resource.type === "static" ? undefined : resource.image)),
 	).toEqual(Array(4).fill("app:abcdef0"));
-	expect(parsed.resources["web"]).toMatchObject({ env: [{ name: "LITERAL", value: "${COMMIT_ID:7}" }] });
+	expect(parsed.resources["web"]).toMatchObject({ env: [{ name: "LITERAL", value: "$COMMIT_ID" }] });
 	expect(() => decodeDescriptorYaml(JSON.stringify(value), "test-service")).toThrow("Invalid service descriptor");
 });
 

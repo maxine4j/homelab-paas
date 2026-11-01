@@ -10,6 +10,54 @@ import { startTestApi } from "../../util/test/router.ts";
 import { createAuthRouter } from "./auth-router.ts";
 import type { IAuthService } from "./auth-service.ts";
 
+test("forwards only the identity returned by private authorization, without reflecting supplied headers", async () => {
+	let decision: Awaited<ReturnType<IAuthService["authorize"]>> = {
+		userId: "alice",
+		email: "alice@example.test",
+		name: "Alice Smith",
+	};
+	const auth: IAuthService = {
+		authorize: async () => decision,
+		verifyAuthCookie: vi.fn(),
+		beginLogin: vi.fn(),
+		completeLogin: vi.fn(),
+	};
+	const api = await startTestApi(
+		new Koa().use(
+			createAuthRouter(
+				auth,
+				testConfig({ services: { demo: { remote: "local", descriptorPath: "/repo/demo.yaml" } } }),
+			).routes(),
+		),
+	);
+	try {
+		const request = () =>
+			requestWithHost(`${api.origin}/auth/check/`, {
+				host: "demo.example.test",
+				"x-webauth-user": "mallory",
+				"x-webauth-email": "mallory@example.test",
+				"x-webauth-fullname": "Mallory",
+			});
+		const response = await request();
+		expect(response.status).toBe(200);
+		expect(response.headers.get("x-webauth-user")).toBe("alice");
+		expect(response.headers.get("x-webauth-email")).toBe("alice@example.test");
+		expect(response.headers.get("x-webauth-fullname")).toBe("Alice Smith");
+		decision = { userId: "alice", name: "Alice 李" };
+		expect((await request()).headers.get("x-webauth-fullname")).toBe(
+			Buffer.from("Alice 李", "utf8").toString("latin1"),
+		);
+		for (decision of ["allowed", "login", "missing", { userId: "alice" }] as const) {
+			const result = await request();
+			expect(result.headers.get("x-webauth-email")).toBeNull();
+			expect(result.headers.get("x-webauth-fullname")).toBeNull();
+			expect(result.headers.get("x-webauth-user")).toBe(typeof decision === "object" ? "alice" : null);
+		}
+	} finally {
+		await api.close();
+	}
+});
+
 test("request logs identify validated auth targets and fixed decisions without credentials", async () => {
 	const lines: string[] = [];
 	const log = createLogger("http", { write: (line: string) => lines.push(line) });

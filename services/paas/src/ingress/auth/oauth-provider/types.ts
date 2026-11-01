@@ -4,6 +4,7 @@ export interface GitHubEndpoints {
 	authorization: string;
 	token: string;
 	profile: string;
+	emails: string;
 }
 
 export interface Oauth2Provider {

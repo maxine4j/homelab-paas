@@ -108,6 +108,7 @@ export class EnvoyService implements IEnvoyService {
 												],
 											},
 											http_filters: [
+												this.stripIdentityHeaders(),
 												{
 													name: "envoy.filters.http.router",
 													typed_config: {
@@ -126,6 +127,20 @@ export class EnvoyService implements IEnvoyService {
 			},
 			verify,
 		);
+	}
+
+	private stripIdentityHeaders() {
+		return {
+			name: "envoy.filters.http.header_mutation",
+			typed_config: {
+				"@type": "type.googleapis.com/envoy.extensions.filters.http.header_mutation.v3.HeaderMutation",
+				mutations: {
+					request_mutations: ["x-webauth-user", "x-webauth-email", "x-webauth-fullname"].map((remove) => ({
+						remove,
+					})),
+				},
+			},
+		};
 	}
 
 	private accessLogs() {
@@ -237,7 +252,15 @@ export class EnvoyService implements IEnvoyService {
 						path_prefix: "/auth/check",
 						authorization_response: {
 							// Envoy 1.37 also selects denied-response headers from this list.
-							allowed_upstream_headers: { patterns: [{ exact: "cookie" }, { exact: "location" }] },
+							allowed_upstream_headers: {
+								patterns: [
+									"cookie",
+									"location",
+									"x-webauth-user",
+									"x-webauth-email",
+									"x-webauth-fullname",
+								].map((exact) => ({ exact })),
+							},
 							allowed_client_headers: { patterns: [{ exact: "location" }] },
 						},
 					},
@@ -257,7 +280,7 @@ export class EnvoyService implements IEnvoyService {
 				access_log: this.accessLogs(),
 				upgrade_configs: [{ upgrade_type: "websocket", enabled: false }],
 				route_config: { name, virtual_hosts: virtualHosts },
-				http_filters: filters,
+				http_filters: [this.stripIdentityHeaders(), ...filters],
 			},
 		});
 		return [
