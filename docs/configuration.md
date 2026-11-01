@@ -6,6 +6,8 @@ All platform and descriptor YAML is parsed through the canonical backend YAML ut
 
 ## Implemented deployment MVP
 
+Static frontend bundles are also supported, including services containing only static resources. Their minimal configuration and repository confinement rules are defined in [static resources](#static-resources). Static ingress uses the same auth/TLS requirements as web ingress.
+
 The current runtime supports one or more workload resources per service: any number of `web` resources with one replica each, and any number of `worker` resources with positive integer replica counts. Worker-only services are supported without auth/TLS. Both workload types support `recreate` or `surge` deployment. Descriptors use the schema below with only `version`, `metadata`, and `resources` at the top level. Runtime-supported web fields are `type`, `image`, `ingress`, `primary`, optional `replicas: 1`, `rolloutStrategy` (`recreate` or `surge`), `healthcheckUrl`, `command`, literal or secret-reference `env` values, `volumes`, `hostPorts`, `devices`, `supplementaryGroups`, `limits`, and `termination.timeoutSeconds` (default 30, maximum 300). Workers support the same application settings, with `healthcheckPort` instead of `ingress` and multiple replicas. Unknown fields fail descriptor validation; unsupported runtime features fail a separate capability check before changing workloads. The public TypeScript types, Zod schema, and `parseDescriptor` validator in `@homelab-paas/shared-contracts` describe the complete service descriptor contract below. Platform configuration, runtime capability checks, and deployment state stay in the backend.
 
 Managed databases/brokers, egress, web replicas beyond one, and resource/service removal are deferred. Private ingress (including the default `public: false`) requires platform auth and TLS. Without them, ingress must explicitly set `public: true`. The remaining service examples include capabilities beyond the deployed runtime.
@@ -117,7 +119,7 @@ Service and resource IDs must use lowercase kebab case:
 
 The descriptor’s `metadata.serviceId` must match its key in the platform configuration.
 
-Each service may contain multiple web resources. With more than one, exactly one must explicitly set `primary: true`; omitted or `false` values select secondary resources. A sole web resource is implicitly primary, including when `primary` is omitted or explicitly `false`. Worker-only services need no primary. Each web resource has its own [external hostname](networking-and-auth.md#external-ingress-and-authentication); the primary also receives the service hostname. Primary selection changes routing without replacing otherwise unchanged containers.
+Each service may contain multiple web and static resources. Across both types, with more than one routable resource, exactly one must explicitly set `primary: true`; omitted or `false` values select secondary resources. A sole web or static resource is implicitly primary, including when `primary` is omitted or explicitly `false`. Other resource types do not participate in primary selection. Each web or static resource has its own [external hostname](networking-and-auth.md#external-ingress-and-authentication); the primary also receives the service hostname. Primary selection changes routing without replacing otherwise unchanged containers or static files.
 
 ```yaml
 resources:
@@ -132,7 +134,23 @@ resources:
         ingress: { port: 8080, public: false }
 ```
 
-Resources are a discriminated union of `web`, `worker`, `postgres`, and `rabbitmq`. Every resource requires a nonempty `image` and may set `limits` and `termination.timeoutSeconds` (positive integer seconds, maximum 300). Web and worker resources additionally accept `command`, `env`, `volumes`, [devices and supplementary groups](#devices-and-supplementary-groups) (`devices`, `supplementaryGroups`), `hostPorts`, `egress`, positive integer `replicas` (default 1), and `rolloutStrategy` (`recreate` by default, or `surge`). Web resources require an ingress port (1–65535) and default `ingress.public` to `false`. Workers require `healthcheckPort` (integer 1–65535) and reject `ingress`. Both accept optional `healthcheckUrl`, a relative HTTP path beginning with a single `/`. Omitted, undefined or null values disable HTTP health checks; there is no default URL. See [health checks](reconciliation-and-deployments.md#health-checks-and-termination) for readiness and polling behavior. When enabled, PaaS probes worker health endpoints on the container's service-network address; no host port, public route, or Envoy health check is created automatically. Workers with HTTP checks must listen on that container interface, rather than only loopback. Managed PostgreSQL and RabbitMQ resources accept no custom environment, credentials, volumes, devices, supplementary groups, replicas, or rollout strategy; see [managed resources](managed-resources.md).
+Resources are a discriminated union of `web`, `static`, `worker`, `postgres`, and `rabbitmq`. Resources other than static require a nonempty `image` and may set `limits` and `termination.timeoutSeconds` (positive integer seconds, maximum 300). Web and worker resources additionally accept `command`, `env`, `volumes`, [devices and supplementary groups](#devices-and-supplementary-groups) (`devices`, `supplementaryGroups`), `hostPorts`, `egress`, positive integer `replicas` (default 1), and `rolloutStrategy` (`recreate` by default, or `surge`). Web resources require an ingress port (1–65535) and default `ingress.public` to `false`. Workers require `healthcheckPort` (integer 1–65535) and reject `ingress`. Both accept optional `healthcheckUrl`, a relative HTTP path beginning with a single `/`. Omitted, undefined or null values disable HTTP health checks; there is no default URL. See [health checks](reconciliation-and-deployments.md#health-checks-and-termination) for readiness and polling behavior. When enabled, PaaS probes worker health endpoints on the container's service-network address; no host port, public route, or Envoy health check is created automatically. Workers with HTTP checks must listen on that container interface, rather than only loopback. Managed PostgreSQL and RabbitMQ resources accept no custom environment, credentials, volumes, devices, supplementary groups, replicas, or rollout strategy; see [managed resources](managed-resources.md).
+
+### Static resources
+
+```yaml
+resources:
+    site:
+        type: static
+        path: ../dist
+        ingress: { public: false }
+```
+
+Only `type`, `path`, optional `ingress: { public: boolean }`, and optional `primary` are accepted. Omitting ingress or its public flag defaults to private. Private static ingress requires configured auth/TLS; local public HTTP must explicitly use `public: true`. Access policy covers the entire resource; there is no per-file policy.
+
+`path` is a nonempty directory path in the configured Git repository, relative to the service descriptor's directory. A leading `/` anchors it at the repository root, rather than the host root. For `services/frontend/service.sd.yaml`, `../dist` selects `services/dist` and `/dist` selects `dist` at repo root. `.` and `..` components are supported only while remaining inside the repository; any step above root is rejected, even if later components would return inside. `/` selects the repository root. NUL bytes and backslashes are rejected.
+
+Bundles must already be built and committed. Only regular Git blobs from the descriptor's exact commit are published; uncommitted and untracked files are ignored. Symlinks and submodules within the selected bundle are rejected, including symlink paths used to select a bundle. Missing or non-directory paths fail reconciliation. No build command runs, and static resources have no image, container, replicas, environment, volumes or healthcheck configuration. See [static publication](reconciliation-and-deployments.md#static-publication) for replacement and recovery.
 
 ### Image tag variables
 

@@ -40,5 +40,5 @@ COPY --from=builder /app/packages/shared-contracts/dist packages/shared-contract
 COPY --from=builder /app/services/paas/dist services/paas/dist
 COPY --from=builder /app/services/paas-ui/dist services/paas-ui/dist
 WORKDIR /app/services/paas
-EXPOSE 8080
+EXPOSE 8080 8081
 CMD ["node", "dist/main.js"]

@@ -52,6 +52,7 @@ export const ServiceResources = ({ serviceId, resources }: { serviceId: string; 
 							? ingress["public"]
 							: undefined;
 					const image = config?.["image"];
+					const path = config?.["path"];
 					const url = resource.primaryUrl ?? resource.url;
 					return (
 						<article className='card service-resource-card' key={resource.resourceId}>
@@ -70,10 +71,18 @@ export const ServiceResources = ({ serviceId, resources }: { serviceId: string; 
 								<StatusBadges health={resource.health} sync={resource.sync} />
 							</div>
 							<div className='resource-card-image'>
-								<span className='muted'>Image</span>
-								<code>{typeof image === "string" ? image : "Image unavailable"}</code>
+								<span className='muted'>{resource.type === "static" ? "Path" : "Image"}</span>
+								<code>
+									{resource.type === "static"
+										? typeof path === "string"
+											? path
+											: "Path unavailable"
+										: typeof image === "string"
+											? image
+											: "Image unavailable"}
+								</code>
 							</div>
-							{resource.type === "web" && (
+							{(resource.type === "web" || resource.type === "static") && (
 								<div className='resource-card-ingress'>
 									{typeof isPublic === "boolean" ? (
 										<IngressAccess isPublic={isPublic} />

@@ -89,7 +89,9 @@ test("resolves only resource image tags using the descriptor commit", () => {
 		"test-service",
 		"abcdef0123456789abcdef0123456789abcdef01",
 	);
-	expect(Object.values(parsed.resources).map((resource) => resource.image)).toEqual(Array(4).fill("app:abcdef0"));
+	expect(
+		Object.values(parsed.resources).map((resource) => (resource.type === "static" ? undefined : resource.image)),
+	).toEqual(Array(4).fill("app:abcdef0"));
 	expect(parsed.resources["web"]).toMatchObject({ env: [{ name: "LITERAL", value: "${COMMIT_ID:7}" }] });
 	expect(() => decodeDescriptorYaml(JSON.stringify(value), "test-service")).toThrow("Invalid service descriptor");
 });

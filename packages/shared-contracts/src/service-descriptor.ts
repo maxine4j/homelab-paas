@@ -132,7 +132,16 @@ const worker = z.strictObject({
 });
 const postgres = z.strictObject({ ...base, type: z.literal("postgres") });
 const rabbitmq = z.strictObject({ ...base, type: z.literal("rabbitmq") });
-const resource = z.discriminatedUnion("type", [web, worker, postgres, rabbitmq]);
+const staticResource = z.strictObject({
+	type: z.literal("static"),
+	path: z
+		.string()
+		.min(1)
+		.refine((path) => !path.includes("\0") && !path.includes("\\")),
+	primary: z.boolean().optional(),
+	ingress: z.strictObject({ public: z.boolean().default(false) }).default({ public: false }),
+});
+const resource = z.discriminatedUnion("type", [web, worker, postgres, rabbitmq, staticResource]);
 export const serviceDescriptorSchema = z
 	.strictObject({
 		version: z.literal(1),
@@ -142,7 +151,9 @@ export const serviceDescriptorSchema = z
 			labels: z.record(z.string(), z.string()).optional(),
 		}),
 		resources: z.record(id, resource).refine((resources) => {
-			const webs = Object.values(resources).filter((resource) => resource.type === "web");
+			const webs = Object.values(resources).filter(
+				(resource) => resource.type === "web" || resource.type === "static",
+			);
 			return webs.length <= 1 || webs.filter((resource) => resource.primary === true).length === 1;
 		}),
 	})
@@ -180,6 +191,7 @@ export const serviceDescriptorSchema = z
 export type ServiceDescriptor = z.input<typeof serviceDescriptorSchema>;
 export type Resource = z.input<typeof resource>;
 export type WebResource = z.input<typeof web>;
+export type StaticResource = z.input<typeof staticResource>;
 export type WorkerResource = z.input<typeof worker>;
 export type PostgresResource = z.input<typeof postgres>;
 export type RabbitMqResource = z.input<typeof rabbitmq>;

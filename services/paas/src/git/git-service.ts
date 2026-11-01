@@ -1,10 +1,20 @@
 import { createHash } from "node:crypto";
-import { isAbsolute, join, normalize } from "node:path";
+import { dirname, isAbsolute, join, normalize } from "node:path";
 
 import { createLogger } from "../util/logger.ts";
 import type { IGitClient } from "./git-client.ts";
 import { GitServiceError } from "./types.ts";
-import type { GitCommit, GitCredentials, GitFile, GitFileSource } from "./types.ts";
+import type { GitCommit, GitCredentials, GitDirectoryFile, GitFile, GitFileSource } from "./types.ts";
+
+export interface IGitDirectoryService {
+	/** Reads a directory at the exact descriptor commit, confined to its repository. Throws GitClientError or GitServiceError. */
+	readDirectory(
+		serviceId: string,
+		source: GitFileSource,
+		revision: string,
+		path: string,
+	): Promise<GitDirectoryFile[]>;
+}
 
 const DEFAULT_GIT_BRANCH = "main";
 
@@ -26,7 +36,7 @@ export interface IGitCacheService extends IGitRevisionService {
 }
 
 /** Committed-file workflows; all filesystem and Git effects go through the client. */
-export class GitService implements IGitCacheService {
+export class GitService implements IGitCacheService, IGitDirectoryService {
 	private readonly files = new Map<string, GitFile>();
 	private readonly commits = new Map<string, GitCommit>();
 	private readonly pending = new Map<string, Promise<unknown>>();
@@ -40,6 +50,35 @@ export class GitService implements IGitCacheService {
 		private readonly client: IGitClient,
 		private readonly directory: string,
 	) {}
+
+	readDirectory(
+		serviceId: string,
+		source: GitFileSource,
+		revision: string,
+		path: string,
+	): Promise<GitDirectoryFile[]> {
+		this.validateSource(serviceId, source);
+		return this.serialize(serviceId, async () => {
+			const file =
+				source.remote === "local"
+					? await this.client.locateFile(source.descriptorPath)
+					: { directory: this.repositoryDirectory(serviceId, source), path: source.descriptorPath };
+			if (!path || /[\0\\]/.test(path)) throw new GitServiceError();
+			const parts = path.startsWith("/")
+				? []
+				: dirname(normalize(file.path))
+						.split("/")
+						.filter((part) => part !== ".");
+			for (const part of path.split("/")) {
+				if (!part || part === ".") continue;
+				if (part === "..") {
+					if (!parts.length) throw new GitServiceError();
+					parts.pop();
+				} else parts.push(part);
+			}
+			return this.client.readDirectory(file.directory, revision, parts.join("/"));
+		});
+	}
 	async fetchFile(serviceId: string, source: GitFileSource): Promise<GitFile> {
 		this.validateSource(serviceId, source);
 		const key = this.key(serviceId, source);

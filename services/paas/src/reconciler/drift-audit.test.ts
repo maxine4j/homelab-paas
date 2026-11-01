@@ -5,6 +5,50 @@ import { testConfig } from "../util/test/config.ts";
 import { DriftAudit } from "./drift-audit.ts";
 import { ResourceSpecification } from "./resource-specification.ts";
 
+test("static-only audits repair file and route drift without requiring a service network", async () => {
+	const inspect = vi.fn(async () => "current" as "current" | "different");
+	const invalidate = vi.fn();
+	const docker = {
+		listServiceContainers: vi.fn(async () => []),
+		inspectServiceContainer: vi.fn(async () => null),
+		inspectServiceNetwork: vi.fn(async () => null),
+	};
+	const peers = { inspectServiceInfrastructure: vi.fn(async () => false) };
+	const routes = { "site.demo": { address: "127.0.0.1", port: 8081, static: true, public: false, primary: true } };
+	const audit = new DriftAudit(
+		testConfig({ services: { demo: { remote: "repo", descriptorPath: "sd.yaml" } } }),
+		{
+			read: async () => ({
+				revision: "rev",
+				secrets: [],
+				resources: [["site", { type: "static", path: "dist", primary: true }]],
+			}),
+		},
+		docker,
+		peers,
+		new ResourceSpecification(),
+		{ invalidate, refreshInputs: async () => {} },
+		{ getAll: async () => routes },
+		{ verifyRoutes: async () => {} },
+		{ invalidateService: () => {} },
+		{ refresh: async () => {} },
+		() => {},
+		() => "audit",
+		{ inspect },
+	);
+	await audit.run();
+	expect(invalidate).not.toHaveBeenCalled();
+	expect(peers.inspectServiceInfrastructure).not.toHaveBeenCalled();
+	inspect.mockResolvedValue("different");
+	await audit.run();
+	expect(invalidate).toHaveBeenCalledWith("demo");
+	inspect.mockResolvedValue("current");
+	invalidate.mockClear();
+	routes["site.demo"].primary = false;
+	await audit.run();
+	expect(invalidate).toHaveBeenCalledWith("demo");
+});
+
 const fixture = () => {
 	const resource = { type: "web" as const, image: "image", ingress: { port: 8080, public: true }, primary: true };
 	const specification = new ResourceSpecification();

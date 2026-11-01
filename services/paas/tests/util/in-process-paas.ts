@@ -35,11 +35,14 @@ import { ReconcilerService } from "../../src/reconciler/reconciler-service.ts";
 import { ReconciliationScheduler } from "../../src/reconciler/reconciliation-scheduler.ts";
 import { ReconciliationStore } from "../../src/reconciler/reconciliation-store.ts";
 import { ResourceSpecification } from "../../src/reconciler/resource-specification.ts";
+import { StaticResourceReconciler } from "../../src/reconciler/resources/static/static-reconciler.ts";
 import { WebResourceReconciler } from "../../src/reconciler/resources/web/web-reconciler.ts";
 import { WorkerResourceReconciler } from "../../src/reconciler/resources/worker/worker-reconciler.ts";
 import { ServiceEventStore } from "../../src/reconciler/service-event-store.ts";
+import { StaticStore } from "../../src/static/static-store.ts";
 import { ResourceStatusService } from "../../src/status/resource-status-service.ts";
 import { FileSystemKeyValueStore } from "../../src/store/file-system-store.ts";
+import * as staticFiles from "../../src/util/file.ts";
 import { atomicWriteFile, mkdir, readFile, rm } from "../../src/util/file.ts";
 import { probe } from "../../src/util/healthcheck.ts";
 import { sleep, type ISleep } from "../../src/util/sleep.ts";
@@ -102,6 +105,7 @@ export const inProcessPaas = async (
 		new SurgeDeploymentStrategy(docker, networking, deploymentContainers, generateInstanceId),
 	]);
 	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${directory}/git`);
+	const staticStore = new StaticStore(`${directory}/static`, staticFiles);
 	const desiredInputs = new DesiredInputs(
 		config,
 		git,
@@ -123,6 +127,8 @@ export const inProcessPaas = async (
 		events,
 		new EventDiagnostics(config),
 		changes,
+		undefined,
+		new StaticResourceReconciler(git, staticStore, networking),
 	);
 	const scheduler = new ReconciliationScheduler(
 		config,
@@ -144,9 +150,14 @@ export const inProcessPaas = async (
 		probe,
 		changes,
 		observations,
+		staticStore,
 	);
 	const inspection = new PaasUiService(
-		new ResourceStatusService(new ResourceSpecification(), new EnvironmentResolver(`${directory}/env`, readFile)),
+		new ResourceStatusService(
+			new ResourceSpecification(),
+			new EnvironmentResolver(`${directory}/env`, readFile),
+			staticStore,
+		),
 		config,
 		git,
 		decodeDescriptorYaml,
@@ -170,6 +181,7 @@ export const inProcessPaas = async (
 		management,
 		(id, serviceId) => watcher?.rememberNetwork(id, serviceId),
 		generateInstanceId,
+		staticStore,
 	);
 	const watcher = watchDocker
 		? new DockerEventWatcher(

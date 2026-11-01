@@ -1,5 +1,7 @@
 # Management UI
 
+Static resources participate in resource inspection, service aggregation and ingress links alongside web resources. Their cards show the configured bundle path, public/private policy and resource or primary link, without an image placeholder. They have no containers or container logs. The primary link is selected across web and static resources together. Snapshot-based health and sync are defined in [static publication](reconciliation-and-deployments.md#static-publication).
+
 The browser favicon is the 🍝 emoji.
 
 The React management UI is served by the control plane at the cluster's base hostname. It supports platform configuration edits, service secret edits and read-only service/resource inspection. With auth/TLS configured, open `https://{baseDomain}` (including a nonstandard HTTPS port). Envoy requires the existing GitHub allowlisted session before serving the UI or its API; missing or invalid sessions redirect to login, including API requests. OAuth accepts this hostname as a return target. Platform cookies are retained only for the management upstream; workload cookie stripping is unchanged. The authentication hostname still exposes only login and callback routes. Management ingress blocks API paths outside `/api/ui/`.

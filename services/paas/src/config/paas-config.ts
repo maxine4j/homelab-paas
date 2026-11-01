@@ -350,7 +350,7 @@ export function decodeDescriptorYaml(content: string, serviceId: string, revisio
 	try {
 		const descriptor = parseDescriptor(parseYaml(content, `${serviceId}.sd.yaml`), serviceId);
 		for (const resource of Object.values(descriptor.resources)) {
-			resource.image = resolveImageTag(resource.image, revision);
+			if (resource.type !== "static") resource.image = resolveImageTag(resource.image, revision);
 		}
 		return descriptor;
 	} catch (cause) {

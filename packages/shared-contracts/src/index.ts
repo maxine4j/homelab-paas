@@ -4,6 +4,7 @@ export type {
 	ServiceDescriptor,
 	Resource,
 	WebResource,
+	StaticResource,
 	WorkerResource,
 	PostgresResource,
 	RabbitMqResource,

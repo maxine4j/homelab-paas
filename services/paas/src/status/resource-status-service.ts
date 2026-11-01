@@ -2,6 +2,7 @@ import type { HealthStatus, SyncStatus } from "@homelab-paas/shared-contracts";
 
 import type { IEnvironmentResolver } from "../reconciler/environment-resolver.ts";
 import type { IResourceSpecification } from "../reconciler/resource-specification.ts";
+import type { IStaticStore } from "../static/static-store.ts";
 import { createLogger } from "../util/logger.ts";
 import type { ResourceStatus, ResourceStatusRequest } from "./types.ts";
 
@@ -17,14 +18,26 @@ export class ResourceStatusService implements IResourceStatusService {
 	constructor(
 		private readonly specification: IResourceSpecification,
 		private readonly environment: IEnvironmentResolver,
+		private readonly staticStore?: { inspect: IStaticStore["inspect"] },
 	) {}
 
 	async getSync(request: ResourceStatusRequest): Promise<SyncStatus> {
 		const { serviceId, resourceId, resource, descriptorAvailable, containers } = request;
 		if (!descriptorAvailable) return "Unknown";
 		if (!resource) return "OutOfSync";
-		if (resource.type !== "web" && resource.type !== "worker") return "Unknown";
 		try {
+			if (resource.type === "static") {
+				if (!this.staticStore || !request.revision) return "Unknown";
+				return (await this.staticStore.inspect({
+					serviceId,
+					resourceId,
+					revision: request.revision,
+					path: resource.path,
+				})) === "current"
+					? "Synced"
+					: "OutOfSync";
+			}
+			if (resource.type !== "web" && resource.type !== "worker") return "Unknown";
 			const env = await this.environment.resolve(serviceId, resource.env ?? []);
 			const spec = this.specification.get(resourceId, { ...resource, env });
 			return containers.length === (resource.replicas ?? 1)

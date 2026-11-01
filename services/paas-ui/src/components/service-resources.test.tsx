@@ -19,6 +19,25 @@ const renderResources = (resources: UiResource[]) =>
 		/>,
 	);
 
+test("static cards show the bundle path and ingress link without an image placeholder", () => {
+	const html = renderResources([
+		{
+			resourceId: "site",
+			type: "static",
+			sync: "Synced",
+			health: "Healthy",
+			primaryUrl: "https://metrics.example.test",
+			config: { path: "/dist", ingress: { public: false } },
+			containers: [],
+		},
+	]);
+	expect(html).toContain("/dist");
+	expect(html).toContain('class="primary-web-link"');
+	expect(html).toContain("Private ingress");
+	expect(html).toContain('href="https://metrics.example.test" target="_blank"');
+	expect(html).not.toContain("Image unavailable");
+});
+
 test.each([true, false])(
 	"web cards prefer the primary ingress link, %s access, health and the configured image",
 	(isPublic) => {

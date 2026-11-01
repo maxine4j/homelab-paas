@@ -9,6 +9,7 @@ const file = { revision: "a".repeat(40), content: "committed\n" };
 const fixture = () => {
 	const refs = new Map<string, string>();
 	const client = {
+		readDirectory: vi.fn<IGitClient["readDirectory"]>().mockResolvedValue([]),
 		initRepo: vi.fn<IGitClient["initRepo"]>().mockResolvedValue(undefined),
 		fetch: vi.fn<IGitClient["fetch"]>().mockResolvedValue(undefined),
 		locateFile: vi
@@ -33,6 +34,17 @@ const fixture = () => {
 	} satisfies IGitClient;
 	return { client, refs, service: new GitService(client, "/state/git") };
 };
+
+test("directory exports resolve remote paths inside the repository, including normalized descriptor paths", async () => {
+	const { service, client } = fixture();
+	await service.readDirectory("demo", { ...source, descriptorPath: "nested/../file.yaml" }, file.revision, "dist");
+	expect(client.readDirectory).toHaveBeenLastCalledWith(expect.any(String), file.revision, "dist");
+	await service.readDirectory("demo", { ...source, descriptorPath: "nested/file.yaml" }, file.revision, "../dist");
+	expect(client.readDirectory).toHaveBeenLastCalledWith(expect.any(String), file.revision, "dist");
+	await expect(
+		service.readDirectory("demo", { ...source, descriptorPath: "nested/file.yaml" }, file.revision, "../../dist"),
+	).rejects.toThrow();
+});
 
 test("cold load populates memory and disk; warm reads do no Git I/O", async () => {
 	const { client, service } = fixture();

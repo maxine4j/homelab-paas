@@ -88,6 +88,7 @@ test.each([
 });
 function fixture() {
 	const transport = {
+		executeBytes: vi.fn<IGitTransport["executeBytes"]>().mockResolvedValue(new Uint8Array()),
 		execute: vi.fn<IGitTransport["execute"]>().mockResolvedValue(""),
 		createDirectory: vi.fn<IGitTransport["createDirectory"]>().mockResolvedValue(undefined),
 		realPath: vi.fn<IGitTransport["realPath"]>().mockResolvedValue("/repo/nested"),

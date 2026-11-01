@@ -28,6 +28,41 @@ const fixture = () => {
 	return { sources, config, fetchFile, decode, resolve, inputs };
 };
 
+test("prepares static-only and mixed resources with a shared primary and no workload fields", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "rev",
+		content: JSON.stringify({
+			version: 1,
+			metadata: { serviceId: "demo" },
+			resources: {
+				site: { type: "static", path: "/dist", ingress: { public: true } },
+			},
+		}),
+	});
+	expect((await f.inputs.read("demo")).resources).toEqual([
+		["site", { type: "static", path: "/dist", ingress: { public: true }, primary: true }],
+	]);
+	f.fetchFile.mockResolvedValue({
+		revision: "new",
+		content: JSON.stringify({
+			version: 1,
+			metadata: { serviceId: "demo" },
+			resources: {
+				site: { type: "static", path: "/dist", primary: true },
+				app: { type: "web", image: "app:1", ingress: { public: true, port: 80 } },
+			},
+		}),
+	});
+	await f.inputs.refresh("demo");
+	expect((await f.inputs.read("demo")).resources).toMatchObject([
+		["site", { primary: true }],
+		["app", { primary: false }],
+	]);
+	f.config.getAuthConfig = () => undefined;
+	await expect(f.inputs.refresh("demo")).rejects.toMatchObject({ stage: "capabilities" });
+});
+
 test("reuses validated resolved inputs and detects secret-only external refreshes", async () => {
 	const f = fixture();
 	const first = await f.inputs.read("demo");
@@ -39,9 +74,13 @@ test("reuses validated resolved inputs and detects secret-only external refreshe
 	expect(f.decode).toHaveBeenCalledTimes(1);
 	f.resolve.mockResolvedValue([{ name: "TOKEN", value: "secret-two" }]);
 	expect(await f.inputs.refresh("demo")).toBe(true);
-	expect((await f.inputs.read("demo")).resources[0]?.[1].env).toEqual([{ name: "TOKEN", value: "secret-two" }]);
-	first.resources[0]![1].image = "mutated";
-	expect((await f.inputs.read("demo")).resources[0]?.[1].image).toBe("app:1");
+	expect((await f.inputs.read("demo")).resources[0]?.[1]).toMatchObject({
+		env: [{ name: "TOKEN", value: "secret-two" }],
+	});
+	const resource = first.resources[0]![1];
+	if (resource.type === "static") throw new Error("Expected workload");
+	resource.image = "mutated";
+	expect((await f.inputs.read("demo")).resources[0]?.[1]).toMatchObject({ image: "app:1" });
 });
 
 test("isolates source/credential namespaces even at identical commit and content", async () => {
@@ -82,5 +121,5 @@ test("invalidation overlapping resolution cannot publish stale desired inputs", 
 	f.inputs.invalidate("demo");
 	f.resolve.mockResolvedValue([{ name: "TOKEN", value: "new" }]);
 	release();
-	expect((await read).resources[0]?.[1].env).toEqual([{ name: "TOKEN", value: "new" }]);
+	expect((await read).resources[0]?.[1]).toMatchObject({ env: [{ name: "TOKEN", value: "new" }] });
 });

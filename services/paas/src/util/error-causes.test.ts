@@ -35,7 +35,13 @@ const github = new GitHubOauth2Provider(
 
 test.each([
 	["configuration", () => new PaasConfig(fail).load()],
-	["Git", () => new GitClient({ execute: fail, createDirectory: fail, realPath: fail }).initRepo("/repo")],
+	[
+		"Git",
+		() =>
+			new GitClient({ execute: fail, executeBytes: fail, createDirectory: fail, realPath: fail }).initRepo(
+				"/repo",
+			),
+	],
 	["Docker", () => new DockerClient({ request: fail }).inspectNetwork("network")],
 	["Envoy bootstrap", () => envoy.bootstrap()],
 	["Envoy apply", () => envoy.apply({ clusters: [], listeners: [] })],

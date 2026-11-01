@@ -53,13 +53,17 @@ Generated environment-variable names must be unambiguous. Normalization collisio
 
 ## External ingress and authentication
 
-Every web resource, including a sole implicit primary, has this external URL:
+Every web or static resource, including a sole implicit primary, has this external URL:
 
 ```text
 https://{resourceId}.{serviceId}.{baseDomain}
 ```
 
-The [primary web resource](configuration.md#service-descriptors) also receives `https://{serviceId}.{baseDomain}`. Both hostnames route to the same resource and use its authentication policy. Other web resources retain independent endpoints, health checks and policies. Local deployments without TLS use the same names over HTTP; nonstandard ingress ports appear in URLs.
+The [primary resource](configuration.md#service-descriptors), selected across web and static resources together, also receives `https://{serviceId}.{baseDomain}`. Both hostnames route to the same resource and use its authentication policy. Other resources retain independent endpoints and policies. Local deployments without TLS use the same names over HTTP; nonstandard ingress ports appear in URLs.
+
+Static routes use a DNS cluster targeting `paas:8081`, the control plane's dedicated static HTTP listener on the bootstrap network. Envoy applies the same fail-closed ingress authorization as for web routes. The static listener has no published host port, management API, health or OAuth routes. It resolves only published static resource hosts and their primary aliases. No service Docker network or workload container is created for static-only services. This listener follows the same trusted internal-network boundary as workload ports.
+
+Static serving supports GET and HEAD, preserves binary contents, assigns MIME types by extension, and serves `index.html` for `/` and directory paths ending in `/`. Missing files return 404; there is no SPA fallback, directory listing or WebSocket upgrade. Paths are decoded once and traversal, NUL bytes, backslashes and symbolic links are rejected. Responses use `Cache-Control: no-cache` and `X-Content-Type-Options: nosniff`. Static resource policy applies to every file; see [static configuration](configuration.md#static-resources).
 
 Web resources declare their application port and authentication policy:
 

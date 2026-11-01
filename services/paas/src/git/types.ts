@@ -9,6 +9,11 @@ export interface GitFile {
 	content: string;
 }
 
+export interface GitDirectoryFile {
+	path: string;
+	content: Uint8Array;
+}
+
 export interface GitRefreshResult {
 	serviceId: string;
 	refreshed: boolean;

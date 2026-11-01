@@ -1,6 +1,7 @@
 import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IDockerInfrastructure } from "../docker/docker-service.ts";
 import type { DockerContainerDetails, DockerNetwork, ServiceContainer } from "../docker/types.ts";
+import type { IStaticStore } from "../static/static-store.ts";
 import { createLogger, withLogContext } from "../util/logger.ts";
 import { DesiredInputError, type IDesiredInputs } from "./desired-inputs.ts";
 import type { IRouteVerifier } from "./networking/networking-service.ts";
@@ -44,6 +45,7 @@ export class DriftAudit implements IDriftAudit {
 		private readonly state: { refresh(serviceId: string): Promise<void> },
 		private readonly rememberNetwork: (networkId: string, serviceId: string) => void,
 		private readonly generateTaskId: () => string,
+		private readonly staticStore?: { inspect: IStaticStore["inspect"] },
 	) {}
 
 	run(serviceId?: string): Promise<void> {
@@ -111,12 +113,30 @@ export class DriftAudit implements IDriftAudit {
 
 	private async inspect(serviceId: string): Promise<void> {
 		const desired = await this.inputs.read(serviceId);
-		const containers = await this.docker.listServiceContainers(serviceId);
-		const network = await this.docker.inspectServiceNetwork(serviceId);
+		const workloads = desired.resources.some(([, resource]) => resource.type !== "static");
+		const containers = workloads ? await this.docker.listServiceContainers(serviceId) : [];
+		const network = workloads ? await this.docker.inspectServiceNetwork(serviceId) : null;
 		if (network) this.rememberNetwork(network.id, serviceId);
-		let drift = !(await this.infrastructure.inspectServiceInfrastructure(serviceId));
+		let drift = workloads && !(await this.infrastructure.inspectServiceInfrastructure(serviceId));
 		const routes = await this.endpoints.getAll();
 		for (const [resourceId, resource] of desired.resources) {
+			if (resource.type === "static") {
+				const actual = routes[`${resourceId}.${serviceId}`];
+				if (
+					(await this.staticStore?.inspect({
+						serviceId,
+						resourceId,
+						revision: desired.revision,
+						path: resource.path,
+					})) !== "current"
+					|| !actual?.static
+					|| actual.port !== 8081
+					|| actual.public !== (resource.ingress?.public ?? false)
+					|| actual.primary !== (resource.primary ?? false)
+				)
+					drift = true;
+				continue;
+			}
 			const current = containers.filter((entry) => entry.resourceId === resourceId);
 			if (current.length !== (resource.replicas ?? 1)) drift = true;
 			for (const container of current) {

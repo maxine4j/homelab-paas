@@ -6,6 +6,7 @@ import type { IChangeBus } from "../events/change-bus.ts";
 import type { IGitService } from "../git/git-service.ts";
 import type { IObservationInvalidation } from "../observation/runtime-observations.ts";
 import type { DescriptorDecoder } from "../reconciler/types.ts";
+import type { IStaticStore } from "../static/static-store.ts";
 import type { PeriodicTask } from "../task/periodic.ts";
 import type { HttpProbe } from "../util/healthcheck.ts";
 import { createLogger } from "../util/logger.ts";
@@ -48,14 +49,18 @@ export class ResourceHealthService implements IResourceHealthReader, IResourceHe
 		private readonly probe: HttpProbe,
 		private readonly changes: IChangeBus,
 		private readonly runtime?: IObservationInvalidation,
+		private readonly staticStore?: { inspect: IStaticStore["inspect"] },
 	) {}
 
 	getStatus(serviceId: string, resourceId: string, containers: readonly ServiceContainer[]): HealthStatus {
 		const key = `${serviceId}/${resourceId}`;
 		if (this.deploying.has(key)) return "Progressing";
-		if (!containers.length) return "Missing";
 		const observation = this.observations.get(key);
-		return observation?.signature === this.signature(containers) ? observation.health : "Unknown";
+		return observation?.signature === this.signature(containers)
+			? observation.health
+			: containers.length
+				? "Unknown"
+				: "Missing";
 	}
 
 	refineStatus(health: HealthStatus, containers: readonly HealthContainerInspection[]): HealthStatus {
@@ -137,7 +142,23 @@ export class ResourceHealthService implements IResourceHealthReader, IResourceHe
 								const signature = this.signature(current);
 								let health: HealthStatus;
 								try {
-									health = await this.check(serviceId, resources[resourceId], current);
+									const resource = resources[resourceId];
+									if (resource?.type === "static") {
+										const snapshot = await this.staticStore?.inspect({
+											serviceId,
+											resourceId,
+											revision: file.revision,
+											path: resource.path,
+										});
+										health =
+											snapshot === "current"
+												? "Healthy"
+												: snapshot === "missing"
+													? "Missing"
+													: snapshot === "different"
+														? "Degraded"
+														: "Unknown";
+									} else health = await this.check(serviceId, resource, current);
 								} catch (err) {
 									this.log.error({ err, serviceId, resourceId }, "Cannot inspect resource health");
 									health = "Unknown";

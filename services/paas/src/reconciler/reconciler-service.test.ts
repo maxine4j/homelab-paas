@@ -19,6 +19,31 @@ const descriptor = {
 	resources: { app: { type: "web", image: "app:1", ingress: { public: true, port: 8080 } } },
 };
 
+test("static resources dispatch independently, checkpoint success and retry failures", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "static",
+		content: JSON.stringify({
+			...descriptor,
+			resources: { site: { type: "static", path: "/dist", ingress: { public: true } } },
+		}),
+	});
+	await f.service.reconcile();
+	expect(f.reconcileStatic).toHaveBeenCalledWith(
+		expect.objectContaining({
+			source: f.deps.services.demo,
+			resourceId: "site",
+			revision: "static",
+			resource: expect.objectContaining({ type: "static", primary: true }),
+		}),
+	);
+	expect(f.reconcileWorker).not.toHaveBeenCalled();
+	expect(f.states.get("demo")).toMatchObject({ phase: "ready", activeRevision: "static" });
+	f.reconcileStatic.mockRejectedValueOnce(new Error("disk failure"));
+	await expect(f.service.redeploy("demo")).rejects.toThrow();
+	expect(f.states.get("demo")).toMatchObject({ failures: 1, retryAt: 1000 });
+});
+
 test("targeted observation reconciles only the selected service and reuses desired inputs", async () => {
 	const f = fixture();
 	const service = f.createService({ ...f.deps.services, other: f.deps.services.demo });
@@ -160,6 +185,7 @@ function fixture() {
 	const fetchFile = vi.fn(async (): Promise<GitFile> => ({ revision: "rev", content: JSON.stringify(descriptor) }));
 	const reconcile = vi.fn(async () => {});
 	const reconcileWorker = vi.fn(async () => {});
+	const reconcileStatic = vi.fn(async () => {});
 	const readSecrets = vi.fn(async (): Promise<string | undefined> => undefined);
 	const appendEvent = vi.fn(async (_serviceId: string, _event: UiServiceEvent) => {});
 	const bus = new ChangeBus();
@@ -203,6 +229,7 @@ function fixture() {
 			new EventDiagnostics(testConfig()),
 			bus,
 			{ reconciliation },
+			{ reconcile: reconcileStatic },
 		);
 	};
 	return {
@@ -213,6 +240,7 @@ function fixture() {
 		fetchFile,
 		reconcile,
 		reconcileWorker,
+		reconcileStatic,
 		readSecrets,
 		appendEvent,
 		resolveHostPath,

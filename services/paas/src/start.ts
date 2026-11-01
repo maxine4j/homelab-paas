@@ -66,13 +66,18 @@ import { ReconcilerService } from "./reconciler/reconciler-service.ts";
 import { ReconciliationScheduler } from "./reconciler/reconciliation-scheduler.ts";
 import { ReconciliationStore } from "./reconciler/reconciliation-store.ts";
 import { ResourceSpecification } from "./reconciler/resource-specification.ts";
+import { StaticResourceReconciler } from "./reconciler/resources/static/static-reconciler.ts";
 import { WebResourceReconciler } from "./reconciler/resources/web/web-reconciler.ts";
 import { WorkerResourceReconciler } from "./reconciler/resources/worker/worker-reconciler.ts";
 import { ServiceEventStore } from "./reconciler/service-event-store.ts";
+import { createStaticRouter } from "./static/static-router.ts";
+import { StaticService } from "./static/static-service.ts";
+import { StaticStore } from "./static/static-store.ts";
 import { ResourceStatusService } from "./status/resource-status-service.ts";
 import { FileSystemKeyValueStore } from "./store/file-system-store.ts";
 import { PeriodicTaskRunner } from "./task/periodic.ts";
 import type { StartOptions } from "./types.ts";
+import * as staticFiles from "./util/file.ts";
 import { atomicWriteFile, chmod, lstat, mkdir, readFileBytes, readFile, rm, type FileWriter } from "./util/file.ts";
 import { createHealthCheckRouter, probe } from "./util/healthcheck.ts";
 import type { Lifecycle } from "./util/lifecycle.ts";
@@ -125,6 +130,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	await envoy.bootstrap();
 	const networking = new NetworkingService(endpoints, envoy);
 	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/git`);
+	const staticStore = new StaticStore("/var/homelab-paas/__paas/static", staticFiles);
 	const observations = new RuntimeObservations(docker, Date.now);
 	const health = new ResourceHealthService(
 		config,
@@ -134,6 +140,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		probe,
 		changes,
 		observations,
+		staticStore,
 	);
 	const progress = new DeploymentProgress(store, events, changes, Date.now, health, (serviceId) =>
 		managementState.refresh(serviceId),
@@ -174,6 +181,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		new EventDiagnostics(config),
 		changes,
 		metrics,
+		new StaticResourceReconciler(git, staticStore, networking),
 	);
 	const scheduler = new ReconciliationScheduler(
 		config,
@@ -235,7 +243,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		);
 	}
 	const inspection = new PaasUiService(
-		new ResourceStatusService(new ResourceSpecification(), environment),
+		new ResourceStatusService(new ResourceSpecification(), environment, staticStore),
 		config,
 		git,
 		decodeDescriptorYaml,
@@ -261,6 +269,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		managementState,
 		(id, serviceId) => watcher.rememberNetwork(id, serviceId),
 		nanoid,
+		staticStore,
 	);
 	const watcher = new DockerEventWatcher(
 		new DockerEventClient(dockerTransport),
@@ -321,6 +330,15 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	);
 	lifecycle.registerShutdownHandler(() => live.close());
 	await once(server, "listening");
+	const staticServer = new Koa()
+		.use(createRequestLogger())
+		.use(createStaticRouter(new StaticService(config, endpoints, staticStore)))
+		.listen(8081, "0.0.0.0");
+	lifecycle.registerShutdownHandler(
+		() =>
+			new Promise<void>((resolve, reject) => staticServer.close((error) => (error ? reject(error) : resolve()))),
+	);
+	await once(staticServer, "listening");
 	const metricsServer = new Koa().use(createMetricsRouter(metrics).routes()).listen(9090, "0.0.0.0");
 	lifecycle.registerShutdownHandler(
 		() =>

@@ -25,6 +25,29 @@ const descriptor = {
 		db: { type: "postgres", image: "postgres:17" },
 	},
 };
+
+test("static and web resources share the primary URL and expose resource links", async () => {
+	const f = fixture();
+	f.fetchFile.mockResolvedValue({
+		revision: "rev",
+		content: JSON.stringify({
+			...descriptor,
+			resources: { app: descriptor.resources.app, site: { type: "static", path: "/dist", primary: true } },
+		}),
+	});
+	const snapshot = await f.service.getService("demo");
+	expect(snapshot.primaryUrl).toBe("http://demo.example.com");
+	expect(snapshot.resources.find((entry) => entry.resourceId === "app")?.primaryUrl).toBeUndefined();
+	expect(snapshot.resources.find((entry) => entry.resourceId === "site")).toMatchObject({
+		url: "http://site.demo.example.com",
+		primaryUrl: "http://demo.example.com",
+		type: "static",
+		containers: [],
+	});
+	f.refineStatus.mockClear();
+	await f.service.getResource("demo", "site", snapshot);
+	expect(f.refineStatus).not.toHaveBeenCalled();
+});
 const fixture = (health: HealthStatus = "Degraded") => {
 	const config = parseConfig({
 		version: 1,

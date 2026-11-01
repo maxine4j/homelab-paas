@@ -185,7 +185,8 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 					};
 				}),
 			);
-			const health = this.health.refineStatus(resource.health, containers);
+			const health =
+				resource.type === "static" ? resource.health : this.health.refineStatus(resource.health, containers);
 			const sync =
 				resource.sync !== "Unknown"
 				&& (health === "Missing" || containers.some(({ state }) => state === "missing"))
@@ -235,7 +236,9 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 				this.descriptor(serviceId),
 			]);
 			const resources = file?.descriptor.resources ?? {};
-			const webCount = Object.values(resources).filter((resource) => resource.type === "web").length;
+			const webCount = Object.values(resources).filter(
+				(resource) => resource.type === "web" || resource.type === "static",
+			).length;
 			const secrets = this.secrets(file?.descriptor);
 			const metadata = includeRevisionMetadata
 				? await this.revisionMetadata(
@@ -257,6 +260,7 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 						? await this.status.getSync({
 								serviceId,
 								resourceId,
+								revision: file?.revision,
 								descriptorAvailable: Boolean(file),
 								resource:
 									resources[resourceId]?.type === "web"
@@ -276,11 +280,11 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 							)
 						: "Unknown",
 					url:
-						resources[resourceId]?.type === "web"
+						resources[resourceId]?.type === "web" || resources[resourceId]?.type === "static"
 							? this.ingressUrl(`${resourceId}.${serviceId}`)
 							: undefined,
 					primaryUrl:
-						resources[resourceId]?.type === "web"
+						(resources[resourceId]?.type === "web" || resources[resourceId]?.type === "static")
 						&& (webCount === 1 || resources[resourceId].primary === true)
 							? this.ingressUrl(serviceId)
 							: undefined,
@@ -309,7 +313,8 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 						? undefined
 						: this.config.redact(file.descriptor.metadata.description, secrets),
 				primaryUrl: Object.values(resources).some(
-					(resource) => resource.type === "web" && (webCount === 1 || resource.primary),
+					(resource) =>
+						(resource.type === "web" || resource.type === "static") && (webCount === 1 || resource.primary),
 				)
 					? this.ingressUrl(serviceId)
 					: undefined,

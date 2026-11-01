@@ -10,6 +10,36 @@ const descriptor = {
 
 const binding = { protocol: "tcp", containerPort: 8080, hostPort: 18080, bindAddress: "127.0.0.1" };
 
+test("static resources need only a path and default to private ingress", () => {
+	expect(
+		parseDescriptor({ ...descriptor, resources: { site: { type: "static", path: "../dist" } } }, "test-service")
+			.resources["site"],
+	).toEqual({ type: "static", path: "../dist", ingress: { public: false } });
+});
+
+test("web and static share one primary selection", () => {
+	const resources = { app: descriptor.resources.app, site: { type: "static", path: "/dist", primary: true } };
+	expect(() => parseDescriptor({ ...descriptor, resources }, "test-service")).not.toThrow();
+	expect(() =>
+		parseDescriptor(
+			{ ...descriptor, resources: { ...resources, app: { ...resources.app, primary: true } } },
+			"test-service",
+		),
+	).toThrow();
+	expect(() =>
+		parseDescriptor(
+			{ ...descriptor, resources: { ...resources, site: { ...resources.site, primary: false } } },
+			"test-service",
+		),
+	).toThrow();
+});
+
+test.each(["", "dist\0", "dist\\file"])("rejects invalid static path %j", (path) => {
+	expect(() =>
+		parseDescriptor({ ...descriptor, resources: { site: { type: "static", path } } }, "test-service"),
+	).toThrow();
+});
+
 test.each(["web", "worker"])("SELinux labeling is an explicit boolean for %s", (type) => {
 	const app = type === "web" ? descriptor.resources.app : { type, image: "jobs:1", healthcheckPort: 8080 };
 	for (const selinuxLabeling of [true, false])

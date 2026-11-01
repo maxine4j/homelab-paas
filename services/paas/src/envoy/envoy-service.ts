@@ -47,10 +47,14 @@ export class EnvoyService implements IEnvoyService {
 			...entries.map(([id, endpoint]) => ({
 				"@type": "type.googleapis.com/envoy.config.cluster.v3.Cluster",
 				name: `service-${id}`,
-				type: "STATIC",
+				type: endpoint.static ? "STRICT_DNS" : "STATIC",
 				connect_timeout: "2s",
 				common_lb_config: { healthy_panic_threshold: { value: 0 } },
-				load_assignment: assignment(`service-${id}`, endpoint.address, endpoint.port),
+				load_assignment: assignment(
+					`service-${id}`,
+					endpoint.static ? "paas" : endpoint.address,
+					endpoint.static ? 8081 : endpoint.port,
+				),
 				...(endpoint.healthcheckPath
 					? {
 							health_checks: [
@@ -133,21 +137,27 @@ export class EnvoyService implements IEnvoyService {
 		}
 		return {
 			...host,
-			routes: [
-				{
-					match: {
-						prefix: "/",
-						headers: [{ name: "upgrade", string_match: { exact: "websocket", ignore_case: true } }],
-					},
-					route: {
-						cluster,
-						timeout: "0s",
-						idle_timeout: "300s",
-						upgrade_configs: [{ upgrade_type: "websocket", enabled: true }],
-					},
-				},
-				...host.routes,
-			],
+			...(endpoint.static
+				? {}
+				: {
+						routes: [
+							{
+								match: {
+									prefix: "/",
+									headers: [
+										{ name: "upgrade", string_match: { exact: "websocket", ignore_case: true } },
+									],
+								},
+								route: {
+									cluster,
+									timeout: "0s",
+									idle_timeout: "300s",
+									upgrade_configs: [{ upgrade_type: "websocket", enabled: true }],
+								},
+							},
+							...host.routes,
+						],
+					}),
 		};
 	}
 

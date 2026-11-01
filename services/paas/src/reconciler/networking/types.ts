@@ -1,4 +1,6 @@
 export interface Endpoint {
+	/** Uses the control-plane static listener instead of a workload container. */
+	static?: boolean;
 	address: string;
 	port: number;
 	healthcheckPath?: string | null;

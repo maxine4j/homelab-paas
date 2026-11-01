@@ -15,6 +15,62 @@ import { GitClientError } from "./types.ts";
 const execute = promisify(execFile);
 const roots: string[] = [];
 
+test("exports binary committed files relative to descriptors or repository root, ignoring dirty files", async () => {
+	const { repo, git, service } = await fixture();
+	await mkdir(join(repo, "bundle"));
+	await writeFile(join(repo, "bundle/image.bin"), new Uint8Array([0, 255, 128, 10]));
+	await git("add", ".");
+	await git("commit", "-m", "bundle");
+	const source = { remote: "local", descriptorPath: join(repo, "nested/file.yaml") };
+	const { revision } = await service.fetchFile("demo", source);
+	await writeFile(join(repo, "bundle/image.bin"), "dirty");
+	await writeFile(join(repo, "bundle/untracked"), "untracked");
+	for (const path of ["../bundle", "/bundle", "../nested/../bundle"])
+		expect(await service.readDirectory("demo", source, revision, path)).toEqual([
+			{ path: "image.bin", content: new Uint8Array([0, 255, 128, 10]) },
+		]);
+});
+
+test.each(["../../outside", "../..", "/../outside", "/bundle/../../bundle", "..\\outside", "bad\0path"])(
+	"rejects escaping static path %j",
+	async (path) => {
+		const { repo, git, service } = await fixture();
+		await expect(
+			service.readDirectory(
+				"demo",
+				{ remote: "local", descriptorPath: join(repo, "nested/file.yaml") },
+				await git("rev-parse", "HEAD"),
+				path,
+			),
+		).rejects.toThrow();
+	},
+);
+
+test("rejects committed symlinks and missing directories", async () => {
+	const { repo, git, service } = await fixture();
+	await symlink("/etc/passwd", join(repo, "nested/link"));
+	await git("add", ".");
+	await git("commit", "-m", "link");
+	const source = { remote: "local", descriptorPath: join(repo, "nested/file.yaml") };
+	const revision = await git("rev-parse", "HEAD");
+	await expect(service.readDirectory("demo", source, revision, ".")).rejects.toThrow();
+	await expect(service.readDirectory("demo", source, revision, "link")).rejects.toThrow();
+	await expect(service.readDirectory("demo", source, revision, "missing")).rejects.toThrow();
+});
+
+test("repository-root bundles include only tracked files and reject submodules", async () => {
+	const { repo, git, service } = await fixture();
+	const source = { remote: "local", descriptorPath: join(repo, "nested/file.yaml") };
+	const revision = await git("rev-parse", "HEAD");
+	for (const path of ["/", ".."])
+		expect(await service.readDirectory("demo", source, revision, path)).toEqual([
+			{ path: "nested/file.yaml", content: new TextEncoder().encode("committed\n") },
+		]);
+	await git("update-index", "--add", "--cacheinfo", `160000,${revision},nested/module`);
+	await git("commit", "-m", "gitlink");
+	await expect(service.readDirectory("demo", source, await git("rev-parse", "HEAD"), ".")).rejects.toThrow();
+});
+
 test("operation environment reaches Git without leaking into subsequent commands", async () => {
 	const { repo, transport } = await fixture();
 	expect(

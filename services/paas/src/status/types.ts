@@ -5,6 +5,7 @@ import type { ServiceContainer } from "../docker/types.ts";
 export interface ResourceStatusRequest {
 	serviceId: string;
 	resourceId: string;
+	revision?: string;
 	resource?: Resource;
 	descriptorAvailable: boolean;
 	containers: readonly ServiceContainer[];

@@ -27,7 +27,7 @@ One [Docker event watcher and serialized safety audit](reconciliation-and-deploy
 The platform supports:
 
 - Git-managed service descriptors.
-- Web, worker, PostgreSQL, and RabbitMQ resources.
+- Web, static, worker, PostgreSQL, and RabbitMQ resources.
 - Authenticated or public HTTP ingress.
 - Inter-service HTTP communication through Envoy.
 - Recreate and surge deployments.
@@ -56,6 +56,7 @@ Host paths:
 | `/var/homelab-paas/{serviceId}/{resourceId}/credentials.env` | Platform-generated resource credentials  |
 | `/var/homelab-paas/_paas/`                                   | Platform state and ACME account material |
 | `/var/homelab-paas/_paas/ingress.pem`                        | TLS certificate chain and private key    |
+| `/var/homelab-paas/__paas/static/{serviceId}/{resourceId}/`  | Published static bundle files            |
 
 The control-plane container mounts the Docker socket and the required configuration and state directories. Paths supplied to Docker for bind mounts refer to the **host filesystem**.
 

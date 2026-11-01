@@ -2,6 +2,14 @@
 
 Remote descriptor and commit-metadata fetches support optional per-service [Git credentials](configuration.md#private-git-repositories), including live credential changes through configuration reloads.
 
+## Static publication
+
+Static reconcilers export the selected directory from the descriptor's exact Git commit through the shared Git service. They stage regular files in a private sibling directory, then replace `/var/homelab-paas/__paas/static/{serviceId}/{resourceId}/` as a complete bundle before publishing its Envoy route. Publication removes stale files, including files absent from the next commit; it never resets or cleans the user's working checkout. Staging or export failure retains the previous bundle and route. Replacement and metadata failures are retryable through the normal reconciliation checkpoint and backoff. Publication is per resource, not an atomic service-wide update.
+
+Published identity and file digests are persisted beside each resource directory and cannot be served by that resource. Reads serialize with publication, never cache old file bytes, and refuse symlinks. Each inspection checks the committed revision, configured path and file contents, including unexpected files. The safety audit queues reconciliation for missing, altered or extra files and incorrect static route policies; reconciliation recreates the clean snapshot. Unchanged snapshots retain their files while routes are revalidated. Forced redeploy republishes static bundles as well as replacing workloads. Static-only audits do not require workload networks or containers.
+
+Static health is Healthy for a complete matching snapshot, Missing when absent, Degraded when changed, and Unknown when inspection fails. Sync compares snapshot identity and contents with desired Git inputs. Container inspection does not override static health. Static serving and [ingress](networking-and-auth.md#external-ingress-and-authentication) resume from persisted files and routes on restart. Removal remains under the existing deferred removal contract; persistent data outside the selected static publication directory is preserved.
+
 ## Shared Git cache
 
 Reconciliation and management inspection share one Git service with three tiers: an in-memory map, committed objects in local bare repositories, and the configured remote. Warm descriptor and commit-metadata reads use memory without Git commands or network access. A descriptor memory miss awaits a committed disk read and schedules a background refresh; when no disk descriptor exists it awaits remote population and fails explicitly if that fails. Local source mode discovers committed ref changes on the same configurable Git refresh interval, without fetching or reading working-tree contents.

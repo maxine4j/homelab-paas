@@ -1,4 +1,4 @@
-import type { ServiceDescriptor } from "@homelab-paas/shared-contracts";
+import type { ServiceDescriptor, StaticResource } from "@homelab-paas/shared-contracts";
 
 import type { DeploymentWebResource } from "./deployment/strategy/types.ts";
 import type { DeploymentWorkerResource } from "./deployment/types.ts";
@@ -6,7 +6,7 @@ import type { DeploymentWorkerResource } from "./deployment/types.ts";
 /** Internal only: contains resolved secrets. Never persist or send to logs/status. */
 export interface DesiredService {
 	revision: string;
-	resources: [string, DeploymentWebResource | DeploymentWorkerResource][];
+	resources: [string, DeploymentWebResource | DeploymentWorkerResource | StaticResource][];
 	secrets: string[];
 }
 
@@ -19,6 +19,7 @@ export const serviceEventMessages = {
 	secrets: "Cannot resolve application secrets; check the service env file and required variable names",
 	web: "Cannot reconcile web resource; check Docker, image, readiness and Envoy access",
 	worker: "Cannot reconcile worker resource; check Docker, image and private health check",
+	static: "Cannot reconcile static resource; check committed bundle path, storage and Envoy access",
 	state: "Cannot persist reconciliation state; check platform state directory access",
 	ready: "Deployment completed successfully",
 	recovered: "Service recovered; clearing retry backoff",

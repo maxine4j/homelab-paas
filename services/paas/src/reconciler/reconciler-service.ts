@@ -1,4 +1,4 @@
-import type { WebResource, WorkerResource, UiServiceEvent } from "@homelab-paas/shared-contracts";
+import type { StaticResource, WebResource, WorkerResource, UiServiceEvent } from "@homelab-paas/shared-contracts";
 
 import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IChangeBus } from "../events/change-bus.ts";
@@ -8,6 +8,7 @@ import { createLogger } from "../util/logger.ts";
 import { DesiredInputError, type IDesiredInputs } from "./desired-inputs.ts";
 import { EnvironmentResolutionError } from "./environment-resolver.ts";
 import type { IEventDiagnostics } from "./event-diagnostics.ts";
+import type { IStaticResourceReconciler } from "./resources/static/static-reconciler.ts";
 import type { IWebResourceReconciler } from "./resources/web/web-reconciler.ts";
 import type { IWorkerResourceReconciler } from "./resources/worker/worker-reconciler.ts";
 import type { IServiceEventStore } from "./service-event-store.ts";
@@ -53,6 +54,7 @@ export class ReconcilerService implements IReconcilerService, ITargetedReconcile
 		private readonly diagnostics: IEventDiagnostics,
 		private readonly changes?: IChangeBus,
 		private readonly metrics?: IReconciliationMetrics,
+		private readonly staticResource?: IStaticResourceReconciler,
 	) {}
 
 	reconcile(): Promise<void> {
@@ -116,7 +118,7 @@ export class ReconcilerService implements IReconcilerService, ITargetedReconcile
 		let message: string = serviceEventMessages.fetch;
 		let resourceId: string | undefined;
 		let image: string | undefined;
-		let resourceContext: WebResource | WorkerResource | undefined;
+		let resourceContext: WebResource | WorkerResource | StaticResource | undefined;
 		const secrets: string[] = [];
 		try {
 			const desired = await this.inputs.read(serviceId);
@@ -156,7 +158,7 @@ export class ReconcilerService implements IReconcilerService, ITargetedReconcile
 				});
 			for (const [id, resource] of resources) {
 				resourceId = id;
-				image = resource.image;
+				image = resource.type === "static" ? undefined : resource.image;
 				resourceContext = resource;
 				if (resource.type === "web") {
 					message = serviceEventMessages.web;
@@ -164,6 +166,17 @@ export class ReconcilerService implements IReconcilerService, ITargetedReconcile
 						serviceId,
 						resourceId: id,
 						revision: desiredRevision,
+						resource,
+						...(force ? { force } : {}),
+					});
+				} else if (resource.type === "static") {
+					message = serviceEventMessages.static;
+					if (!this.staticResource) throw new Error("Static reconciler is unavailable");
+					await this.staticResource.reconcile({
+						serviceId,
+						resourceId: id,
+						revision: desiredRevision,
+						source,
 						resource,
 						...(force ? { force } : {}),
 					});

@@ -27,7 +27,7 @@ export interface UiCluster extends UiEditableConfig {
 export interface UiServiceSummary {
 	serviceId: string;
 	description?: string;
-	/** Desired primary web ingress; presence does not imply readiness. */
+	/** Desired primary web or static ingress; presence does not imply readiness. */
 	primaryUrl?: string;
 	sync: SyncStatus;
 	health: HealthStatus;
@@ -91,7 +91,7 @@ export interface UiResource {
 	sync: SyncStatus;
 	health: HealthStatus;
 	type: string;
-	/** Desired web ingress URLs; presence does not imply readiness. */
+	/** Desired web or static ingress URLs; presence does not imply readiness. */
 	url?: string;
 	primaryUrl?: string;
 	config?: JsonValue;

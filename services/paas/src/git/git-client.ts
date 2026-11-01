@@ -2,10 +2,12 @@ import { basename, dirname, isAbsolute, join, relative } from "node:path";
 
 import type { IGitTransport } from "./git-transport.ts";
 import { GitClientError } from "./types.ts";
-import type { GitCommit, GitCredentials } from "./types.ts";
+import type { GitCommit, GitCredentials, GitDirectoryFile } from "./types.ts";
 
 /** All operations reject with GitClientError; paths refer to repositories on disk. */
 export interface IGitClient {
+	/** Reads regular committed files only; rejects symlinks, submodules and unsafe paths. */
+	readDirectory(directory: string, revision: string, path: string): Promise<GitDirectoryFile[]>;
 	initRepo(directory: string): Promise<void>;
 	fetch(directory: string, remote: string, branch: string, credentials?: GitCredentials): Promise<void>;
 	locateFile(path: string): Promise<{ directory: string; path: string }>;
@@ -21,6 +23,26 @@ const commitId = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
 /** Git commands, filesystem discovery, and infrastructure failure translation. */
 export class GitClient implements IGitClient {
 	constructor(private readonly transport: IGitTransport) {}
+	readDirectory(directory: string, revision: string, path: string): Promise<GitDirectoryFile[]> {
+		return this.operation(async () => {
+			if (!commitId.test(revision) || (path && !this.safeTreePath(path))) throw new GitClientError();
+			const tree = `${revision}:${path}`;
+			const listing = await this.transport.execute(directory, ["ls-tree", "-r", "-z", tree]);
+			const files: GitDirectoryFile[] = [];
+			for (const entry of listing.split("\0").filter(Boolean)) {
+				const match = /^(100644|100755) blob ([a-f0-9]{40}|[a-f0-9]{64})\t([\s\S]+)$/.exec(entry);
+				if (!match || !this.safeTreePath(match[3]!)) throw new GitClientError();
+				files.push({
+					path: match[3]!,
+					content: new Uint8Array(
+						await this.transport.executeBytes(directory, ["cat-file", "blob", match[2]!]),
+					),
+				});
+			}
+			return files;
+		});
+	}
+
 	async initRepo(directory: string): Promise<void> {
 		await this.operation(async () => {
 			await this.transport.createDirectory(directory);
@@ -114,6 +136,13 @@ export class GitClient implements IGitClient {
 				...this.authentication(directory, remote, credentials),
 			);
 		});
+	}
+
+	private safeTreePath(path: string): boolean {
+		return (
+			!/[\0\\]/.test(path)
+			&& path.split("/").every((part) => Boolean(part) && ![".", "..", ".git"].includes(part))
+		);
 	}
 
 	private authentication(

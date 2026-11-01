@@ -6,6 +6,42 @@ import { ChangeBus } from "../events/change-bus.ts";
 import { testConfig } from "../util/test/config.ts";
 import { ResourceHealthService } from "./resource-health-service.ts";
 
+test("static health observes snapshot integrity independently of Docker containers", async () => {
+	const inspect = vi.fn(async () => "current" as "current" | "missing" | "different");
+	const config = testConfig({ services: { demo: { remote: "repo", descriptorPath: "sd.yaml" } } });
+	const health = new ResourceHealthService(
+		config,
+		{
+			fetchFile: async () => ({
+				revision: "rev",
+				content: JSON.stringify({
+					version: 1,
+					metadata: { serviceId: "demo" },
+					resources: { site: { type: "static", path: "dist" } },
+				}),
+			}),
+		},
+		decodeDescriptorYaml,
+		{
+			listServiceContainers: async () => [],
+			inspectServiceNetwork: async () => null,
+			inspectServiceContainer: async () => null,
+		},
+		async () => false,
+		new ChangeBus(),
+		undefined,
+		{ inspect },
+	);
+	await health.run();
+	expect(health.getStatus("demo", "site", [])).toBe("Healthy");
+	inspect.mockResolvedValue("missing");
+	await health.run();
+	expect(health.getStatus("demo", "site", [])).toBe("Missing");
+	inspect.mockResolvedValue("different");
+	await health.run();
+	expect(health.getStatus("demo", "site", [])).toBe("Degraded");
+});
+
 const fixture = (
 	type: "web" | "worker" = "web",
 	replicas = 1,

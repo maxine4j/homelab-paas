@@ -6,6 +6,7 @@ import { mkdir, realpath } from "../util/file.ts";
 
 /** Internal infrastructure boundary; failures are translated by GitClient. */
 export interface IGitTransport {
+	executeBytes(directory: string, args: string[]): Promise<Uint8Array>;
 	execute(directory: string, args: string[], environment?: Readonly<Record<string, string>>): Promise<string>;
 	createDirectory(directory: string): Promise<void>;
 	realPath(path: string): Promise<string>;
@@ -16,6 +17,16 @@ const execute = promisify(execFile);
 /** Node adapter with bounded, noninteractive Git subprocesses. */
 export class NodeGitTransport implements IGitTransport {
 	constructor(private readonly config: IPaasConfig) {}
+	async executeBytes(directory: string, args: string[]): Promise<Uint8Array> {
+		return (
+			await execute("git", ["-c", "safe.directory=*", "-C", directory, ...args], {
+				encoding: "buffer",
+				timeout: this.config.getGitConfig().operationTimeoutSeconds * 1000,
+				maxBuffer: 64 * 1024 * 1024,
+				env: { ...this.config.getGitEnvironment(), GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1" },
+			})
+		).stdout;
+	}
 	async execute(directory: string, args: string[], environment?: Readonly<Record<string, string>>): Promise<string> {
 		return (
 			await execute("git", ["-c", "safe.directory=*", "-C", directory, ...args], {

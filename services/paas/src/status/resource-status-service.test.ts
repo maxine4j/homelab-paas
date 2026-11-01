@@ -5,6 +5,27 @@ import type { ServiceContainer } from "../docker/types.ts";
 import { ResourceSpecification } from "../reconciler/resource-specification.ts";
 import { ResourceStatusService } from "./resource-status-service.ts";
 
+test("static sync compares the published commit and path without requiring containers or secrets", async () => {
+	const inspect = vi.fn(async () => "current" as "current" | "different");
+	const resolve = vi.fn(async () => []);
+	const service = new ResourceStatusService(new ResourceSpecification(), { resolve }, { inspect });
+	const request = {
+		serviceId: "demo",
+		resourceId: "site",
+		revision: "rev",
+		resource: { type: "static" as const, path: "/dist" },
+		descriptorAvailable: true,
+		containers: [],
+	};
+	expect(await service.getSync(request)).toBe("Synced");
+	expect(inspect).toHaveBeenCalledWith({ serviceId: "demo", resourceId: "site", revision: "rev", path: "/dist" });
+	expect(resolve).not.toHaveBeenCalled();
+	inspect.mockResolvedValue("different");
+	expect(await service.getSync(request)).toBe("OutOfSync");
+	inspect.mockRejectedValue(new Error("disk failure"));
+	expect(await service.getSync(request)).toBe("Unknown");
+});
+
 const fixture = () => {
 	const resource: WebResource = {
 		type: "web",

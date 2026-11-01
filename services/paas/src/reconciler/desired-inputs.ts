@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { ServiceDescriptor, WebResource, WorkerResource } from "@homelab-paas/shared-contracts";
+import type { ServiceDescriptor, StaticResource, WebResource, WorkerResource } from "@homelab-paas/shared-contracts";
 
 import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IGitService } from "../git/git-service.ts";
@@ -33,7 +33,7 @@ export class DesiredInputs implements IDesiredInputs {
 	private readonly cache = new Map<string, { namespace: string; identity: string; value: DesiredService }>();
 	private readonly descriptors = new Map<
 		string,
-		{ identity: string; resources: [string, WebResource | WorkerResource][] }
+		{ identity: string; resources: [string, WebResource | WorkerResource | StaticResource][] }
 	>();
 	private readonly generations = new Map<string, number>();
 	private readonly pending = new Map<string, Promise<DesiredService>>();
@@ -107,7 +107,7 @@ export class DesiredInputs implements IDesiredInputs {
 			resourceId = desired.resources.length === 1 ? desired.resources.at(0)?.[0] : undefined;
 			const declared = new Map(
 				desired.resources.flatMap(([, resource]) =>
-					(resource.env ?? [])
+					(resource.type === "static" ? [] : (resource.env ?? []))
 						.filter((entry) => "secret" in entry)
 						.map((entry) => [entry.name, entry] as const),
 				),
@@ -121,29 +121,40 @@ export class DesiredInputs implements IDesiredInputs {
 			return {
 				revision,
 				secrets: [...resolved.values()],
-				resources: desired.resources.map(([id, resource]) => [
-					id,
-					{
-						...resource,
-						env: (resource.env ?? []).map((entry) => {
-							const value = "value" in entry ? entry.value : resolved.get(entry.name);
-							if (value === undefined)
-								throw new Error("Cannot resolve application secrets; open the service Secrets tab");
-							return { name: entry.name, value };
-						}),
-					},
-				]),
+				resources: desired.resources.map(([id, resource]) =>
+					resource.type === "static"
+						? [id, resource]
+						: [
+								id,
+								{
+									...resource,
+									env: (resource.env ?? []).map((entry) => {
+										const value = "value" in entry ? entry.value : resolved.get(entry.name);
+										if (value === undefined)
+											throw new Error(
+												"Cannot resolve application secrets; open the service Secrets tab",
+											);
+										return { name: entry.name, value };
+									}),
+								},
+							],
+				),
 			};
 		} catch (cause) {
 			throw new DesiredInputError(stage, revision, resourceId, { cause });
 		}
 	}
 
-	private resources(descriptor: ServiceDescriptor): [string, WebResource | WorkerResource][] {
+	private resources(descriptor: ServiceDescriptor): [string, WebResource | WorkerResource | StaticResource][] {
 		const entries = Object.entries(descriptor.resources);
-		const webCount = entries.filter(([, resource]) => resource.type === "web").length;
+		const webCount = entries.filter(([, resource]) => resource.type === "web" || resource.type === "static").length;
 		if (!entries.length) throw new Error("Runtime requires at least one workload resource");
 		return entries.map(([id, resource]) => {
+			if (resource.type === "static") {
+				if (!this.config.getAuthConfig() && resource.ingress?.public !== true)
+					throw new Error("Private ingress requires auth/TLS");
+				return [id, { ...resource, primary: webCount === 1 || resource.primary === true }];
+			}
 			if (
 				(resource.type !== "web" && resource.type !== "worker")
 				|| (resource.type === "web"

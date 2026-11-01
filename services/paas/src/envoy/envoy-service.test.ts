@@ -5,6 +5,51 @@ import { EnvoyService } from "./envoy-service.ts";
 import { EnvoyClientError, type EnvoyConfiguration } from "./types.ts";
 
 test.each([undefined, 443])(
+	"static routes use the isolated serving listener and shared primary host, TLS %s",
+	async (httpsPort) => {
+		let configuration: EnvoyConfiguration | undefined;
+		await new EnvoyService(
+			{
+				bootstrap: async () => {},
+				apply: async (value) => {
+					configuration = value;
+				},
+			},
+			testConfig({ ingress: { baseDomain: "example.test", httpPort: 80, httpsPort } }),
+		).configureRoutes({
+			"site.demo": {
+				address: "127.0.0.1",
+				port: 8081,
+				static: true,
+				public: httpsPort === undefined,
+				primary: true,
+			},
+			"app.demo": { address: "10.0.0.2", port: 80, public: true, primary: false },
+		});
+		const cluster = configuration?.clusters.find((cluster) => cluster.name === "service-site.demo");
+		expect(cluster).toMatchObject({
+			type: "STRICT_DNS",
+			load_assignment: {
+				endpoints: [
+					{
+						lb_endpoints: [
+							{ endpoint: { address: { socket_address: { address: "paas", port_value: 8081 } } } },
+						],
+					},
+				],
+			},
+		});
+		const text = JSON.stringify(configuration?.listeners);
+		expect(text).toContain(
+			'"domains":["site.demo.example.test","site.demo.example.test:*","demo.example.test","demo.example.test:*"]',
+		);
+		// Static hosts have one ordinary route, with the listener's normal authorization filter.
+		expect(text).toContain('"routes":[{"match":{"prefix":"/"},"route":{"cluster":"service-site.demo"}}]');
+		if (httpsPort) expect(text).toContain('"failure_mode_allow":false');
+	},
+);
+
+test.each([undefined, 443])(
 	"workload WebSockets retain ingress authorization while other management routes reject upgrades (HTTPS %s)",
 	async (httpsPort) => {
 		let configuration: EnvoyConfiguration | undefined;

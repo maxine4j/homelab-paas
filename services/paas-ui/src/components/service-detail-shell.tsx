@@ -22,7 +22,7 @@ export const ServiceDetailShell = ({
 	actions?: ReactNode;
 }) => {
 	const primaryUrl = service?.resources.find(
-		(resource) => resource.type === "web" && resource.primaryUrl,
+		(resource) => (resource.type === "web" || resource.type === "static") && resource.primaryUrl,
 	)?.primaryUrl;
 	const pendingRevision = serviceError ? "Revision data unavailable" : "Loading…";
 	return (
