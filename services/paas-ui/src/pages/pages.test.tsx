@@ -2,6 +2,7 @@ import type { UiService } from "@homelab-paas/shared-contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 
+import { ConfigView } from "../components/config-view.tsx";
 import { ServiceEvents } from "../components/service-events.tsx";
 import { parseRoute } from "../hooks/use-route.ts";
 import { ClusterPage } from "./cluster-page.tsx";
@@ -57,7 +58,8 @@ test("resource descriptor has its own route and tab between Overview and Logs", 
 	expect(html.indexOf(">Overview</a>")).toBeLessThan(html.indexOf(">Descriptor</a>"));
 	expect(html.indexOf(">Descriptor</a>")).toBeLessThan(html.indexOf(">Logs</a>"));
 	expect(html).toContain('aria-label="Resource descriptor YAML"');
-	expect(html).toContain("image: app:1\n");
+	expect(html).toContain('class="language-yaml"');
+	expect(html.replace(/<[^>]*>/g, "")).toContain("image: app:1\n");
 	expect(html).not.toContain("Recent events");
 	const overview = renderToStaticMarkup(
 		<ResourcePage serviceId='demo' tab='config' resource={{ ...resource, containers: [] }} />,
@@ -99,7 +101,7 @@ test("cluster has Config and control-plane Logs tabs with direct navigation", ()
 	expect(html).toContain('href="#/cluster"');
 	expect(html).toContain('href="#/cluster/logs" aria-current="page"');
 	expect(html).toContain(">PaaS logs</a>");
-	expect(html).toContain("control-plane ready");
+	expect(html.replace(/<[^>]*>/g, "")).toContain("control-plane ready");
 	expect(html).toContain("Copy recent logs");
 	expect(html).not.toContain("Save configuration");
 	expect(renderToStaticMarkup(<ClusterPage tab='logs' logError='Logs unavailable' />)).toContain("Logs unavailable");
@@ -133,7 +135,8 @@ test("Descriptor tab routes to selectable redacted YAML with an unavailable fall
 	const html = renderToStaticMarkup(<ServicePage service={service} tab='descriptor' />);
 	expect(html).toContain('href="#/services/demo/descriptor" aria-current="page"');
 	expect(html).toContain('aria-label="Service descriptor YAML"');
-	expect(html).toContain("serviceId: demo");
+	expect(html).toContain('class="language-yaml"');
+	expect(html.replace(/<[^>]*>/g, "")).toContain("serviceId: demo");
 	expect(
 		renderToStaticMarkup(<ServicePage service={{ ...service, descriptorYaml: undefined }} tab='descriptor' />),
 	).toContain("Descriptor YAML unavailable");
@@ -472,14 +475,34 @@ test("diagnostics show the actual error below the status row, decoded stacks, ca
 	expect(html).toMatch(/<\/time><\/div><p class="event-message">Port &lt;bind&gt; failed<\/p>/);
 	expect(html).not.toContain("Cannot reconcile worker");
 	expect(html).toContain("Stack trace</h3><pre");
-	expect(html).toContain("\n    at start (src/start.ts:1:2)");
-	expect(html).toContain("\n    at create (src/docker.ts:3:4)");
+	expect(html).toContain('class="language-stacktrace"');
+	expect(html.replace(/<[^>]*>/g, "")).toContain("\n    at start (src/start.ts:1:2)");
+	expect(html.replace(/<[^>]*>/g, "")).toContain("\n    at create (src/docker.ts:3:4)");
 	expect(html).not.toContain("file:///app/services/paas/");
 	expect(html).toContain("Context</h3><pre");
-	expect(html).toContain("resource:\n  image: app:1\n");
+	expect(html).toContain('class="language-yaml"');
+	expect(html.replace(/<[^>]*>/g, "")).toContain("resource:\n  image: app:1\n");
 	expect(html).toContain("bind source missing");
 	expect(html).toContain("500");
 	expect(html).not.toContain("&quot;stack&quot;");
+});
+
+test("live configuration and structured diagnostic context use JSON highlighting", () => {
+	const config = renderToStaticMarkup(<ConfigView value={{ ready: true }} />);
+	expect(config).toContain('class="language-json"');
+	expect(config).toContain('class="token property"');
+	const html = renderToStaticMarkup(
+		<ServiceEvents
+			events={[
+				{
+					...events[0]!,
+					diagnostics: JSON.stringify({ error: { message: "failed" }, context: { ready: true } }),
+				},
+			]}
+		/>,
+	);
+	expect(html).toContain('class="language-json"');
+	expect(html).toContain('class="token boolean"');
 });
 
 test.each(["Error: plain\n    at start", '{"error":{"message":"partial"\n[truncated]'])(
@@ -488,7 +511,9 @@ test.each(["Error: plain\n    at start", '{"error":{"message":"partial"\n[trunca
 		const html = renderToStaticMarkup(<ServiceEvents events={[{ ...events[0]!, diagnostics }]} />);
 		expect(html).toContain("Stack trace</h3>");
 		expect(html).toContain("Context</h3>");
-		expect(html).toContain(diagnostics.startsWith("Error") ? "    at start" : "[truncated]");
+		expect(html.replace(/<[^>]*>/g, "")).toContain(
+			diagnostics.startsWith("Error") ? "    at start" : "[truncated]",
+		);
 	},
 );
 
@@ -670,8 +695,8 @@ test("events expose selectable error diagnostics in an escaped disclosure", () =
 	);
 	expect(html).toContain("<details");
 	expect(html).toContain("Error diagnostics");
-	expect(html).toContain("&lt;bind failed&gt;");
-	expect(html).toContain(" at start");
+	expect(html.replace(/<[^>]*>/g, "")).toContain("&lt;bind failed&gt;");
+	expect(html.replace(/<[^>]*>/g, "")).toContain(" at start");
 });
 
 test("both service event views show missing names, host edit path and safe syntax location", () => {
@@ -828,7 +853,7 @@ test("resource inspection renders configuration, state and escaped log output", 
 			expect(html).not.toContain('href="#/services/demo/resources/app/state"');
 		}
 		if (tab === "logs") {
-			expect(html).toContain("&lt;script&gt;");
+			expect(html.replace(/<[^>]*>/g, "")).toContain("&lt;script&gt;");
 			expect(html).not.toContain("<script>");
 		}
 	}

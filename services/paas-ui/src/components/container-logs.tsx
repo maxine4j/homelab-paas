@@ -1,6 +1,8 @@
 import { Copy, Pause, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { CodeHighlight } from "./code-highlight.tsx";
+
 export const copyRecentLogs = async (
 	content: string,
 	clipboard: Pick<Clipboard, "writeText"> | undefined,
@@ -51,11 +53,13 @@ export const ContainerLogs = ({ content }: { content?: string }) => {
 						setFrozen(content ?? "");
 				}}
 			>
-				{paused
-					? frozen || "No log output yet."
-					: content === undefined
-						? "Loading logs…"
-						: content || "No log output yet."}
+				<CodeHighlight language='log'>
+					{paused
+						? frozen || "No log output yet."
+						: content === undefined
+							? "Loading logs…"
+							: content || "No log output yet."}
+				</CodeHighlight>
 			</pre>
 		</>
 	);

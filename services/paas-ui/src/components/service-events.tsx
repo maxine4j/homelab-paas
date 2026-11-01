@@ -1,5 +1,6 @@
 import type { UiServiceEvent } from "@homelab-paas/shared-contracts";
 
+import { CodeHighlight } from "./code-highlight.tsx";
 import { EventCopy } from "./event-copy.tsx";
 import { presentDiagnostics } from "./event-diagnostics.ts";
 
@@ -46,10 +47,18 @@ export const ServiceEvents = ({
 							<details className='event-diagnostics'>
 								<summary>Error diagnostics</summary>
 								<h3>Stack trace</h3>
-								<pre tabIndex={0}>{diagnostics.stack || "Stack trace unavailable."}</pre>
+								<pre tabIndex={0}>
+									<CodeHighlight language='stacktrace'>
+										{diagnostics.stack || "Stack trace unavailable."}
+									</CodeHighlight>
+								</pre>
 								<h3>Context</h3>
 								{diagnostics.context ? (
-									<pre tabIndex={0}>{diagnostics.context}</pre>
+									<pre tabIndex={0}>
+										<CodeHighlight language={diagnostics.contextLanguage ?? "json"}>
+											{diagnostics.context}
+										</CodeHighlight>
+									</pre>
 								) : (
 									<p className='muted'>Context unavailable.</p>
 								)}

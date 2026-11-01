@@ -15,10 +15,12 @@
 	"dependencies": {
 		"@homelab-paas/shared-contracts": "workspace:*",
 		"lucide-react": "1.66.0",
+		"prismjs": "1.30.0",
 		"react": "19.1.0",
 		"react-dom": "19.1.0"
 	},
 	"devDependencies": {
+		"@types/prismjs": "1.26.6",
 		"@types/react": "19.1.6",
 		"@types/react-dom": "19.1.5",
 		"@vitejs/plugin-react": "4.5.0",

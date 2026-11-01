@@ -1,6 +1,7 @@
 import type { UiService, UiServiceEvent } from "@homelab-paas/shared-contracts";
 import type { ReactNode } from "react";
 
+import { CodeHighlight } from "../components/code-highlight.tsx";
 import { gitCommitLink } from "../components/git-source-link.ts";
 import { HealthTimeline } from "../components/health-timeline.tsx";
 import { ServiceDetailShell } from "../components/service-detail-shell.tsx";
@@ -108,7 +109,7 @@ export const ServicePage = ({
 					<h2>Service descriptor</h2>
 					{service.descriptorYaml ? (
 						<pre className='code-view' tabIndex={0} aria-label='Service descriptor YAML'>
-							{service.descriptorYaml}
+							<CodeHighlight language='yaml'>{service.descriptorYaml}</CodeHighlight>
 						</pre>
 					) : (
 						<p className='empty'>Descriptor YAML unavailable.</p>

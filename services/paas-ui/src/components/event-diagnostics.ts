@@ -19,7 +19,9 @@ const errorText = (value: unknown, depth = 0): string => {
 const stripPaths = (text: string): string => text.replaceAll("file:///app/services/paas/", "");
 
 /** Legacy plain or clipped JSON remains selectable when structured fields cannot be decoded. */
-export const presentDiagnostics = (text: string): { message?: string; stack: string; context?: string } => {
+export const presentDiagnostics = (
+	text: string,
+): { message?: string; stack: string; context?: string; contextLanguage?: "yaml" | "json" } => {
 	try {
 		const diagnostic: unknown = JSON.parse(text);
 		if (!record(diagnostic) || !("error" in diagnostic)) return { stack: stripPaths(errorText(diagnostic)) };
@@ -30,6 +32,7 @@ export const presentDiagnostics = (text: string): { message?: string; stack: str
 		return {
 			message: message ? (message.length <= 4096 ? message : `${message.slice(0, 4084)} [truncated]`) : undefined,
 			stack: stripPaths(errorText(diagnostic["error"])),
+			contextLanguage: typeof diagnostic["contextYaml"] === "string" ? "yaml" : "json",
 			context:
 				typeof diagnostic["contextYaml"] === "string"
 					? diagnostic["contextYaml"]

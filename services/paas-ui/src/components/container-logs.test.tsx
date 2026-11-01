@@ -11,6 +11,15 @@ test("log viewer provides explicit follow control and accessible log output", ()
 	expect(html).toContain("Copy recent logs");
 });
 
+test("log output highlights structured JSON and stack frames", () => {
+	const html = renderToStaticMarkup(
+		<ContainerLogs content={'{"msg":"failed"}\nError: failed\n    at start (src/start.ts:1:2)\n'} />,
+	);
+	expect(html).toContain('class="language-log"');
+	expect(html).toContain('class="token property"');
+	expect(html).toContain('class="token function"');
+});
+
 test("copies the latest 200 lines, preserving a trailing newline", async () => {
 	const writeText = vi.fn().mockResolvedValue(undefined);
 	const lines = Array.from({ length: 210 }, (_, index) => `line ${index}`);

@@ -1,5 +1,6 @@
 import type { UiLogs, UiResource, UiServiceEvent } from "@homelab-paas/shared-contracts";
 
+import { CodeHighlight } from "../components/code-highlight.tsx";
 import { ContainerLogs } from "../components/container-logs.tsx";
 import { ResourceConfiguration } from "../components/resource-configuration.tsx";
 import { ResourceDetailShell } from "../components/resource-detail-shell.tsx";
@@ -57,7 +58,7 @@ export const ResourcePage = ({
 					<h2>Resource descriptor</h2>
 					{resource.configYaml ? (
 						<pre className='code-view' tabIndex={0} aria-label='Resource descriptor YAML'>
-							{resource.configYaml}
+							<CodeHighlight language='yaml'>{resource.configYaml}</CodeHighlight>
 						</pre>
 					) : (
 						<p className='empty'>Descriptor YAML unavailable.</p>

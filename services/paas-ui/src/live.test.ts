@@ -104,8 +104,8 @@ test("resource views filter immediate and persisted service events identically a
 		for (const html of immediate) {
 			expect(html.match(/class="service-event service-event-error"/g)).toHaveLength(1);
 			expect(html).toContain("Port bind failed");
-			expect(html).toContain("\n    at start (src/start.ts:1:2)");
-			expect(html).toContain("image: app:1\n");
+			expect(html.replace(/<[^>]*>/g, "")).toContain("\n    at start (src/start.ts:1:2)");
+			expect(html.replace(/<[^>]*>/g, "")).toContain("image: app:1\n");
 			for (const excluded of ["Wrong service", "Wrong resource", "Service-wide"])
 				expect(html).not.toContain(excluded);
 		}

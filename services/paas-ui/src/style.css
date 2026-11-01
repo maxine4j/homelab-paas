@@ -158,6 +158,42 @@ pre {
 	min-width: 0;
 	max-width: 100%;
 }
+pre code {
+	font: inherit;
+}
+pre .token.comment {
+	color: #9aa8bb;
+}
+pre .token.key,
+pre .token.property {
+	color: #aac3ff;
+}
+pre .token.string,
+pre .token.scalar,
+pre .token.url {
+	color: #a6dbb8;
+}
+pre .token.number,
+pre .token.boolean,
+pre .token.null {
+	color: #e5b98b;
+}
+pre .token.keyword,
+pre .token.function,
+pre .token.tag {
+	color: #cfb3f7;
+}
+pre .token.class-name,
+pre .token.error {
+	color: #ffaaaa;
+}
+pre .token.warning {
+	color: #f0cd91;
+}
+pre .token.punctuation,
+pre .token.operator {
+	color: #b9c8df;
+}
 a {
 	color: inherit;
 	text-decoration: none;
