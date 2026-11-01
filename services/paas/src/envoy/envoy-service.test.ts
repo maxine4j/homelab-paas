@@ -5,7 +5,7 @@ import { EnvoyService } from "./envoy-service.ts";
 import { EnvoyClientError, type EnvoyConfiguration } from "./types.ts";
 
 test.each([undefined, 443])(
-	"only the management live route enables WebSocket upgrades with long-lived timeouts (HTTPS %s)",
+	"workload WebSockets retain ingress authorization while other management routes reject upgrades (HTTPS %s)",
 	async (httpsPort) => {
 		let configuration: EnvoyConfiguration | undefined;
 		await new EnvoyService(
@@ -16,14 +16,52 @@ test.each([undefined, 443])(
 				},
 			},
 			testConfig({ ingress: { baseDomain: "example.test", httpPort: 80, httpsPort } }),
-		).configureRoutes({ demo: { address: "10.0.0.2", port: 8080, healthcheckPath: "/health", public: true } });
+		).configureRoutes({
+			"app.demo": {
+				address: "10.0.0.2",
+				port: 8080,
+				healthcheckPath: "/health",
+				public: httpsPort === undefined,
+				primary: true,
+			},
+		});
 		const text = JSON.stringify(configuration?.listeners);
-		expect(text.match(/"upgrade_type":"websocket","enabled":true/g)).toHaveLength(1);
+		expect(text.match(/"upgrade_type":"websocket","enabled":true/g)).toHaveLength(2);
+		expect(text).toContain(
+			JSON.stringify({
+				name: "app.demo",
+				domains: [
+					"app.demo.example.test",
+					"app.demo.example.test:*",
+					"demo.example.test",
+					"demo.example.test:*",
+				],
+				routes: [
+					{
+						match: {
+							prefix: "/",
+							headers: [{ name: "upgrade", string_match: { exact: "websocket", ignore_case: true } }],
+						},
+						route: {
+							cluster: "service-app.demo",
+							timeout: "0s",
+							idle_timeout: "300s",
+							upgrade_configs: [{ upgrade_type: "websocket", enabled: true }],
+						},
+					},
+					{ match: { prefix: "/" }, route: { cluster: "service-app.demo" } },
+				],
+			}),
+		);
 		expect(text).toContain(
 			'"match":{"path":"/api/ui/live"},"route":{"cluster":"paas","timeout":"0s","idle_timeout":"0s","upgrade_configs":[{"upgrade_type":"websocket","enabled":true}]}',
 		);
 		expect(text).toContain('"upgrade_type":"websocket","enabled":false');
-		if (httpsPort) expect(text).toContain("envoy.filters.http.ext_authz");
+		if (httpsPort) {
+			expect(text).toContain('"http_filters":[{"name":"envoy.filters.http.ext_authz"');
+			expect(text).toContain('"failure_mode_allow":false');
+			expect(text).toContain('"allowed_upstream_headers":{"patterns":[{"exact":"cookie"},{"exact":"location"}]}');
+		}
 	},
 );
 

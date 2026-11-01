@@ -1,6 +1,6 @@
 # Networking and authentication
 
-Management WebSocket upgrades are restricted to `/api/ui/live`, preserve the existing session authorization/cookies and disable route request/idle timeouts for long-lived streams. Workload routes do not enable upgrades. The protocol, direct-upgrade protection and open-session revalidation are defined in [live management subscriptions](management-ui.md#live-subscriptions).
+Management WebSocket upgrades are restricted to `/api/ui/live`, preserve the existing session authorization/cookies and disable route request/idle timeouts for long-lived streams. The protocol, direct-upgrade protection and open-session revalidation are defined in [live management subscriptions](management-ui.md#live-subscriptions). Workload WebSockets follow the [workload upgrade contract](#workload-websockets).
 
 The [deployment runtime](configuration.md#implemented-deployment-mvp) supports public HTTP for local development and authenticated HTTPS when auth/TLS are configured. The internal listener and inter-service discovery remain deferred. The control plane and Envoy attach to each service's dedicated Docker network. Workloads publish no host ports by default; explicit [host ports](configuration.md#host-ports) connect directly to web or worker applications outside Envoy's authentication, TLS and readiness controls. Bootstrap containers must carry `homelab-paas.cluster={clusterId}` and `homelab-paas.role=control-plane` or `envoy` labels so the control plane can discover them. Envoy loads generated filesystem xDS from the shared platform state directory. Its administration/configuration interfaces have no published ports. Later sections also describe intended capabilities beyond this runtime.
 
@@ -75,6 +75,14 @@ Every application request through Envoy ingress passes through its authorization
 - Authorization-check failures fail closed.
 
 Login and OAuth callback routes are exempt from requiring an existing session.
+
+### Workload WebSockets
+
+Web ingress supports WebSocket upgrades on resource hostnames and primary service aliases. HTTPS upgrades use the same fail-closed authorization check as ordinary HTTP requests: private ingress requires a valid platform session, public ingress follows its declared public policy, and platform cookies are stripped before forwarding to workloads. Local HTTP development retains its existing unauthenticated public-only policy. Other upgrade protocols remain disabled; management upgrades remain restricted to `/api/ui/live`.
+
+Only WebSocket requests disable the route request timeout; ordinary HTTP requests retain their existing timeouts. Workload sockets have a five-minute stream idle timeout, reset by traffic in either direction, so applications should send heartbeats when idle. Upgrades retain Envoy's normal HTTP filter chain, including authorization; no alternate filter chain bypasses authentication.
+
+Platform authorization is checked only at the initial handshake. Session expiry or allowlist removal does not terminate established workload sockets; reconnecting requires a fresh authorization check. Applications own origin validation, message authorization and any ongoing session checks. Connections stay with their original container until closed, including during deployments; applications must reconnect after interruption. This differs from the management socket's continuous session revalidation.
 
 ### GitHub login and JWT sessions
 

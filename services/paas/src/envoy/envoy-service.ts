@@ -121,13 +121,31 @@ export class EnvoyService implements IEnvoyService {
 	}
 
 	private resourceHost(id: string, endpoint: Endpoint) {
-		const host = virtualHost(id, `${id}.${this.config.getIngressConfig().baseDomain}`, `service-${id}`);
+		const cluster = `service-${id}`;
+		const host = virtualHost(id, `${id}.${this.config.getIngressConfig().baseDomain}`, cluster);
 		const serviceId = id.split(".").at(1);
 		if (serviceId && endpoint.primary) {
 			const alias = `${serviceId}.${this.config.getIngressConfig().baseDomain}`;
 			host.domains.push(alias, `${alias}:*`);
 		}
-		return host;
+		return {
+			...host,
+			routes: [
+				{
+					match: {
+						prefix: "/",
+						headers: [{ name: "upgrade", string_match: { exact: "websocket", ignore_case: true } }],
+					},
+					route: {
+						cluster,
+						timeout: "0s",
+						idle_timeout: "300s",
+						upgrade_configs: [{ upgrade_type: "websocket", enabled: true }],
+					},
+				},
+				...host.routes,
+			],
+		};
 	}
 
 	private liveRoute() {
