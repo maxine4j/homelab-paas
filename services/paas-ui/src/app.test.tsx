@@ -3,6 +3,21 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { App, AppView, viewPaths } from "./app.tsx";
 
+test("main navigation retains readable destinations with decorative icons", () => {
+	const html = renderToStaticMarkup(
+		<AppView
+			route={{ page: "services" }}
+			snapshot={{ refresh: () => {} }}
+			events={{ refresh: () => {} }}
+			logs={{}}
+		/>,
+	);
+	const nav = html.match(/<nav aria-label="Main navigation"[^]*?<\/nav>/)?.[0] ?? "";
+	expect(nav.match(/<svg\b[^>]*aria-hidden="true"/g)).toHaveLength(2);
+	expect(nav).toMatch(/href="#\/services" aria-current="page"[^]*?<\/svg>Services<\/a>/);
+	expect(nav).toMatch(/href="#\/cluster"[^]*?<\/svg>Cluster<\/a>/);
+});
+
 test.each(["logs", "ingress-logs"] as const)("Cluster %s remains usable when configuration is unavailable", (tab) => {
 	const html = renderToStaticMarkup(
 		<AppView
@@ -12,7 +27,7 @@ test.each(["logs", "ingress-logs"] as const)("Cluster %s remains usable when con
 			logs={{ data: { containerId: "controller", content: "ready", tail: 200 } }}
 		/>,
 	);
-	expect(html).toContain('href="#/cluster" aria-current="page">Cluster</a>');
+	expect(html).toMatch(/href="#\/cluster" aria-current="page"><svg\b[^]*?<\/svg>Cluster<\/a>/);
 	expect(html).toContain(tab === "logs" ? "PaaS logs" : "Ingress logs");
 	expect(html).toContain("ready");
 	expect(html).not.toContain("Cluster config");
@@ -195,9 +210,11 @@ test("resource event history renders independently of failed inspection with lin
 	);
 	expect(html).toContain("Live · connected");
 	expect(html).toContain('aria-label="Resource inspection"');
-	expect(html).toContain('href="#/services/demo/resources/app/config">Overview</a>');
-	expect(html).toContain('href="#/services/demo/resources/app/logs">Logs</a>');
-	expect(html).toContain('href="#/services/demo/resources/app/events" aria-current="page">Events</a>');
+	expect(html).toMatch(/href="#\/services\/demo\/resources\/app\/config"><svg\b[^]*?<\/svg>Overview<\/a>/);
+	expect(html).toMatch(/href="#\/services\/demo\/resources\/app\/logs"><svg\b[^]*?<\/svg>Logs<\/a>/);
+	expect(html).toMatch(
+		/href="#\/services\/demo\/resources\/app\/events" aria-current="page"><svg\b[^]*?<\/svg>Events<\/a>/,
+	);
 	expect(html).not.toContain('class="back-link"');
 });
 
@@ -214,9 +231,9 @@ test("service history retains service navigation without a Git snapshot", () => 
 	expect(html).toMatch(/<nav class="breadcrumbs"[^>]*>[^]*<a href="#\/services\/demo">demo<\/a>/);
 	expect(html.match(/<nav class="breadcrumbs"[^>]*>.*?<\/nav>/)?.[0]).not.toContain("<h1>");
 	expect(html).toContain('aria-label="Service detail"');
-	expect(html).toContain('href="#/services/demo">Overview</a>');
-	expect(html).toContain('href="#/services/demo/resources">Resources</a>');
-	expect(html).toContain('href="#/services/demo/events" aria-current="page">Events</a>');
+	expect(html).toMatch(/href="#\/services\/demo"><svg\b[^]*?<\/svg>Overview<\/a>/);
+	expect(html).toMatch(/href="#\/services\/demo\/resources"><svg\b[^]*?<\/svg>Resources<\/a>/);
+	expect(html).toMatch(/href="#\/services\/demo\/events" aria-current="page"><svg\b[^]*?<\/svg>Events<\/a>/);
 	expect(html).not.toContain("Git unavailable");
 	expect(html).not.toContain('class="back-link"');
 });
@@ -275,14 +292,14 @@ test("service Resources uses the service snapshot and renders detailed cards thr
 		/service-identity"><h1>demo<\/h1><span class="status-badges"><span class="badge badge-healthy"/,
 	);
 	expect(html.match(/<h1>/g)).toHaveLength(1);
-	expect(html).toContain('href="#/services/demo/resources" aria-current="page">Resources</a>');
+	expect(html).toMatch(/href="#\/services\/demo\/resources" aria-current="page"><svg\b[^]*?<\/svg>Resources<\/a>/);
 	expect(html).not.toContain("Recent events");
 });
 
 test("topbar offers Git refresh beside breadcrumbs without a snapshot refresh button", () => {
 	const html = renderToStaticMarkup(<App />);
 	expect(html).toMatch(
-		/<header class="topbar"><nav class="breadcrumbs".*?<\/nav><div class="git-refresh"><div class="service-actions"><button class="action-info" type="button">Refresh all<\/button><\/div><\/div><\/header>/,
+		/<header class="topbar"><nav class="breadcrumbs".*?<\/nav><div class="git-refresh"><div class="service-actions"><button class="action-info" type="button"><svg\b[^]*?<\/svg>Refresh all<\/button><\/div><\/div><\/header>/,
 	);
 	expect(html).not.toContain("Refresh snapshot");
 	expect(html.match(/Refresh all/g)).toHaveLength(1);
@@ -305,7 +322,7 @@ test("footer explicitly identifies builds without a supplied revision", () => {
 test("main navigation is in the page header with services and cluster links", () => {
 	const html = renderToStaticMarkup(<App />);
 	expect(html).toMatch(/<header class="primary-header">.*<nav aria-label="Main navigation">/);
-	expect(html).toContain('href="#/services" aria-current="page">Services</a>');
-	expect(html).toContain('href="#/cluster">Cluster</a>');
+	expect(html).toMatch(/href="#\/services" aria-current="page"><svg\b[^]*?<\/svg>Services<\/a>/);
+	expect(html).toMatch(/href="#\/cluster"><svg\b[^]*?<\/svg>Cluster<\/a>/);
 	expect(html).not.toContain("<aside");
 });

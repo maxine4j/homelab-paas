@@ -6,6 +6,7 @@ import type {
 	UiServiceSummary,
 	UiServiceEvent,
 } from "@homelab-paas/shared-contracts";
+import { Layers, Server } from "lucide-react";
 
 import { GitRefreshControl } from "./components/git-refresh.tsx";
 import { ServiceDetailShell } from "./components/service-detail-shell.tsx";
@@ -102,9 +103,11 @@ export const AppView = ({
 				</a>
 				<nav aria-label='Main navigation'>
 					<a href='#/services' aria-current={route.page !== "cluster" ? "page" : undefined}>
+						<Layers aria-hidden='true' />
 						Services
 					</a>
 					<a href='#/cluster' aria-current={route.page === "cluster" ? "page" : undefined}>
+						<Server aria-hidden='true' />
 						Cluster
 					</a>
 				</nav>

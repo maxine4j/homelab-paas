@@ -1,4 +1,5 @@
 import type { UiServiceEvent } from "@homelab-paas/shared-contracts";
+import { Copy } from "lucide-react";
 import { useState } from "react";
 
 export const copyEventJson = async (
@@ -24,6 +25,7 @@ export const EventCopy = ({ event }: { event: UiServiceEvent }) => {
 				className='text-action'
 				onClick={async () => setFeedback(await copyEventJson(event, navigator.clipboard))}
 			>
+				<Copy aria-hidden='true' />
 				Copy JSON
 			</button>
 		</div>

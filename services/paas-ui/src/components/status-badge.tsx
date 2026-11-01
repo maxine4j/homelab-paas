@@ -1,4 +1,5 @@
 import type { HealthStatus, SyncStatus } from "@homelab-paas/shared-contracts";
+import { Heart, RefreshCw } from "lucide-react";
 
 type BadgeProps = { kind: "Health"; status: HealthStatus } | { kind: "Sync"; status: SyncStatus };
 
@@ -9,7 +10,7 @@ export const StatusBadge = ({ kind, status }: BadgeProps) => {
 			aria-label={`${kind}: ${status}`}
 			title={`${kind}: ${status}`}
 		>
-			<span aria-hidden='true'>{kind === "Health" ? "♥" : "↻"}</span> {status}
+			{kind === "Health" ? <Heart aria-hidden='true' /> : <RefreshCw aria-hidden='true' />} {status}
 		</span>
 	);
 };

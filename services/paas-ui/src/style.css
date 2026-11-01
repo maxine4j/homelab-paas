@@ -57,6 +57,21 @@ button:disabled {
 	cursor: default;
 	opacity: 0.5;
 }
+.lucide {
+	width: 1rem;
+	height: 1rem;
+	flex-shrink: 0;
+	vertical-align: -0.15em;
+}
+button:has(> .lucide) {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.45rem;
+}
+.primary-web-link {
+	gap: 0.4rem;
+}
 .config-editor fieldset {
 	border: 1px solid #364050;
 	border-radius: 10px;
@@ -175,7 +190,8 @@ button:disabled {
 }
 .primary-header nav a {
 	display: flex;
-	justify-content: space-between;
+	align-items: center;
+	gap: 0.5rem;
 	padding: 12px;
 	color: #a4aebc;
 	border-radius: 8px;
@@ -880,8 +896,11 @@ dd {
 	border-bottom: 1px solid #303844;
 }
 .tabs a {
-	display: grid;
-	place-items: center;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.45rem;
+	white-space: nowrap;
 	min-height: 48px;
 	padding: 12px 4px;
 	color: #9aa8bb;

@@ -31,7 +31,7 @@ test("cluster ingress logs have their own route and work without configuration",
 	const html = renderToStaticMarkup(
 		<ClusterPage tab='ingress-logs' logs={{ containerId: "envoy", content: "ingress ready", tail: 200 }} />,
 	);
-	expect(html).toContain('href="#/cluster/ingress-logs" aria-current="page">Ingress logs</a>');
+	expect(html).toMatch(/href="#\/cluster\/ingress-logs" aria-current="page"><svg\b[^]*?<\/svg>Ingress logs<\/a>/);
 	expect(html).toContain('aria-label="Ingress logs"');
 	expect(html).toContain("ingress ready");
 	expect(html).not.toContain("Save configuration");
@@ -515,9 +515,9 @@ test("service overview shows tabs and two recent events above compact resources 
 			]}
 		/>,
 	);
-	expect(html).toContain('href="#/services/demo" aria-current="page">Overview</a>');
-	expect(html).toContain('href="#/services/demo/resources">Resources</a>');
-	expect(html).toContain('href="#/services/demo/events">Events</a>');
+	expect(html).toMatch(/href="#\/services\/demo" aria-current="page"><svg\b[^]*?<\/svg>Overview<\/a>/);
+	expect(html).toMatch(/href="#\/services\/demo\/resources"><svg\b[^]*?<\/svg>Resources<\/a>/);
+	expect(html).toMatch(/href="#\/services\/demo\/events"><svg\b[^]*?<\/svg>Events<\/a>/);
 	expect(html.indexOf("Recent events")).toBeLessThan(html.indexOf("<h2>Resources"));
 	expect(html).not.toContain("Service descriptor");
 	expect(html).toContain("1 more events...");
@@ -531,7 +531,7 @@ test("service overview shows tabs and two recent events above compact resources 
 		/service-identity-block"><div class="service-identity"><h1>demo<\/h1>[^]*badge-healthy[^]*<\/div><\/div><a class="primary-web-link"/,
 	);
 	expect(html).toContain('href="https://demo.example.test" target="_blank" rel="noreferrer"');
-	expect(html).toMatch(/primary-web-link[^>]*>demo.example.test[^<]*<span aria-hidden="true">↗<\/span><\/a>/);
+	expect(html).toMatch(/primary-web-link[^>]*>demo.example.test[^<]*<svg\b[^>]*aria-hidden="true"[^]*?<\/svg><\/a>/);
 	expect(html).not.toContain("&quot;metadata&quot;");
 	expect(html).not.toContain("Service source configuration");
 });
@@ -557,7 +557,7 @@ test("service resources tab supports direct links without changing resource insp
 			}}
 		/>,
 	);
-	expect(html).toContain('href="#/services/demo/resources" aria-current="page">Resources</a>');
+	expect(html).toMatch(/href="#\/services\/demo\/resources" aria-current="page"><svg\b[^]*?<\/svg>Resources<\/a>/);
 	expect(html).toContain("No resources available");
 	expect(html).not.toContain("Recent events");
 	expect(html).not.toContain("Service descriptor");

@@ -1,4 +1,5 @@
 import type { UiService } from "@homelab-paas/shared-contracts";
+import { ExternalLink } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { ServiceDetailTabs } from "./detail-tabs.tsx";
@@ -39,7 +40,7 @@ export const ServiceDetailShell = ({
 						</div>
 						{primaryUrl && (
 							<a className='primary-web-link' href={primaryUrl} target='_blank' rel='noreferrer'>
-								{new URL(primaryUrl).host} <span aria-hidden='true'>↗</span>
+								{new URL(primaryUrl).host} <ExternalLink aria-hidden='true' />
 							</a>
 						)}
 						<div className='service-commit-panels'>

@@ -1,3 +1,4 @@
+import { Copy, Pause, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 export const copyRecentLogs = async (
@@ -26,6 +27,7 @@ export const ContainerLogs = ({ content }: { content?: string }) => {
 		<>
 			<div className='log-actions'>
 				<button onClick={() => setFrozen(paused ? undefined : (content ?? ""))}>
+					{paused ? <Play aria-hidden='true' /> : <Pause aria-hidden='true' />}
 					{paused ? "Resume follow" : "Pause follow"}
 				</button>
 				<button
@@ -33,6 +35,7 @@ export const ContainerLogs = ({ content }: { content?: string }) => {
 					disabled={content === undefined || content === ""}
 					onClick={async () => setFeedback(await copyRecentLogs(content ?? "", navigator.clipboard))}
 				>
+					<Copy aria-hidden='true' />
 					Copy recent logs
 				</button>
 				<span role='status'>{feedback}</span>

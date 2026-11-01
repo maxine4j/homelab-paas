@@ -1,33 +1,11 @@
 import type { UiResource } from "@homelab-paas/shared-contracts";
+import { ExternalLink, Globe, Lock } from "lucide-react";
 
 import { StatusBadges } from "./status-badge.tsx";
 
 const IngressAccess = ({ isPublic }: { isPublic: boolean }) => (
 	<span className='ingress-access'>
-		<svg
-			width='16'
-			height='16'
-			viewBox='0 0 24 24'
-			fill='none'
-			stroke='currentColor'
-			strokeWidth='1.7'
-			aria-hidden='true'
-			data-icon={isPublic ? "globe" : "lock"}
-		>
-			{isPublic ? (
-				<>
-					<circle cx='12' cy='12' r='9' />
-					<ellipse cx='12' cy='12' rx='4' ry='9' />
-					<path d='M3 12h18' />
-				</>
-			) : (
-				<>
-					<rect x='5' y='10' width='14' height='11' rx='2' />
-					<path d='M8 10V7a4 4 0 0 1 8 0v3' />
-					<path d='M12 14v3' />
-				</>
-			)}
-		</svg>
+		{isPublic ? <Globe aria-hidden='true' data-icon='globe' /> : <Lock aria-hidden='true' data-icon='lock' />}
 		{isPublic ? "Public ingress" : "Private ingress"}
 	</span>
 );
@@ -91,7 +69,7 @@ export const ServiceResources = ({ serviceId, resources }: { serviceId: string; 
 									)}
 									{url && (
 										<a href={url} target='_blank' rel='noreferrer'>
-											{url} <span aria-hidden='true'>↗</span>
+											{url} <ExternalLink aria-hidden='true' />
 										</a>
 									)}
 								</div>

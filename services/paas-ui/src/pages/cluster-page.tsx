@@ -1,4 +1,5 @@
 import type { UiCluster, UiLogs } from "@homelab-paas/shared-contracts";
+import { Network, ScrollText, Settings } from "lucide-react";
 
 import { ConfigEditor } from "../components/config-editor.tsx";
 import { ContainerLogs } from "../components/container-logs.tsx";
@@ -28,9 +29,9 @@ export const ClusterPage = ({
 			label='Cluster detail'
 			current={tab === "config" ? "" : `/${tab}`}
 			tabs={[
-				{ path: "", label: "Config" },
-				{ path: "/logs", label: "PaaS logs" },
-				{ path: "/ingress-logs", label: "Ingress logs" },
+				{ path: "", label: "Config", icon: Settings },
+				{ path: "/logs", label: "PaaS logs", icon: ScrollText },
+				{ path: "/ingress-logs", label: "Ingress logs", icon: Network },
 			]}
 		/>
 		{tab !== "config" ? (

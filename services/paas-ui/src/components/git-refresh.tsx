@@ -1,3 +1,4 @@
+import { RefreshCw, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { refreshGit, redeployService } from "../api.ts";
@@ -68,10 +69,12 @@ export const GitRefreshFeedback = ({
 	<div className='git-refresh'>
 		<div className='service-actions'>
 			<button className='action-info' type='button' disabled={pending} onClick={onRefresh}>
+				<RefreshCw aria-hidden='true' />
 				{serviceId ? "Refresh" : "Refresh all"}
 			</button>
 			{serviceId && onRedeploy && (
 				<button className='action-warning' type='button' disabled={pending} onClick={onRedeploy}>
+					<RotateCcw aria-hidden='true' />
 					Redeploy
 				</button>
 			)}

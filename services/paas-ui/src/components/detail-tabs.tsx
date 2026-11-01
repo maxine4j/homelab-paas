@@ -1,3 +1,6 @@
+import { Activity, FileCode, KeyRound, LayoutDashboard, ListTree, ScrollText } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
 export const DetailTabs = ({
 	base,
 	label,
@@ -6,12 +9,13 @@ export const DetailTabs = ({
 }: {
 	base: string;
 	label: string;
-	tabs: { path: string; label: string }[];
+	tabs: { path: string; label: string; icon: LucideIcon }[];
 	current: string;
 }) => (
 	<nav className='tabs' aria-label={label}>
-		{tabs.map((tab) => (
+		{tabs.map(({ icon: Icon, ...tab }) => (
 			<a key={tab.path} href={`${base}${tab.path}`} aria-current={tab.path === current ? "page" : undefined}>
+				<Icon aria-hidden='true' />
 				{tab.label}
 			</a>
 		))}
@@ -30,11 +34,11 @@ export const ServiceDetailTabs = ({
 		label='Service detail'
 		current={tab === "overview" ? "" : `/${tab}`}
 		tabs={[
-			{ path: "", label: "Overview" },
-			{ path: "/resources", label: "Resources" },
-			{ path: "/descriptor", label: "Descriptor" },
-			{ path: "/events", label: "Events" },
-			{ path: "/secrets", label: "Secrets" },
+			{ path: "", label: "Overview", icon: LayoutDashboard },
+			{ path: "/resources", label: "Resources", icon: ListTree },
+			{ path: "/descriptor", label: "Descriptor", icon: FileCode },
+			{ path: "/events", label: "Events", icon: Activity },
+			{ path: "/secrets", label: "Secrets", icon: KeyRound },
 		]}
 	/>
 );
@@ -53,9 +57,9 @@ export const ResourceDetailTabs = ({
 		label='Resource inspection'
 		current={`/${tab}`}
 		tabs={[
-			{ path: "/config", label: "Overview" },
-			{ path: "/logs", label: "Logs" },
-			{ path: "/events", label: "Events" },
+			{ path: "/config", label: "Overview", icon: LayoutDashboard },
+			{ path: "/logs", label: "Logs", icon: ScrollText },
+			{ path: "/events", label: "Events", icon: Activity },
 		]}
 	/>
 );
