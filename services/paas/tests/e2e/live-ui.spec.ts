@@ -1,5 +1,51 @@
 import { test, expect } from "../util/browser-fixtures.ts";
 
+test("preformatted inspection content keeps long lines in horizontal scroll areas", async ({
+	environment: env,
+	page,
+}) => {
+	const checkBlocks = async (selector: string): Promise<void> => {
+		const blocks = page.locator(selector);
+		await expect(blocks.first()).toBeVisible();
+		for (const width of [320, 390, 1280]) {
+			await page.setViewportSize({ width, height: 900 });
+			for (const block of await blocks.all()) {
+				const layout = await block.evaluate((element) => {
+					const original = element.textContent;
+					element.textContent = "short\n  indented";
+					const shortHeight = element.scrollHeight;
+					element.textContent = `${"long value ".repeat(1000)}${"x".repeat(1000)}\n  indented`;
+					const longHeight = element.scrollHeight;
+					const overflows = element.scrollWidth > element.clientWidth;
+					element.scrollLeft = 100;
+					const scrolls = element.scrollLeft > 0;
+					const pageFits = document.documentElement.scrollWidth <= window.innerWidth;
+					element.textContent = original;
+					return { shortHeight, longHeight, overflows, scrolls, pageFits };
+				});
+				expect.soft(layout.longHeight).toBe(layout.shortHeight);
+				expect.soft(layout.overflows).toBe(true);
+				expect.soft(layout.scrolls).toBe(true);
+				expect.soft(layout.pageFits).toBe(true);
+			}
+		}
+	};
+	await page.goto(env.url("", "/#/services/public/descriptor"));
+	await checkBlocks('pre[aria-label="Service descriptor YAML"]');
+	await page.goto(env.url("", "/#/services/public/resources/app"));
+	await page.getByText("Descriptor YAML", { exact: true }).click();
+	await page.getByText("Live state JSON", { exact: true }).click();
+	await checkBlocks(".inspection-panel pre");
+	await page.goto(env.url("", "/#/services/public/resources/app/logs"));
+	await checkBlocks('pre[aria-label="Container logs"]');
+	await env.git.commit({ "public.sd.yaml": "version: 999\n" });
+	await page.goto(env.url("", "/#/services/public/events"));
+	const diagnostics = page.locator(".event-diagnostics").first();
+	await diagnostics.locator("summary").click();
+	await expect(diagnostics.locator("pre")).toHaveCount(2);
+	await checkBlocks(".event-diagnostics[open] pre");
+});
+
 test("authenticated Envoy pushes deployment snapshots/events and follows new Docker log output without polling", async ({
 	environment: env,
 	page,

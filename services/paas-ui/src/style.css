@@ -12,6 +12,13 @@ body {
 	margin: 0;
 	min-width: 280px;
 }
+pre {
+	white-space: pre;
+	overflow-wrap: normal;
+	overflow-x: auto;
+	min-width: 0;
+	max-width: 100%;
+}
 a {
 	color: inherit;
 	text-decoration: none;
@@ -771,8 +778,6 @@ p {
 	background: #101620;
 	font-size: 0.8rem;
 	line-height: 1.6;
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
 	max-height: 36rem;
 	overflow: auto;
 }
@@ -904,8 +909,6 @@ dd {
 }
 .logs {
 	min-height: 240px;
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
 }
 .inspection-panel {
 	background: #151b24;
