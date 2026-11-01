@@ -10,48 +10,17 @@ export interface IResourceSpecification {
 
 export class ResourceSpecification implements IResourceSpecification {
 	get(resourceId: string, resource: DeploymentWebResource | DeploymentWorkerResource): string {
-		return resource.type === "web" ? this.web(resourceId, resource) : this.worker(resourceId, resource);
-	}
-	private web(resourceId: string, resource: DeploymentWebResource): string {
-		const env = Object.entries(
-			Object.fromEntries((resource.env ?? []).map(({ name, value }) => [name, value])),
-		).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 		return createHash("sha256")
 			.update(
 				JSON.stringify([
 					resourceId,
 					{
-						image: resource.image,
-						...(resource.selinuxLabeling === false ? { selinuxLabeling: false } : {}),
-						...(resource.devices?.length
-							? {
-									devices: resource.devices.map(({ hostPath, mountPath, permissions }) => ({
-										hostPath,
-										mountPath,
-										permissions: permissions ?? "rwm",
-									})),
-								}
-							: {}),
-						...(resource.supplementaryGroups?.length
-							? { supplementaryGroups: [...resource.supplementaryGroups].sort((a, b) => a - b) }
-							: {}),
-						...(resource.hostPorts?.length ? { hostPorts: resource.hostPorts } : {}),
-						command: resource.command ?? null,
-						env,
-						volumes:
-							resource.volumes?.map(({ hostPath, mountPath, readOnly, ownership }) => ({
-								hostPath,
-								mountPath,
-								readOnly: readOnly ?? false,
-								selinux: "z",
-								...(!readOnly && ownership !== false
-									? { ownership: ownership ? `${ownership.uid}:${ownership.gid}` : "1000:1000" }
-									: {}),
-							})) ?? [],
-						limits: { cpus: resource.limits?.cpus, memoryMiB: resource.limits?.memoryMiB },
-						replicas: resource.replicas ?? 1,
-						rolloutStrategy: resource.rolloutStrategy ?? "recreate",
-						ingress: { public: resource.ingress.public, port: resource.ingress.port },
+						// Property order is part of persisted specification compatibility.
+						...(resource.type === "worker" ? { type: "worker" } : {}),
+						...this.normalize(resource),
+						...(resource.type === "web"
+							? { ingress: { public: resource.ingress.public, port: resource.ingress.port } }
+							: { healthcheckPort: resource.healthcheckPort }),
 						healthcheckUrl: resource.healthcheckUrl ?? null,
 						terminationTimeoutSeconds: resource.termination?.timeoutSeconds ?? 30,
 					},
@@ -59,52 +28,42 @@ export class ResourceSpecification implements IResourceSpecification {
 			)
 			.digest("hex");
 	}
-	private worker(resourceId: string, resource: DeploymentWorkerResource): string {
+
+	private normalize(resource: DeploymentWebResource | DeploymentWorkerResource) {
 		const env = Object.entries(
 			Object.fromEntries((resource.env ?? []).map(({ name, value }) => [name, value])),
 		).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-		return createHash("sha256")
-			.update(
-				JSON.stringify([
-					resourceId,
-					{
-						type: "worker",
-						image: resource.image,
-						...(resource.selinuxLabeling === false ? { selinuxLabeling: false } : {}),
-						...(resource.devices?.length
-							? {
-									devices: resource.devices.map(({ hostPath, mountPath, permissions }) => ({
-										hostPath,
-										mountPath,
-										permissions: permissions ?? "rwm",
-									})),
-								}
-							: {}),
-						...(resource.supplementaryGroups?.length
-							? { supplementaryGroups: [...resource.supplementaryGroups].sort((a, b) => a - b) }
-							: {}),
-						...(resource.hostPorts?.length ? { hostPorts: resource.hostPorts } : {}),
-						command: resource.command ?? null,
-						env,
-						volumes:
-							resource.volumes?.map(({ hostPath, mountPath, readOnly, ownership }) => ({
-								hostPath,
-								mountPath,
-								readOnly: readOnly ?? false,
-								selinux: "z",
-								...(!readOnly && ownership !== false
-									? { ownership: ownership ? `${ownership.uid}:${ownership.gid}` : "1000:1000" }
-									: {}),
-							})) ?? [],
-						limits: { cpus: resource.limits?.cpus, memoryMiB: resource.limits?.memoryMiB },
-						replicas: resource.replicas ?? 1,
-						rolloutStrategy: resource.rolloutStrategy ?? "recreate",
-						healthcheckPort: resource.healthcheckPort,
-						healthcheckUrl: resource.healthcheckUrl ?? null,
-						terminationTimeoutSeconds: resource.termination?.timeoutSeconds ?? 30,
-					},
-				]),
-			)
-			.digest("hex");
+		return {
+			image: resource.image,
+			...(resource.selinuxLabeling === false ? { selinuxLabeling: false } : {}),
+			...(resource.devices?.length
+				? {
+						devices: resource.devices.map(({ hostPath, mountPath, permissions }) => ({
+							hostPath,
+							mountPath,
+							permissions: permissions ?? "rwm",
+						})),
+					}
+				: {}),
+			...(resource.supplementaryGroups?.length
+				? { supplementaryGroups: [...resource.supplementaryGroups].sort((a, b) => a - b) }
+				: {}),
+			...(resource.hostPorts?.length ? { hostPorts: resource.hostPorts } : {}),
+			command: resource.command ?? null,
+			env,
+			volumes:
+				resource.volumes?.map(({ hostPath, mountPath, readOnly, ownership }) => ({
+					hostPath,
+					mountPath,
+					readOnly: readOnly ?? false,
+					selinux: "z",
+					...(!readOnly && ownership !== false
+						? { ownership: ownership ? `${ownership.uid}:${ownership.gid}` : "1000:1000" }
+						: {}),
+				})) ?? [],
+			limits: { cpus: resource.limits?.cpus, memoryMiB: resource.limits?.memoryMiB },
+			replicas: resource.replicas ?? 1,
+			rolloutStrategy: resource.rolloutStrategy ?? "recreate",
+		};
 	}
 }
