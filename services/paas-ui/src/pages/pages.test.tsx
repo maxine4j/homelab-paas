@@ -11,6 +11,68 @@ import { ServiceEventsPage } from "./service-events-page.tsx";
 import { ServicePage } from "./service-page.tsx";
 import { ServicesPage } from "./services-page.tsx";
 
+test("resource heading shows its full ingress URL in a new tab without container counts", () => {
+	const html = renderToStaticMarkup(
+		<ResourcePage
+			serviceId='demo'
+			tab='config'
+			resource={{
+				resourceId: "app",
+				type: "web",
+				health: "Healthy",
+				sync: "Synced",
+				containers: [],
+				url: "https://app.example.test/path",
+			}}
+		/>,
+	);
+	expect(html).toContain(
+		'class="primary-web-link" href="https://app.example.test/path" target="_blank" rel="noreferrer"',
+	);
+	expect(html).toContain("https://app.example.test/path");
+	expect(html).not.toContain("observed containers");
+	expect(html).not.toContain("Open resource");
+});
+
+test("resource descriptor has its own route and tab between Overview and Logs", () => {
+	expect(parseRoute("#/services/demo/resources/app/descriptor")).toEqual({
+		page: "resource",
+		serviceId: "demo",
+		resourceId: "app",
+		tab: "descriptor",
+	});
+	const resource = {
+		resourceId: "app",
+		type: "web",
+		health: "Healthy",
+		sync: "Synced",
+		containers: [],
+		config: { image: "app:1" },
+		configYaml: "image: app:1\n",
+	} as const;
+	const html = renderToStaticMarkup(
+		<ResourcePage serviceId='demo' tab='descriptor' resource={{ ...resource, containers: [] }} />,
+	);
+	expect(html).toContain('href="#/services/demo/resources/app/descriptor" aria-current="page"');
+	expect(html.indexOf(">Overview</a>")).toBeLessThan(html.indexOf(">Descriptor</a>"));
+	expect(html.indexOf(">Descriptor</a>")).toBeLessThan(html.indexOf(">Logs</a>"));
+	expect(html).toContain('aria-label="Resource descriptor YAML"');
+	expect(html).toContain("image: app:1\n");
+	expect(html).not.toContain("Recent events");
+	const overview = renderToStaticMarkup(
+		<ResourcePage serviceId='demo' tab='config' resource={{ ...resource, containers: [] }} />,
+	);
+	expect(overview).not.toContain('aria-label="Resource descriptor YAML"');
+	const unavailable = renderToStaticMarkup(
+		<ResourcePage
+			serviceId='demo'
+			tab='descriptor'
+			resource={{ ...resource, containers: [], configYaml: undefined }}
+		/>,
+	);
+	expect(unavailable).toContain("Descriptor YAML unavailable.");
+});
+
 test("service overview shows aggregate health history", () => {
 	const html = renderToStaticMarkup(
 		<ServicePage
@@ -757,7 +819,7 @@ test("resource inspection renders configuration, state and escaped log output", 
 		);
 		expect(html).toContain('aria-current="page"');
 		if (tab === "config") {
-			expect(html).toContain("image: app:1\n");
+			expect(html).not.toContain('aria-label="Resource descriptor YAML"');
 			expect(html).not.toContain("Descriptor unavailable.");
 			expect(html).toContain("<h2>Configuration</h2>");
 			expect(html).toContain("<h2>Live state</h2>");

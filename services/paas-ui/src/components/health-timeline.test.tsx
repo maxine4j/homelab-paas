@@ -15,6 +15,12 @@ const timeline: UiHealthTimeline = {
 	],
 };
 
+test("controlled timelines can omit their individual range button", () => {
+	const html = renderToStaticMarkup(<HealthTimelineView label='Health' now={now} range='hour' timeline={timeline} />);
+	expect(html).not.toContain("<button");
+	expect(html).toContain("1 hour ago");
+});
+
 test("offers a native range button and lists only health statuses in the legend", () => {
 	const html = renderToStaticMarkup(<HealthTimeline label='Health' now={now} legend />);
 	expect(html).toContain('<button type="button"');

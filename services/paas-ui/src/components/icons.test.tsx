@@ -18,7 +18,7 @@ const expectIconWithLabel = (html: string, label: string) => {
 
 test.each([
 	["service", <ServiceDetailTabs key='service' serviceId='demo' tab='overview' />, 5],
-	["resource", <ResourceDetailTabs key='resource' serviceId='demo' resourceId='web' tab='config' />, 3],
+	["resource", <ResourceDetailTabs key='resource' serviceId='demo' resourceId='web' tab='config' />, 4],
 	["cluster", <ClusterPage key='cluster' />, 3],
 ] as const)("%s tabs pair every readable navigation label with a decorative icon", (_name, view, count) => {
 	const html = renderToStaticMarkup(view);

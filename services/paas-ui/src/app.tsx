@@ -78,7 +78,6 @@ export const AppView = ({
 	containerId?: string;
 }) => {
 	const buildSha = import.meta.env["VITE_BUILD_SHA"] || "unknown";
-	const path = viewPaths(route).snapshot;
 	const actions =
 		route.page === "service" || route.page === "events" || route.page === "secrets" ? (
 			<GitRefreshControl
@@ -157,15 +156,6 @@ export const AppView = ({
 							</>
 						)}
 					</nav>
-					{route.page === "services" && (
-						<GitRefreshControl
-							key={path}
-							onComplete={() => {
-								snapshot.refresh();
-								events.refresh();
-							}}
-						/>
-					)}
 				</header>
 				<main id='main-content'>
 					{route.page === "cluster" ? (
@@ -224,7 +214,17 @@ export const AppView = ({
 							Loading cluster data…
 						</p>
 					) : route.page === "services" ? (
-						<ServicesPage services={snapshot.data as UiServiceSummary[]} />
+						<ServicesPage
+							services={snapshot.data as UiServiceSummary[]}
+							actions={
+								<GitRefreshControl
+									onComplete={() => {
+										snapshot.refresh();
+										events.refresh();
+									}}
+								/>
+							}
+						/>
 					) : route.page === "service" ? (
 						<ServicePage
 							service={snapshot.data as UiService}

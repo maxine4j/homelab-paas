@@ -11,6 +11,7 @@ interface HealthTimelineProps {
 	resourceId?: string;
 	now?: number;
 	legend?: boolean;
+	showLabel?: boolean;
 	eventError?: string;
 }
 
@@ -34,13 +35,14 @@ export const HealthTimelineView = ({
 	resourceId,
 	now: end,
 	legend = false,
+	showLabel = true,
 	eventError,
 	range,
 	onRangeChange,
 }: HealthTimelineProps & {
 	now: number;
 	range: "day" | "hour";
-	onRangeChange: (range: "day" | "hour") => void;
+	onRangeChange?: (range: "day" | "hour") => void;
 }) => {
 	const duration = range === "day" ? day : 3_600_000;
 	const start = end - duration;
@@ -70,12 +72,20 @@ export const HealthTimelineView = ({
 	}
 	return (
 		<figure className='health-timeline' aria-label={label}>
-			<figcaption>
-				<span>{label}</span>
-				<button type='button' className='muted' onClick={() => onRangeChange(range === "day" ? "hour" : "day")}>
-					{range === "day" ? "Last 24 hours" : "Last hour"}
-				</button>
-			</figcaption>
+			{(showLabel || onRangeChange) && (
+				<figcaption>
+					{showLabel && <span>{label}</span>}
+					{onRangeChange && (
+						<button
+							type='button'
+							className='muted'
+							onClick={() => onRangeChange(range === "day" ? "hour" : "day")}
+						>
+							{range === "day" ? "Last 24 hours" : "Last hour"}
+						</button>
+					)}
+				</figcaption>
+			)}
 			<div className='health-track' aria-label='Unobserved time is Unknown'>
 				{periods.map((period, index) => {
 					const description = `${period.health}: ${new Date(period.start).toLocaleString()} – ${new Date(period.end).toLocaleString()}`;

@@ -1,8 +1,60 @@
 import type { UiResource } from "@homelab-paas/shared-contracts";
+import { Children, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 
 import { ServicePage } from "../pages/service-page.tsx";
+import { ServiceResourcesView } from "./service-resources.tsx";
+
+test("one heading button switches every resource timeline to the same window and back", () => {
+	const now = 86_400_000;
+	const resources: UiResource[] = ["app", "db"].map((resourceId) => ({
+		resourceId,
+		type: "worker",
+		health: "Healthy",
+		sync: "Synced",
+		containers: [],
+		healthTimeline: { observedAt: now, periods: [{ start: now - 1_800_000, end: now, health: "Healthy" }] },
+	}));
+	let range: "day" | "hour" = "day";
+	const render = () =>
+		ServiceResourcesView({
+			serviceId: "demo",
+			resources,
+			now,
+			range,
+			onRangeChange: (next) => {
+				range = next;
+			},
+		});
+	const click = (node: ReactNode): boolean => {
+		for (const child of Children.toArray(node)) {
+			if (!isValidElement<{ children?: ReactNode; onClick?: () => void }>(child)) continue;
+			if (child.type === "button") {
+				child.props.onClick?.();
+				return true;
+			}
+			if (click(child.props.children)) return true;
+		}
+		return false;
+	};
+	const day = renderToStaticMarkup(render());
+	expect(day.match(/<button/g)).toHaveLength(1);
+	expect(day).not.toContain("<figcaption>");
+	expect(day).toContain('aria-label="app health history"');
+	expect(day).toMatch(
+		/class="section-heading resource-list-heading"[^]*?Resources[^]*?Last 24 hours[^]*?<\/button><\/div>/,
+	);
+	expect(day.match(/yesterday/g)).toHaveLength(2);
+	expect(click(render())).toBe(true);
+	expect(range).toBe("hour");
+	const hour = renderToStaticMarkup(render());
+	expect(hour.match(/1 hour ago/g)).toHaveLength(2);
+	expect(hour.match(/width:50%/g)).toHaveLength(2);
+	expect(hour).toContain("Last hour");
+	expect(click(render())).toBe(true);
+	expect(renderToStaticMarkup(render())).toBe(day);
+});
 
 const renderResources = (resources: UiResource[]) =>
 	renderToStaticMarkup(

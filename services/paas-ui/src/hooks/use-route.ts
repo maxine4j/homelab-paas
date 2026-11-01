@@ -22,13 +22,17 @@ export const parseRoute = (hash: string): Route => {
 	if (parts.at(2) !== "resources" || !resourceId || !id.test(resourceId)) return { page: "missing" };
 	const tab = parts.at(4) ?? "config";
 	if (parts.length === 5 && tab === "events") return { page: "resource-events", serviceId, resourceId };
-	if (!["config", "state", "logs"].includes(tab) || parts.length > 6 || (parts.length === 6 && tab !== "logs"))
+	if (
+		!["config", "state", "descriptor", "logs"].includes(tab)
+		|| parts.length > 6
+		|| (parts.length === 6 && tab !== "logs")
+	)
 		return { page: "missing" };
 	return {
 		page: "resource",
 		serviceId,
 		resourceId,
-		tab: tab === "logs" ? "logs" : "config",
+		tab: tab === "logs" || tab === "descriptor" ? tab : "config",
 		...(parts.at(5) ? { containerId: parts.at(5) } : {}),
 	};
 };

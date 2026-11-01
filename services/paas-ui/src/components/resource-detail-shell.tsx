@@ -1,4 +1,5 @@
 import type { UiResource } from "@homelab-paas/shared-contracts";
+import { ExternalLink } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { ResourceDetailTabs } from "./detail-tabs.tsx";
@@ -14,7 +15,7 @@ export const ResourceDetailShell = ({
 	serviceId: string;
 	resourceId: string;
 	resource?: UiResource;
-	tab: "config" | "logs" | "events";
+	tab: "config" | "descriptor" | "logs" | "events";
 	children: ReactNode;
 }) => (
 	<>
@@ -25,22 +26,15 @@ export const ResourceDetailShell = ({
 					<h1>{resourceId}</h1>
 					{resource && <StatusBadges health={resource.health} sync={resource.sync} />}
 				</div>
-				{resource && (
-					<>
-						<p>{resource.containers.length} observed containers · live updates</p>
-						{resource.url && (
-							<p>
-								<a href={resource.url}>Open resource</a>
-								{resource.primaryUrl && (
-									<>
-										{" "}
-										· <a href={resource.primaryUrl}>Open primary service URL</a>
-									</>
-								)}
-							</p>
-						)}
-					</>
-				)}
+				<div className='resource-ingress-links'>
+					{[...new Set([resource?.primaryUrl, resource?.url])]
+						.filter((url) => url !== undefined)
+						.map((url) => (
+							<a key={url} className='primary-web-link' href={url} target='_blank' rel='noreferrer'>
+								{url} <ExternalLink aria-hidden='true' />
+							</a>
+						))}
+				</div>
 			</div>
 		</div>
 		<ResourceDetailTabs serviceId={serviceId} resourceId={resourceId} tab={tab} />

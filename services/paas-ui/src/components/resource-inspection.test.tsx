@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import { ResourceConfiguration } from "./resource-configuration.tsx";
 import { ResourceState } from "./resource-state.tsx";
 
-test("configuration presents image, deployment, inline ingress, environment rows and a collapsed YAML descriptor", () => {
+test("configuration presents structured settings without a YAML disclosure", () => {
 	const html = renderToStaticMarkup(
 		<ResourceConfiguration
 			config={{
@@ -20,7 +20,6 @@ test("configuration presents image, deployment, inline ingress, environment rows
 				volumes: [{ hostPath: "/srv/data", mountPath: "/data", readOnly: true }],
 				limits: { cpus: 0.5, memoryMiB: 512 },
 			}}
-			configYaml={"type: web\nimage: app:1\n"}
 		/>,
 	);
 	expect(html).toContain("Image");
@@ -36,10 +35,7 @@ test("configuration presents image, deployment, inline ingress, environment rows
 	expect(html).toContain("Secrets and commands are redacted.");
 	expect(html).toContain("/srv/data");
 	expect(html).toContain("Memory (MiB)");
-	expect(html).toMatch(/<details[^>]*><summary>Descriptor YAML/);
-	expect(html).toContain('aria-label="Resource descriptor YAML"');
-	expect(html).toContain("image: app:1\n");
-	expect(html).not.toMatch(/<details[^>]* open/);
+	expect(html).not.toContain("Descriptor YAML");
 });
 
 test("configuration uses one card with volume sections and omits the redundant resource type", () => {

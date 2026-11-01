@@ -1,4 +1,4 @@
-export type ResourceTab = "config" | "logs";
+export type ResourceTab = "config" | "descriptor" | "logs";
 export type ServiceTab = "overview" | "resources" | "descriptor";
 export type Route =
 	| { page: "services" }

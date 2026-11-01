@@ -97,7 +97,7 @@ const Volumes = ({ fields }: { fields: Record<string, JsonValue> }) => (
 	</div>
 );
 
-export const ResourceConfiguration = ({ config, configYaml }: { config?: JsonValue; configYaml?: string }) => {
+export const ResourceConfiguration = ({ config }: { config?: JsonValue }) => {
 	if (!config || typeof config !== "object" || Array.isArray(config))
 		return (
 			<InspectionPanel title='Configuration'>
@@ -145,12 +145,6 @@ export const ResourceConfiguration = ({ config, configYaml }: { config?: JsonVal
 					</section>
 				)}
 			</div>
-			<details>
-				<summary>Descriptor YAML</summary>
-				<pre className='code-view' tabIndex={0} aria-label='Resource descriptor YAML'>
-					{configYaml ?? "Descriptor unavailable."}
-				</pre>
-			</details>
 		</InspectionPanel>
 	);
 };

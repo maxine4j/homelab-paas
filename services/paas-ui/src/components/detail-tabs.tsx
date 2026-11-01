@@ -50,7 +50,7 @@ export const ResourceDetailTabs = ({
 }: {
 	serviceId: string;
 	resourceId: string;
-	tab: "config" | "logs" | "events";
+	tab: "config" | "descriptor" | "logs" | "events";
 }) => (
 	<DetailTabs
 		base={`#/services/${serviceId}/resources/${resourceId}`}
@@ -58,6 +58,7 @@ export const ResourceDetailTabs = ({
 		current={`/${tab}`}
 		tabs={[
 			{ path: "/config", label: "Overview", icon: LayoutDashboard },
+			{ path: "/descriptor", label: "Descriptor", icon: FileCode },
 			{ path: "/logs", label: "Logs", icon: ScrollText },
 			{ path: "/events", label: "Events", icon: Activity },
 		]}

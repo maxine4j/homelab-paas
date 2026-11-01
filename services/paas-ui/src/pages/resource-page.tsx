@@ -43,7 +43,7 @@ export const ResourcePage = ({
 						<ServiceEvents serviceId={serviceId} events={resourceEvents?.slice(0, 2)} error={eventError} />
 					</section>
 					<div className='resource-overview'>
-						<ResourceConfiguration config={resource.config} configYaml={resource.configYaml} />
+						<ResourceConfiguration config={resource.config} />
 						<ResourceState
 							serviceId={serviceId}
 							resourceId={resource.resourceId}
@@ -51,6 +51,18 @@ export const ResourcePage = ({
 						/>
 					</div>
 				</>
+			)}
+			{tab === "descriptor" && (
+				<section aria-label='Resource descriptor'>
+					<h2>Resource descriptor</h2>
+					{resource.configYaml ? (
+						<pre className='code-view' tabIndex={0} aria-label='Resource descriptor YAML'>
+							{resource.configYaml}
+						</pre>
+					) : (
+						<p className='empty'>Descriptor YAML unavailable.</p>
+					)}
+				</section>
 			)}
 			{tab === "logs" && (
 				<>

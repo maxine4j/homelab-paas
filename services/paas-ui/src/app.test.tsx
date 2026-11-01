@@ -339,14 +339,19 @@ test("service Resources uses the service snapshot and renders detailed cards thr
 	expect(html).not.toContain("Recent events");
 });
 
-test("topbar offers Git refresh beside breadcrumbs without a snapshot refresh button", () => {
-	const html = renderToStaticMarkup(<App />);
-	expect(html).toMatch(
-		/<header class="topbar"><nav class="breadcrumbs".*?<\/nav><div class="git-refresh"><div class="service-actions"><button class="action-info" type="button"><svg\b[^]*?<\/svg>Refresh all<\/button><\/div><\/div><\/header>/,
+test("services heading offers Git refresh below the breadcrumbs", () => {
+	const html = renderToStaticMarkup(
+		<AppView
+			route={{ page: "services" }}
+			snapshot={{ data: [], refresh: () => {} }}
+			events={{ refresh: () => {} }}
+			logs={{}}
+		/>,
 	);
+	expect(html).toMatch(/<main[^>]*><div class="page-heading"[^]*?Refresh all/);
 	expect(html).not.toContain("Refresh snapshot");
 	expect(html.match(/Refresh all/g)).toHaveLength(1);
-	expect(html).not.toMatch(/<main[^>]*>.*Refresh all/);
+	expect(html).not.toMatch(/<header class="topbar">[^]*?Refresh all[^]*?<\/header>/);
 });
 
 test("footer identifies the platform build with a short revision and full revision tooltip", () => {

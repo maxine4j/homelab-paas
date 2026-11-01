@@ -1,9 +1,10 @@
 import type { UiServiceSummary } from "@homelab-paas/shared-contracts";
+import type { ReactNode } from "react";
 
 import { RevisionDetails } from "../components/revision-details.tsx";
 import { StatusBadges } from "../components/status-badge.tsx";
 
-export const ServicesPage = ({ services }: { services: UiServiceSummary[] }) => (
+export const ServicesPage = ({ services, actions }: { services: UiServiceSummary[]; actions?: ReactNode }) => (
 	<>
 		<div className='page-heading'>
 			<div>
@@ -13,6 +14,7 @@ export const ServicesPage = ({ services }: { services: UiServiceSummary[] }) => 
 				</h1>
 				<p>Configured services and their sync and health status.</p>
 			</div>
+			{actions}
 		</div>
 		{services.length === 0 ? (
 			<p className='empty'>No services configured. Add a service to the cluster configuration.</p>

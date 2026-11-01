@@ -921,6 +921,14 @@ p {
 .section-heading a {
 	padding: 12px 0;
 }
+.resource-list-heading {
+	margin-bottom: 20px;
+}
+.resource-ingress-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 24px;
+}
 .recent-events .section-heading {
 	margin-bottom: 12px;
 }

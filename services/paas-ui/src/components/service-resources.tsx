@@ -1,7 +1,8 @@
 import type { UiResource, UiServiceEvent } from "@homelab-paas/shared-contracts";
 import { ExternalLink, Globe, Lock } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import { HealthTimeline } from "./health-timeline.tsx";
+import { HealthTimelineView } from "./health-timeline.tsx";
 import { StatusBadges } from "./status-badge.tsx";
 
 const IngressAccess = ({ isPublic }: { isPublic: boolean }) => (
@@ -11,21 +12,52 @@ const IngressAccess = ({ isPublic }: { isPublic: boolean }) => (
 	</span>
 );
 
-export const ServiceResources = ({
-	serviceId,
-	resources,
-	events,
-	eventError,
-}: {
+interface ServiceResourcesProps {
 	serviceId: string;
 	resources: UiResource[];
 	events?: UiServiceEvent[];
 	eventError?: string;
+}
+
+export const ServiceResources = (props: ServiceResourcesProps) => {
+	const [range, setRange] = useState<"day" | "hour">("day");
+	const [clock, setClock] = useState(() => Date.now());
+	useEffect(() => {
+		const timer = window.setInterval(() => setClock(Date.now()), 30_000);
+		return () => window.clearInterval(timer);
+	}, []);
+	const now = Math.max(
+		clock,
+		...props.resources.map((resource) => resource.healthTimeline?.observedAt ?? 0),
+		...(props.events ?? []).map((event) => event.timestamp),
+	);
+	return <ServiceResourcesView {...props} range={range} onRangeChange={setRange} now={now} />;
+};
+
+export const ServiceResourcesView = ({
+	serviceId,
+	resources,
+	events,
+	eventError,
+	range,
+	onRangeChange,
+	now,
+}: ServiceResourcesProps & {
+	range: "day" | "hour";
+	onRangeChange: (range: "day" | "hour") => void;
+	now: number;
 }) => (
 	<section aria-label='Service resources'>
-		<h2>
-			Resources <span className='count'>{resources.length}</span>
-		</h2>
+		<div className='section-heading resource-list-heading'>
+			<h2>
+				Resources <span className='count'>{resources.length}</span>
+			</h2>
+			{resources.length > 0 && (
+				<button type='button' className='muted' onClick={() => onRangeChange(range === "day" ? "hour" : "day")}>
+					{range === "day" ? "Last 24 hours" : "Last hour"}
+				</button>
+			)}
+		</div>
 		{!resources.length ? (
 			<p className='empty'>No resources available.</p>
 		) : (
@@ -85,7 +117,10 @@ export const ServiceResources = ({
 									)}
 								</div>
 							)}
-							<HealthTimeline
+							<HealthTimelineView
+								showLabel={false}
+								range={range}
+								now={now}
 								label={`${resource.resourceId} health history`}
 								timeline={resource.healthTimeline}
 								events={events}
