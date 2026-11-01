@@ -36,7 +36,7 @@ if [ "${1:-}" != --inner ]; then
 fi
 
 diagnostics() {
-    for container in grafana victoriametrics victorialogs telegraf fixture managed paas-control-plane; do
+    for container in grafana victoriametrics victorialogs telegraf fixture managed paas-control-plane paas-envoy unknown-role; do
         docker logs --tail 80 "$container" 2>&1 || true
     done
 }
@@ -78,6 +78,13 @@ docker run -d --name telegraf --network metrics --memory 128m --cpus 0.1 \
     -v /var/run/docker.sock:/var/run/docker.sock:ro -v telegraf-state:/var/lib/telegraf \
     homelab-paas/metrics-telegraf:ci >/dev/null
 await_contains '' http://telegraf:8080
+docker run -d --name paas-envoy --network unrelated --entrypoint sh \
+    --label homelab-paas.cluster=fixture --label homelab-paas.role=envoy \
+    homelab-paas/metrics-telegraf:ci -c 'while true; do echo envoy-marker; sleep 2; done' >/dev/null
+# Similar role names must not acquire platform service identity.
+docker run -d --name unknown-role --network unrelated --entrypoint sh \
+    --label homelab-paas.role=envoy-custom \
+    homelab-paas/metrics-telegraf:ci -c 'while true; do echo unknown-role-marker; sleep 2; done' >/dev/null
 docker run -d --name managed --network unrelated --entrypoint sh \
     --label homelab-paas.cluster=fixture --label homelab-paas.service=demo \
     --label homelab-paas.revision=abcdef0123456789abcdef0123456789abcdef01 \
@@ -90,13 +97,21 @@ await_contains 'abcdef0' -G http://victoriametrics:8428/api/v1/query \
     --data-urlencode 'query=docker_container_mem_usage{container_name="paas-control-plane",serviceId="paas",revision="abcdef0"}'
 await_contains 'demo' -G http://victorialogs:9428/select/logsql/query \
     --data-urlencode 'query=container_name:managed AND serviceId:demo AND revision:abcdef0 AND "managed-marker"'
+await_contains 'paas-envoy' -G http://victoriametrics:8428/api/v1/query \
+    --data-urlencode 'query=docker_container_mem_usage{container_name="paas-envoy",serviceId="paas",revision="unknown",cluster="fixture"}'
+await_contains 'envoy-marker' -G http://victorialogs:9428/select/logsql/query \
+    --data-urlencode 'query=container_name:paas-envoy AND serviceId:paas AND revision:unknown AND cluster:fixture AND "envoy-marker"'
+await_contains 'unknown-role' -G http://victoriametrics:8428/api/v1/query \
+    --data-urlencode 'query=docker_container_mem_usage{container_name="unknown-role",serviceId="unmanaged",revision="unknown"}'
+await_contains 'unknown-role-marker' -G http://victorialogs:9428/select/logsql/query \
+    --data-urlencode 'query=container_name:unknown-role AND serviceId:unmanaged AND "unknown-role-marker"'
 # Start an unlabelled workload later, on a network the collector cannot reach.
 docker run -d --name fixture --network unrelated --entrypoint sh homelab-paas/metrics-telegraf:ci \
     -c 'while true; do echo paas-metrics-discovery-marker; sleep 2; done' >/dev/null
 await_contains 'fixture' -G http://victoriametrics:8428/api/v1/query \
     --data-urlencode 'query=docker_container_mem_usage{container_name="fixture",serviceId="unmanaged",revision="unknown"}'
 await_contains 'paas-metrics-discovery-marker' -G http://victorialogs:9428/select/logsql/query \
-    --data-urlencode 'query=container_name:fixture AND "paas-metrics-discovery-marker"'
+    --data-urlencode 'query=container_name:fixture AND serviceId:unmanaged AND revision:unknown AND "paas-metrics-discovery-marker"'
 docker stop telegraf >/dev/null
 docker run --rm --entrypoint sh -v telegraf-state:/state homelab-paas/metrics-telegraf:ci \
     -c 'test -s /state/telegraf.state'
