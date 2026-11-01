@@ -63,7 +63,7 @@ The management UI embeds `BUILD_SHA` during the Vite build and displays it in it
 
 For a local image with revision metadata, run `docker build --build-arg BUILD_SHA="$(git rev-parse HEAD)" -f services/paas/Dockerfile -t homelab-paas/paas:dev .`. For a local UI build or dev server, prefix its pnpm command with `BUILD_SHA="$(git rev-parse HEAD)"`. Omitted or empty metadata displays `Build unknown`.
 
-The control-plane Docker image retains `BUILD_SHA` for telemetry identity. Custom VictoriaMetrics images also consume the build argument for scrape labels. See the [metrics contract](../services/paas-metrics/README.md#built-in-dashboards-and-application-metrics) for revision semantics and built-in dashboards.
+The control-plane Docker image retains `BUILD_SHA` for telemetry identity. Custom VictoriaMetrics images also consume the build argument for scrape labels. See the [metrics contract](../services/metrics/README.md#built-in-dashboards-and-application-metrics) for revision semantics and built-in dashboards.
 
 ## Backend infrastructure boundaries
 
@@ -99,7 +99,7 @@ Every run validates the release tag, then runs independent checks: a Docker Buil
 
 Pull requests validate images without publishing. Pushes to `main` publish `ghcr.io/maxine4j/homelab-paas:<full-commit-sha>`. Release tag pushes publish the same image name with the exact Git tag, for example `ghcr.io/maxine4j/homelab-paas:v1.2.3`. The control-plane image has no `latest` tag. Both push events also publish `ghcr.io/maxine4j/homelab-paas/test-service` with `latest` and the first seven characters of the commit SHA as tags. Invalid release tags caught by the broad trigger fail before building or publishing.
 
-The custom [observability images](../services/paas-metrics/README.md) publish as `ghcr.io/maxine4j/homelab-paas/metrics-grafana`, `metrics-victoriametrics`, and `metrics-telegraf` under the same namespace. Every publication includes the full commit SHA; `main` also updates `latest`, while release pushes add the exact release tag without moving `latest`. Their configuration and the Grafana datasource plugin are baked in at build time.
+The custom [observability images](../services/metrics/README.md) publish as `ghcr.io/maxine4j/homelab-paas/metrics-grafana`, `metrics-victoriametrics`, and `metrics-telegraf` under the same namespace. Every publication includes the full commit SHA; `main` also updates `latest`, while release pushes add the exact release tag without moving `latest`. Their configuration and the Grafana datasource plugin are baked in at build time.
 
 Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no registry secret is required. The repository must be allowed to publish the GHCR package. Package visibility and deployment credentials for pulling private images are managed separately in GitHub. See [GitHub's container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 

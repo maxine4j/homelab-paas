@@ -1,6 +1,6 @@
 # PaaS observability stack
 
-`paas-metrics.sd.yaml` deploys Grafana with private ingress, plus VictoriaMetrics, VictoriaLogs, and Telegraf workers. Grafana queries both stores over the dedicated service network using resource DNS names. No host ports are published. Platform authentication and TLS must be enabled; see [networking](../../docs/networking-and-auth.md).
+`metrics.sd.yaml` deploys Grafana with private ingress, plus VictoriaMetrics, VictoriaLogs, and Telegraf workers. Grafana queries both stores over the dedicated service network using resource DNS names. No host ports are published. Platform authentication and TLS must be enabled; see [networking](../../docs/networking-and-auth.md).
 
 VictoriaMetrics scrapes Grafana and both stores' `/metrics` endpoints every 30 seconds and retains metrics for 30 days. VictoriaLogs retains logs for 14 days. Telegraf collects Docker container resource metrics and stdout/stderr logs automatically; see [collection](#container-collection-and-resource-budget).
 
@@ -22,20 +22,22 @@ The Docker host must be able to pull the published GHCR images. CI must publish 
 
 ## Register and access
 
-Add `paas-metrics` to the platform configuration's `services` map, using the repository remote, branch, and descriptor path. For the mounted local-development repository:
+Add `metrics` to the platform configuration's `services` map, using the repository remote, branch, and descriptor path. For the mounted local-development repository:
 
 ```yaml
 services:
-    paas-metrics:
+    metrics:
         remote: local
-        descriptorPath: /mnt/repo/services/paas-metrics/paas-metrics.sd.yaml
+        descriptorPath: /mnt/repo/services/metrics/metrics.sd.yaml
 ```
 
 Merge this entry into the existing map, retaining other services. Commit the descriptor before reconciliation; local Git sources read committed content. See [Git configuration](../../docs/configuration.md#implemented-deployment-mvp).
 
-Open `https://paas-metrics.{baseDomain}` (also available at `https://grafana.paas-metrics.{baseDomain}`) and sign in. The provisioned VictoriaMetrics datasource is the default; select VictoriaLogs in Explore to query ingested logs. Worker APIs are reachable only on the service network at `http://victoriametrics:8428` and `http://victorialogs:9428`.
+When renaming an existing deployment, stop its workloads before moving the host data directory to `/var/homelab-paas/metrics/`. Update the service registration and descriptor path together before deploying `metrics`, preserving data ownership and permissions.
 
-Persistent data paths refer to the Docker host, independently of bootstrap mounts. Docker Desktop's `local/var` mapping does not relocate workload data. Removing containers retains data. Obsolete provisioning-file directories under `/etc/homelab-paas/paas-metrics/` are no longer mounted and need not be repaired. Each new source commit changes the three resolved custom image tags and triggers replacement during reconciliation, including commits that leave the descriptor unchanged. CI must publish those images before deployment can succeed; missing tags retry under the [deployment retry contract](../../docs/reconciliation-and-deployments.md#implemented-deployment-mvp). No host configuration copies or startup plugin downloads are required.
+Open `https://metrics.{baseDomain}` (also available at `https://grafana.metrics.{baseDomain}`) and sign in. The provisioned VictoriaMetrics datasource is the default; select VictoriaLogs in Explore to query ingested logs. Worker APIs are reachable only on the service network at `http://victoriametrics:8428` and `http://victorialogs:9428`.
+
+Persistent data paths refer to the Docker host, independently of bootstrap mounts. Docker Desktop's `local/var` mapping does not relocate workload data. Removing containers retains data. Obsolete provisioning-file directories under `/etc/homelab-paas/metrics/` are no longer mounted and need not be repaired. Each new source commit changes the three resolved custom image tags and triggers replacement during reconciliation, including commits that leave the descriptor unchanged. CI must publish those images before deployment can succeed; missing tags retry under the [deployment retry contract](../../docs/reconciliation-and-deployments.md#implemented-deployment-mvp). No host configuration copies or startup plugin downloads are required.
 
 ## Built-in dashboards and application metrics
 
@@ -60,7 +62,7 @@ The control plane uses the maintained [`@prometheus-io/client`](https://github.c
 
 Every service metric carries `serviceId` and `revision` (the first seven commit characters). Docker telemetry derives these from container ownership/source labels; it also normalizes the cluster label to `cluster`. Bootstrap containers with `homelab-paas.role=control-plane` or `homelab-paas.role=envoy` use `serviceId="paas"` for both metrics and logs. This telemetry mapping uses existing role labels and does not give bootstrap containers workload ownership. Non-PaaS containers use `serviceId="unmanaged"`; unavailable revisions use `revision="unknown"`, including Envoy without a source revision label. Engine-wide Docker metrics use unmanaged/unknown because they do not belong to a service. The full source revision is replaced by the short tag; specification fingerprints and arbitrary labels are excluded from telemetry. Logs receive the same normalized tags.
 
-Control-plane request metrics use `serviceId="paas"` and its image build revision. Reconciliation metrics use the attempted desired revision (last known desired revision on Git failure); health uses active revision and sync uses desired revision. Unchanged workloads can legitimately retain older source revisions. Metrics-stack endpoint scrapes use `serviceId="paas-metrics"` and the custom image set's build revision. Supply `--build-arg BUILD_SHA=<full-sha>` when building the control-plane and VictoriaMetrics images locally; CI supplies it automatically.
+Control-plane request metrics use `serviceId="paas"` and its image build revision. Reconciliation metrics use the attempted desired revision (last known desired revision on Git failure); health uses active revision and sync uses desired revision. Unchanged workloads can legitimately retain older source revisions. Metrics-stack endpoint scrapes use `serviceId="metrics"` and the custom image set's build revision. Supply `--build-arg BUILD_SHA=<full-sha>` when building the control-plane and VictoriaMetrics images locally; CI supplies it automatically.
 
 Counters and duration observations reset on process restart. Each counter family retains at most 2,048 label sets, evicting the oldest inserted set; VictoriaMetrics retains previously ingested history for its configured retention period. HTTP labels omit paths, URLs, query parameters, users and credentials. Unknown methods collapse to `OTHER`.
 

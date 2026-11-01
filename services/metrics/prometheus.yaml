@@ -5,19 +5,19 @@ scrape_configs:
       static_configs:
           - targets: [grafana:3000]
             labels:
-                serviceId: paas-metrics
+                serviceId: metrics
                 revision: __BUILD_REVISION__
     - job_name: victoriametrics
       static_configs:
           - targets: [victoriametrics:8428]
             labels:
-                serviceId: paas-metrics
+                serviceId: metrics
                 revision: __BUILD_REVISION__
     - job_name: victorialogs
       static_configs:
           - targets: [victorialogs:9428]
             labels:
-                serviceId: paas-metrics
+                serviceId: metrics
                 revision: __BUILD_REVISION__
     - job_name: paas
       honor_labels: true

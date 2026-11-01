@@ -1,6 +1,6 @@
 version: 1
 metadata:
-    serviceId: paas-metrics
+    serviceId: metrics
 resources:
     grafana:
         type: web
@@ -12,7 +12,7 @@ resources:
             public: false
             port: 3000
         volumes:
-            - hostPath: /var/homelab-paas/paas-metrics/grafana
+            - hostPath: /var/homelab-paas/metrics/grafana
               mountPath: /var/lib/grafana
               ownership:
                   uid: 472
@@ -24,7 +24,7 @@ resources:
         healthcheckPort: 8428
         healthcheckUrl: /health
         volumes:
-            - hostPath: /var/homelab-paas/paas-metrics/victoriametrics
+            - hostPath: /var/homelab-paas/metrics/victoriametrics
               mountPath: /storage
     victorialogs:
         type: worker
@@ -36,7 +36,7 @@ resources:
             - -storageDataPath=/storage
             - -retentionPeriod=14d
         volumes:
-            - hostPath: /var/homelab-paas/paas-metrics/victorialogs
+            - hostPath: /var/homelab-paas/metrics/victorialogs
               mountPath: /storage
     telegraf:
         type: worker
@@ -51,6 +51,6 @@ resources:
             - hostPath: /var/run/docker.sock
               mountPath: /var/run/docker.sock
               readOnly: true
-            - hostPath: /var/homelab-paas/paas-metrics/telegraf
+            - hostPath: /var/homelab-paas/metrics/telegraf
               mountPath: /var/lib/telegraf
               ownership: false

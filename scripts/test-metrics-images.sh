@@ -5,7 +5,7 @@ set -eu
 if [ "${1:-}" != --inner ]; then
     root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
     cd "$root"
-    runner="paas-metrics-test-$$"
+    runner="metrics-test-$$"
     cleanup() {
         docker logs "$runner" > "artifacts/$runner-engine.log" 2>&1 || true
         docker rm -fv "$runner" >/dev/null 2>&1 || true
@@ -13,7 +13,7 @@ if [ "${1:-}" != --inner ]; then
     mkdir -p artifacts
     trap cleanup EXIT
     for component in grafana victoriametrics telegraf; do
-        docker build --build-arg BUILD_SHA=abcdef0123456789abcdef0123456789abcdef01 -f "services/paas-metrics/$component.Dockerfile" -t "homelab-paas/metrics-$component:ci" .
+        docker build --build-arg BUILD_SHA=abcdef0123456789abcdef0123456789abcdef01 -f "services/metrics/$component.Dockerfile" -t "homelab-paas/metrics-$component:ci" .
     done
     docker build --build-arg BUILD_SHA=abcdef0123456789abcdef0123456789abcdef01 \
         -f services/paas/Dockerfile -t homelab-paas/paas:metrics-ci .
@@ -73,7 +73,7 @@ await_contains 'PaaS control plane' http://localhost:3000/api/dashboards/uid/paa
 await_contains 'abcdef0' -G http://victoriametrics:8428/api/v1/query \
     --data-urlencode 'query=paas_service_health{serviceId="demo",revision="abcdef0",health="Healthy"}'
 await_contains 'abcdef0' -G http://victoriametrics:8428/api/v1/query \
-    --data-urlencode 'query=grafana_build_info{serviceId="paas-metrics",revision="abcdef0"}'
+    --data-urlencode 'query=grafana_build_info{serviceId="metrics",revision="abcdef0"}'
 docker run -d --name telegraf --network metrics --memory 128m --cpus 0.1 \
     -v /var/run/docker.sock:/var/run/docker.sock:ro -v telegraf-state:/var/lib/telegraf \
     homelab-paas/metrics-telegraf:ci >/dev/null
@@ -107,18 +107,18 @@ await_contains 'unknown-role-marker' -G http://victorialogs:9428/select/logsql/q
     --data-urlencode 'query=container_name:unknown-role AND serviceId:unmanaged AND "unknown-role-marker"'
 # Start an unlabelled workload later, on a network the collector cannot reach.
 docker run -d --name fixture --network unrelated --entrypoint sh homelab-paas/metrics-telegraf:ci \
-    -c 'while true; do echo paas-metrics-discovery-marker; sleep 2; done' >/dev/null
+    -c 'while true; do echo metrics-discovery-marker; sleep 2; done' >/dev/null
 await_contains 'fixture' -G http://victoriametrics:8428/api/v1/query \
     --data-urlencode 'query=docker_container_mem_usage{container_name="fixture",serviceId="unmanaged",revision="unknown"}'
-await_contains 'paas-metrics-discovery-marker' -G http://victorialogs:9428/select/logsql/query \
-    --data-urlencode 'query=container_name:fixture AND serviceId:unmanaged AND revision:unknown AND "paas-metrics-discovery-marker"'
+await_contains 'metrics-discovery-marker' -G http://victorialogs:9428/select/logsql/query \
+    --data-urlencode 'query=container_name:fixture AND serviceId:unmanaged AND revision:unknown AND "metrics-discovery-marker"'
 docker stop telegraf >/dev/null
 docker run --rm --entrypoint sh -v telegraf-state:/state homelab-paas/metrics-telegraf:ci \
     -c 'test -s /state/telegraf.state'
 docker start telegraf >/dev/null
 await_contains '' http://telegraf:8080
-await_contains 'paas-metrics-discovery-marker' -G http://victorialogs:9428/select/logsql/query \
-    --data-urlencode 'query=container_name:fixture AND "paas-metrics-discovery-marker" AND _time:5s'
+await_contains 'metrics-discovery-marker' -G http://victorialogs:9428/select/logsql/query \
+    --data-urlencode 'query=container_name:fixture AND "metrics-discovery-marker" AND _time:5s'
 docker stats --no-stream telegraf
 [ "$(docker inspect telegraf --format '{{.State.OOMKilled}}')" = false ]
 docker exec paas-control-plane node validate-dashboards.mjs

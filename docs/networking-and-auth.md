@@ -26,7 +26,7 @@ Envoy uses separate external and internal listeners. The internal listener, admi
 
 No authentication or authorization is enforced for internal communication. All workloads are therefore treated as trusted peers.
 
-The control plane's private metrics listener uses port 9090 and the `control-plane.paas.internal` service-network alias. It has no published host port or Envoy route. See the [metrics collection contract](../services/paas-metrics/README.md#built-in-dashboards-and-application-metrics) for scraping and labels.
+The control plane's private metrics listener uses port 9090 and the `control-plane.paas.internal` service-network alias. It has no published host port or Envoy route. See the [metrics collection contract](../services/metrics/README.md#built-in-dashboards-and-application-metrics) for scraping and labels.
 
 ### Inter-service discovery
 

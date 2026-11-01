@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 FROM alpine:3.24.1
 RUN apk add --no-cache ca-certificates
 COPY --from=build /out/telegraf /usr/bin/telegraf
-COPY services/paas-metrics/telegraf.conf /etc/telegraf/telegraf.conf
+COPY services/metrics/telegraf.conf /etc/telegraf/telegraf.conf
 # Root is needed for the Docker socket; do not inherit an entrypoint that
 # silently drops to an unprivileged user.
 ENTRYPOINT ["telegraf"]
