@@ -3,6 +3,32 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { App, AppView, viewPaths } from "./app.tsx";
 
+test.each([
+	{ page: "service", serviceId: "demo", tab: "overview" },
+	{ page: "service", serviceId: "demo", tab: "resources" },
+	{ page: "service", serviceId: "demo", tab: "descriptor" },
+	{ page: "events", serviceId: "demo" },
+	{ page: "secrets", serviceId: "demo" },
+	{ page: "resource", serviceId: "demo", resourceId: "app", tab: "config" },
+	{ page: "resource", serviceId: "demo", resourceId: "app", tab: "logs" },
+	{ page: "resource-events", serviceId: "demo", resourceId: "app" },
+	{ page: "cluster", tab: "config" },
+	{ page: "cluster", tab: "logs" },
+	{ page: "cluster", tab: "ingress-logs" },
+] as const)("$page $tab breadcrumbs show entity ancestry without tab names", (route) => {
+	const html = renderToStaticMarkup(
+		<AppView route={route} snapshot={{ refresh: () => {} }} events={{ refresh: () => {} }} logs={{}} />,
+	);
+	const breadcrumb = html.match(/<nav class="breadcrumbs"[^>]*>.*?<\/nav>/)?.[0] ?? "";
+	expect(breadcrumb).not.toMatch(/Overview|Resources|Descriptor|Events|Secrets|Logs|logs/);
+	if (route.page === "cluster") expect(breadcrumb).toContain('aria-current="page">Cluster');
+	else {
+		expect(breadcrumb).toContain('href="#/services"');
+		expect(breadcrumb).toContain('href="#/services/demo"');
+		expect(breadcrumb).toContain(`aria-current="page">${"resourceId" in route ? "app" : "demo"}</a>`);
+	}
+});
+
 test("brand link displays the pasta emoji used by the favicon", () => {
 	const html = renderToStaticMarkup(
 		<AppView
@@ -90,8 +116,15 @@ test("all service tabs share the same complete header with actions beside identi
 		expect(header).toMatch(
 			/service-identity[^]*<h1>demo<\/h1>[^]*badge-healthy[^]*git-refresh[^]*Refresh<\/button>[^]*Redeploy<\/button>/,
 		);
-		expect(header).toContain("Active revision");
-		expect(header).toContain("Desired revision");
+		expect(header).not.toContain("Active revision");
+		expect(header).not.toContain("Desired revision");
+		if (route.page === "service" && route.tab === "overview") {
+			expect(html).toContain("Active revision");
+			expect(html).toContain("Desired revision");
+		} else {
+			expect(html).not.toContain("Active revision");
+			expect(html).not.toContain("Desired revision");
+		}
 		expect(header).toContain('href="https://demo.example.test"');
 		expect(html.match(/<header class="topbar">.*?<\/header>/)?.[0]).not.toContain("git-refresh");
 		return header;
@@ -99,7 +132,7 @@ test("all service tabs share the same complete header with actions beside identi
 	expect(new Set(headers).size).toBe(1);
 });
 
-test.each(["events", "secrets"] as const)("%s reuses the service snapshot subscription and revision panels", (page) => {
+test.each(["events", "secrets"] as const)("%s reuses the service snapshot subscription without revisions", (page) => {
 	expect(viewPaths({ page, serviceId: "demo" }).snapshot).toBe(
 		viewPaths({ page: "service", serviceId: "demo" }).snapshot,
 	);
@@ -128,10 +161,10 @@ test.each(["events", "secrets"] as const)("%s reuses the service snapshot subscr
 			logs={{}}
 		/>,
 	);
-	expect(html).toContain("Active revision");
-	expect(html).toContain("Desired revision");
-	expect(html).toContain("Active commit");
-	expect(html).toContain('title="desired456"');
+	expect(html).not.toContain("Active revision");
+	expect(html).not.toContain("Desired revision");
+	expect(html).not.toContain("Active commit");
+	expect(html).not.toContain('title="desired456"');
 });
 
 test("Secrets loads independently of unavailable Git/Docker snapshots and retains service tabs", () => {
@@ -168,7 +201,7 @@ test.each([
 	{ page: "service", serviceId: "demo", tab: "descriptor" },
 	{ page: "events", serviceId: "demo" },
 	{ page: "secrets", serviceId: "demo" },
-] as const)("$page $tab retains revision panels during loading and service errors", (route) => {
+] as const)("$page $tab retains shared navigation without revisions during loading and service errors", (route) => {
 	for (const error of [undefined, "Cluster data is unavailable; retry shortly"]) {
 		const html = renderToStaticMarkup(
 			<AppView
@@ -178,13 +211,9 @@ test.each([
 				logs={{}}
 			/>,
 		);
-		expect(html).toContain("Active revision");
-		expect(html).toContain("Desired revision");
+		expect(html).not.toContain("Active revision");
+		expect(html).not.toContain("Desired revision");
 		expect(html).toContain('aria-label="Service detail"');
-		if (error) {
-			expect(html).toContain("Revision data unavailable");
-			expect(html).not.toContain("Loading…");
-		} else expect(html.match(/Loading…/g)).toHaveLength(2);
 	}
 });
 
@@ -221,9 +250,7 @@ test("resource event history renders independently of failed inspection with lin
 	);
 	expect(html).toContain("App failed");
 	expect(html).not.toContain("Docker unavailable");
-	expect(html).toMatch(
-		/breadcrumbs[^]*href="#\/services\/demo\/resources\/app">app<\/a>[^]*aria-current="page">Events/,
-	);
+	expect(html).toMatch(/breadcrumbs[^]*href="#\/services\/demo\/resources\/app" aria-current="page">app<\/a>/);
 	expect(html).toContain("Live · connected");
 	expect(html).toContain('aria-label="Resource inspection"');
 	expect(html).toMatch(/href="#\/services\/demo\/resources\/app\/config"><svg\b[^]*?<\/svg>Overview<\/a>/);
@@ -244,7 +271,7 @@ test("service history retains service navigation without a Git snapshot", () => 
 		/>,
 	);
 	expect(html).toContain("<h1>demo</h1>");
-	expect(html).toMatch(/<nav class="breadcrumbs"[^>]*>[^]*<a href="#\/services\/demo">demo<\/a>/);
+	expect(html).toMatch(/<nav class="breadcrumbs"[^>]*>[^]*<a href="#\/services\/demo" aria-current="page">demo<\/a>/);
 	expect(html.match(/<nav class="breadcrumbs"[^>]*>.*?<\/nav>/)?.[0]).not.toContain("<h1>");
 	expect(html).toContain('aria-label="Service detail"');
 	expect(html).toMatch(/href="#\/services\/demo"><svg\b[^]*?<\/svg>Overview<\/a>/);

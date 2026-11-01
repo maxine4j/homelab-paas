@@ -3,21 +3,17 @@ import { ExternalLink } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { ServiceDetailTabs } from "./detail-tabs.tsx";
-import { gitCommitLink } from "./git-source-link.ts";
-import { ServiceRevision } from "./service-revision.tsx";
 import { StatusBadges } from "./status-badge.tsx";
 
 export const ServiceDetailShell = ({
 	serviceId,
 	service,
-	serviceError,
 	tab,
 	children,
 	actions,
 }: {
 	serviceId: string;
 	service?: UiService;
-	serviceError?: string;
 	tab: "overview" | "resources" | "events" | "secrets" | "descriptor";
 	children: ReactNode;
 	actions?: ReactNode;
@@ -25,7 +21,6 @@ export const ServiceDetailShell = ({
 	const primaryUrl = service?.resources.find(
 		(resource) => (resource.type === "web" || resource.type === "static") && resource.primaryUrl,
 	)?.primaryUrl;
-	const pendingRevision = serviceError ? "Revision data unavailable" : "Loading…";
 	return (
 		<>
 			<div className='page-heading service-heading'>
@@ -43,22 +38,6 @@ export const ServiceDetailShell = ({
 								{new URL(primaryUrl).host} <ExternalLink aria-hidden='true' />
 							</a>
 						)}
-						<div className='service-commit-panels'>
-							<ServiceRevision
-								label='Active revision'
-								revision={service?.activeRevision}
-								href={service && gitCommitLink(service.source, service.activeRevision)}
-								metadata={service?.activeRevisionMetadata}
-								fallback={service ? "Not deployed" : pendingRevision}
-							/>
-							<ServiceRevision
-								label='Desired revision'
-								revision={service?.descriptorRevision}
-								href={service && gitCommitLink(service.source, service.descriptorRevision)}
-								metadata={service?.descriptorRevisionMetadata}
-								fallback={service ? "Unavailable" : pendingRevision}
-							/>
-						</div>
 					</div>
 				</div>
 			</div>

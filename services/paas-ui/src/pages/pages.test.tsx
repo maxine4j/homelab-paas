@@ -248,7 +248,7 @@ test("service cards show identity and statuses above ingress and compact revisio
 	expect(html).not.toContain('eyebrow">Service</span>');
 });
 
-test("service revisions link their own GitHub commits beside the identity and retain commit metadata", () => {
+test("service revisions link their own GitHub commits in Overview and retain commit metadata", () => {
 	const service = {
 		serviceId: "demo",
 		sync: "Synced" as const,
@@ -271,7 +271,7 @@ test("service revisions link their own GitHub commits beside the identity and re
 	};
 	const html = renderToStaticMarkup(<ServicePage service={service} />);
 	expect(html).toMatch(
-		/service-heading-row[^]*Active revision[^]*>active1<\/a>[^]*Desired revision[^]*>descrip<\/a>/,
+		/<nav class="tabs"[^]*<section class="service-commit-panels" aria-label="Service revisions">[^]*Active revision[^]*>active1<\/a>[^]*Desired revision[^]*>descrip<\/a>/,
 	);
 	expect(html).toContain('title="active123"');
 	expect(html).toContain('title="descriptor456"');

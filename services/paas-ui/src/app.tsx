@@ -133,7 +133,11 @@ export const AppView = ({
 										<span aria-hidden='true'>/</span>
 										<a
 											href={`#/services/${route.serviceId}`}
-											aria-current={route.page === "service" ? "page" : undefined}
+											aria-current={
+												route.page !== "resource" && route.page !== "resource-events"
+													? "page"
+													: undefined
+											}
 										>
 											{route.serviceId}
 										</a>
@@ -142,23 +146,12 @@ export const AppView = ({
 								{(route.page === "resource" || route.page === "resource-events") && (
 									<>
 										<span aria-hidden='true'>/</span>
-										{route.page === "resource-events" ? (
-											<a href={`#/services/${route.serviceId}/resources/${route.resourceId}`}>
-												{route.resourceId}
-											</a>
-										) : (
-											<span aria-current='page'>{route.resourceId}</span>
-										)}
-									</>
-								)}
-								{(route.page === "events"
-									|| route.page === "resource-events"
-									|| route.page === "secrets") && (
-									<>
-										<span aria-hidden='true'>/</span>
-										<span aria-current='page'>
-											{route.page === "secrets" ? "Secrets" : "Events"}
-										</span>
+										<a
+											href={`#/services/${route.serviceId}/resources/${route.resourceId}`}
+											aria-current='page'
+										>
+											{route.resourceId}
+										</a>
 									</>
 								)}
 							</>
@@ -188,14 +181,12 @@ export const AppView = ({
 							key={route.serviceId}
 							serviceId={route.serviceId}
 							service={snapshot.data as UiService | undefined}
-							serviceError={snapshot.error}
 							actions={actions}
 						/>
 					) : route.page === "events" ? (
 						<ServiceEventsPage
 							serviceId={route.serviceId}
 							service={snapshot.data as UiService | undefined}
-							serviceError={snapshot.error}
 							actions={actions}
 							events={events.data}
 							error={events.error}
@@ -208,12 +199,7 @@ export const AppView = ({
 							error={events.error}
 						/>
 					) : route.page === "service" && !snapshot.data ? (
-						<ServiceDetailShell
-							serviceId={route.serviceId}
-							tab={route.tab ?? "overview"}
-							serviceError={snapshot.error}
-							actions={actions}
-						>
+						<ServiceDetailShell serviceId={route.serviceId} tab={route.tab ?? "overview"} actions={actions}>
 							{snapshot.error ? (
 								<div className='empty' role='alert'>
 									<p>{snapshot.error}</p>

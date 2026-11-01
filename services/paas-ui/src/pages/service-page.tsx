@@ -1,10 +1,12 @@
 import type { UiService, UiServiceEvent } from "@homelab-paas/shared-contracts";
 import type { ReactNode } from "react";
 
+import { gitCommitLink } from "../components/git-source-link.ts";
 import { HealthTimeline } from "../components/health-timeline.tsx";
 import { ServiceDetailShell } from "../components/service-detail-shell.tsx";
 import { ServiceEvents } from "../components/service-events.tsx";
 import { ServiceResources } from "../components/service-resources.tsx";
+import { ServiceRevision } from "../components/service-revision.tsx";
 import { StatusBadges } from "../components/status-badge.tsx";
 import type { ServiceTab } from "../types.ts";
 
@@ -30,6 +32,22 @@ export const ServicePage = ({
 			)}
 			{tab === "overview" && (
 				<>
+					<section className='service-commit-panels' aria-label='Service revisions'>
+						<ServiceRevision
+							label='Active revision'
+							revision={service.activeRevision}
+							href={gitCommitLink(service.source, service.activeRevision)}
+							metadata={service.activeRevisionMetadata}
+							fallback='Not deployed'
+						/>
+						<ServiceRevision
+							label='Desired revision'
+							revision={service.descriptorRevision}
+							href={gitCommitLink(service.source, service.descriptorRevision)}
+							metadata={service.descriptorRevisionMetadata}
+							fallback='Unavailable'
+						/>
+					</section>
 					<HealthTimeline
 						label='Service health history'
 						timeline={service.healthTimeline}
