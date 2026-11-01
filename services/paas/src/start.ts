@@ -54,12 +54,13 @@ import { DeploymentService } from "./reconciler/deployment/deployment-service.ts
 import { RecreateDeploymentStrategy } from "./reconciler/deployment/strategy/recreate-deployment-strategy.ts";
 import { SurgeDeploymentStrategy } from "./reconciler/deployment/strategy/surge-deployment-strategy.ts";
 import { WorkerDeploymentService } from "./reconciler/deployment/worker-deployment-service.ts";
+import { DesiredInputs } from "./reconciler/desired-inputs.ts";
 import { EnvironmentResolver } from "./reconciler/environment-resolver.ts";
 import { EventDiagnostics } from "./reconciler/event-diagnostics.ts";
 import { EndpointsStore } from "./reconciler/networking/endpoints-store.ts";
 import { NetworkingService } from "./reconciler/networking/networking-service.ts";
 import { ReconcilerService } from "./reconciler/reconciler-service.ts";
-import { ReconcilerTask } from "./reconciler/reconciler-task.ts";
+import { ReconciliationScheduler } from "./reconciler/reconciliation-scheduler.ts";
 import { ReconciliationStore } from "./reconciler/reconciliation-store.ts";
 import { ResourceSpecification } from "./reconciler/resource-specification.ts";
 import { WebResourceReconciler } from "./reconciler/resources/web/web-reconciler.ts";
@@ -147,14 +148,13 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		readFile,
 		new DockerHostPathResolver(dockerClient, config.getClusterId()),
 	);
+	const desiredInputs = new DesiredInputs(config, git, decodeDescriptorYaml, environment);
 	const reconciler = new ReconcilerService(
 		config,
-		git,
-		decodeDescriptorYaml,
+		desiredInputs,
 		new WebResourceReconciler(new ResourceSpecification(), docker, deployment, networking, probe),
 		store,
 		Date.now,
-		environment,
 		new WorkerResourceReconciler(
 			new ResourceSpecification(),
 			docker,
@@ -166,6 +166,18 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		changes,
 		metrics,
 	);
+	const scheduler = new ReconciliationScheduler(
+		config,
+		reconciler,
+		store,
+		desiredInputs,
+		sleep,
+		Date.now,
+		nanoid,
+		changes,
+	);
+	scheduler.initialize();
+	lifecycle.registerShutdownHandler(() => scheduler.stop());
 	const abort = new AbortController();
 	const pause = async (ms: number): Promise<void> => {
 		try {
@@ -174,15 +186,6 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 			if (!abort.signal.aborted) throw error;
 		}
 	};
-	const runner = new PeriodicTaskRunner({
-		lifecycle,
-		periodMs: 5000,
-		taskName: "reconciliation",
-		generateTaskId: nanoid,
-		task: new ReconcilerTask(reconciler),
-		pause,
-		report: (err) => logger.error({ err }, "Reconciliation task failed; check persistent state and Docker access"),
-	});
 	const app = new Koa()
 		.use(createMetricsMiddleware(metrics, Date.now))
 		.use(createRequestLogger())
@@ -236,10 +239,8 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const uiService = new CachedPaasUiService(inspection, config, changes);
 	serviceSnapshots = () => uiService.listServices();
 	const managementState = new ManagementStateTask(health, uiService);
-	const gitRefresh = new ManagementRefreshService(
-		new GitRefreshService(config, git, reconciler, changes),
-		managementState,
-	);
+	const gitRefreshService = new GitRefreshService(config, git, scheduler, changes);
+	const gitRefresh = new ManagementRefreshService(gitRefreshService, managementState);
 	const managementOrigin = (): string => {
 		const { baseDomain, httpPort, httpsPort } = config.getIngressConfig();
 		const port = httpsPort ?? httpPort;
@@ -256,8 +257,9 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		git,
 		decodeDescriptorYaml,
 		new SecretStore(secretDirectory, readFile, writeSecrets),
+		changes,
 	);
-	const ui = createPaasUiRouter(uiService, gitRefresh, sessions, managementOrigin, reconciler, secrets);
+	const ui = createPaasUiRouter(uiService, gitRefresh, sessions, managementOrigin, scheduler, secrets);
 	app.use(ui.routes()).use(ui.allowedMethods());
 	app.use(
 		createFrontendRouter(
@@ -306,8 +308,10 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	if (!lifecycle.isOpen()) return;
 	await networking.verifyRoutes();
 	if (!lifecycle.isOpen()) return;
+	// Event subscription and initial audit must precede this explicit execution gate.
+	for (const id of Object.keys(config.getServices())) scheduler.invalidate(id);
+	await scheduler.start();
 	const runners = [
-		runner,
 		new PeriodicTaskRunner({
 			lifecycle,
 			periodMs: 6 * 60 * 60 * 1000,
@@ -339,7 +343,11 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 			generateTaskId: nanoid,
 			task: {
 				run: async () => {
-					await gitRefresh.refreshAll();
+					try {
+						await gitRefreshService.refreshAll();
+					} finally {
+						await managementState.run();
+					}
 				},
 			},
 			pause,

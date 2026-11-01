@@ -1,6 +1,5 @@
 import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IChangeBus } from "../events/change-bus.ts";
-import type { IReconcilerService } from "../reconciler/types.ts";
 import { createLogger } from "../util/logger.ts";
 import type { GitFile, GitFileSource, GitRefreshResult } from "./types.ts";
 
@@ -8,10 +7,15 @@ export interface IGitRefreshCache {
 	refreshFile(serviceId: string, source: GitFileSource): Promise<GitFile>;
 }
 
+export interface IDesiredReconciliation {
+	refreshInputs(serviceId: string): Promise<void>;
+	settle(): Promise<void>;
+}
+
 export interface IGitRefreshService {
-	/** Refreshes one configured source, then reconciles from cache. Throws GitRefreshError. */
+	/** Refreshes one configured source, queues changed inputs and settles eligible work. Throws GitRefreshError. */
 	refreshOne(serviceId: string): Promise<void>;
-	/** Fetches concurrently with per-service isolation, then reconciles from cache. Reconciliation failures propagate. */
+	/** Fetches concurrently, isolates source/service failures and settles changed-input work. Orchestration failures propagate. */
 	refreshAll(): Promise<GitRefreshResult[]>;
 }
 
@@ -34,7 +38,7 @@ export class GitRefreshService implements IGitRefreshService {
 	constructor(
 		private readonly config: IPaasConfig,
 		private readonly cache: IGitRefreshCache,
-		private readonly reconciler: IReconcilerService,
+		private readonly scheduler: IDesiredReconciliation,
 		private readonly changes?: IChangeBus,
 	) {}
 
@@ -45,7 +49,8 @@ export class GitRefreshService implements IGitRefreshService {
 		try {
 			await this.cache.refreshFile(serviceId, source);
 			this.changes?.publish({ serviceId, refreshLogs: true });
-			await this.reconciler.reconcile();
+			await this.scheduler.refreshInputs(serviceId);
+			await this.scheduler.settle();
 		} catch (cause) {
 			throw new GitRefreshError("unavailable", { cause });
 		}
@@ -64,7 +69,8 @@ export class GitRefreshService implements IGitRefreshService {
 				}
 			}),
 		);
-		await this.reconciler.reconcile();
+		for (const result of results) if (result.refreshed) await this.scheduler.refreshInputs(result.serviceId);
+		await this.scheduler.settle();
 		return results;
 	}
 }

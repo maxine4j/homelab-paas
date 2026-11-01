@@ -3,6 +3,8 @@ import type { UiServiceEvent } from "@homelab-paas/shared-contracts";
 import { createLogger } from "../util/logger.ts";
 
 export interface PlatformChange {
+	/** Only accepted desired-input writes/reloads set this. Observational updates must omit it. */
+	desiredInputs?: boolean;
 	serviceId?: string;
 	refreshLogs?: boolean;
 	event?: UiServiceEvent;

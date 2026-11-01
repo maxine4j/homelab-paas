@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 
+import { ChangeBus } from "../events/change-bus.ts";
 import { testConfig } from "../util/test/config.ts";
 import { decodeDescriptorYaml } from "./paas-config.ts";
 import { SecretStore } from "./secret-store.ts";
@@ -29,7 +30,11 @@ const fixture = () => {
 			},
 		}),
 	}));
+	const changes = new ChangeBus();
+	const receive = vi.fn();
+	changes.subscribe(receive);
 	return {
+		receive,
 		write,
 		fetchFile,
 		service: new ServiceSecrets(
@@ -37,9 +42,26 @@ const fixture = () => {
 			{ fetchFile },
 			decodeDescriptorYaml,
 			new SecretStore("/env", async () => content, write),
+			changes,
 		),
 	};
 };
+
+test("accepted durable secret-only writes publish desired invalidation; rejected writes publish none", async () => {
+	const f = fixture();
+	const current = await f.service.read("demo");
+	await expect(
+		f.service.update("demo", { revision: "stale", changes: [{ name: "TOKEN", value: "new" }] }),
+	).rejects.toMatchObject({ kind: "conflict" });
+	expect(f.receive).not.toHaveBeenCalled();
+	f.write.mockRejectedValueOnce(new Error("disk failure"));
+	await expect(
+		f.service.update("demo", { revision: current.revision, changes: [{ name: "TOKEN", value: "new" }] }),
+	).rejects.toMatchObject({ kind: "unavailable" });
+	expect(f.receive).not.toHaveBeenCalled();
+	await f.service.update("demo", { revision: current.revision, changes: [{ name: "TOKEN", value: "new" }] });
+	expect(f.receive.mock.calls).toEqual([[{ serviceId: "demo", desiredInputs: true }]]);
+});
 
 test("returns declared names/status first and saved extras last without secret values", async () => {
 	const f = fixture();

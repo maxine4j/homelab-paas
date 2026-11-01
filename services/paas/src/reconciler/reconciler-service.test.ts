@@ -6,6 +6,7 @@ import { ChangeBus } from "../events/change-bus.ts";
 import type { GitFile, GitFileSource } from "../git/types.ts";
 import { testConfig } from "../util/test/config.ts";
 import { captureLogs } from "../util/test/logs.ts";
+import { DesiredInputs } from "./desired-inputs.ts";
 import { EnvironmentResolver } from "./environment-resolver.ts";
 import { EventDiagnostics } from "./event-diagnostics.ts";
 import { ReconcilerService } from "./reconciler-service.ts";
@@ -17,6 +18,43 @@ const descriptor = {
 	metadata: { serviceId: "demo" },
 	resources: { app: { type: "web", image: "app:1", ingress: { public: true, port: 8080 } } },
 };
+
+test("targeted observation reconciles only the selected service and reuses desired inputs", async () => {
+	const f = fixture();
+	const service = f.createService({ ...f.deps.services, other: f.deps.services.demo });
+	for (let i = 0; i < 3; i++) await service.reconcileOne("demo");
+	expect(f.fetchFile).toHaveBeenCalledTimes(1);
+	expect(f.reconcile).toHaveBeenCalledTimes(3);
+	expect(f.fetchFile).toHaveBeenCalledWith("demo", f.deps.services.demo);
+	expect(f.states.has("other")).toBe(false);
+});
+
+test("an invalid newer input clears the previous revision's deployment grace window", async () => {
+	const f = fixture();
+	f.states.set("demo", {
+		desiredRevision: "old",
+		activeRevision: "active",
+		phase: "deploying",
+		deploymentStartedAt: 0,
+	});
+	f.fetchFile.mockResolvedValue({ revision: "new", content: "invalid descriptor" });
+	f.advance(300000);
+	await f.service.reconcileOne("demo");
+	expect(f.states.get("demo")).toMatchObject({ phase: "failed", desiredRevision: "new" });
+	expect(f.states.get("demo")?.deploymentStartedAt).toBeUndefined();
+});
+
+test("targeted checkpoint failures retain diagnostics and propagate for scheduler recovery", async () => {
+	const f = fixture();
+	f.deps.state.read = vi.fn(async () => {
+		throw new Error("checkpoint unavailable");
+	});
+	await expect(f.service.reconcileOne("demo")).rejects.toThrow("checkpoint unavailable");
+	expect(f.appendEvent).toHaveBeenCalledWith(
+		"demo",
+		expect.objectContaining({ event: "reconciliation.state-failed" }),
+	);
+});
 
 test("stable successful reconciliation emits no checkpoint change notifications", async () => {
 	const f = fixture();
@@ -143,25 +181,30 @@ function fixture() {
 		},
 		now: () => time,
 	};
-	const createService = (services: Record<string, GitFileSource> = deps.services, privateIngressEnabled = false) =>
-		new ReconcilerService(
-			testConfig({
-				services: services,
-				reconciliation: deps.retry,
-				auth: privateIngressEnabled ? testConfig().getAuthConfig() : undefined,
-			}),
-			deps.git,
-			deps.decode,
+	const createService = (services: Record<string, GitFileSource> = deps.services, privateIngressEnabled = false) => {
+		const config = testConfig({
+			services: services,
+			reconciliation: deps.retry,
+			auth: privateIngressEnabled ? testConfig().getAuthConfig() : undefined,
+		});
+		return new ReconcilerService(
+			config,
+			new DesiredInputs(
+				config,
+				deps.git,
+				deps.decode,
+				new EnvironmentResolver("/etc/homelab-paas/env", readSecrets, { resolve: resolveHostPath }),
+			),
 			deps.web,
 			deps.state,
 			deps.now,
-			new EnvironmentResolver("/etc/homelab-paas/env", readSecrets, { resolve: resolveHostPath }),
 			{ type: "worker", lifecycle: "deployment", reconcile: reconcileWorker },
 			{ append: appendEvent, list: async () => [] },
 			new EventDiagnostics(testConfig()),
 			bus,
 			{ reconciliation },
 		);
+	};
 	return {
 		deps,
 		bus,

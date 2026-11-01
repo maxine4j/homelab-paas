@@ -1,5 +1,15 @@
 import type { ServiceDescriptor } from "@homelab-paas/shared-contracts";
 
+import type { DeploymentWebResource } from "./deployment/strategy/types.ts";
+import type { DeploymentWorkerResource } from "./deployment/types.ts";
+
+/** Internal only: contains resolved secrets. Never persist or send to logs/status. */
+export interface DesiredService {
+	revision: string;
+	resources: [string, DeploymentWebResource | DeploymentWorkerResource][];
+	secrets: string[];
+}
+
 export const serviceEventMessages = {
 	started: "Deployment started; reconciling resources",
 	fetch: "Cannot fetch descriptor; check repository, branch and committed file path",
@@ -15,7 +25,7 @@ export const serviceEventMessages = {
 } as const;
 
 export interface IReconcilerService {
-	/** Serializes passes; service failures are checkpointed and reported independently. */
+	/** Controlled compatibility pass for tests/internal callers; runtime work uses the targeted scheduler. */
 	reconcile(): Promise<void>;
 }
 

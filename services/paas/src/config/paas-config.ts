@@ -81,7 +81,7 @@ export class PaasConfig implements IPaasConfig {
 			const changed = this.document?.revision !== document.revision;
 			this.current = next;
 			this.document = document;
-			if (changed) this.changes?.publish({});
+			if (changed) this.changes?.publish({ desiredInputs: true });
 			return structuredClone(next);
 		});
 	}
@@ -231,7 +231,7 @@ export class PaasConfig implements IPaasConfig {
 				const saved = await this.store.write(candidate);
 				this.document = saved;
 				this.current = next;
-				this.changes?.publish({});
+				this.changes?.publish({ desiredInputs: true });
 				return this.getEditableConfig();
 			} catch (cause) {
 				if (cause instanceof ConfigEditError) throw cause;

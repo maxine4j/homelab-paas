@@ -18,7 +18,7 @@ The Docker client exposes low-level network, container, and image operations thr
 
 Docker Compose bootstraps Envoy and the control plane for [local development](development.md#local-container-environment) and [production deployment](../prod/README.md). The platform manages application workloads directly through Docker Engine.
 
-Independent health and management inspection share an injected backend [runtime observation component](reconciliation-and-deployments.md#shared-runtime-observations). Deployment and ownership operations keep fresh Docker observations. Management/observational change notifications remain separate from desired-input scheduling, so updating a snapshot cannot request a deployment.
+Independent health and management inspection share an injected backend [runtime observation component](reconciliation-and-deployments.md#shared-runtime-observations). Deployment and ownership operations keep fresh Docker observations. The [reconciliation scheduler and desired-input cache](reconciliation-and-deployments.md#targeted-scheduling-and-desired-inputs) serialize affected services and recover persisted retry deadlines without periodic healthy-service deployment passes. Management/observational change notifications remain separate from desired-input scheduling, so updating a snapshot cannot request a deployment.
 
 ## Initial scope
 

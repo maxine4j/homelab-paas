@@ -7,13 +7,22 @@ import { expect, test, vi } from "vitest";
 import { decodeDescriptorYaml } from "../../src/config/paas-config.ts";
 import { SecretStore } from "../../src/config/secret-store.ts";
 import { ServiceSecrets } from "../../src/config/service-secrets.ts";
+import { ChangeBus } from "../../src/events/change-bus.ts";
 import { createPaasUiRouter } from "../../src/frontend/paas-ui-router.ts";
 import { PaasUiService } from "../../src/frontend/paas-ui-service.ts";
 import { JwtClient } from "../../src/ingress/auth/jwt-client.ts";
+import { DesiredInputs } from "../../src/reconciler/desired-inputs.ts";
 import { EnvironmentResolver } from "../../src/reconciler/environment-resolver.ts";
+import { EventDiagnostics } from "../../src/reconciler/event-diagnostics.ts";
+import { ReconcilerService } from "../../src/reconciler/reconciler-service.ts";
+import { ReconciliationScheduler } from "../../src/reconciler/reconciliation-scheduler.ts";
+import { ReconciliationStore } from "../../src/reconciler/reconciliation-store.ts";
 import { ResourceSpecification } from "../../src/reconciler/resource-specification.ts";
+import type { WebReconciliationRequest } from "../../src/reconciler/resources/web/web-reconciler.ts";
 import { ResourceStatusService } from "../../src/status/resource-status-service.ts";
+import { FileSystemKeyValueStore } from "../../src/store/file-system-store.ts";
 import { atomicWriteFile, chmod, mkdir, mkdtemp, readFile, rm, stat, type FileWriter } from "../../src/util/file.ts";
+import { sleep } from "../../src/util/sleep.ts";
 import { testConfig } from "../../src/util/test/config.ts";
 import { startTestApi } from "../../src/util/test/router.ts";
 
@@ -21,6 +30,7 @@ test("authenticated secret editing persists private files, retains values, resol
 	const directory = await mkdtemp(join(tmpdir(), "paas-secrets-"));
 	const envDirectory = join(directory, "env");
 	const config = testConfig({ services: { demo: { remote: "local", descriptorPath: "/repo/demo.yaml" } } });
+	const changes = new ChangeBus();
 	const git = {
 		fetchFile: vi.fn(async () => ({
 			revision: "rev",
@@ -52,7 +62,46 @@ test("authenticated secret editing persists private files, retains values, resol
 		git,
 		decodeDescriptorYaml,
 		new SecretStore(envDirectory, readFile, write),
+		changes,
 	);
+	const state = new ReconciliationStore(
+		new FileSystemKeyValueStore<unknown>(
+			directory,
+			readFile,
+			atomicWriteFile,
+			(path) => rm(path, { force: true }),
+			"yaml",
+		),
+	);
+	const desiredInputs = new DesiredInputs(
+		config,
+		git,
+		decodeDescriptorYaml,
+		new EnvironmentResolver(envDirectory, readFile),
+	);
+	const rollout = vi.fn(async (_request: WebReconciliationRequest) => {});
+	const reconciler = new ReconcilerService(
+		config,
+		desiredInputs,
+		{ type: "web", lifecycle: "deployment", reconcile: rollout },
+		state,
+		Date.now,
+		{ type: "worker", lifecycle: "deployment", reconcile: async () => {} },
+		{ append: async () => {}, list: async () => [] },
+		new EventDiagnostics(config),
+		changes,
+	);
+	const scheduler = new ReconciliationScheduler(
+		config,
+		reconciler,
+		state,
+		desiredInputs,
+		sleep,
+		Date.now,
+		() => "secrets-api",
+		changes,
+	);
+	await scheduler.start();
 	const ui = new PaasUiService(
 		new ResourceStatusService(new ResourceSpecification(), {
 			resolve: async (_serviceId, env) =>
@@ -104,6 +153,12 @@ test("authenticated secret editing persists private files, retains values, resol
 			body: JSON.stringify({ revision: initial.revision, changes }),
 		});
 		expect(saved.status).toBe(200);
+		await scheduler.settle();
+		expect(rollout).toHaveBeenCalledTimes(1);
+		expect(rollout.mock.calls.at(-1)?.[0].resource.env).toEqual([
+			{ name: "TOKEN", value: " private#$\\token " },
+			{ name: "EMPTY", value: "initial" },
+		]);
 		const metadata = await saved.json();
 		expect(metadata.variables).toEqual([
 			{ name: "EMPTY", configured: true, used: true },
@@ -131,12 +186,16 @@ test("authenticated secret editing persists private files, retains values, resol
 			body: JSON.stringify({ revision: initial.revision, changes: [{ name: "TOKEN", value: "stale" }] }),
 		});
 		expect(stale.status).toBe(409);
+		await scheduler.settle();
+		expect(rollout).toHaveBeenCalledTimes(1);
 		const merged = await fetch(url, {
 			method: "PUT",
 			headers,
 			body: JSON.stringify({ revision: metadata.revision, changes: [{ name: "TOKEN", value: "replacement" }] }),
 		});
 		expect(merged.status).toBe(200);
+		await scheduler.settle();
+		expect(rollout).toHaveBeenCalledTimes(2);
 		expect(await readFile(join(envDirectory, "demo.env"))).toContain("FUTURE='next-deployment'");
 		const mergedMetadata = await merged.json();
 		const removed = await fetch(url, {
@@ -151,6 +210,10 @@ test("authenticated secret editing persists private files, retains values, resol
 			}),
 		});
 		expect(removed.status).toBe(200);
+		await scheduler.settle();
+		expect(rollout).toHaveBeenCalledTimes(2);
+		expect(await state.read("demo")).toMatchObject({ phase: "failed", activeRevision: "rev" });
+		expect(await readFile(join(directory, "demo.state.yaml"))).not.toContain("replacement");
 		expect((await removed.json()).variables).toEqual([
 			{ name: "EMPTY", configured: false, used: true },
 			{ name: "TOKEN", configured: true, used: true },
@@ -169,6 +232,7 @@ test("authenticated secret editing persists private files, retains values, resol
 			details: { missingVariables: ["A", "B"] },
 		});
 	} finally {
+		await scheduler.stop();
 		await server.close();
 		await rm(directory, { recursive: true, force: true });
 	}

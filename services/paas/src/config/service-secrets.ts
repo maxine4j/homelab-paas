@@ -1,5 +1,6 @@
 import type { UiSecrets, UiSecretsUpdate } from "@homelab-paas/shared-contracts";
 
+import type { IChangeBus } from "../events/change-bus.ts";
 import type { IGitService } from "../git/git-service.ts";
 import type { DescriptorDecoder } from "../reconciler/types.ts";
 import type { IPaasConfig } from "./paas-config.ts";
@@ -10,7 +11,7 @@ import type { SecretDocument } from "./types.ts";
 export interface IServiceSecrets {
 	/** Only names/status are returned. Throws SecretEditError; causes are for operator logs only. */
 	read(serviceId: string): Promise<UiSecrets>;
-	/** Merges write-only edits; periodic reconciliation observes changes, retaining retry backoff. */
+	/** Merges write-only edits; accepted durable writes invalidate desired inputs, retaining retry backoff. */
 	update(serviceId: string, update: UiSecretsUpdate): Promise<UiSecrets>;
 }
 
@@ -20,6 +21,7 @@ export class ServiceSecrets implements IServiceSecrets {
 		private readonly git: IGitService,
 		private readonly decode: DescriptorDecoder,
 		private readonly store: ISecretStore,
+		private readonly changes?: IChangeBus,
 	) {}
 	async read(serviceId: string): Promise<UiSecrets> {
 		const descriptor = await this.descriptor(serviceId);
@@ -29,7 +31,9 @@ export class ServiceSecrets implements IServiceSecrets {
 		const descriptor = await this.descriptor(serviceId);
 		const current = await this.store.read(serviceId);
 		if (update.revision !== this.metadata(descriptor, current).revision) throw new SecretEditError("conflict");
-		return this.metadata(descriptor, await this.store.update(serviceId, current.revision, update.changes));
+		const saved = await this.store.update(serviceId, current.revision, update.changes);
+		this.changes?.publish({ serviceId, desiredInputs: true });
+		return this.metadata(descriptor, saved);
 	}
 	private async descriptor(serviceId: string): Promise<{ revision: string; names: Set<string> }> {
 		const services = this.config.getServices();

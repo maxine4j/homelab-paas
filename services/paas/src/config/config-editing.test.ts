@@ -26,12 +26,15 @@ test("publishes validated configuration changes and avoids restarting live strea
 	await config.load();
 	await config.reload();
 	expect(receive).toHaveBeenCalledTimes(1);
+	expect(receive).toHaveBeenLastCalledWith({ desiredInputs: true });
 	await config.updateConfig({ revision, changes: [{ path: "git.pollIntervalSeconds", value: 6 }] });
 	expect(receive).toHaveBeenCalledTimes(2);
+	expect(receive).toHaveBeenLastCalledWith({ desiredInputs: true });
 	value = { ...testConfigValue(), services: { demo: { remote: "https://example.com/repo" } } };
 	revision = "external";
 	await config.reload();
 	expect(receive).toHaveBeenCalledTimes(3);
+	expect(receive).toHaveBeenLastCalledWith({ desiredInputs: true });
 	value = {};
 	revision = "invalid";
 	await config.reload();

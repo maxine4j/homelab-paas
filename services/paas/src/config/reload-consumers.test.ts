@@ -6,6 +6,7 @@ import { JwtClient } from "../ingress/auth/jwt-client.ts";
 import { GitHubOauth2Provider } from "../ingress/auth/oauth-provider/github.ts";
 import { TlsCertProvisionService } from "../ingress/tls/cert-provision-service.ts";
 import { DigitalOceanDnsAcmeChallengeProvider } from "../ingress/tls/dns-challenge/digitalocean-dns-challenge-provider.ts";
+import { DesiredInputs } from "../reconciler/desired-inputs.ts";
 import { EventDiagnostics } from "../reconciler/event-diagnostics.ts";
 import { ReconcilerService } from "../reconciler/reconciler-service.ts";
 import { ResourceSpecification } from "../reconciler/resource-specification.ts";
@@ -105,12 +106,10 @@ test("existing reconciler and UI discover reloaded service sources and retry bou
 	const reconcile = vi.fn(async () => {});
 	const service = new ReconcilerService(
 		f.config,
-		{ fetchFile },
-		decodeDescriptorYaml,
+		new DesiredInputs(f.config, { fetchFile }, decodeDescriptorYaml, { resolve: async () => [] }),
 		{ type: "web", lifecycle: "deployment", reconcile },
 		state,
 		() => 0,
-		{ resolve: async () => [] },
 		{ type: "worker", lifecycle: "deployment", reconcile },
 		{ append: async () => {}, list: async () => [] },
 		new EventDiagnostics(f.config),

@@ -1,3 +1,5 @@
+import { onTestFinished } from "vitest";
+
 import type { IPaasConfig } from "../../src/config/paas-config.ts";
 import { decodeDescriptorYaml } from "../../src/config/paas-config.ts";
 import { DockerClient } from "../../src/docker/docker-client.ts";
@@ -21,11 +23,13 @@ import { DeploymentService } from "../../src/reconciler/deployment/deployment-se
 import { RecreateDeploymentStrategy } from "../../src/reconciler/deployment/strategy/recreate-deployment-strategy.ts";
 import { SurgeDeploymentStrategy } from "../../src/reconciler/deployment/strategy/surge-deployment-strategy.ts";
 import { WorkerDeploymentService } from "../../src/reconciler/deployment/worker-deployment-service.ts";
+import { DesiredInputs } from "../../src/reconciler/desired-inputs.ts";
 import { EnvironmentResolver } from "../../src/reconciler/environment-resolver.ts";
 import { EventDiagnostics } from "../../src/reconciler/event-diagnostics.ts";
 import { EndpointsStore } from "../../src/reconciler/networking/endpoints-store.ts";
 import { NetworkingService } from "../../src/reconciler/networking/networking-service.ts";
 import { ReconcilerService } from "../../src/reconciler/reconciler-service.ts";
+import { ReconciliationScheduler } from "../../src/reconciler/reconciliation-scheduler.ts";
 import { ReconciliationStore } from "../../src/reconciler/reconciliation-store.ts";
 import { ResourceSpecification } from "../../src/reconciler/resource-specification.ts";
 import { WebResourceReconciler } from "../../src/reconciler/resources/web/web-reconciler.ts";
@@ -97,14 +101,18 @@ export const inProcessPaas = async (
 		new SurgeDeploymentStrategy(docker, networking, deploymentContainers, generateInstanceId),
 	]);
 	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${directory}/git`);
-	const reconciler = new ReconcilerService(
+	const desiredInputs = new DesiredInputs(
 		config,
 		git,
 		decodeDescriptorYaml,
+		new EnvironmentResolver(`${directory}/env`, readFile),
+	);
+	const reconciler = new ReconcilerService(
+		config,
+		desiredInputs,
 		new WebResourceReconciler(new ResourceSpecification(), docker, deployments, networking, probe),
 		checkpoints,
 		now,
-		new EnvironmentResolver(`${directory}/env`, readFile),
 		new WorkerResourceReconciler(
 			new ResourceSpecification(),
 			docker,
@@ -115,6 +123,18 @@ export const inProcessPaas = async (
 		new EventDiagnostics(config),
 		changes,
 	);
+	const scheduler = new ReconciliationScheduler(
+		config,
+		reconciler,
+		checkpoints,
+		desiredInputs,
+		sleep,
+		now,
+		generateInstanceId,
+		changes,
+	);
+	await scheduler.start();
+	onTestFinished(() => scheduler.stop());
 	const observations = new RuntimeObservations(docker, now);
 	const health = new ResourceHealthService(
 		config,
@@ -139,8 +159,10 @@ export const inProcessPaas = async (
 	const management = new ManagementStateTask(health, cache);
 	return {
 		reconciler,
+		scheduler,
+		desiredInputs,
 		git,
-		refresh: new GitRefreshService(config, git, reconciler),
+		refresh: new GitRefreshService(config, git, scheduler),
 		checkpoints,
 		endpoints,
 		events,

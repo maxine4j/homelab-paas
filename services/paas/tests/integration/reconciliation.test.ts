@@ -88,7 +88,7 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 			notifications++;
 		});
 		for (let pass = 0; pass < 3; pass++) {
-			await paas.reconciler.reconcile();
+			await paas.scheduler.settle();
 			await paas.management.run();
 			await paas.cache.listServices();
 			for (const id of ["demo", "other"]) {
@@ -100,7 +100,7 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 		expect(paas.writes).toEqual([]);
 		expect(envoy.server.requests.length - publications).toBe(0);
 		expect(notifications).toBe(0);
-		expect(docker.server.requests.length - dockerReads).toBe(60);
+		expect(docker.server.requests.length - dockerReads).toBe(18);
 		const create = docker.server.requests.find((r) => r.url.pathname.endsWith("/containers/create"))!;
 		expect(JSON.parse(create.body)).toMatchObject({
 			Image: "sha256:test-image",

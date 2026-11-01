@@ -1,25 +1,27 @@
-import type { ServiceDescriptor, WebResource, WorkerResource, UiServiceEvent } from "@homelab-paas/shared-contracts";
+import type { WebResource, WorkerResource, UiServiceEvent } from "@homelab-paas/shared-contracts";
 
 import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IChangeBus } from "../events/change-bus.ts";
-import type { IGitService } from "../git/git-service.ts";
 import type { GitFileSource } from "../git/types.ts";
 import type { IReconciliationMetrics } from "../metrics/metrics-service.ts";
 import { createLogger } from "../util/logger.ts";
-import type { DeploymentWebResource } from "./deployment/strategy/types.ts";
-import type { DeploymentWorkerResource } from "./deployment/types.ts";
-import type { IEnvironmentResolver } from "./environment-resolver.ts";
+import { DesiredInputError, type IDesiredInputs } from "./desired-inputs.ts";
 import { EnvironmentResolutionError } from "./environment-resolver.ts";
 import type { IEventDiagnostics } from "./event-diagnostics.ts";
 import type { IWebResourceReconciler } from "./resources/web/web-reconciler.ts";
 import type { IWorkerResourceReconciler } from "./resources/worker/worker-reconciler.ts";
 import type { IServiceEventStore } from "./service-event-store.ts";
 import { serviceEventMessages } from "./types.ts";
-import type { DescriptorDecoder, IReconcilerService, IReconciliationStateStore, ReconciliationState } from "./types.ts";
+import type { IReconcilerService, IReconciliationStateStore, ReconciliationState } from "./types.ts";
 
 export interface IServiceRedeployer {
 	/** Serializes with reconciliation; validates inputs before forcing all workloads through their rollout strategy. Throws RedeployError. */
 	redeploy(serviceId: string): Promise<void>;
+}
+
+export interface ITargetedReconciler extends IServiceRedeployer {
+	/** Serialized fresh Docker observation using cached desired inputs; persisted backoff remains authoritative. */
+	reconcileOne(serviceId: string): Promise<void>;
 }
 
 export class RedeployError extends Error {
@@ -36,18 +38,16 @@ export class RedeployError extends Error {
 	}
 }
 
-export class ReconcilerService implements IReconcilerService, IServiceRedeployer {
+export class ReconcilerService implements IReconcilerService, ITargetedReconciler {
 	private readonly log = createLogger(ReconcilerService.name);
 	private pending: Promise<void> = Promise.resolve();
 
 	constructor(
 		private readonly config: IPaasConfig,
-		private readonly git: IGitService,
-		private readonly decode: DescriptorDecoder,
+		private readonly inputs: IDesiredInputs,
 		private readonly web: IWebResourceReconciler,
 		private readonly state: IReconciliationStateStore,
 		private readonly now: () => number,
-		private readonly environment: IEnvironmentResolver,
 		private readonly worker: IWorkerResourceReconciler,
 		private readonly events: IServiceEventStore,
 		private readonly diagnostics: IEventDiagnostics,
@@ -59,20 +59,26 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 		const operation = this.pending.then(async () => {
 			for (const [serviceId, source] of Object.entries(this.config.getServices())) {
 				try {
+					this.inputs.invalidate(serviceId);
 					await this.reconcileService(serviceId, source);
 				} catch (error) {
-					await this.recordEvent(serviceId, {
-						timestamp: this.now(),
-						level: "error",
-						event: "reconciliation.state-failed",
-						message: this.diagnostics.summarize(error, []),
-						diagnostics: this.diagnostics.describe(error, { operation: "state", serviceId }, []),
-					});
-					this.log.error(
-						{ event: "reconciliation.state-failed", serviceId, err: error },
-						"Cannot persist reconciliation state; check platform state directory access",
-					);
+					await this.recordStateFailure(serviceId, error);
 				}
+			}
+		});
+		this.pending = operation.catch(() => {});
+		return operation;
+	}
+
+	reconcileOne(serviceId: string): Promise<void> {
+		const operation = this.pending.then(async () => {
+			const source = this.config.getServices()[serviceId];
+			if (!source || !Object.hasOwn(this.config.getServices(), serviceId)) return;
+			try {
+				await this.reconcileService(serviceId, source);
+			} catch (error) {
+				await this.recordStateFailure(serviceId, error);
+				throw error;
 			}
 		});
 		this.pending = operation.catch(() => {});
@@ -84,6 +90,7 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 			const sources = this.config.getServices();
 			if (!Object.hasOwn(sources, serviceId)) throw new RedeployError("not-found");
 			try {
+				this.inputs.invalidate(serviceId);
 				await this.reconcileService(serviceId, sources[serviceId]!, true);
 			} catch (cause) {
 				throw new RedeployError("unavailable", { cause });
@@ -112,43 +119,11 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 		let resourceContext: WebResource | WorkerResource | undefined;
 		const secrets: string[] = [];
 		try {
-			const file = await this.git.fetchFile(serviceId, source);
-			desiredRevision = file.revision;
+			const desired = await this.inputs.read(serviceId);
+			desiredRevision = desired.revision;
 			if (previous?.desiredRevision !== desiredRevision) deploymentStartedAt = undefined;
-			message = serviceEventMessages.descriptor;
-			const descriptor = this.decode(file.content, serviceId, file.revision);
-			message = serviceEventMessages.capabilities;
-			const desired = this.deploymentResources(descriptor);
-			message = serviceEventMessages.secrets;
-			// Resolve the union first so a missing file or variable reports every required name.
-			const declaredSecrets = new Map(
-				desired.flatMap(([, resource]) =>
-					(resource.env ?? [])
-						.filter((entry) => "secret" in entry)
-						.map((entry) => [entry.name, entry] as const),
-				),
-			);
-			resourceId = desired.length === 1 ? desired.at(0)?.[0] : undefined;
-			const resolvedSecrets = new Map(
-				(await this.environment.resolve(serviceId, [...declaredSecrets.values()])).map((entry) => [
-					entry.name,
-					entry.value,
-				]),
-			);
-			secrets.push(...resolvedSecrets.values());
-			const resources: [string, DeploymentWebResource | DeploymentWorkerResource][] = [];
-			for (const [id, resource] of desired) {
-				resourceId = id;
-				resourceContext = resource;
-				image = resource.image;
-				const env = (resource.env ?? []).map((entry) => {
-					const value = "value" in entry ? entry.value : resolvedSecrets.get(entry.name);
-					if (value === undefined)
-						throw new Error("Cannot resolve application secrets; open the service Secrets tab");
-					return { name: entry.name, value };
-				});
-				resources.push([id, { ...resource, env }]);
-			}
+			secrets.push(...desired.secrets);
+			const resources = desired.resources;
 			resourceId = undefined;
 			resourceContext = undefined;
 			image = undefined;
@@ -223,7 +198,15 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 					"Service recovered; clearing retry backoff",
 				);
 			outcome = "success";
-		} catch (error) {
+		} catch (failure) {
+			let error = failure;
+			if (failure instanceof DesiredInputError) {
+				message = serviceEventMessages[failure.stage];
+				desiredRevision = failure.revision ?? desiredRevision;
+				if (previous?.desiredRevision !== desiredRevision) deploymentStartedAt = undefined;
+				resourceId = failure.resourceId;
+				error = failure.cause;
+			}
 			const retry = this.config.getReconciliationConfig();
 			const failures = Math.min(
 				(previous?.desiredRevision === desiredRevision ? (previous?.failures ?? 0) : 0) + 1,
@@ -297,6 +280,20 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 		this.changes?.publish({ serviceId });
 	}
 
+	private async recordStateFailure(serviceId: string, error: unknown): Promise<void> {
+		await this.recordEvent(serviceId, {
+			timestamp: this.now(),
+			level: "error",
+			event: "reconciliation.state-failed",
+			message: this.diagnostics.summarize(error, []),
+			diagnostics: this.diagnostics.describe(error, { operation: "state", serviceId }, []),
+		});
+		this.log.error(
+			{ event: "reconciliation.state-failed", serviceId, err: error },
+			"Cannot persist reconciliation state; check platform state directory access",
+		);
+	}
+
 	private async recordEvent(serviceId: string, event: UiServiceEvent): Promise<void> {
 		this.changes?.publish({ serviceId, event });
 		try {
@@ -308,27 +305,5 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 				"Cannot append service event; check platform event history and directory permissions",
 			);
 		}
-	}
-
-	private deploymentResources(descriptor: ServiceDescriptor): [string, WebResource | WorkerResource][] {
-		const entries = Object.entries(descriptor.resources);
-		const webCount = entries.filter(([, resource]) => resource.type === "web").length;
-		if (entries.length === 0) throw new Error("Runtime requires at least one workload resource");
-		return entries.map(([resourceId, resource]) => {
-			if (
-				(resource.type !== "web" && resource.type !== "worker")
-				|| (resource.type === "web"
-					&& ((!this.config.getAuthConfig() && resource.ingress.public !== true)
-						|| (resource.replicas ?? 1) !== 1))
-				|| resource.egress !== undefined
-			)
-				throw new Error("Resource requires unsupported runtime capabilities");
-			return [
-				resourceId,
-				resource.type === "web"
-					? { ...resource, primary: webCount === 1 || resource.primary === true }
-					: resource,
-			];
-		});
 	}
 }
