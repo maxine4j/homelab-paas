@@ -53,7 +53,25 @@ export class MockHttpServer {
 				response.headers.forEach((value, key) => res.setHeader(key, value));
 				if (response.headers.getSetCookie().length)
 					res.setHeader("set-cookie", response.headers.getSetCookie());
-				res.end(Buffer.from(await response.arrayBuffer()));
+				res.flushHeaders();
+				const reader = response.body?.getReader();
+				if (reader) {
+					const cancel = () => {
+						void reader.cancel();
+					};
+					res.once("close", cancel);
+					try {
+						while (!res.destroyed) {
+							const chunk = await reader.read();
+							if (chunk.done) break;
+							res.write(chunk.value);
+						}
+					} finally {
+						res.off("close", cancel);
+						reader.releaseLock();
+					}
+				}
+				res.end();
 			} catch (error) {
 				this.failures.push(error);
 				res.writeHead(500).end("Mock handler failed");

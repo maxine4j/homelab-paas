@@ -11,6 +11,8 @@ import { PaasConfig, decodeDescriptorYaml } from "./config/paas-config.ts";
 import { SecretStore } from "./config/secret-store.ts";
 import { ServiceSecrets } from "./config/service-secrets.ts";
 import { DockerClient } from "./docker/docker-client.ts";
+import { DockerEventClient } from "./docker/docker-event-client.ts";
+import { DockerEventWatcher } from "./docker/docker-event-watcher.ts";
 import { DockerHostPathResolver } from "./docker/docker-host-path-resolver.ts";
 import { DockerLogClient } from "./docker/docker-log-client.ts";
 import { DockerLogService } from "./docker/docker-log-service.ts";
@@ -55,6 +57,7 @@ import { RecreateDeploymentStrategy } from "./reconciler/deployment/strategy/rec
 import { SurgeDeploymentStrategy } from "./reconciler/deployment/strategy/surge-deployment-strategy.ts";
 import { WorkerDeploymentService } from "./reconciler/deployment/worker-deployment-service.ts";
 import { DesiredInputs } from "./reconciler/desired-inputs.ts";
+import { DriftAudit } from "./reconciler/drift-audit.ts";
 import { EnvironmentResolver } from "./reconciler/environment-resolver.ts";
 import { EventDiagnostics } from "./reconciler/event-diagnostics.ts";
 import { EndpointsStore } from "./reconciler/networking/endpoints-store.ts";
@@ -158,7 +161,13 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		new WorkerResourceReconciler(
 			new ResourceSpecification(),
 			docker,
-			new WorkerDeploymentService(docker, deploymentContainers, () => nanoid(10), progress),
+			new WorkerDeploymentService(
+				docker,
+				deploymentContainers,
+				() => nanoid(10),
+				new ResourceSpecification(),
+				progress,
+			),
 			probe,
 		),
 		events,
@@ -239,8 +248,37 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const uiService = new CachedPaasUiService(inspection, config, changes);
 	serviceSnapshots = () => uiService.listServices();
 	const managementState = new ManagementStateTask(health, uiService);
+	const audit = new DriftAudit(
+		config,
+		desiredInputs,
+		docker,
+		docker,
+		new ResourceSpecification(),
+		scheduler,
+		endpoints,
+		networking,
+		health,
+		managementState,
+		(id, serviceId) => watcher.rememberNetwork(id, serviceId),
+		nanoid,
+	);
+	const watcher = new DockerEventWatcher(
+		new DockerEventClient(dockerTransport),
+		dockerClient,
+		config,
+		scheduler,
+		health,
+		managementState,
+		audit,
+		sleep,
+		nanoid,
+	);
+	lifecycle.registerShutdownHandler(() => audit.stop());
+	lifecycle.registerShutdownHandler(() => watcher.stop());
+	// Connect before the first owned inventory. Pending event hints survive the execution gate.
+	await watcher.start();
 	const gitRefreshService = new GitRefreshService(config, git, scheduler, changes);
-	const gitRefresh = new ManagementRefreshService(gitRefreshService, managementState);
+	const gitRefresh = new ManagementRefreshService(gitRefreshService, managementState, audit, scheduler);
 	const managementOrigin = (): string => {
 		const { baseDomain, httpPort, httpsPort } = config.getIngressConfig();
 		const port = httpsPort ?? httpPort;
@@ -306,12 +344,32 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		}
 	}
 	if (!lifecycle.isOpen()) return;
-	await networking.verifyRoutes();
+	try {
+		await audit.run();
+	} catch (err) {
+		logger.error({ err }, "Initial safety audit failed; targeted recovery remains queued");
+	}
 	if (!lifecycle.isOpen()) return;
-	// Event subscription and initial audit must precede this explicit execution gate.
-	for (const id of Object.keys(config.getServices())) scheduler.invalidate(id);
 	await scheduler.start();
+	let initialAuditCompleted = true;
 	const runners = [
+		new PeriodicTaskRunner({
+			lifecycle,
+			periodMs: 15 * 60 * 1000,
+			taskName: "safety-audit",
+			generateTaskId: nanoid,
+			task: {
+				run: async () => {
+					if (initialAuditCompleted) {
+						initialAuditCompleted = false;
+						return;
+					}
+					await audit.run();
+				},
+			},
+			pause,
+			report: (err) => logger.error({ err }, "Safety audit failed; retaining routes and queued recovery"),
+		}),
 		new PeriodicTaskRunner({
 			lifecycle,
 			periodMs: 6 * 60 * 60 * 1000,

@@ -21,6 +21,14 @@ test("the built image's production command deploys and authorizes without test c
 	);
 	expect(env.github.server.requests).toHaveLength(0);
 	const workloads = await env.workloadIds("private");
+	await env.compose(["restart", "paas"]);
+	await waitFor(
+		"production restart restores authenticated routing",
+		async () =>
+			(await env.request(env.url("private", "/version"), `__Secure-paas_session=${env.session()}`)).status
+			=== 200,
+	);
+	expect(await env.workloadIds("private")).toEqual(workloads);
 	await env.compose(["stop", "paas"]);
 	expect(JSON.parse(await env.docker(["inspect", id])).at(0).State).toMatchObject({ Running: false, ExitCode: 0 });
 	const path = `${env.directory}/etc/config.yaml`;

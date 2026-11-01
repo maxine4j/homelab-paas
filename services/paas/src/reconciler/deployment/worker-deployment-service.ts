@@ -1,6 +1,7 @@
 import type { IDockerService } from "../../docker/docker-service.ts";
 import { createLogger } from "../../util/logger.ts";
 import type { IDeploymentProgress } from "../deployment-progress.ts";
+import type { IResourceSpecification } from "../resource-specification.ts";
 import type { IDeploymentContainers } from "./deployment-containers.ts";
 import type { WorkerDeploymentRequest } from "./types.ts";
 
@@ -18,6 +19,7 @@ export class WorkerDeploymentService implements IWorkerDeploymentService {
 		private readonly docker: IDockerService,
 		private readonly containers: IDeploymentContainers,
 		private readonly generateInstanceId: () => string,
+		private readonly specification: IResourceSpecification,
 		private readonly progress?: IDeploymentProgress,
 	) {}
 
@@ -53,12 +55,22 @@ export class WorkerDeploymentService implements IWorkerDeploymentService {
 		await this.docker.prepareServiceNetwork(serviceId);
 		const network = await this.docker.inspectServiceNetwork(serviceId);
 		if (!network) throw new Error("Service network is unavailable");
-		const retained = current
-			.filter(
-				({ id, spec, state }) =>
-					!request.force && spec === request.spec && state === "running" && network.containerIds.includes(id),
+		const retained = [];
+		for (const container of current) {
+			if (
+				!request.force
+				&& container.spec === request.spec
+				&& container.state === "running"
+				&& retained.length < (resource.replicas ?? 1)
+				&& this.specification.matchesRuntime(
+					resourceId,
+					resource,
+					await this.docker.inspectServiceContainer(serviceId, container.id),
+					network,
+				)
 			)
-			.slice(0, resource.replicas ?? 1);
+				retained.push(container);
+		}
 		const retainedIds = new Set(retained.map(({ id }) => id));
 		const retiring = current.filter(({ id }) => !retainedIds.has(id)).map(({ id }) => id);
 		const missing = (resource.replicas ?? 1) - retained.length;

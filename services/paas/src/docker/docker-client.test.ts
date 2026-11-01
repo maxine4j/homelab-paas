@@ -3,6 +3,18 @@ import { expect, test } from "vitest";
 import { DockerClient, DockerClientError } from "./docker-client.ts";
 import type { IDockerTransport } from "./docker-transport.ts";
 
+test("returns live HostConfig CPU and memory settings independently of specification labels", async () => {
+	const f = fixture(200, {
+		Id: "id",
+		Image: "image",
+		State: { Running: true },
+		Config: { Labels: { "homelab-paas.spec": "unchanged" } },
+		HostConfig: { NanoCpus: 500000000, Memory: 268435456 },
+		NetworkSettings: { Networks: {} },
+	});
+	expect((await f.client.inspectContainer("id"))?.limits).toEqual({ nanoCpus: 500000000, memoryBytes: 268435456 });
+});
+
 test("prunes host-wide unused containers, networks, all images and build cache without removing volumes", async () => {
 	const calls: { method: string; path: string; body: unknown }[] = [];
 	const client = new DockerClient({
@@ -146,6 +158,7 @@ test("maps Docker mount metadata for host secret file discovery", async () => {
 		Id: "controller",
 		Image: "image",
 		State: { Running: true },
+		HostConfig: { NanoCpus: 0, Memory: 0 },
 		Config: { Labels: {} },
 		NetworkSettings: { Networks: {} },
 		Mounts: [{ Type: "bind", Source: "/srv/config", Destination: "/etc/homelab-paas", RW: true }],
@@ -332,6 +345,7 @@ test("inspects container state and network addresses without interpreting labels
 		Id: "c",
 		Image: "sha256:a",
 		State: { Running: false },
+		HostConfig: { NanoCpus: 0, Memory: 0 },
 		Config: { Labels: { owner: "x" }, Env: ["SECRET=value"] },
 		NetworkSettings: { Networks: { custom: { IPAddress: "10.0.0.2", Aliases: null } } },
 	});
@@ -341,6 +355,7 @@ test("inspects container state and network addresses without interpreting labels
 		imageId: "sha256:a",
 		running: false,
 		labels: { owner: "x" },
+		limits: { nanoCpus: 0, memoryBytes: 0 },
 		networks: { custom: { address: "10.0.0.2", aliases: [] } },
 	});
 	expect(f.calls.at(0)?.path).toBe("/containers/c%2Fa/json");
@@ -478,6 +493,7 @@ test("container inspection normalizes environment values for log redaction", asy
 		Id: "c",
 		Image: "image",
 		State: { Running: true },
+		HostConfig: { NanoCpus: 0, Memory: 0 },
 		Config: { Labels: {}, Env: ["PASSWORD=a=b", "EMPTY="] },
 		NetworkSettings: { Networks: {} },
 	});

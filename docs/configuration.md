@@ -95,6 +95,8 @@ The file store serializes YAML and uses the canonical atomic writer to replace t
 
 The editor preserves dirty drafts across polling refreshes. On a conflict, reload the editor snapshot and reapply changes; external disk edits become visible after the periodic reload accepts them. Rotating the signing key invalidates existing sessions, including the editor's session, on subsequent requests.
 
+Manual management Refresh re-observes desired inputs and supported live settings through the [safety audit](reconciliation-and-deployments.md#docker-events-and-safety-audit), retaining validation, rollout and retry policy without forcing replacement of unchanged healthy workloads.
+
 ## Service descriptors
 
 Each configured service has a descriptor named:

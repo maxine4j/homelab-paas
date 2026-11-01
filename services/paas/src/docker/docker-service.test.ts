@@ -568,3 +568,36 @@ test.each(["old-secret", "rotated-secret"])(
 		expect(await f.service.readServiceContainerLogs("demo", "c")).toBe("PASSWORD=[redacted]\n");
 	},
 );
+test.each(["healthy", "alias", "missing", "identity", "stopped", "attachment", "ambiguous"])(
+	"independently audits infrastructure identities and the control-plane alias: %s",
+	async (condition) => {
+		const labels = (role: string) => ({ "homelab-paas.cluster": "local", "homelab-paas.role": role });
+		const f = fixture({
+			inspectNetwork: async () => ({
+				...network,
+				containerIds: condition === "attachment" ? [] : ["control-plane", "envoy"],
+			}),
+			listContainers: async (query) => {
+				const role = query?.labels?.["homelab-paas.role"] ?? "";
+				const peer = { ...container, id: role, state: "running", labels: labels(role) };
+				return condition === "ambiguous" ? [peer, peer] : [peer];
+			},
+			inspectContainer: async (id) =>
+				condition === "missing"
+					? null
+					: {
+							...details,
+							id,
+							running: condition !== "stopped",
+							labels: labels(condition === "identity" ? "foreign" : id),
+							networks: {
+								"paas-local-demo": {
+									address: "10.0.0.2",
+									aliases: condition === "alias" ? [] : ["control-plane.paas.internal"],
+								},
+							},
+						},
+		});
+		expect(await f.service.inspectServiceInfrastructure("demo")).toBe(condition === "healthy");
+	},
+);

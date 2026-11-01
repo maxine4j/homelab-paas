@@ -167,7 +167,8 @@ function fixture() {
 				imageId: "image",
 				running: true,
 				labels: {},
-				networks: { network: { address: "10.0.0.2", aliases: [] } },
+				limits: { nanoCpus: 0, memoryBytes: 0 },
+				networks: { network: { address: "10.0.0.2", aliases: ["app"] } },
 			};
 		},
 		async prepareServiceNetwork() {
@@ -470,4 +471,20 @@ test("unhealthy unchanged containers do not receive newly published routes", asy
 	);
 	expect(f.routes).toEqual([]);
 	expect(f.requests).toEqual([]);
+});
+
+test.each(["limits", "alias"])("repairs live %s drift despite unchanged specification labels", async (drift) => {
+	const f = fixture();
+	await f.converge();
+	const inspect = f.docker.inspectServiceContainer.bind(f.docker);
+	f.docker.inspectServiceContainer = async (serviceId, id) => {
+		const details = (await inspect(serviceId, id))!;
+		return {
+			...details,
+			limits: { nanoCpus: drift === "limits" ? 1e9 : 0, memoryBytes: 0 },
+			networks: { network: { address: "10.0.0.2", aliases: drift === "alias" ? [] : ["app"] } },
+		};
+	};
+	await f.reconciler.reconcile(input);
+	expect(f.requests).toHaveLength(1);
 });

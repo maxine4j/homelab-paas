@@ -3,6 +3,8 @@ import { onTestFinished } from "vitest";
 import type { IPaasConfig } from "../../src/config/paas-config.ts";
 import { decodeDescriptorYaml } from "../../src/config/paas-config.ts";
 import { DockerClient } from "../../src/docker/docker-client.ts";
+import { DockerEventClient } from "../../src/docker/docker-event-client.ts";
+import { DockerEventWatcher } from "../../src/docker/docker-event-watcher.ts";
 import { DockerService } from "../../src/docker/docker-service.ts";
 import { NodeDockerTransport } from "../../src/docker/docker-transport.ts";
 import { EnvoyClient } from "../../src/envoy/envoy-client.ts";
@@ -24,6 +26,7 @@ import { RecreateDeploymentStrategy } from "../../src/reconciler/deployment/stra
 import { SurgeDeploymentStrategy } from "../../src/reconciler/deployment/strategy/surge-deployment-strategy.ts";
 import { WorkerDeploymentService } from "../../src/reconciler/deployment/worker-deployment-service.ts";
 import { DesiredInputs } from "../../src/reconciler/desired-inputs.ts";
+import { DriftAudit } from "../../src/reconciler/drift-audit.ts";
 import { EnvironmentResolver } from "../../src/reconciler/environment-resolver.ts";
 import { EventDiagnostics } from "../../src/reconciler/event-diagnostics.ts";
 import { EndpointsStore } from "../../src/reconciler/networking/endpoints-store.ts";
@@ -49,6 +52,7 @@ export const inProcessPaas = async (
 	adminUrl: string,
 	now: () => number,
 	pause: ISleep,
+	watchDocker = false,
 ) => {
 	await mkdir(directory, { recursive: true, mode: 0o700 });
 	const writes: string[] = [];
@@ -66,15 +70,12 @@ export const inProcessPaas = async (
 	const checkpoints = new ReconciliationStore(state);
 	const events = new ServiceEventStore(state);
 	const endpoints = new EndpointsStore(state);
-	const docker = new DockerService(
-		new DockerClient(
-			new NodeDockerTransport(
-				{ socketPath: dockerSocket, timeoutMs: 2000, maxResponseBytes: 1024 * 1024 },
-				sleep,
-			),
-		),
-		config,
+	const dockerTransport = new NodeDockerTransport(
+		{ socketPath: dockerSocket, timeoutMs: 2000, maxResponseBytes: 1024 * 1024 },
+		sleep,
 	);
+	const dockerClient = new DockerClient(dockerTransport);
+	const docker = new DockerService(dockerClient, config);
 	const transport = new NodeEnvoyTransport({ directory, adminUrl, timeoutMs: 2000, maxResponseBytes: 1024 * 1024 });
 	const envoy = new EnvoyService(
 		new EnvoyClient(
@@ -116,7 +117,7 @@ export const inProcessPaas = async (
 		new WorkerResourceReconciler(
 			new ResourceSpecification(),
 			docker,
-			new WorkerDeploymentService(docker, deploymentContainers, generateInstanceId),
+			new WorkerDeploymentService(docker, deploymentContainers, generateInstanceId, new ResourceSpecification()),
 			probe,
 		),
 		events,
@@ -133,8 +134,7 @@ export const inProcessPaas = async (
 		generateInstanceId,
 		changes,
 	);
-	await scheduler.start();
-	onTestFinished(() => scheduler.stop());
+	scheduler.initialize();
 	const observations = new RuntimeObservations(docker, now);
 	const health = new ResourceHealthService(
 		config,
@@ -157,7 +157,45 @@ export const inProcessPaas = async (
 	);
 	const cache = new CachedPaasUiService(inspection, config, changes);
 	const management = new ManagementStateTask(health, cache);
+	const audit = new DriftAudit(
+		config,
+		desiredInputs,
+		docker,
+		docker,
+		new ResourceSpecification(),
+		scheduler,
+		endpoints,
+		networking,
+		health,
+		management,
+		(id, serviceId) => watcher?.rememberNetwork(id, serviceId),
+		generateInstanceId,
+	);
+	const watcher = watchDocker
+		? new DockerEventWatcher(
+				new DockerEventClient(dockerTransport),
+				dockerClient,
+				config,
+				scheduler,
+				health,
+				management,
+				audit,
+				sleep,
+				generateInstanceId,
+			)
+		: undefined;
+	const stop = async () => {
+		await Promise.all([audit.stop(), watcher?.stop(), scheduler.stop()]);
+	};
+	onTestFinished(stop);
+	if (watcher) {
+		await watcher.start();
+		await audit.run();
+	}
+	await scheduler.start();
 	return {
+		audit,
+		stop,
 		reconciler,
 		scheduler,
 		desiredInputs,

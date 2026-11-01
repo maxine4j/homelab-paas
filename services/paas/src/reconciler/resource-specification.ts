@@ -1,14 +1,39 @@
 import { createHash } from "node:crypto";
 
+import type { DockerContainerDetails, DockerNetwork } from "../docker/types.ts";
 import type { DeploymentWebResource } from "./deployment/strategy/types.ts";
 import type { DeploymentWorkerResource } from "./deployment/types.ts";
 
 export interface IResourceSpecification {
 	/** Hashes resolved deployment configuration; revision and runtime health are excluded. */
 	get(resourceId: string, resource: DeploymentWebResource | DeploymentWorkerResource): string;
+	/** Compares observed mutable settings and attachment/alias, never specification labels or HTTP readiness. */
+	matchesRuntime(
+		resourceId: string,
+		resource: DeploymentWebResource | DeploymentWorkerResource,
+		container: DockerContainerDetails | null,
+		network: DockerNetwork | null,
+	): boolean;
 }
 
 export class ResourceSpecification implements IResourceSpecification {
+	matchesRuntime(
+		resourceId: string,
+		resource: DeploymentWebResource | DeploymentWorkerResource,
+		container: DockerContainerDetails | null,
+		network: DockerNetwork | null,
+	): boolean {
+		if (!container?.running || !network?.containerIds.includes(container.id)) return false;
+		const endpoint = container.networks[network.name];
+		if (!container.limits) throw new Error("Live container resource limits are unavailable");
+		return Boolean(
+			endpoint?.address
+			&& endpoint.aliases.includes(resourceId)
+			&& container.limits.nanoCpus === Math.round((resource.limits?.cpus ?? 0) * 1e9)
+			&& container.limits.memoryBytes === (resource.limits?.memoryMiB ?? 0) * 1048576,
+		);
+	}
+
 	get(resourceId: string, resource: DeploymentWebResource | DeploymentWorkerResource): string {
 		return createHash("sha256")
 			.update(

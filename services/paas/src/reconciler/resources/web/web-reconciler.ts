@@ -46,7 +46,7 @@ export class WebResourceReconciler implements IWebResourceReconciler {
 			const network = await this.docker.inspectServiceNetwork(serviceId);
 			const container = await this.docker.inspectServiceContainer(serviceId, current.id);
 			const address = network && container?.networks[network.name]?.address;
-			if (network && container?.running && network.containerIds.includes(container.id) && address) {
+			if (address && this.specification.matchesRuntime(resourceId, resource, container, network)) {
 				// A restarted control plane may need attaching to an existing service network.
 				await this.docker.prepareServiceNetwork(serviceId);
 				const endpoint = {

@@ -3,6 +3,7 @@ import { expect, test, vi } from "vitest";
 import type { IDockerService } from "../../docker/docker-service.ts";
 import type { ServiceContainer } from "../../docker/types.ts";
 import { captureLogs } from "../../util/test/logs.ts";
+import { ResourceSpecification } from "../resource-specification.ts";
 import { DeploymentContainers } from "./deployment-containers.ts";
 import type { WorkerDeploymentRequest } from "./types.ts";
 import { WorkerDeploymentService } from "./worker-deployment-service.ts";
@@ -27,6 +28,22 @@ const request: WorkerDeploymentRequest = {
 		termination: { timeoutSeconds: 60 },
 	},
 };
+
+test.each(["limits", "alias"])("does not retain worker replicas with observed %s drift", async (drift) => {
+	const f = fixture();
+	f.old("old", request.spec);
+	const inspect = vi.mocked(f.docker.inspectServiceContainer).getMockImplementation()!;
+	vi.mocked(f.docker.inspectServiceContainer).mockImplementation(async (service, id) => {
+		const details = (await inspect(service, id))!;
+		return {
+			...details,
+			limits: { nanoCpus: id === "old" && drift === "limits" ? 1e9 : 0.5e9, memoryBytes: 256 * 1048576 },
+			networks: { network: { address: id, aliases: id === "old" && drift === "alias" ? [] : ["jobs"] } },
+		};
+	});
+	await f.service.deploy(request);
+	expect(f.containers.has("old")).toBe(false);
+});
 
 test.each([
 	["missing", "container is no longer present"],
@@ -66,6 +83,7 @@ test("failed worker rollout clears deploying health", async () => {
 		f.docker,
 		new DeploymentContainers(f.docker, f.probe, f.sleep),
 		() => "id",
+		new ResourceSpecification(),
 		progress,
 	);
 	await expect(service.deploy(request)).rejects.toThrow("pull failed");
@@ -100,7 +118,8 @@ const fixture = () => {
 			imageId: "image",
 			running: containers.get(id)?.state === "running",
 			labels: {},
-			networks: { network: { address: id, aliases: [] } },
+			limits: { nanoCpus: 0.5e9, memoryBytes: 256 * 1048576 },
+			networks: { network: { address: id, aliases: ["jobs"] } },
 		})),
 		inspectServiceNetwork: vi.fn(async () => ({
 			id: "net",
@@ -155,6 +174,7 @@ const fixture = () => {
 			docker,
 			new DeploymentContainers(docker, probe, sleep),
 			() => `instance-${++instance}`,
+			new ResourceSpecification(),
 		),
 		old(id = "old", spec = "previous", state = "running") {
 			containers.set(id, { id, spec, state, resourceId: "jobs", revision: "rev1", imageId: "old-image" });

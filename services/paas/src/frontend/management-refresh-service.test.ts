@@ -2,6 +2,35 @@ import { expect, test, vi } from "vitest";
 
 import { ManagementRefreshService } from "./management-refresh-service.ts";
 
+test("manual refresh audits the selected service and settles resulting repair before observation", async () => {
+	const order: string[] = [];
+	const service = new ManagementRefreshService(
+		{
+			refreshOne: async () => {
+				order.push("git");
+			},
+			refreshAll: async () => [],
+		},
+		{
+			run: async () => {
+				order.push("state");
+			},
+		},
+		{
+			run: async (id) => {
+				order.push(`audit:${id}`);
+			},
+		},
+		{
+			settle: async () => {
+				order.push("settle");
+			},
+		},
+	);
+	await service.refreshOne("demo");
+	expect(order).toEqual(["git", "audit:demo", "settle", "state"]);
+});
+
 test.each(["one", "all"])(
 	"%s refresh awaits reconciliation before refreshing UI state, including failures",
 	async (kind) => {

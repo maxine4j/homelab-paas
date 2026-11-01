@@ -105,6 +105,8 @@ Publishing uses the workflow's `GITHUB_TOKEN` with `packages: write`; no registr
 
 ## Integration and E2E tests
 
+The [event watcher and safety audit](reconciliation-and-deployments.md#docker-events-and-safety-audit) have real Unix-socket streaming integration coverage with the actual scheduler, including initial/reconnect scan overlap, missed mutable drift and finite platform-event feedback. Built-image recovery coverage exercises manual stop/removal, network disconnection, mutable memory limits and production startup/restart. These complement the unchanged-workload operation counts above; no CPU profile has been captured and no measured CPU improvement is claimed.
+
 Ordinary `pnpm test` selects source unit tests and backend test-utility unit tests explicitly. `pnpm test:integration` selects `services/paas/tests/integration/` with Vitest. These scenarios compose real services, stores, Git, JWT, routers and clients within the test process. Small typed mocks serve GitHub, DigitalOcean and Envoy over HTTP and the focused Docker Engine endpoints over a Unix socket. They validate captured request parameters and meaningful ordering, and fail teardown on unexpected traffic. They do not globally replace fetch or emulate complete external systems.
 
 Direct integration needs Git, OpenSSL and permission to open local HTTP/Unix-socket listeners; the private Linux runner supplies these tools for containerized runs. E2E additionally needs Docker Engine/Compose and the three test images below. Run `nvm use` first, then:

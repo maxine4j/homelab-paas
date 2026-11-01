@@ -166,6 +166,9 @@ export class DockerClient implements IDockerClient, IDockerPruneClient {
 		return {
 			id: data.Id,
 			imageId: data.Image,
+			...(data.HostConfig
+				? { limits: { nanoCpus: data.HostConfig.NanoCpus, memoryBytes: data.HostConfig.Memory } }
+				: {}),
 			...(data.Mounts
 				? {
 						mounts: data.Mounts.map((mount) => ({
@@ -404,6 +407,7 @@ const container = z.object({
 	Id: z.string().min(1),
 	Image: z.string().min(1),
 	State: z.object({ Running: z.boolean() }),
+	HostConfig: z.object({ NanoCpus: z.number().nonnegative(), Memory: z.number().nonnegative() }),
 	Config: z.object({ Labels: labels, Env: z.array(z.string().includes("=")).nullish() }),
 	Mounts: z
 		.array(z.object({ Type: z.string(), Source: z.string().default(""), Destination: z.string().startsWith("/") }))

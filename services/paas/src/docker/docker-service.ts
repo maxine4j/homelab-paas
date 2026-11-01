@@ -41,6 +41,11 @@ export interface IDockerService {
 	removeServiceContainer(serviceId: string, containerId: string): Promise<void>;
 }
 
+export interface IDockerInfrastructure {
+	/** Fresh read-only identity, running state, attachment and supported peer-alias verification. */
+	inspectServiceInfrastructure(serviceId: string): Promise<boolean>;
+}
+
 export class DockerServiceError extends Error {
 	override readonly name = "DockerServiceError";
 	constructor(public readonly kind: "ownership" | "invalid-identity" | "infrastructure" | "not-found") {
@@ -49,7 +54,7 @@ export class DockerServiceError extends Error {
 }
 
 /** Platform conventions and scoped Docker helpers; rollout decisions belong to reconcilers. */
-export class DockerService implements IDockerService {
+export class DockerService implements IDockerService, IDockerInfrastructure {
 	constructor(
 		private readonly client: IDockerClient,
 		private readonly config: IPaasConfig,
@@ -169,6 +174,37 @@ export class DockerService implements IDockerService {
 				await this.client.connectNetwork(networkId, peer.id, ["control-plane.paas.internal"]);
 			} else if (!attached) await this.client.connectNetwork(networkId, peer.id);
 		}
+	}
+
+	async inspectServiceInfrastructure(serviceId: string): Promise<boolean> {
+		const network = await this.inspectServiceNetwork(serviceId);
+		if (!network || network.driver !== "bridge") return false;
+		for (const role of ["control-plane", "envoy"]) {
+			const labels = { "homelab-paas.cluster": this.config.getClusterId(), "homelab-paas.role": role };
+			const peers = await this.client.listContainers({ all: true, labels });
+			const peer = peers.at(0);
+			if (
+				peers.length !== 1
+				|| !peer
+				|| Object.entries(labels).some(([key, value]) => peer.labels[key] !== value)
+			)
+				return false;
+			const details = await this.client.inspectContainer(peer.id);
+			if (
+				!details?.running
+				|| details.id !== peer.id
+				|| Object.entries(labels).some(([key, value]) => details.labels[key] !== value)
+				|| !network.containerIds.includes(peer.id)
+				|| !details.networks[network.name]?.address
+			)
+				return false;
+			if (
+				role === "control-plane"
+				&& !details.networks[network.name]?.aliases.includes("control-plane.paas.internal")
+			)
+				return false;
+		}
+		return true;
 	}
 
 	async resolveImage(reference: string): Promise<string> {

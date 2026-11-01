@@ -20,6 +20,8 @@ Docker Compose bootstraps Envoy and the control plane for [local development](de
 
 Independent health and management inspection share an injected backend [runtime observation component](reconciliation-and-deployments.md#shared-runtime-observations). Deployment and ownership operations keep fresh Docker observations. The [reconciliation scheduler and desired-input cache](reconciliation-and-deployments.md#targeted-scheduling-and-desired-inputs) serialize affected services and recover persisted retry deadlines without periodic healthy-service deployment passes. Management/observational change notifications remain separate from desired-input scheduling, so updating a snapshot cannot request a deployment.
 
+One [Docker event watcher and serialized safety audit](reconciliation-and-deployments.md#docker-events-and-safety-audit) feed the scheduler through invalidation hints. The stream connects before initial inventory; reconnect and periodic audits recover missed events without blocking consumption. Live mutable settings remain independently observed through platform-owned Docker types.
+
 ## Initial scope
 
 The platform supports:

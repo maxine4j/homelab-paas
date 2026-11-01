@@ -1,5 +1,13 @@
 export type Labels = Record<string, string>;
 
+/** Invalidation hint only; consumers must freshly inspect before repairing. */
+export interface DockerEvent {
+	type: "container" | "network";
+	action: string;
+	id: string;
+	attributes: Labels;
+}
+
 export interface DockerContainer {
 	id: string;
 	names: string[];
@@ -9,6 +17,8 @@ export interface DockerContainer {
 }
 
 export interface DockerContainerDetails {
+	/** Fresh live mutable Engine settings, independent of specification labels. */
+	limits?: { nanoCpus: number; memoryBytes: number };
 	/** Internal mount metadata; never return wholesale in UI snapshots. */
 	mounts?: { type: string; source: string; destination: string }[];
 	/** Internal only; never serialize environment in status responses. */

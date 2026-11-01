@@ -39,7 +39,7 @@ export class WorkerResourceReconciler implements IWorkerResourceReconciler {
 			for (const current of containers) {
 				const container = await this.docker.inspectServiceContainer(serviceId, current.id);
 				const address = network && container?.networks[network.name]?.address;
-				if (!network || !container?.running || !network.containerIds.includes(current.id) || !address) {
+				if (!address || !this.specification.matchesRuntime(resourceId, resource, container, network)) {
 					connected = false;
 					break;
 				}

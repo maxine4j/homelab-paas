@@ -14,6 +14,19 @@ for (const operation of ["stop", "remove"] as const)
 		await env.waitReady("public", "v1");
 	});
 
+test("recovers disconnected workload networking and live memory-limit drift from Engine events", async ({
+	environment: env,
+}) => {
+	const [original] = await env.workloadIds("public");
+	await env.docker(["network", "disconnect", `paas-${env.cluster}-public`, original!]);
+	await waitFor("network drift replacement", async () => (await env.workloadIds("public")).at(0) !== original);
+	await env.waitReady("public", "v1");
+	const [connected] = await env.workloadIds("public");
+	await env.docker(["update", "--memory", "128m", "--memory-swap", "256m", connected!]);
+	await waitFor("live limit replacement", async () => (await env.workloadIds("public")).at(0) !== connected);
+	await env.waitReady("public", "v1");
+});
+
 test("control-plane restart restores routes, workload identity and signed sessions", async ({ environment: env }) => {
 	const ids = await env.workloadIds("private");
 	const cookie = `__Secure-paas_session=${env.session()}`;
