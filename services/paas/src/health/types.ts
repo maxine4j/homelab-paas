@@ -12,3 +12,8 @@ export interface HealthObservation {
 	health: HealthStatus;
 	signature: string;
 }
+
+/** An absent running flag means the listed container disappeared during inspection. */
+export interface HealthContainerInspection {
+	running?: boolean;
+}

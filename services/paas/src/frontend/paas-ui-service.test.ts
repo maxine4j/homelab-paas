@@ -3,6 +3,7 @@ import { expect, test, vi } from "vitest";
 
 import { parseConfig, decodeDescriptorYaml } from "../config/paas-config.ts";
 import type { DockerContainerDetails } from "../docker/types.ts";
+import type { IResourceHealthReader } from "../health/resource-health-service.ts";
 import { ResourceSpecification } from "../reconciler/resource-specification.ts";
 import { ResourceStatusService } from "../status/resource-status-service.ts";
 import { testConfig } from "../util/test/config.ts";
@@ -77,6 +78,7 @@ const fixture = (health: HealthStatus = "Degraded") => {
 			retryAt: 1000,
 		},
 	]);
+	const refineStatus = vi.fn<IResourceHealthReader["refineStatus"]>((status) => status);
 	const service = new PaasUiService(
 		new ResourceStatusService(new ResourceSpecification(), {
 			resolve: async (_serviceId, env) =>
@@ -104,7 +106,7 @@ const fixture = (health: HealthStatus = "Degraded") => {
 			async write() {},
 		},
 		{ list: listEvents, append: async () => {} },
-		{ getStatus: (_serviceId, _resourceId, containers) => (containers.length ? health : "Missing") },
+		{ getStatus: (_serviceId, _resourceId, containers) => (containers.length ? health : "Missing"), refineStatus },
 		{ follow: followLogs, followControlPlane },
 	);
 	return {
@@ -118,6 +120,7 @@ const fixture = (health: HealthStatus = "Degraded") => {
 		listEvents,
 		followLogs,
 		followControlPlane,
+		refineStatus,
 	};
 };
 
@@ -152,11 +155,16 @@ test.each(["Progressing", "Missing", "Healthy", "Degraded", "Unknown"] as const)
 
 test("resource inspection cannot retain healthy status after its container disappears or stops", async () => {
 	const f = fixture("Healthy");
+	f.refineStatus.mockReturnValueOnce("Missing");
 	f.inspectServiceContainer.mockResolvedValueOnce(null);
 	expect(await f.service.getResource("demo", "app")).toMatchObject({
 		health: "Missing",
 		containers: [{ state: "missing" }],
 	});
+	expect(f.refineStatus).toHaveBeenLastCalledWith("Healthy", [
+		expect.objectContaining({ state: "missing", running: undefined }),
+	]);
+	f.refineStatus.mockReturnValueOnce("Degraded");
 	f.inspectServiceContainer.mockResolvedValueOnce({
 		id: "c",
 		imageId: "image",
@@ -168,7 +176,27 @@ test("resource inspection cannot retain healthy status after its container disap
 		health: "Degraded",
 		containers: [{ running: false }],
 	});
+	expect(f.refineStatus).toHaveBeenLastCalledWith("Healthy", [expect.objectContaining({ running: false })]);
 });
+
+test.each(["db", "old"])(
+	"stopped unsupported or observed-only resource %s retains Unknown health",
+	async (resourceId) => {
+		const f = fixture("Unknown");
+		f.listServiceContainers.mockResolvedValue([
+			{ id: "c", resourceId, imageId: "image", revision: "old", spec: "s", state: "exited" },
+		]);
+		f.inspectServiceContainer.mockResolvedValue({
+			id: "c",
+			imageId: "image",
+			running: false,
+			labels: {},
+			networks: {},
+		});
+		expect(await f.service.getResource("demo", resourceId)).toMatchObject({ health: "Unknown" });
+		expect(f.refineStatus).toHaveBeenCalledWith("Unknown", [expect.objectContaining({ running: false })]);
+	},
+);
 
 test("live logs verify configured service/resource/container and require descriptor redaction before opening a follow", async () => {
 	const f = fixture();
@@ -470,7 +498,7 @@ test("cluster inspection and edits delegate configuration policy to the config s
 		{ listServiceContainers: vi.fn(), inspectServiceContainer: vi.fn(), readServiceContainerLogs: vi.fn() },
 		{ read: vi.fn(), write: vi.fn() },
 		{ append: async () => {}, list: async () => [] },
-		{ getStatus: vi.fn() },
+		{ getStatus: vi.fn(), refineStatus: vi.fn() },
 	);
 	expect(await service.getCluster()).toEqual({ clusterId: "local", ...snapshot });
 	const update = { revision: "r1", changes: [{ path: "git.pollIntervalSeconds", value: 9 }] };
@@ -623,6 +651,7 @@ test("failing readiness does not make an applied specification OutOfSync", async
 
 test("a disappearing container does not claim a known sync comparison when the descriptor is unavailable", async () => {
 	const f = fixture("Healthy");
+	f.refineStatus.mockReturnValueOnce("Missing");
 	f.fetchFile.mockRejectedValue(new Error("Git unavailable"));
 	f.inspectServiceContainer.mockResolvedValueOnce(null);
 	expect(await f.service.getResource("demo", "app")).toMatchObject({ sync: "Unknown", health: "Missing" });
