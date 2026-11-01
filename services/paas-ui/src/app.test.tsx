@@ -3,6 +3,22 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { App, AppView, viewPaths } from "./app.tsx";
 
+test("brand link displays the pasta emoji used by the favicon", () => {
+	const html = renderToStaticMarkup(
+		<AppView
+			route={{ page: "services" }}
+			snapshot={{ refresh: () => {} }}
+			events={{ refresh: () => {} }}
+			logs={{}}
+		/>,
+	);
+	const brand = html.match(/<a class="brand"[^]*?<\/a>/)?.[0] ?? "";
+
+	expect(brand).toContain('href="#/services"');
+	expect(brand).toContain('<span class="brand-icon" aria-hidden="true">🍝</span>');
+	expect(brand).toContain("homelab");
+});
+
 test("main navigation retains readable destinations with decorative icons", () => {
 	const html = renderToStaticMarkup(
 		<AppView

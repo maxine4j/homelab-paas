@@ -95,7 +95,7 @@ export const AppView = ({
 			<header className='primary-header'>
 				<a className='brand' href='#/services'>
 					<span className='brand-icon' aria-hidden='true'>
-						H
+						🍝
 					</span>
 					<span>
 						homelab<span className='brand-subtitle'>PaaS control plane</span>
