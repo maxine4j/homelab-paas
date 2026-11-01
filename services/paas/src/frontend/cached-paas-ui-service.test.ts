@@ -34,7 +34,7 @@ test("startup refresh warms list and configured services; reads remain memory-on
 	detail.resources.length = 0;
 	expect((await f.cache.listServices())[0]!.health).toBe("Healthy");
 	expect((await f.cache.getService("demo")).resources).toHaveLength(1);
-	expect(f.ui.listServices).toHaveBeenCalledTimes(1);
+	expect(f.ui.listServices).not.toHaveBeenCalled();
 	expect(f.ui.getService).toHaveBeenCalledTimes(1);
 });
 
@@ -42,6 +42,7 @@ test("concurrent resource misses share a load; periodic refresh updates previous
 	const f = fixture();
 	await Promise.all([f.cache.getResource("demo", "app"), f.cache.getResource("demo", "app")]);
 	expect(f.ui.getResource).toHaveBeenCalledTimes(1);
+	expect(f.ui.getResource).toHaveBeenCalledWith("demo", "app", expect.objectContaining({ serviceId: "demo" }));
 	f.ui.getResource.mockResolvedValue({
 		resourceId: "app",
 		type: "web",
@@ -117,7 +118,7 @@ test("concurrent list/service misses share loads and cold failures are cached un
 		f.cache.getService("demo"),
 		f.cache.getService("demo"),
 	]);
-	expect(f.ui.listServices).toHaveBeenCalledTimes(1);
+	expect(f.ui.listServices).not.toHaveBeenCalled();
 	expect(f.ui.getService).toHaveBeenCalledTimes(1);
 	f.ui.getResource.mockRejectedValueOnce(new Error("Docker unavailable"));
 	await expect(f.cache.getResource("demo", "app")).rejects.toThrow("Docker unavailable");
@@ -185,4 +186,26 @@ test("events, logs and configuration delegate without caching", async () => {
 	expect(f.ui.getEvents).toHaveBeenCalledTimes(2);
 	expect(f.ui.getLogs).toHaveBeenCalledTimes(2);
 	expect(f.ui.getCluster).toHaveBeenCalledTimes(2);
+});
+
+test("unchanged refreshes publish no UI notifications and list summaries come from the same detail", async () => {
+	const f = fixture();
+	await f.cache.refresh();
+	const receive = vi.fn();
+	f.changes.subscribe(receive);
+	await f.cache.refresh();
+	expect(receive).not.toHaveBeenCalled();
+	f.ui.getService.mockResolvedValue({
+		serviceId: "demo",
+		source: {},
+		descriptorStatus: "unavailable",
+		sync: "Synced",
+		health: "Degraded",
+		resources: [],
+	});
+	await f.cache.refresh("demo");
+	expect((await f.cache.listServices())[0]?.health).toBe("Degraded");
+	expect((await f.cache.getService("demo")).health).toBe("Degraded");
+	expect(f.ui.listServices).not.toHaveBeenCalled();
+	expect(receive).toHaveBeenCalledTimes(1);
 });

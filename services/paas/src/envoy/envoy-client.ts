@@ -12,12 +12,14 @@ export interface IEnvoyClient {
 	bootstrap(): Promise<void>;
 	/** Publish and confirm active configuration. Rejects with EnvoyClientError;
 	 * publication may have occurred. Callers serialize all updates.
+	 * verify bypasses remembered confirmation and repairs discovery at startup/audit.
 	 */
-	apply(configuration: EnvoyConfiguration): Promise<void>;
+	apply(configuration: EnvoyConfiguration, verify?: boolean): Promise<void>;
 }
 
 /** xDS serialization, response validation, and bounded acceptance polling. */
 export class EnvoyClient implements IEnvoyClient {
+	private confirmed: string | undefined;
 	constructor(
 		private readonly transport: IEnvoyTransport,
 		private readonly sleep: ISleep,
@@ -32,10 +34,14 @@ export class EnvoyClient implements IEnvoyClient {
 			throw new EnvoyClientError();
 	}
 
-	async apply(configuration: EnvoyConfiguration): Promise<void> {
+	async apply(configuration: EnvoyConfiguration, verify = false): Promise<void> {
+		const identity = JSON.stringify(configuration);
+		if (!verify && this.confirmed === identity) return;
+		this.confirmed = undefined;
 		try {
 			await this.publish("cds", configuration.clusters);
 			await this.publish("lds", configuration.listeners);
+			this.confirmed = identity;
 		} catch (cause) {
 			throw new EnvoyClientError({ cause });
 		}

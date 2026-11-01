@@ -9,7 +9,7 @@ export interface IEnvoyService {
 	/** Seed missing discovery before accepting startup traffic. Rejects with EnvoyClientError. */
 	bootstrap(): Promise<void>;
 	/** Replace service routes and confirm activation. Rejects with EnvoyClientError. */
-	configureRoutes(endpoints: Record<string, Endpoint>): Promise<void>;
+	configureRoutes(endpoints: Record<string, Endpoint>, verify?: boolean): Promise<void>;
 }
 
 /** Generates external routing, authorization and filesystem SDS configuration. */
@@ -23,7 +23,7 @@ export class EnvoyService implements IEnvoyService {
 		await this.client.bootstrap();
 	}
 
-	async configureRoutes(endpoints: Record<string, Endpoint>): Promise<void> {
+	async configureRoutes(endpoints: Record<string, Endpoint>, verify = false): Promise<void> {
 		const ingress = this.config.getIngressConfig();
 		const entries = Object.entries(endpoints).sort(([a], [b]) => a.localeCompare(b));
 		for (const [, endpoint] of entries) {
@@ -67,57 +67,60 @@ export class EnvoyService implements IEnvoyService {
 			})),
 		];
 		if (ingress.httpsPort) {
-			await this.client.apply({ clusters, listeners: this.secureListeners(entries) });
+			await this.client.apply({ clusters, listeners: this.secureListeners(entries) }, verify);
 			return;
 		}
 		if (entries.some(([, endpoint]) => endpoint.public === false)) throw new EnvoyClientError();
-		await this.client.apply({
-			clusters,
-			listeners: [
-				{
-					"@type": "type.googleapis.com/envoy.config.listener.v3.Listener",
-					name: "http",
-					address: socket("0.0.0.0", ingress.httpPort),
-					filter_chains: [
-						{
-							filters: [
-								{
-									name: "envoy.filters.network.http_connection_manager",
-									typed_config: {
-										"@type":
-											"type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-										stat_prefix: "http",
-										upgrade_configs: [{ upgrade_type: "websocket", enabled: false }],
-										route_config: {
-											name: "services",
-											virtual_hosts: [
+		await this.client.apply(
+			{
+				clusters,
+				listeners: [
+					{
+						"@type": "type.googleapis.com/envoy.config.listener.v3.Listener",
+						name: "http",
+						address: socket("0.0.0.0", ingress.httpPort),
+						filter_chains: [
+							{
+								filters: [
+									{
+										name: "envoy.filters.network.http_connection_manager",
+										typed_config: {
+											"@type":
+												"type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+											stat_prefix: "http",
+											upgrade_configs: [{ upgrade_type: "websocket", enabled: false }],
+											route_config: {
+												name: "services",
+												virtual_hosts: [
+													{
+														...virtualHost("paas", ingress.baseDomain, "paas"),
+														routes: [
+															this.liveRoute(),
+															{ match: { prefix: "/" }, route: { cluster: "paas" } },
+														],
+													},
+													...entries.map(([id, endpoint]) => this.resourceHost(id, endpoint)),
+												],
+											},
+											http_filters: [
 												{
-													...virtualHost("paas", ingress.baseDomain, "paas"),
-													routes: [
-														this.liveRoute(),
-														{ match: { prefix: "/" }, route: { cluster: "paas" } },
-													],
+													name: "envoy.filters.http.router",
+													typed_config: {
+														"@type":
+															"type.googleapis.com/envoy.extensions.filters.http.router.v3.Router",
+													},
 												},
-												...entries.map(([id, endpoint]) => this.resourceHost(id, endpoint)),
 											],
 										},
-										http_filters: [
-											{
-												name: "envoy.filters.http.router",
-												typed_config: {
-													"@type":
-														"type.googleapis.com/envoy.extensions.filters.http.router.v3.Router",
-												},
-											},
-										],
 									},
-								},
-							],
-						},
-					],
-				},
-			],
-		});
+								],
+							},
+						],
+					},
+				],
+			},
+			verify,
+		);
 	}
 
 	private resourceHost(id: string, endpoint: Endpoint) {

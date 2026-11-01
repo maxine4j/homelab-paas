@@ -42,7 +42,14 @@ test.each([
 	["state read", () => new ReconciliationStore(values).read("demo")],
 	["state write", () => new ReconciliationStore(values).write("demo", { phase: "ready" })],
 	["routes read", () => new EndpointsStore(values).getAll()],
-	["routes write", () => new EndpointsStore({ ...values, get: async () => ({}) }).set("demo", undefined)],
+	[
+		"routes write",
+		() =>
+			new EndpointsStore({
+				...values,
+				get: async () => ({ demo: { address: "10.0.0.2", port: 80, public: true } }),
+			}).set("demo", undefined),
+	],
 	["environment", () => new EnvironmentResolver("/env", fail).resolve("demo", [{ name: "TOKEN", secret: true }])],
 	["GitHub token", () => github.fetchAccessToken("code", "https://example.com/callback")],
 	["GitHub profile", () => github.fetchUserDetails("token")],

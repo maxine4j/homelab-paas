@@ -47,6 +47,7 @@ import { FileCertificateStore } from "./ingress/tls/certificate-store.ts";
 import { DigitalOceanDnsAcmeChallengeProvider } from "./ingress/tls/dns-challenge/digitalocean-dns-challenge-provider.ts";
 import { createMetricsMiddleware, createMetricsRouter } from "./metrics/metrics-router.ts";
 import { MetricsService } from "./metrics/metrics-service.ts";
+import { RuntimeObservations } from "./observation/runtime-observations.ts";
 import { DeploymentProgress } from "./reconciler/deployment-progress.ts";
 import { DeploymentContainers } from "./reconciler/deployment/deployment-containers.ts";
 import { DeploymentService } from "./reconciler/deployment/deployment-service.ts";
@@ -120,8 +121,19 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	await envoy.bootstrap();
 	const networking = new NetworkingService(endpoints, envoy);
 	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/git`);
-	const health = new ResourceHealthService(config, git, decodeDescriptorYaml, docker, probe, changes);
-	const progress = new DeploymentProgress(store, events, changes, Date.now, health);
+	const observations = new RuntimeObservations(docker, Date.now);
+	const health = new ResourceHealthService(
+		config,
+		git,
+		decodeDescriptorYaml,
+		observations,
+		probe,
+		changes,
+		observations,
+	);
+	const progress = new DeploymentProgress(store, events, changes, Date.now, health, (serviceId) =>
+		managementState.refresh(serviceId),
+	);
 	const deploymentContainers = new DeploymentContainers(docker, probe, sleep);
 	const deployment = new DeploymentService(
 		[
@@ -215,7 +227,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		config,
 		git,
 		decodeDescriptorYaml,
-		docker,
+		observations,
 		store,
 		events,
 		health,
@@ -292,7 +304,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		}
 	}
 	if (!lifecycle.isOpen()) return;
-	await envoy.configureRoutes(await endpoints.getAll());
+	await networking.verifyRoutes();
 	if (!lifecycle.isOpen()) return;
 	const runners = [
 		runner,

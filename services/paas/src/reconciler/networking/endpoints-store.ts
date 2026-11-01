@@ -24,6 +24,7 @@ export class EndpointsStore implements IEndpointsStore {
 	async set(serviceId: string, endpoint: Endpoint | undefined): Promise<void> {
 		if (!routeId.safeParse(serviceId).success) throw new Error("Invalid reconciliation service identity");
 		const routes = await this.getAll();
+		const previous = JSON.stringify(routes);
 		const service = serviceId.split(".").at(1);
 		// Legacy routes have no resource identity: any recreation may retire their destination.
 		if (service && !endpoint) delete routes[service];
@@ -36,7 +37,9 @@ export class EndpointsStore implements IEndpointsStore {
 		if (endpoint) routes[serviceId] = endpoint;
 		else delete routes[serviceId];
 		try {
-			await this.store.set("routes", routesSchema.parse(routes));
+			const next = routesSchema.parse(routes);
+			if (JSON.stringify(next) === previous) return;
+			await this.store.set("routes", next);
 		} catch (cause) {
 			throw new Error("Cannot write reconciliation data; check platform state directory permissions", { cause });
 		}

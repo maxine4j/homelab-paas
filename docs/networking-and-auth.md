@@ -12,6 +12,8 @@ The reconciler uses `INetworkingService.routeTo` with a `{resourceId}.{serviceId
 
 Each service receives a dedicated Docker network.
 
+`EnvoyClient` remembers only completely confirmed generated CDS/LDS content. Identical confirmed content skips discovery writes and admin polling; any changed or uncertain publication discards the earlier confirmation and must retry. Generated configuration includes endpoint policies, ingress hostnames/ports and authorization/TLS listeners, so relevant configuration changes cannot reuse an incompatible publication. `NetworkingService.verifyRoutes` explicitly republishes and confirms discovery at startup and for audit callers, bypassing this optimization to repair persisted discovery or live routing drift. It optionally accepts a complete freshly observed desired endpoint snapshot to repair persisted endpoint drift too. That snapshot must retain routes outside the caller's supported inventory, including removed services under the [removal contract](reconciliation-and-deployments.md#removal); an incomplete inventory must not be passed as complete desired routing. Calls without a snapshot verify the persisted endpoints. Verification failures remain uncertain and retryable.
+
 - Resources within a service communicate directly using resource names, such as `store:5432`.
 - Resources in different services have no direct service-network connectivity; explicitly published host ports are reachable according to host routing and firewall rules.
 - Envoy connects to each service network and routes inter-service traffic.

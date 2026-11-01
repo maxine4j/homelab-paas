@@ -17,7 +17,11 @@ export class ReconciliationStore implements IReconciliationStateStore {
 	async write(serviceId: string, state: ReconciliationState): Promise<void> {
 		const key = `${this.identity(serviceId)}.state`;
 		try {
-			await this.store.set(key, stateSchema.parse(state));
+			const next = stateSchema.parse(state);
+			const value = await this.store.get(key);
+			const previous = value === undefined ? undefined : stateSchema.parse(value);
+			if (JSON.stringify(previous) === JSON.stringify(next)) return;
+			await this.store.set(key, next);
 		} catch (cause) {
 			throw new Error("Cannot write reconciliation data; check platform state directory permissions", { cause });
 		}

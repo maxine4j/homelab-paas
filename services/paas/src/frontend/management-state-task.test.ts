@@ -15,7 +15,7 @@ test("health polling completes before the cache is refreshed; manual and periodi
 	const refresh = vi.fn(async () => {
 		order.push("cache");
 	});
-	const task = new ManagementStateTask({ run }, { refresh });
+	const task = new ManagementStateTask({ run, refresh: run }, { refresh });
 	const first = task.run();
 	const second = task.run();
 	await Promise.resolve();
@@ -30,9 +30,20 @@ test("health failure still refreshes snapshots and does not prevent the next pas
 	const run = vi.fn(async () => {});
 	run.mockRejectedValueOnce(new Error("health failed"));
 	const refresh = vi.fn(async () => {});
-	const task = new ManagementStateTask({ run }, { refresh });
+	const task = new ManagementStateTask({ run, refresh: run }, { refresh });
 	await expect(task.run()).rejects.toThrow("health failed");
 	expect(refresh).toHaveBeenCalledTimes(1);
 	await task.run();
 	expect(refresh).toHaveBeenCalledTimes(2);
+});
+
+test("targeted lifecycle observations refresh only the affected health and cached snapshots", async () => {
+	const refreshHealth = vi.fn(async (_serviceId: string) => {});
+	const refresh = vi.fn(async (_serviceId?: string) => {});
+	const run = vi.fn(async () => {});
+	const task = new ManagementStateTask({ run, refresh: refreshHealth }, { refresh });
+	await task.refresh("demo");
+	expect(refreshHealth).toHaveBeenCalledWith("demo");
+	expect(refresh).toHaveBeenCalledWith("demo");
+	expect(run).not.toHaveBeenCalled();
 });

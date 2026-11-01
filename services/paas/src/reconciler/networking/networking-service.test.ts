@@ -126,3 +126,17 @@ test("endpoint snapshots and supplied objects cannot mutate stored state", async
 	if (stored) stored.address = "changed";
 	expect(await f.endpoints.getAll()).toEqual({ demo: old });
 });
+
+test("audit restores externally changed persisted endpoints and forces discovery verification", async () => {
+	const f = fixture();
+	await f.service.routeTo("demo", old);
+	await f.endpoints.set("demo", replacement);
+	await f.endpoints.set("unexpected", replacement);
+	let verified = false;
+	f.envoy.configureRoutes = async (_routes, verify) => {
+		verified = verify === true;
+	};
+	await f.service.verifyRoutes({ demo: old });
+	expect(await f.endpoints.getAll()).toEqual({ demo: old });
+	expect(verified).toBe(true);
+});

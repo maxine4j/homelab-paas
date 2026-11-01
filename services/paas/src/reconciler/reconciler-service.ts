@@ -159,7 +159,7 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 				);
 			message = serviceEventMessages.state;
 			if (previous?.activeRevision !== desiredRevision) deploymentStartedAt ??= this.now();
-			await this.state.write(serviceId, {
+			await this.checkpoint(serviceId, {
 				desiredRevision,
 				activeRevision: previous?.activeRevision,
 				phase:
@@ -168,7 +168,6 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 				failures: previous?.desiredRevision === desiredRevision ? previous.failures : undefined,
 				retryAt: previous?.retryAt,
 			});
-			this.changes?.publish({ serviceId });
 			if (
 				(previous?.activeRevision !== desiredRevision && previous?.deploymentStartedAt === undefined)
 				|| previous?.desiredRevision !== desiredRevision
@@ -208,8 +207,7 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 			resourceContext = undefined;
 			image = undefined;
 			message = serviceEventMessages.state;
-			await this.state.write(serviceId, { desiredRevision, activeRevision: desiredRevision, phase: "ready" });
-			this.changes?.publish({ serviceId });
+			await this.checkpoint(serviceId, { desiredRevision, activeRevision: desiredRevision, phase: "ready" });
 			const recovered = (previous?.failures ?? 0) > 0 || previous?.phase === "failed";
 			if (recovered || previous?.activeRevision !== desiredRevision)
 				await this.recordEvent(serviceId, {
@@ -269,7 +267,7 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 				{ event: "reconciliation.failed", serviceId, failures, retryAt, err: error },
 				`${message}; retry scheduled`,
 			);
-			await this.state.write(serviceId, {
+			await this.checkpoint(serviceId, {
 				desiredRevision,
 				activeRevision: previous?.activeRevision,
 				phase:
@@ -284,11 +282,19 @@ export class ReconcilerService implements IReconcilerService, IServiceRedeployer
 				failures,
 				retryAt,
 			});
-			this.changes?.publish({ serviceId });
 			if (force) throw error;
 		} finally {
 			this.metrics?.reconciliation(serviceId, desiredRevision, outcome, (this.now() - started) / 1000);
 		}
+	}
+
+	private async checkpoint(serviceId: string, next: ReconciliationState): Promise<void> {
+		const previous = await this.state.read(serviceId);
+		const identity = (state: ReconciliationState | undefined): string | undefined =>
+			state && JSON.stringify(state, Object.keys(state).sort());
+		if (identity(previous) === identity(next)) return;
+		await this.state.write(serviceId, next);
+		this.changes?.publish({ serviceId });
 	}
 
 	private async recordEvent(serviceId: string, event: UiServiceEvent): Promise<void> {

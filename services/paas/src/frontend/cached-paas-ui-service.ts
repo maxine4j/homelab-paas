@@ -16,7 +16,7 @@ import { PaasUiError, type IPaasUiService } from "./paas-ui-service.ts";
 
 export interface IUiStateCache {
 	/** Warms configured services and replaces previously requested resource snapshots. Failures are cached per entry. */
-	refresh(): Promise<void>;
+	refresh(serviceId?: string): Promise<void>;
 }
 
 interface SnapshotEntry<T> {
@@ -28,7 +28,6 @@ interface SnapshotEntry<T> {
 /** Shared read-through state cache. Only explicit refreshes replace warm snapshots. */
 export class CachedPaasUiService implements IPaasUiService, IUiStateCache {
 	private readonly log = createLogger(CachedPaasUiService.name);
-	private readonly lists = new Map<string, SnapshotEntry<UiServiceSummary[]>>();
 	private readonly services = new Map<string, SnapshotEntry<UiService>>();
 	private readonly resources = new Map<string, SnapshotEntry<UiResource>>();
 	private configuration: string | undefined;
@@ -48,19 +47,42 @@ export class CachedPaasUiService implements IPaasUiService, IUiStateCache {
 		return this.ui.updateConfig(update);
 	}
 
-	listServices(): Promise<UiServiceSummary[]> {
-		return this.read(this.lists, "services", () => this.ui.listServices());
+	async listServices(): Promise<UiServiceSummary[]> {
+		return Promise.all(
+			Object.keys(this.config.getServices())
+				.sort()
+				.map(async (serviceId) => {
+					try {
+						const snapshot = await this.getService(serviceId);
+						return {
+							serviceId,
+							sync: snapshot.sync,
+							health: snapshot.health,
+							description: snapshot.description,
+							primaryUrl: snapshot.primaryUrl,
+							desiredRevision: snapshot.desiredRevision,
+							activeRevision: snapshot.activeRevision,
+							activeRevisionMetadata: snapshot.activeRevisionMetadata,
+							desiredRevisionMetadata: snapshot.desiredRevisionMetadata,
+							failures: snapshot.failures,
+							retryAt: snapshot.retryAt,
+						};
+					} catch {
+						return { serviceId, sync: "Unknown" as const, health: "Unknown" as const };
+					}
+				}),
+		);
 	}
 
 	async getService(serviceId: string): Promise<UiService> {
 		this.assertService(serviceId);
-		return this.read(this.services, serviceId, () => this.ui.getService(serviceId));
+		return this.read(this.services, serviceId, () => this.ui.getService(serviceId, true));
 	}
 
 	async getResource(serviceId: string, resourceId: string): Promise<UiResource> {
 		this.assertService(serviceId);
-		return this.read(this.resources, JSON.stringify([serviceId, resourceId]), () =>
-			this.ui.getResource(serviceId, resourceId),
+		return this.read(this.resources, JSON.stringify([serviceId, resourceId]), async () =>
+			this.ui.getResource(serviceId, resourceId, await this.getService(serviceId)),
 		);
 	}
 
@@ -72,40 +94,48 @@ export class CachedPaasUiService implements IPaasUiService, IUiStateCache {
 		return this.ui.getLogs(serviceId, resourceId, containerId);
 	}
 
-	refresh(): Promise<void> {
-		const pending = this.refreshing.then(() => this.refreshSnapshots());
+	refresh(serviceId?: string): Promise<void> {
+		const pending = this.refreshing.then(() => this.refreshSnapshots(serviceId));
 		this.refreshing = pending.catch(() => {});
 		return pending;
 	}
 
-	private async refreshSnapshots(): Promise<void> {
+	private async refreshSnapshots(onlyServiceId?: string): Promise<void> {
 		this.synchronize();
-		this.entry(this.lists, "services", () => this.ui.listServices());
-		for (const serviceId of Object.keys(this.config.getServices()))
-			this.entry(this.services, serviceId, () => this.ui.getService(serviceId));
-		await Promise.all([
-			this.refreshEntries(this.lists),
-			this.refreshEntries(this.services),
-			this.refreshEntries(this.resources),
-		]);
-		for (const serviceId of Object.keys(this.config.getServices())) this.changes.publish({ serviceId });
-	}
-
-	private async refreshEntries<T>(entries: Map<string, SnapshotEntry<T>>): Promise<void> {
+		const serviceIds = Object.keys(this.config.getServices()).filter(
+			(id) => onlyServiceId === undefined || id === onlyServiceId,
+		);
 		await Promise.all(
-			[...entries].map(async ([key, entry]) => {
-				try {
-					// A miss may have started before the new health/Git observation; replace its result too.
-					await entry.pending?.catch(() => {});
-					await this.load(entry);
-				} catch (err) {
-					this.log.error(
-						{ err, key },
-						"Cannot refresh management state snapshot; cached reads will report unavailable",
-					);
-				}
+			serviceIds.map(async (serviceId) => {
+				const service = this.entry(this.services, serviceId, () => this.ui.getService(serviceId, true));
+				const changed = await this.refreshEntry(serviceId, service);
+				const resourcesChanged = await Promise.all(
+					[...this.resources]
+						.filter(([key]) => JSON.parse(key)[0] === serviceId)
+						.map(([key, entry]) => this.refreshEntry(key, entry)),
+				);
+				if (changed || resourcesChanged.some(Boolean)) this.changes.publish({ serviceId });
 			}),
 		);
+	}
+
+	private async refreshEntry<T>(key: string, entry: SnapshotEntry<T>): Promise<boolean> {
+		await entry.pending?.catch(() => {});
+		const before = this.identity(entry.result);
+		try {
+			await this.load(entry);
+		} catch (err) {
+			this.log.error(
+				{ err, key },
+				"Cannot refresh management state snapshot; cached reads will report unavailable",
+			);
+		}
+		return this.identity(entry.result) !== before;
+	}
+
+	private identity<T>(result: SnapshotEntry<T>["result"]): string | undefined {
+		if (!result) return undefined;
+		return "error" in result ? `error:${String(result.error)}` : JSON.stringify(result.data);
 	}
 
 	private async read<T>(cache: Map<string, SnapshotEntry<T>>, key: string, load: () => Promise<T>): Promise<T> {
@@ -158,7 +188,6 @@ export class CachedPaasUiService implements IPaasUiService, IUiStateCache {
 		]);
 		if (this.configuration === configuration) return;
 		this.configuration = configuration;
-		this.lists.clear();
 		this.services.clear();
 		this.resources.clear();
 	}

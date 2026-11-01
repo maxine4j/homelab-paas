@@ -48,3 +48,41 @@ test("actual same-revision drift enters deploying, reports completion and suppre
 	await progress.succeeded("demo", "app", "rev");
 	expect(events).toMatchObject([{ event: "deployment.started" }, { event: "deployment.succeeded" }]);
 });
+
+test("deployment completion refreshes targeted independent observations after invalidating rollout health", async () => {
+	const order: string[] = [];
+	const refresh = vi.fn(async (serviceId: string) => {
+		order.push(serviceId);
+	});
+	const progress = new DeploymentProgress(
+		{ read: async () => undefined, write: async () => {} },
+		{ append: async () => {}, list: async () => [] },
+		new ChangeBus(),
+		() => 0,
+		{
+			started: () => {},
+			finished: () => {
+				order.push("finished");
+			},
+		},
+		refresh,
+	);
+	await progress.succeeded("demo", "app", "rev");
+	await progress.failed("demo", "app", "rev");
+	expect(order).toEqual(["finished", "demo", "finished", "demo"]);
+});
+
+test("observation failure cannot fail successful rollout or mask its original deployment error", async () => {
+	const progress = new DeploymentProgress(
+		{ read: async () => undefined, write: async () => {} },
+		{ append: async () => {}, list: async () => [] },
+		new ChangeBus(),
+		() => 0,
+		undefined,
+		async () => {
+			throw new Error("management unavailable");
+		},
+	);
+	await expect(progress.succeeded("demo", "app", "rev")).resolves.toBeUndefined();
+	await expect(progress.failed("demo", "app", "rev")).resolves.toBeUndefined();
+});

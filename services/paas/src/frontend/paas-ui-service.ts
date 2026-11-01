@@ -28,10 +28,10 @@ export interface IPaasUiService {
 	/** Delegates validation, persistence and safe response generation to the configuration service. */
 	updateConfig(update: UiConfigUpdate): Promise<UiEditableConfig>;
 	listServices(): Promise<UiServiceSummary[]>;
-	getService(serviceId: string): Promise<UiService>;
+	getService(serviceId: string, tolerateDockerFailure?: boolean): Promise<UiService>;
 	/** Safe service events, newest first, independent of descriptor/Docker availability. */
 	getEvents(serviceId: string): Promise<UiServiceEvent[]>;
-	getResource(serviceId: string, resourceId: string): Promise<UiResource>;
+	getResource(serviceId: string, resourceId: string, snapshot?: UiService): Promise<UiResource>;
 	/** Only a container belonging to the requested resource may be read. Last 200 lines. */
 	getLogs(serviceId: string, resourceId: string, containerId: string): Promise<UiLogs>;
 }
@@ -162,12 +162,14 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 		}
 	}
 
-	getService(serviceId: string): Promise<UiService> {
-		return this.serviceSnapshot(serviceId, true);
+	getService(serviceId: string, tolerateDockerFailure = false): Promise<UiService> {
+		return this.serviceSnapshot(serviceId, true, tolerateDockerFailure);
 	}
 
-	async getResource(serviceId: string, resourceId: string): Promise<UiResource> {
-		const resource = (await this.serviceSnapshot(serviceId, false)).resources.find(
+	async getResource(serviceId: string, resourceId: string, snapshot?: UiService): Promise<UiResource> {
+		this.assertService(serviceId);
+		if (snapshot && snapshot.serviceId !== serviceId) throw new PaasUiError("not-found");
+		const resource = (snapshot ?? (await this.serviceSnapshot(serviceId, false))).resources.find(
 			(resource) => resource.resourceId === resourceId,
 		);
 		if (!resource) throw new PaasUiError("not-found");

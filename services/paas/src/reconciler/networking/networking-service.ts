@@ -18,10 +18,16 @@ export interface INetworkingService {
 	withdraw(serviceId: string): Promise<void>;
 }
 
+export interface IRouteVerifier {
+	/** Startup/audit forces xDS repair and confirmation. An optional complete desired snapshot repairs persisted routing;
+	 * callers must retain routes outside their supported inventory, including removed services. */
+	verifyRoutes(expected?: Record<string, Endpoint>): Promise<void>;
+}
+
 /** Serializes complete routing snapshots across services. Store desired state first
  * so uncertain publications are retried rather than silently rolled back.
  */
-export class NetworkingService implements INetworkingService {
+export class NetworkingService implements INetworkingService, IRouteVerifier {
 	private pending: Promise<void> = Promise.resolve();
 
 	constructor(
@@ -35,6 +41,26 @@ export class NetworkingService implements INetworkingService {
 
 	withdraw(serviceId: string): Promise<void> {
 		return this.update(serviceId, undefined);
+	}
+
+	verifyRoutes(expected?: Record<string, Endpoint>): Promise<void> {
+		const snapshot = expected && structuredClone(expected);
+		const operation = this.pending.then(async () => {
+			try {
+				if (snapshot) {
+					const persisted = await this.endpoints.getAll();
+					for (const id of Object.keys(persisted)) {
+						if (!Object.hasOwn(snapshot, id)) await this.endpoints.set(id, undefined);
+					}
+					for (const [id, endpoint] of Object.entries(snapshot)) await this.endpoints.set(id, endpoint);
+				}
+				await this.envoy.configureRoutes(await this.endpoints.getAll(), true);
+			} catch (cause) {
+				throw new NetworkingError({ cause });
+			}
+		});
+		this.pending = operation.catch(() => {});
+		return operation;
 	}
 
 	private update(serviceId: string, endpoint: Endpoint | undefined): Promise<void> {

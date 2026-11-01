@@ -83,6 +83,36 @@ test("publishes deterministic discovery versions and confirms clusters before li
 	expect(f.files.get("cds.yaml")?.version_info).toBe(previous);
 });
 
+test("three stable passes reuse only confirmed acceptance without YAML writes or admin reads", async () => {
+	const f = fixture();
+	await f.client.apply(configuration);
+	f.calls.length = 0;
+	for (let pass = 0; pass < 3; pass++) await f.client.apply(configuration);
+	expect(f.calls).toEqual([]);
+});
+
+test("uncertain publication retries identical content and invalidates earlier confirmation", async () => {
+	const f = fixture();
+	await f.client.apply(configuration);
+	const read = f.transport.readConfigDump;
+	f.transport.readConfigDump = async () => ({ status: 200, body: '{"configs":[]}' });
+	await expect(f.client.apply({ ...configuration, listeners: [] })).rejects.toThrow(EnvoyClientError);
+	f.transport.readConfigDump = read;
+	f.calls.length = 0;
+	await f.client.apply(configuration);
+	expect(f.calls).toEqual(["cds.yaml", "dump", "lds.yaml", "dump"]);
+});
+
+test("explicit startup/audit verification repairs persisted discovery despite confirmed identity", async () => {
+	const f = fixture();
+	await f.client.apply(configuration);
+	f.files.set("cds.yaml", { version_info: "external", resources: [] });
+	f.calls.length = 0;
+	await f.client.apply(configuration, true);
+	expect(f.calls).toEqual(["cds.yaml", "dump", "lds.yaml", "dump"]);
+	expect(f.files.get("cds.yaml")?.resources).toEqual([{ name: "service-demo" }]);
+});
+
 test("file publication alone cannot confirm acceptance; polling is bounded", async () => {
 	const f = fixture();
 	f.transport.readConfigDump = async () => {

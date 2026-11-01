@@ -26,6 +26,31 @@ const fileStore = (directory: string) =>
 	);
 
 const contract = (given: () => Promise<KeyValueStore<unknown>>) => {
+	test("stable checkpoints and endpoints perform no additional YAML writes; external edits are repaired", async () => {
+		const backing = await given();
+		let writes = 0;
+		const values: KeyValueStore<unknown> = {
+			get: (key) => backing.get(key),
+			delete: (key) => backing.delete(key),
+			update: (key, update) => backing.update(key, update),
+			set: async (key, value) => {
+				writes++;
+				await backing.set(key, value);
+			},
+		};
+		const checkpoints = new ReconciliationStore(values);
+		const routes = new EndpointsStore(values);
+		await checkpoints.write("demo", { phase: "ready", activeRevision: "rev" });
+		await routes.set("app.demo", { ...endpoint, primary: true });
+		for (let pass = 0; pass < 3; pass++) {
+			await checkpoints.write("demo", { activeRevision: "rev", phase: "ready" });
+			await routes.set("app.demo", { ...endpoint, primary: true });
+		}
+		expect(writes).toBe(2);
+		await backing.set("routes", {});
+		await routes.set("app.demo", { ...endpoint, primary: true });
+		expect(writes).toBe(3);
+	});
 	test.each([undefined, null])("persists routes without HTTP checks: %s", async (healthcheckPath) => {
 		const values = await given();
 		const store = new EndpointsStore(values);

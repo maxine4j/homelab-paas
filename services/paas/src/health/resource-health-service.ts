@@ -4,6 +4,7 @@ import type { IPaasConfig } from "../config/paas-config.ts";
 import type { ServiceContainer } from "../docker/types.ts";
 import type { IChangeBus } from "../events/change-bus.ts";
 import type { IGitService } from "../git/git-service.ts";
+import type { IObservationInvalidation } from "../observation/runtime-observations.ts";
 import type { DescriptorDecoder } from "../reconciler/types.ts";
 import type { PeriodicTask } from "../task/periodic.ts";
 import type { HttpProbe } from "../util/healthcheck.ts";
@@ -22,12 +23,22 @@ export interface IResourceHealthProgress {
 	finished(serviceId: string, resourceId: string): void;
 }
 
+export interface IResourceHealthTask extends PeriodicTask {
+	refresh(serviceId: string): Promise<void>;
+}
+
+export interface IResourceHealthRefresh extends IResourceHealthTask {
+	/** Immediately discards prior health and pending probes for a lifecycle invalidation. */
+	invalidateService(serviceId: string): void;
+}
+
 /** Live health is independent of reconciliation backoff and is not persisted across process restarts. */
-export class ResourceHealthService implements IResourceHealthReader, IResourceHealthProgress, PeriodicTask {
+export class ResourceHealthService implements IResourceHealthReader, IResourceHealthProgress, IResourceHealthRefresh {
 	private readonly log = createLogger(ResourceHealthService.name);
 	private readonly observations = new Map<string, HealthObservation>();
 	private readonly deploying = new Set<string>();
 	private readonly generations = new Map<string, symbol>();
+	private readonly serviceGenerations = new Map<string, symbol>();
 
 	constructor(
 		private readonly config: IPaasConfig,
@@ -36,6 +47,7 @@ export class ResourceHealthService implements IResourceHealthReader, IResourceHe
 		private readonly docker: HealthDocker,
 		private readonly probe: HttpProbe,
 		private readonly changes: IChangeBus,
+		private readonly runtime?: IObservationInvalidation,
 	) {}
 
 	getStatus(serviceId: string, resourceId: string, containers: readonly ServiceContainer[]): HealthStatus {
@@ -55,8 +67,11 @@ export class ResourceHealthService implements IResourceHealthReader, IResourceHe
 
 	started(serviceId: string, resourceId: string): void {
 		const key = `${serviceId}/${resourceId}`;
+		if (this.deploying.has(key)) return;
 		this.deploying.add(key);
 		this.invalidate(key);
+		this.serviceGenerations.set(serviceId, Symbol());
+		this.runtime?.invalidate(serviceId);
 		this.changes.publish({ serviceId });
 	}
 
@@ -64,60 +79,93 @@ export class ResourceHealthService implements IResourceHealthReader, IResourceHe
 		const key = `${serviceId}/${resourceId}`;
 		this.deploying.delete(key);
 		this.invalidate(key);
+		this.serviceGenerations.set(serviceId, Symbol());
+		this.runtime?.invalidate(serviceId);
 		this.changes.publish({ serviceId });
 	}
 
-	async run(): Promise<void> {
+	refresh(serviceId: string): Promise<void> {
+		return this.run(serviceId);
+	}
+
+	invalidateService(serviceId: string): void {
+		this.serviceGenerations.set(serviceId, Symbol());
+		this.runtime?.invalidate(serviceId);
+		let changed = false;
+		for (const key of this.observations.keys()) {
+			if (key.startsWith(`${serviceId}/`)) {
+				this.invalidate(key);
+				changed = true;
+			}
+		}
+		if (changed) this.changes.publish({ serviceId });
+	}
+
+	async run(onlyServiceId?: string): Promise<void> {
 		const services = this.config.getServices();
 		for (const key of this.observations.keys()) {
 			if (!Object.hasOwn(services, key.split("/")[0]!)) this.observations.delete(key);
 		}
 		await Promise.all(
-			Object.entries(services).map(async ([serviceId, source]) => {
-				try {
-					const [file, containers] = await Promise.all([
-						this.git.fetchFile(serviceId, source),
-						this.docker.listServiceContainers(serviceId),
-					]);
-					const resources = this.decode(file.content, serviceId, file.revision).resources;
-					const ids = new Set([...Object.keys(resources), ...containers.map(({ resourceId }) => resourceId)]);
-					for (const key of this.observations.keys()) {
-						if (key.startsWith(`${serviceId}/`) && !ids.has(key.slice(serviceId.length + 1)))
-							this.observations.delete(key);
-					}
-					await Promise.all(
-						[...ids].map(async (resourceId) => {
-							const key = `${serviceId}/${resourceId}`;
-							if (this.deploying.has(key)) return;
-							const generation = this.generations.get(key);
-							const current = containers.filter((container) => container.resourceId === resourceId);
-							const signature = this.signature(current);
-							let health: HealthStatus;
-							try {
-								health = await this.check(serviceId, resources[resourceId], current);
-							} catch (err) {
-								this.log.error({ err, serviceId, resourceId }, "Cannot inspect resource health");
-								health = "Unknown";
-							}
-							if (this.generations.get(key) !== generation) return;
-							const previous = this.observations.get(key);
-							this.observations.set(key, { health, signature });
-							if (previous?.health !== health || previous.signature !== signature)
-								this.changes.publish({ serviceId });
-						}),
-					);
-				} catch (err) {
-					this.log.error({ err, serviceId }, "Cannot poll service resource health");
-					let changed = false;
-					for (const key of this.observations.keys()) {
-						if (key.startsWith(`${serviceId}/`)) {
-							this.observations.delete(key);
-							changed = true;
+			Object.entries(services)
+				.filter(([id]) => onlyServiceId === undefined || id === onlyServiceId)
+				.map(async ([serviceId, source]) => {
+					const serviceGeneration = Symbol();
+					this.serviceGenerations.set(serviceId, serviceGeneration);
+					this.runtime?.invalidate(serviceId);
+					try {
+						const [file, containers] = await Promise.all([
+							this.git.fetchFile(serviceId, source),
+							this.docker.listServiceContainers(serviceId),
+						]);
+						if (this.serviceGenerations.get(serviceId) !== serviceGeneration) return;
+						const resources = this.decode(file.content, serviceId, file.revision).resources;
+						const ids = new Set([
+							...Object.keys(resources),
+							...containers.map(({ resourceId }) => resourceId),
+						]);
+						for (const key of this.observations.keys()) {
+							if (key.startsWith(`${serviceId}/`) && !ids.has(key.slice(serviceId.length + 1)))
+								this.observations.delete(key);
 						}
+						await Promise.all(
+							[...ids].map(async (resourceId) => {
+								const key = `${serviceId}/${resourceId}`;
+								if (this.deploying.has(key)) return;
+								const generation = this.generations.get(key);
+								const current = containers.filter((container) => container.resourceId === resourceId);
+								const signature = this.signature(current);
+								let health: HealthStatus;
+								try {
+									health = await this.check(serviceId, resources[resourceId], current);
+								} catch (err) {
+									this.log.error({ err, serviceId, resourceId }, "Cannot inspect resource health");
+									health = "Unknown";
+								}
+								if (
+									this.generations.get(key) !== generation
+									|| this.serviceGenerations.get(serviceId) !== serviceGeneration
+								)
+									return;
+								const previous = this.observations.get(key);
+								this.observations.set(key, { health, signature });
+								if (previous?.health !== health || previous.signature !== signature)
+									this.changes.publish({ serviceId });
+							}),
+						);
+					} catch (err) {
+						if (this.serviceGenerations.get(serviceId) !== serviceGeneration) return;
+						this.log.error({ err, serviceId }, "Cannot poll service resource health");
+						let changed = false;
+						for (const key of this.observations.keys()) {
+							if (key.startsWith(`${serviceId}/`)) {
+								this.observations.delete(key);
+								changed = true;
+							}
+						}
+						if (changed) this.changes.publish({ serviceId });
 					}
-					if (changed) this.changes.publish({ serviceId });
-				}
-			}),
+				}),
 		);
 	}
 

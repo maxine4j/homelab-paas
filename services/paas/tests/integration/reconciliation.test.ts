@@ -77,6 +77,30 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 		const original = [...docker.containers.values()].find(
 			(c) => c.Config.Labels["homelab-paas.service"] === "demo",
 		)!;
+		await paas.management.run();
+		await paas.cache.getResource("demo", "app");
+		await paas.cache.getResource("other", "app");
+		paas.writes.length = 0;
+		const dockerReads = docker.server.requests.length;
+		const publications = envoy.server.requests.length;
+		let notifications = 0;
+		const unsubscribe = paas.changes.subscribe(() => {
+			notifications++;
+		});
+		for (let pass = 0; pass < 3; pass++) {
+			await paas.reconciler.reconcile();
+			await paas.management.run();
+			await paas.cache.listServices();
+			for (const id of ["demo", "other"]) {
+				await paas.cache.getService(id);
+				await paas.cache.getResource(id, "app");
+			}
+		}
+		unsubscribe();
+		expect(paas.writes).toEqual([]);
+		expect(envoy.server.requests.length - publications).toBe(0);
+		expect(notifications).toBe(0);
+		expect(docker.server.requests.length - dockerReads).toBe(60);
 		const create = docker.server.requests.find((r) => r.url.pathname.endsWith("/containers/create"))!;
 		expect(JSON.parse(create.body)).toMatchObject({
 			Image: "sha256:test-image",

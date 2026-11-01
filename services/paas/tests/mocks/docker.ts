@@ -95,7 +95,9 @@ export class MockDocker {
 					Image: input.Image,
 					State: { Running: false },
 					Config: { Labels: input.Labels, Env: input.Env ?? [] },
-					NetworkSettings: { Networks: { [name]: { IPAddress: "127.0.0.1", Aliases: ["app"] } } },
+					NetworkSettings: {
+						Networks: { [name]: { IPAddress: `127.0.0.${this.nextId + 1}`, Aliases: ["app"] } },
+					},
 				});
 				this.networks.get(name)!.Containers[id] = {};
 				return Response.json({ Id: id }, { status: 201 });

@@ -6,10 +6,16 @@ import { NodeDockerTransport } from "../../src/docker/docker-transport.ts";
 import { EnvoyClient } from "../../src/envoy/envoy-client.ts";
 import { EnvoyService } from "../../src/envoy/envoy-service.ts";
 import { NodeEnvoyTransport } from "../../src/envoy/envoy-transport.ts";
+import { ChangeBus } from "../../src/events/change-bus.ts";
+import { CachedPaasUiService } from "../../src/frontend/cached-paas-ui-service.ts";
+import { ManagementStateTask } from "../../src/frontend/management-state-task.ts";
+import { PaasUiService } from "../../src/frontend/paas-ui-service.ts";
 import { GitClient } from "../../src/git/git-client.ts";
 import { GitRefreshService } from "../../src/git/git-refresh-service.ts";
 import { GitService } from "../../src/git/git-service.ts";
 import { NodeGitTransport } from "../../src/git/git-transport.ts";
+import { ResourceHealthService } from "../../src/health/resource-health-service.ts";
+import { RuntimeObservations } from "../../src/observation/runtime-observations.ts";
 import { DeploymentContainers } from "../../src/reconciler/deployment/deployment-containers.ts";
 import { DeploymentService } from "../../src/reconciler/deployment/deployment-service.ts";
 import { RecreateDeploymentStrategy } from "../../src/reconciler/deployment/strategy/recreate-deployment-strategy.ts";
@@ -25,6 +31,7 @@ import { ResourceSpecification } from "../../src/reconciler/resource-specificati
 import { WebResourceReconciler } from "../../src/reconciler/resources/web/web-reconciler.ts";
 import { WorkerResourceReconciler } from "../../src/reconciler/resources/worker/worker-reconciler.ts";
 import { ServiceEventStore } from "../../src/reconciler/service-event-store.ts";
+import { ResourceStatusService } from "../../src/status/resource-status-service.ts";
 import { FileSystemKeyValueStore } from "../../src/store/file-system-store.ts";
 import { atomicWriteFile, mkdir, readFile, rm } from "../../src/util/file.ts";
 import { probe } from "../../src/util/healthcheck.ts";
@@ -40,10 +47,15 @@ export const inProcessPaas = async (
 	pause: ISleep,
 ) => {
 	await mkdir(directory, { recursive: true, mode: 0o700 });
+	const writes: string[] = [];
+	const changes = new ChangeBus();
 	const state = new FileSystemKeyValueStore<unknown>(
 		directory,
 		readFile,
-		atomicWriteFile,
+		async (path, content) => {
+			writes.push(path);
+			await atomicWriteFile(path, content);
+		},
 		(path) => rm(path, { force: true }),
 		"yaml",
 	);
@@ -59,9 +71,17 @@ export const inProcessPaas = async (
 		),
 		config,
 	);
+	const transport = new NodeEnvoyTransport({ directory, adminUrl, timeoutMs: 2000, maxResponseBytes: 1024 * 1024 });
 	const envoy = new EnvoyService(
 		new EnvoyClient(
-			new NodeEnvoyTransport({ directory, adminUrl, timeoutMs: 2000, maxResponseBytes: 1024 * 1024 }),
+			{
+				createDiscoveryFile: (name, content) => transport.createDiscoveryFile(name, content),
+				readConfigDump: () => transport.readConfigDump(),
+				writeDiscoveryFile: async (name, content) => {
+					writes.push(name);
+					await transport.writeDiscoveryFile(name, content);
+				},
+			},
 			pause,
 			{ attempts: 2, intervalMs: 1 },
 		),
@@ -93,6 +113,40 @@ export const inProcessPaas = async (
 		),
 		events,
 		new EventDiagnostics(config),
+		changes,
 	);
-	return { reconciler, git, refresh: new GitRefreshService(config, git, reconciler), checkpoints, endpoints, events };
+	const observations = new RuntimeObservations(docker, now);
+	const health = new ResourceHealthService(
+		config,
+		git,
+		decodeDescriptorYaml,
+		observations,
+		probe,
+		changes,
+		observations,
+	);
+	const inspection = new PaasUiService(
+		new ResourceStatusService(new ResourceSpecification(), new EnvironmentResolver(`${directory}/env`, readFile)),
+		config,
+		git,
+		decodeDescriptorYaml,
+		observations,
+		checkpoints,
+		events,
+		health,
+	);
+	const cache = new CachedPaasUiService(inspection, config, changes);
+	const management = new ManagementStateTask(health, cache);
+	return {
+		reconciler,
+		git,
+		refresh: new GitRefreshService(config, git, reconciler),
+		checkpoints,
+		endpoints,
+		events,
+		cache,
+		management,
+		writes,
+		changes,
+	};
 };

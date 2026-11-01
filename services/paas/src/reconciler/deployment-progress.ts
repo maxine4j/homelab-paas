@@ -20,6 +20,7 @@ export class DeploymentProgress implements IDeploymentProgress {
 		private readonly changes: IChangeBus,
 		private readonly now: () => number,
 		private readonly health?: IResourceHealthProgress,
+		private readonly refresh?: (serviceId: string) => Promise<void>,
 	) {}
 	async started(serviceId: string, resourceId: string, revision: string): Promise<void> {
 		this.health?.started(serviceId, resourceId);
@@ -31,12 +32,21 @@ export class DeploymentProgress implements IDeploymentProgress {
 	}
 	async succeeded(serviceId: string, resourceId: string, revision: string): Promise<void> {
 		this.health?.finished(serviceId, resourceId);
+		await this.refreshObservation(serviceId);
 		if (!this.drift.delete(`${serviceId}/${resourceId}/${revision}`)) return;
 		await this.publish(serviceId, resourceId, revision, "deployment.succeeded");
 	}
 	async failed(serviceId: string, resourceId: string, revision: string): Promise<void> {
 		this.health?.finished(serviceId, resourceId);
+		await this.refreshObservation(serviceId);
 		this.drift.delete(`${serviceId}/${resourceId}/${revision}`);
+	}
+	private async refreshObservation(serviceId: string): Promise<void> {
+		try {
+			await this.refresh?.(serviceId);
+		} catch (err) {
+			this.log.error({ err, serviceId }, "Cannot refresh runtime observations after deployment");
+		}
 	}
 	private async publish(
 		serviceId: string,

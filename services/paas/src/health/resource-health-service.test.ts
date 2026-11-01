@@ -104,6 +104,41 @@ test("polls web readiness independently of reconciliation and pushes only change
 	expect(f.health.getStatus("demo", "app", f.containers)).toBe("Healthy");
 });
 
+test("targeted refresh probes only the invalidated service without deployment reconciliation", async () => {
+	const f = fixture();
+	f.config.getServices = () => ({
+		demo: { remote: "local", descriptorPath: "/demo.yaml" },
+		other: { remote: "local", descriptorPath: "/other.yaml" },
+	});
+	await f.health.refresh("demo");
+	expect(f.fetchFile).toHaveBeenCalledTimes(1);
+	expect(f.listServiceContainers).toHaveBeenCalledWith("demo");
+	expect(f.health.getStatus("demo", "app", f.containers)).toBe("Healthy");
+	f.health.invalidateService("demo");
+	expect(f.health.getStatus("demo", "app", f.containers)).toBe("Unknown");
+	f.probe.mockResolvedValue(false);
+	await f.health.refresh("demo");
+	expect(f.health.getStatus("demo", "app", f.containers)).toBe("Degraded");
+});
+
+test("a lifecycle invalidation while inventory is pending cannot restore old health", async () => {
+	const f = fixture();
+	let release!: (containers: ServiceContainer[]) => void;
+	f.listServiceContainers.mockImplementationOnce(
+		() =>
+			new Promise((resolve) => {
+				release = resolve;
+			}),
+	);
+	const pending = f.health.run();
+	f.health.started("demo", "app");
+	f.health.finished("demo", "app");
+	release(f.containers);
+	await pending;
+	expect(f.health.getStatus("demo", "app", f.containers)).toBe("Unknown");
+	expect(f.probe).not.toHaveBeenCalled();
+});
+
 test("workers require all expected replicas to pass private health checks", async () => {
 	const f = fixture("worker", 2);
 	await f.health.run();

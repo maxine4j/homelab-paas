@@ -18,6 +18,15 @@ const descriptor = {
 	resources: { app: { type: "web", image: "app:1", ingress: { public: true, port: 8080 } } },
 };
 
+test("stable successful reconciliation emits no checkpoint change notifications", async () => {
+	const f = fixture();
+	await f.service.reconcile();
+	const receive = vi.fn();
+	f.bus.subscribe(receive);
+	for (let pass = 0; pass < 3; pass++) await f.service.reconcile();
+	expect(receive).not.toHaveBeenCalled();
+});
+
 test("missing secrets across resources are all named in a persistent event directing users to Secrets", async () => {
 	const f = fixture();
 	f.fetchFile.mockResolvedValue({

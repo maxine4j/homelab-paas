@@ -14,6 +14,7 @@ import { PaasUiService } from "../../src/frontend/paas-ui-service.ts";
 import { UiLiveService } from "../../src/frontend/ui-live-service.ts";
 import { UiWebSocket } from "../../src/frontend/ui-websocket.ts";
 import { ResourceHealthService } from "../../src/health/resource-health-service.ts";
+import { RuntimeObservations } from "../../src/observation/runtime-observations.ts";
 import { ResourceSpecification } from "../../src/reconciler/resource-specification.ts";
 import { ResourceStatusService } from "../../src/status/resource-status-service.ts";
 import { probe } from "../../src/util/healthcheck.ts";
@@ -56,23 +57,32 @@ test("HTTP health polling pushes resource health over WebSocket with independent
 	];
 	const docker = {
 		listServiceContainers: vi.fn(async () => containers),
-		inspectServiceContainer: async () => ({
+		inspectServiceContainer: vi.fn(async () => ({
 			id: "c",
 			imageId: "image",
 			running: true,
 			labels: {},
 			networks: { internal: { address: "127.0.0.1", aliases: [] } },
-		}),
-		inspectServiceNetwork: async () => ({
+		})),
+		inspectServiceNetwork: vi.fn(async () => ({
 			id: "net",
 			name: "internal",
 			driver: "bridge",
 			labels: {},
 			containerIds: ["c"],
-		}),
+		})),
 		readServiceContainerLogs: async () => "",
 	};
-	const health = new ResourceHealthService(config, git, decodeDescriptorYaml, docker, probe, changes);
+	const observations = new RuntimeObservations(docker, Date.now);
+	const health = new ResourceHealthService(
+		config,
+		git,
+		decodeDescriptorYaml,
+		observations,
+		probe,
+		changes,
+		observations,
+	);
 	const ui = new PaasUiService(
 		new ResourceStatusService(new ResourceSpecification(), {
 			resolve: async (_serviceId, env) =>
@@ -81,7 +91,7 @@ test("HTTP health polling pushes resource health over WebSocket with independent
 		config,
 		git,
 		decodeDescriptorYaml,
-		docker,
+		observations,
 		{ read: async () => ({ phase: "ready", activeRevision: "rev" }), write: async () => {} },
 		{ list: async () => [], append: async () => {} },
 		health,
@@ -125,6 +135,23 @@ test("HTTP health polling pushes resource health over WebSocket with independent
 		await cache.getResource("demo", "app");
 		await cache.getResource("demo", "app");
 		expect(docker.listServiceContainers).toHaveBeenCalledTimes(reads);
+		await task.run();
+		const before = [
+			docker.listServiceContainers.mock.calls.length,
+			docker.inspectServiceContainer.mock.calls.length,
+			docker.inspectServiceNetwork.mock.calls.length,
+		];
+		for (let pass = 0; pass < 3; pass++) {
+			await task.run();
+			await cache.listServices();
+			await cache.getService("demo");
+			await cache.getResource("demo", "app");
+		}
+		expect([
+			docker.listServiceContainers.mock.calls.length - before[0]!,
+			docker.inspectServiceContainer.mock.calls.length - before[1]!,
+			docker.inspectServiceNetwork.mock.calls.length - before[2]!,
+		]).toEqual([3, 3, 3]);
 		for (const [isReady, expected] of [
 			[true, "Healthy"],
 			[false, "Degraded"],
@@ -148,7 +175,7 @@ test("HTTP health polling pushes resource health over WebSocket with independent
 		await task.run();
 		await latest({ data: { health: "Missing", containers: [] } });
 		expect(await cache.getService("demo")).toMatchObject({ sync: "OutOfSync", health: "Missing" });
-		expect(endpoint.requests.map(({ url }) => url.pathname)).toEqual(["/ready", "/ready", "/ready", "/ready"]);
+		expect(endpoint.requests.map(({ url }) => url.pathname)).toEqual(Array.from({ length: 8 }, () => "/ready"));
 	} finally {
 		socket?.terminate();
 		await adapter.close();
