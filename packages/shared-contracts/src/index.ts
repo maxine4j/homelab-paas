@@ -28,6 +28,8 @@ export type {
 	UiContainer,
 	UiResource,
 	HealthStatus,
+	UiHealthPeriod,
+	UiHealthTimeline,
 	SyncStatus,
 	UiService,
 	UiRevisionMetadata,

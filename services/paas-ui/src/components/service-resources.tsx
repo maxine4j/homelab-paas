@@ -1,6 +1,7 @@
-import type { UiResource } from "@homelab-paas/shared-contracts";
+import type { UiResource, UiServiceEvent } from "@homelab-paas/shared-contracts";
 import { ExternalLink, Globe, Lock } from "lucide-react";
 
+import { HealthTimeline } from "./health-timeline.tsx";
 import { StatusBadges } from "./status-badge.tsx";
 
 const IngressAccess = ({ isPublic }: { isPublic: boolean }) => (
@@ -10,7 +11,17 @@ const IngressAccess = ({ isPublic }: { isPublic: boolean }) => (
 	</span>
 );
 
-export const ServiceResources = ({ serviceId, resources }: { serviceId: string; resources: UiResource[] }) => (
+export const ServiceResources = ({
+	serviceId,
+	resources,
+	events,
+	eventError,
+}: {
+	serviceId: string;
+	resources: UiResource[];
+	events?: UiServiceEvent[];
+	eventError?: string;
+}) => (
 	<section aria-label='Service resources'>
 		<h2>
 			Resources <span className='count'>{resources.length}</span>
@@ -74,6 +85,13 @@ export const ServiceResources = ({ serviceId, resources }: { serviceId: string; 
 									)}
 								</div>
 							)}
+							<HealthTimeline
+								label={`${resource.resourceId} health history`}
+								timeline={resource.healthTimeline}
+								events={events}
+								eventError={eventError}
+								resourceId={resource.resourceId}
+							/>
 						</article>
 					);
 				})}

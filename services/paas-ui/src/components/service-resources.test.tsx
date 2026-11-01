@@ -19,6 +19,20 @@ const renderResources = (resources: UiResource[]) =>
 		/>,
 	);
 
+test("resource rows each include their own health timeline", () => {
+	const html = renderResources([
+		{
+			resourceId: "app",
+			type: "worker",
+			sync: "Synced",
+			health: "Healthy",
+			containers: [],
+			healthTimeline: { observedAt: Date.now(), periods: [] },
+		},
+	]);
+	expect(html).toContain('aria-label="app health history"');
+});
+
 test("static cards show the bundle path and ingress link without an image placeholder", () => {
 	const html = renderResources([
 		{

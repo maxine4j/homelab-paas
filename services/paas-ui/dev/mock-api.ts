@@ -2,6 +2,17 @@ import type { UiCluster, UiResource, UiService, UiServiceEvent } from "@homelab-
 import type { Plugin } from "vite";
 
 const revision = "b7e92a43c0d851fa6e129b0d2c7a8e5409631fba";
+const observedAt = Date.now();
+const healthTimeline: NonNullable<UiService["healthTimeline"]> = {
+	observedAt,
+	periods: [
+		{ start: observedAt - 86_400_000, end: observedAt - 24_000_000, health: "Healthy" },
+		{ start: observedAt - 24_000_000, end: observedAt - 23_999_000, health: "Progressing" },
+		{ start: observedAt - 23_999_000, end: observedAt - 12_000_000, health: "Healthy" },
+		{ start: observedAt - 12_000_000, end: observedAt - 10_000_000, health: "Degraded" },
+		{ start: observedAt - 10_000_000, end: observedAt, health: "Healthy" },
+	],
+};
 const resources: UiResource[] = [
 	{
 		resourceId: "web",
@@ -109,6 +120,7 @@ egress:
 	},
 ];
 const service: UiService = {
+	healthTimeline,
 	serviceId: "paperless",
 	description: "Document management for the homelab, with searchable archives and automatic document processing",
 	primaryUrl: "https://paperless.example.test",
@@ -149,7 +161,7 @@ ${resources
 	)
 	.join("\n")}
 `,
-	resources,
+	resources: resources.map((resource) => ({ ...resource, healthTimeline })),
 };
 const events: UiServiceEvent[] = [
 	{

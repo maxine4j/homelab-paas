@@ -13,11 +13,14 @@ import { ManagementStateTask } from "../../src/frontend/management-state-task.ts
 import { PaasUiService } from "../../src/frontend/paas-ui-service.ts";
 import { UiLiveService } from "../../src/frontend/ui-live-service.ts";
 import { UiWebSocket } from "../../src/frontend/ui-websocket.ts";
+import { HealthHistoryService } from "../../src/health/health-history-service.ts";
+import { HealthHistoryStore } from "../../src/health/health-history-store.ts";
 import { ResourceHealthService } from "../../src/health/resource-health-service.ts";
 import { RuntimeObservations } from "../../src/observation/runtime-observations.ts";
 import { ResourceRoutingPolicy } from "../../src/reconciler/networking/resource-routing-policy.ts";
 import { ResourceSpecification } from "../../src/reconciler/resource-specification.ts";
 import { ResourceStatusService } from "../../src/status/resource-status-service.ts";
+import { InMemoryKeyValueStore } from "../../src/store/in-memory-store.ts";
 import { probe } from "../../src/util/healthcheck.ts";
 import { sleep } from "../../src/util/sleep.ts";
 import { testConfig } from "../../src/util/test/config.ts";
@@ -98,7 +101,12 @@ test("HTTP health polling pushes resource health over WebSocket with independent
 		{ list: async () => [], append: async () => {} },
 		health,
 	);
-	const cache = new CachedPaasUiService(ui, config, changes);
+	const cache = new CachedPaasUiService(
+		ui,
+		config,
+		changes,
+		new HealthHistoryService(new HealthHistoryStore(new InMemoryKeyValueStore<unknown>()), Date.now),
+	);
 	const task = new ManagementStateTask(health, cache);
 	const adapter = new UiWebSocket(
 		new UiLiveService(cache, ui, changes),
@@ -177,6 +185,15 @@ test("HTTP health polling pushes resource health over WebSocket with independent
 		await task.run();
 		await latest({ data: { health: "Missing", containers: [] } });
 		expect(await cache.getService("demo")).toMatchObject({ sync: "OutOfSync", health: "Missing" });
+		const timeline = (await cache.getService("demo")).resources.at(0)?.healthTimeline;
+		expect(timeline?.periods).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ health: "Healthy" }),
+				expect.objectContaining({ health: "Degraded" }),
+				expect.objectContaining({ health: "Progressing" }),
+				expect.objectContaining({ health: "Missing" }),
+			]),
+		);
 		expect(endpoint.requests.map(({ url }) => url.pathname)).toEqual(Array.from({ length: 8 }, () => "/ready"));
 	} finally {
 		socket?.terminate();

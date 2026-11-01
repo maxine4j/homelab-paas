@@ -1,6 +1,7 @@
 import type { UiService, UiServiceEvent } from "@homelab-paas/shared-contracts";
 import type { ReactNode } from "react";
 
+import { HealthTimeline } from "../components/health-timeline.tsx";
 import { ServiceDetailShell } from "../components/service-detail-shell.tsx";
 import { ServiceEvents } from "../components/service-events.tsx";
 import { ServiceResources } from "../components/service-resources.tsx";
@@ -29,6 +30,13 @@ export const ServicePage = ({
 			)}
 			{tab === "overview" && (
 				<>
+					<HealthTimeline
+						label='Service health history'
+						timeline={service.healthTimeline}
+						events={events}
+						eventError={eventError}
+						legend
+					/>
 					{service.retryAt && (
 						<dl className='summary'>
 							<div>
@@ -69,7 +77,14 @@ export const ServicePage = ({
 					</div>
 				</>
 			)}
-			{tab === "resources" && <ServiceResources serviceId={service.serviceId} resources={service.resources} />}
+			{tab === "resources" && (
+				<ServiceResources
+					serviceId={service.serviceId}
+					resources={service.resources}
+					events={events}
+					eventError={eventError}
+				/>
+			)}
 			{tab === "descriptor" && (
 				<section aria-label='Service descriptor'>
 					<h2>Service descriptor</h2>

@@ -2,6 +2,42 @@ import { expect, test } from "vitest";
 
 import { uiLiveClientSchema, uiLiveServerSchema, uiLiveTargetFromPath } from "./ui-live.ts";
 
+test("live health timelines validate bounded chronological observations on services and resources", () => {
+	const healthTimeline = { observedAt: 200, periods: [{ start: 100, end: 200, health: "Healthy" }] };
+	const message = (timeline: unknown) => ({
+		type: "snapshot",
+		id: "1",
+		target: { kind: "service", serviceId: "demo" },
+		data: {
+			serviceId: "demo",
+			sync: "Synced",
+			health: "Healthy",
+			source: {},
+			descriptorStatus: "available",
+			healthTimeline: timeline,
+			resources: [
+				{
+					resourceId: "app",
+					type: "web",
+					sync: "Synced",
+					health: "Healthy",
+					containers: [],
+					healthTimeline: timeline,
+				},
+			],
+		},
+	});
+	expect(uiLiveServerSchema.safeParse(message(healthTimeline)).success).toBe(true);
+	for (const invalid of [
+		{ observedAt: -1, periods: [] },
+		{ observedAt: 200, periods: [{ start: 200, end: 100, health: "Healthy" }] },
+		{ observedAt: 200, periods: [{ start: 100, end: 201, health: "Healthy" }] },
+		{ observedAt: 200, periods: [{ start: 100, end: 200, health: "running" }] },
+		{ observedAt: 200, periods: Array.from({ length: 2001 }, () => ({ start: 100, end: 100, health: "Healthy" })) },
+	])
+		expect(uiLiveServerSchema.safeParse(message(invalid)).success).toBe(false);
+});
+
 test.each([
 	["/cluster/logs", "cluster-logs"],
 	["/cluster/ingress-logs", "ingress-logs"],

@@ -37,6 +37,8 @@ import { GitClient } from "./git/git-client.ts";
 import { GitRefreshService } from "./git/git-refresh-service.ts";
 import { GitService } from "./git/git-service.ts";
 import { NodeGitTransport } from "./git/git-transport.ts";
+import { HealthHistoryService } from "./health/health-history-service.ts";
+import { HealthHistoryStore } from "./health/health-history-store.ts";
 import { ResourceHealthService } from "./health/resource-health-service.ts";
 import { createAuthRouter } from "./ingress/auth/auth-router.ts";
 import { AuthService } from "./ingress/auth/auth-service.ts";
@@ -267,7 +269,12 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		health,
 		dockerLogs,
 	);
-	const uiService = new CachedPaasUiService(inspection, config, changes);
+	const uiService = new CachedPaasUiService(
+		inspection,
+		config,
+		changes,
+		new HealthHistoryService(new HealthHistoryStore(state), Date.now),
+	);
 	serviceSnapshots = () => uiService.listServices();
 	const managementState = new ManagementStateTask(health, uiService);
 	const orphanCleanup = new OrphanCleanup(config, docker, scheduler, changes, nanoid);

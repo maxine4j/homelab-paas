@@ -78,7 +78,7 @@ export class InternalStorage implements IInternalStorage {
 				await this.directory(this.path());
 				await this.directory(this.path("envoy"));
 				for (const name of await this.entries(this.path())) {
-					const checkpoint = /^([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\.(?:state|events)\.yaml$/.exec(name);
+					const checkpoint = /^([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\.(?:state|events|health)\.yaml$/.exec(name);
 					if (checkpoint && !retain().services.has(checkpoint[1]!)) await this.remove(this.path(name));
 					else if (["cds.yaml", "lds.yaml", "sds.yaml", "ingress.pem"].includes(name)) {
 						await this.remove(this.path(name));

@@ -4,6 +4,34 @@ import { ChangeBus } from "../events/change-bus.ts";
 import { DeploymentProgress } from "./deployment-progress.ts";
 import type { ReconciliationState } from "./types.ts";
 
+test("new-revision resources emit durable and immediate markers even when the whole rollout falls between health polls", async () => {
+	const append = vi.fn();
+	const write = vi.fn();
+	const changes = new ChangeBus();
+	const received = vi.fn();
+	changes.subscribe(received);
+	const progress = new DeploymentProgress(
+		{ read: async () => ({ phase: "deploying", desiredRevision: "new" }), write },
+		{ append, list: async () => [] },
+		changes,
+		() => 100,
+	);
+	await progress.started("demo", "app", "new");
+	await progress.started("demo", "app", "new");
+	await progress.succeeded("demo", "app", "new");
+	expect(append.mock.calls.map((call) => call[1])).toMatchObject([
+		{ event: "deployment.started", resourceId: "app", revision: "new" },
+		{ event: "deployment.succeeded", resourceId: "app", revision: "new" },
+	]);
+	expect(received).toHaveBeenCalledWith(
+		expect.objectContaining({
+			serviceId: "demo",
+			event: expect.objectContaining({ event: "deployment.started", resourceId: "app" }),
+		}),
+	);
+	expect(write).not.toHaveBeenCalled();
+});
+
 test("tracks resource rollout health for new revisions and clears it on success or failure", async () => {
 	const health = { started: vi.fn(), finished: vi.fn() };
 	const progress = new DeploymentProgress(

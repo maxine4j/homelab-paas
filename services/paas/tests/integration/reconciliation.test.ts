@@ -97,7 +97,8 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 			}
 		}
 		unsubscribe();
-		expect(paas.writes).toEqual([]);
+		expect(paas.writes).toHaveLength(6);
+		expect(paas.writes.every((path) => /\/(demo|other)\.health\.yaml$/.test(path))).toBe(true);
 		expect(envoy.server.requests.length - publications).toBe(0);
 		expect(notifications).toBe(0);
 		expect(docker.server.requests.length - dockerReads).toBe(18);

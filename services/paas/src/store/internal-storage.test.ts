@@ -52,6 +52,7 @@ test("cleanup removes only recognized obsolete internal output and preserves ser
 		"_paas/envoy/ingress.pem",
 		"_paas/demo.state.yaml",
 		"_paas/demo.events.yaml",
+		"_paas/demo.health.yaml",
 		"_paas/unknown",
 		"_paas/static/demo/site/index.html",
 		"_paas/git/demo/" + "a".repeat(64) + "/objects/keep",
@@ -60,6 +61,7 @@ test("cleanup removes only recognized obsolete internal output and preserves ser
 	const obsolete = [
 		"_paas/gone.state.yaml",
 		"_paas/gone.events.yaml",
+		"_paas/gone.health.yaml",
 		"_paas/ui-git/gone/HEAD",
 		"_paas/git/demo/HEAD",
 		"_paas/git/demo/" + "b".repeat(64) + "/HEAD",
@@ -80,6 +82,7 @@ test("cleanup removes only recognized obsolete internal output and preserves ser
 		"_paas/envoy/ingress.pem",
 		"_paas/demo.state.yaml",
 		"_paas/demo.events.yaml",
+		"_paas/demo.health.yaml",
 		"_paas/unknown",
 		"_paas/static/demo/site/index.html",
 	])

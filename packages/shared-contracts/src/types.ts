@@ -86,7 +86,20 @@ export interface UiContainer {
 export type SyncStatus = "Synced" | "OutOfSync" | "Unknown";
 export type HealthStatus = "Healthy" | "Progressing" | "Degraded" | "Missing" | "Unknown";
 
+export interface UiHealthPeriod {
+	start: number;
+	end: number;
+	health: HealthStatus;
+}
+
+export interface UiHealthTimeline {
+	/** Observation intervals, oldest first; gaps represent unknown health. */
+	periods: UiHealthPeriod[];
+	observedAt: number;
+}
+
 export interface UiResource {
+	healthTimeline?: UiHealthTimeline;
 	resourceId: string;
 	sync: SyncStatus;
 	health: HealthStatus;
@@ -107,6 +120,7 @@ export interface UiRevisionMetadata {
 }
 
 export interface UiService extends UiServiceSummary {
+	healthTimeline?: UiHealthTimeline;
 	source: JsonValue;
 	descriptorRevision?: string;
 	descriptorRevisionMetadata?: UiRevisionMetadata;

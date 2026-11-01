@@ -18,6 +18,8 @@ import { GitClient } from "../../src/git/git-client.ts";
 import { GitRefreshService } from "../../src/git/git-refresh-service.ts";
 import { GitService } from "../../src/git/git-service.ts";
 import { NodeGitTransport } from "../../src/git/git-transport.ts";
+import { HealthHistoryService } from "../../src/health/health-history-service.ts";
+import { HealthHistoryStore } from "../../src/health/health-history-store.ts";
 import { ResourceHealthService } from "../../src/health/resource-health-service.ts";
 import { RuntimeObservations } from "../../src/observation/runtime-observations.ts";
 import { DeploymentContainers } from "../../src/reconciler/deployment/deployment-containers.ts";
@@ -175,7 +177,12 @@ export const inProcessPaas = async (
 		events,
 		health,
 	);
-	const cache = new CachedPaasUiService(inspection, config, changes);
+	const cache = new CachedPaasUiService(
+		inspection,
+		config,
+		changes,
+		new HealthHistoryService(new HealthHistoryStore(state), now),
+	);
 	const management = new ManagementStateTask(health, cache);
 	const audit = new DriftAudit(
 		routing,

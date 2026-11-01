@@ -31,6 +31,19 @@ export const uiLiveClientSchema = z.discriminatedUnion("type", [
 const metadata = z.object({ authorName: z.string(), authoredAt: z.string(), message: z.string() });
 const sync = z.enum(["Synced", "OutOfSync", "Unknown"]);
 const health = z.enum(["Healthy", "Progressing", "Degraded", "Missing", "Unknown"]);
+const timestamp = z.number().finite().nonnegative();
+const healthTimeline = z
+	.object({
+		observedAt: timestamp,
+		periods: z
+			.array(z.object({ start: timestamp, end: timestamp, health }).refine(({ start, end }) => end >= start))
+			.max(2000),
+	})
+	.refine(({ observedAt, periods }) =>
+		periods.every(
+			(period, index) => period.end <= observedAt && (index === 0 || period.start >= periods.at(index - 1)!.end),
+		),
+	);
 const summary = z.object({
 	serviceId: identity,
 	sync,
@@ -45,6 +58,7 @@ const summary = z.object({
 	retryAt: z.number().optional(),
 });
 const resource = z.object({
+	healthTimeline: healthTimeline.optional(),
 	resourceId: identity,
 	sync,
 	health,
@@ -111,6 +125,7 @@ const cluster = z.object({
 	),
 });
 const service = summary.extend({
+	healthTimeline: healthTimeline.optional(),
 	source: z.json(),
 	descriptorRevision: z.string().optional(),
 	descriptorRevisionMetadata: metadata.optional(),

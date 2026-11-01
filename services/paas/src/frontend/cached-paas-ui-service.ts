@@ -11,6 +11,7 @@ import type {
 
 import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IChangeBus } from "../events/change-bus.ts";
+import type { IHealthHistoryService } from "../health/health-history-service.ts";
 import { createLogger } from "../util/logger.ts";
 import { PaasUiError, type IPaasUiService } from "./paas-ui-service.ts";
 
@@ -37,6 +38,7 @@ export class CachedPaasUiService implements IPaasUiService, IUiStateCache {
 		private readonly ui: IPaasUiService,
 		private readonly config: IPaasConfig,
 		private readonly changes: IChangeBus,
+		private readonly history: IHealthHistoryService,
 	) {}
 
 	getCluster(): Promise<UiCluster> {
@@ -76,7 +78,7 @@ export class CachedPaasUiService implements IPaasUiService, IUiStateCache {
 
 	async getService(serviceId: string): Promise<UiService> {
 		this.assertService(serviceId);
-		return this.read(this.services, serviceId, () => this.ui.getService(serviceId, true));
+		return this.read(this.services, serviceId, () => this.observe(serviceId));
 	}
 
 	async getResource(serviceId: string, resourceId: string): Promise<UiResource> {
@@ -107,7 +109,7 @@ export class CachedPaasUiService implements IPaasUiService, IUiStateCache {
 		);
 		await Promise.all(
 			serviceIds.map(async (serviceId) => {
-				const service = this.entry(this.services, serviceId, () => this.ui.getService(serviceId, true));
+				const service = this.entry(this.services, serviceId, () => this.observe(serviceId));
 				const changed = await this.refreshEntry(serviceId, service);
 				const resourcesChanged = await Promise.all(
 					[...this.resources]
@@ -131,6 +133,15 @@ export class CachedPaasUiService implements IPaasUiService, IUiStateCache {
 			);
 		}
 		return this.identity(entry.result) !== before;
+	}
+
+	private async observe(serviceId: string): Promise<UiService> {
+		try {
+			return await this.history.observe(await this.ui.getService(serviceId, true));
+		} catch (error) {
+			this.history.interrupt(serviceId);
+			throw error;
+		}
 	}
 
 	private identity<T>(result: SnapshotEntry<T>["result"]): string | undefined {

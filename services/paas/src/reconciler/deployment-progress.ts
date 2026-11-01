@@ -10,10 +10,10 @@ export interface IDeploymentProgress {
 	failed(serviceId: string, resourceId: string, revision: string): Promise<void>;
 }
 
-/** Adds progress for actual drift rollouts of an already active revision. New revisions are owned by reconciliation. */
+/** Emits resource rollout markers; reconciliation separately owns service-wide revision events. */
 export class DeploymentProgress implements IDeploymentProgress {
 	private readonly log = createLogger(DeploymentProgress.name);
-	private readonly drift = new Set<string>();
+	private readonly rollouts = new Set<string>();
 	constructor(
 		private readonly state: IReconciliationStateStore,
 		private readonly events: IServiceEventStore,
@@ -24,22 +24,24 @@ export class DeploymentProgress implements IDeploymentProgress {
 	) {}
 	async started(serviceId: string, resourceId: string, revision: string): Promise<void> {
 		this.health?.started(serviceId, resourceId);
+		const key = `${serviceId}/${resourceId}/${revision}`;
+		if (this.rollouts.has(key)) return;
 		const previous = await this.state.read(serviceId);
-		if (previous?.activeRevision !== revision || previous.phase === "deploying") return;
-		await this.state.write(serviceId, { ...previous, phase: "deploying", deploymentStartedAt: this.now() });
-		this.drift.add(`${serviceId}/${resourceId}/${revision}`);
+		if (previous?.activeRevision === revision && previous.phase !== "deploying")
+			await this.state.write(serviceId, { ...previous, phase: "deploying", deploymentStartedAt: this.now() });
+		this.rollouts.add(key);
 		await this.publish(serviceId, resourceId, revision, "deployment.started");
 	}
 	async succeeded(serviceId: string, resourceId: string, revision: string): Promise<void> {
 		this.health?.finished(serviceId, resourceId);
 		await this.refreshObservation(serviceId);
-		if (!this.drift.delete(`${serviceId}/${resourceId}/${revision}`)) return;
+		if (!this.rollouts.delete(`${serviceId}/${resourceId}/${revision}`)) return;
 		await this.publish(serviceId, resourceId, revision, "deployment.succeeded");
 	}
 	async failed(serviceId: string, resourceId: string, revision: string): Promise<void> {
 		this.health?.finished(serviceId, resourceId);
 		await this.refreshObservation(serviceId);
-		this.drift.delete(`${serviceId}/${resourceId}/${revision}`);
+		this.rollouts.delete(`${serviceId}/${resourceId}/${revision}`);
 	}
 	private async refreshObservation(serviceId: string): Promise<void> {
 		try {

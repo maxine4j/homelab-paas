@@ -11,6 +11,23 @@ import { ServiceEventsPage } from "./service-events-page.tsx";
 import { ServicePage } from "./service-page.tsx";
 import { ServicesPage } from "./services-page.tsx";
 
+test("service overview shows aggregate health history", () => {
+	const html = renderToStaticMarkup(
+		<ServicePage
+			service={{
+				serviceId: "demo",
+				sync: "Synced",
+				health: "Healthy",
+				source: {},
+				descriptorStatus: "available",
+				resources: [],
+				healthTimeline: { observedAt: Date.now(), periods: [] },
+			}}
+		/>,
+	);
+	expect(html).toContain('aria-label="Service health history"');
+});
+
 test("cluster has Config and control-plane Logs tabs with direct navigation", () => {
 	expect(parseRoute("#/cluster/logs")).toEqual({ page: "cluster", tab: "logs" });
 	expect(parseRoute("#/cluster/unknown")).toEqual({ page: "missing" });

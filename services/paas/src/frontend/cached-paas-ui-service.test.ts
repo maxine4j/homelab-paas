@@ -22,8 +22,30 @@ const fixture = () => {
 		getLogs: vi.fn(async () => ({ containerId: "c", content: "live", tail: 200 as const })),
 	} satisfies IPaasUiService;
 	const changes = new ChangeBus();
-	return { ui, config, changes, cache: new CachedPaasUiService(ui, config, changes) };
+	const history = { observe: async (snapshot: UiService) => snapshot, interrupt: vi.fn() };
+	return {
+		ui,
+		config,
+		changes,
+		history,
+		cache: new CachedPaasUiService(ui, config, changes, history),
+	};
 };
+
+test("enriches cached service snapshots with recorded health history once per observation", async () => {
+	const f = fixture();
+	const observe = vi.fn(async (service: UiService) => ({
+		...service,
+		healthTimeline: { observedAt: 123, periods: [{ start: 123, end: 123, health: service.health }] },
+	}));
+	const cache = new CachedPaasUiService(f.ui, f.config, f.changes, { observe, interrupt: vi.fn() });
+	await cache.refresh();
+	expect((await cache.getService("demo")).healthTimeline?.observedAt).toBe(123);
+	await cache.getService("demo");
+	expect(observe).toHaveBeenCalledTimes(1);
+	await cache.refresh();
+	expect(observe).toHaveBeenCalledTimes(2);
+});
 
 test("startup refresh warms list and configured services; reads remain memory-only and isolated", async () => {
 	const f = fixture();
@@ -133,6 +155,7 @@ test("failed refreshes replace stale snapshots, isolate services and retry only 
 	await f.cache.refresh();
 	f.ui.getService.mockRejectedValueOnce(new Error("inspection unavailable"));
 	await f.cache.refresh();
+	expect(f.history.interrupt).toHaveBeenCalledWith("demo");
 	await expect(f.cache.getService("demo")).rejects.toThrow("inspection unavailable");
 	await expect(f.cache.getService("demo")).rejects.toThrow("inspection unavailable");
 	expect(f.ui.getService).toHaveBeenCalledTimes(2);
