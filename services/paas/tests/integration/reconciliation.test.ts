@@ -16,7 +16,7 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 	const docker = new MockDocker("integration", journal);
 	const envoy = new MockEnvoy(`${directory}/state`, journal);
 	const health = new MockHttpServer(({ url }) =>
-		url.pathname === "/health"
+		url.pathname === "/health" || url.pathname === "/health-v4"
 			? new Response("ready")
 			: url.pathname === "/unready"
 				? new Response("unready", { status: 503 })
@@ -156,7 +156,9 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 		expect(await readFile(`${directory}/state/routes.yaml`)).toBe(routes);
 		envoy.reject = true;
 		now += 1000;
-		await git.commit({ "demo.sd.yaml": descriptor("demo", "v4") });
+		// The mock shares one portable loopback address. Change route content explicitly
+		// so this deployment exercises publication rejection rather than confirmed-content reuse.
+		await git.commit({ "demo.sd.yaml": descriptor("demo", "v4", "/health-v4") });
 		await paas.refresh.refreshAll();
 		expect(await paas.checkpoints.read("demo")).toMatchObject({ phase: "deploying", deploymentStartedAt: now });
 		expect((await paas.events.list("demo")).at(0)).toMatchObject({
