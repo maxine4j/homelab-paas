@@ -1,8 +1,9 @@
 import type { UiHealthTimeline, UiServiceEvent } from "@homelab-paas/shared-contracts";
+import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test, vi } from "vitest";
 
-import { HealthTimeline } from "./health-timeline.tsx";
+import { HealthTimeline, HealthTimelineView } from "./health-timeline.tsx";
 
 const now = 86_400_000;
 const timeline: UiHealthTimeline = {
@@ -13,6 +14,85 @@ const timeline: UiHealthTimeline = {
 		{ start: 43_201_000, end: now, health: "Healthy" },
 	],
 };
+
+test("offers a native range button and lists only health statuses in the legend", () => {
+	const html = renderToStaticMarkup(<HealthTimeline label='Health' now={now} legend />);
+	expect(html).toContain('<button type="button"');
+	expect(html).toContain(">Last 24 hours</button>");
+	expect(html).not.toContain("Brief transitions / events");
+	for (const status of ["Healthy", "Progressing", "Degraded", "Missing", "Unknown"]) {
+		expect(html).toContain(status);
+	}
+});
+
+test("range button switches the plotted window, markers and axis to the last hour and back", () => {
+	const hour = 3_600_000;
+	const selection: { range: "day" | "hour" } = { range: "day" };
+	const render = () =>
+		HealthTimelineView({
+			label: "Health",
+			now,
+			range: selection.range,
+			onRangeChange: (range) => {
+				selection.range = range;
+			},
+			timeline: {
+				observedAt: now,
+				periods: [
+					{ start: now - hour * 2, end: now - hour, health: "Degraded" },
+					{ start: now - hour, end: now - hour / 2, health: "Healthy" },
+					{ start: now - hour / 2, end: now - hour / 2 + 30_000, health: "Progressing" },
+					{ start: now - hour / 2 + 30_000, end: now, health: "Healthy" },
+				],
+			},
+			events: [
+				{ timestamp: now - hour * 2, level: "info", event: "deployment.succeeded", message: "Older rollout" },
+				{ timestamp: now - hour / 2, level: "info", event: "deployment.started", message: "Recent start" },
+				{
+					timestamp: now - hour / 2 + 120_000,
+					level: "info",
+					event: "deployment.succeeded",
+					message: "Recent finish",
+				},
+			],
+		});
+	const click = (view: ReturnType<typeof render>) => {
+		const caption = view.props.children[0] as ReactElement<{ children: ReactNode }>;
+		const button = Children.toArray(caption.props.children).find(
+			(child) => isValidElement(child) && child.type === "button",
+		);
+		if (!isValidElement<{ onClick: () => void }>(button)) throw new Error("Missing range button");
+		button.props.onClick();
+	};
+	const day = render();
+	const dayHtml = renderToStaticMarkup(day);
+	expect(dayHtml).toContain("Last 24 hours");
+	expect(dayHtml).toContain("yesterday");
+	expect(dayHtml).toContain("Older rollout");
+	expect(dayHtml).toContain('data-count="2"');
+	expect(dayHtml).toContain('class="health-marker health-progressing"');
+	click(day);
+	expect(selection.range).toBe("hour");
+	const lastHour = render();
+	const hourHtml = renderToStaticMarkup(lastHour);
+	expect(hourHtml).toContain("Last hour");
+	expect(hourHtml).toContain("width:50%");
+	expect(hourHtml).not.toContain('class="health-period health-degraded"');
+	expect(hourHtml).not.toContain("Older rollout");
+	expect(hourHtml).not.toContain('data-count="2"');
+	expect(hourHtml).toContain("Recent start");
+	expect(hourHtml).toContain("Recent finish");
+	expect(hourHtml).toContain("left:50%");
+	expect(hourHtml).not.toContain("yesterday");
+	expect(hourHtml).toContain(
+		`${new Date(now - hour).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} 1 hour ago`,
+	);
+	// The 30-second observation is visible as a period, rather than a brief-transition circle at this scale.
+	expect(hourHtml.match(/class="health-marker health-progressing"/g)).toHaveLength(1);
+	click(lastHour);
+	expect(selection.range).toBe("day");
+	expect(renderToStaticMarkup(render())).toBe(dayHtml);
+});
 
 test("immediate events use the render time instead of waiting for the next display-clock tick", () => {
 	const clock = vi.spyOn(Date, "now").mockReturnValueOnce(1000).mockReturnValue(2000);

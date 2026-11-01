@@ -4,15 +4,7 @@ import { useEffect, useState } from "react";
 const day = 86_400_000;
 const statuses: HealthStatus[] = ["Healthy", "Progressing", "Degraded", "Missing", "Unknown"];
 
-export const HealthTimeline = ({
-	label,
-	timeline,
-	events = [],
-	resourceId,
-	now,
-	legend = false,
-	eventError,
-}: {
+interface HealthTimelineProps {
 	label: string;
 	timeline?: UiHealthTimeline;
 	events?: UiServiceEvent[];
@@ -20,24 +12,48 @@ export const HealthTimeline = ({
 	now?: number;
 	legend?: boolean;
 	eventError?: string;
-}) => {
+}
+
+export const HealthTimeline = (props: HealthTimelineProps) => {
+	const { now, timeline, events = [] } = props;
 	const [clock, setClock] = useState(() => Date.now());
+	const [range, setRange] = useState<"day" | "hour">("day");
 	useEffect(() => {
 		if (now !== undefined) return;
 		const timer = window.setInterval(() => setClock(Date.now()), 30_000);
 		return () => window.clearInterval(timer);
 	}, [now]);
 	const end = now ?? Math.max(clock, timeline?.observedAt ?? 0, ...events.map(({ timestamp }) => timestamp));
-	const start = end - day;
-	const position = (at: number) => `${Math.max(0, Math.min(100, ((at - start) / day) * 100))}%`;
-	const alignment = (at: number) => (at < start + day * 0.25 ? "start" : at > start + day * 0.75 ? "end" : undefined);
+	return <HealthTimelineView {...props} now={end} range={range} onRangeChange={setRange} />;
+};
+
+export const HealthTimelineView = ({
+	label,
+	timeline,
+	events = [],
+	resourceId,
+	now: end,
+	legend = false,
+	eventError,
+	range,
+	onRangeChange,
+}: HealthTimelineProps & {
+	now: number;
+	range: "day" | "hour";
+	onRangeChange: (range: "day" | "hour") => void;
+}) => {
+	const duration = range === "day" ? day : 3_600_000;
+	const start = end - duration;
+	const position = (at: number) => `${Math.max(0, Math.min(100, ((at - start) / duration) * 100))}%`;
+	const alignment = (at: number) =>
+		at < start + duration * 0.25 ? "start" : at > start + duration * 0.75 ? "end" : undefined;
 	const periods =
 		timeline?.periods.flatMap((period, index) => {
 			const until =
 				index === timeline.periods.length - 1
 					? Math.max(period.end, Math.min(end, timeline.observedAt + 90_000))
 					: period.end;
-			if (until < start || period.start > end) return [];
+			if (until <= start || period.start >= end) return [];
 			return [{ ...period, start: Math.max(start, period.start), end: Math.min(end, until) }];
 		}) ?? [];
 	const markers = events.filter(
@@ -49,19 +65,21 @@ export const HealthTimeline = ({
 	const groups: UiServiceEvent[][] = [];
 	for (const event of markers.sort((a, b) => a.timestamp - b.timestamp)) {
 		const last = groups.at(-1);
-		if (last && event.timestamp - last[0]!.timestamp < day * 0.02) last.push(event);
+		if (last && event.timestamp - last[0]!.timestamp < duration * 0.02) last.push(event);
 		else groups.push([event]);
 	}
 	return (
 		<figure className='health-timeline' aria-label={label}>
 			<figcaption>
 				<span>{label}</span>
-				<span className='muted'>Last 24 hours</span>
+				<button type='button' className='muted' onClick={() => onRangeChange(range === "day" ? "hour" : "day")}>
+					{range === "day" ? "Last 24 hours" : "Last hour"}
+				</button>
 			</figcaption>
 			<div className='health-track' aria-label='Unobserved time is Unknown'>
 				{periods.map((period, index) => {
 					const description = `${period.health}: ${new Date(period.start).toLocaleString()} – ${new Date(period.end).toLocaleString()}`;
-					const width = ((period.end - period.start) / day) * 100;
+					const width = ((period.end - period.start) / duration) * 100;
 					return (
 						<span
 							key={`${period.start}-${index}`}
@@ -76,7 +94,7 @@ export const HealthTimeline = ({
 					);
 				})}
 				{periods
-					.filter((period) => (period.end - period.start) / day < 0.005)
+					.filter((period) => (period.end - period.start) / duration < 0.005)
 					.map((period, index) => {
 						const description = `${period.health}: ${new Date(period.start).toLocaleString()} – ${new Date(period.end).toLocaleString()}`;
 						return (
@@ -121,7 +139,10 @@ export const HealthTimeline = ({
 				})}
 			</div>
 			<div className='health-axis'>
-				<span>{new Date(start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} yesterday</span>
+				<span>
+					{new Date(start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{" "}
+					{range === "day" ? "yesterday" : "1 hour ago"}
+				</span>
 				<span>Now</span>
 			</div>
 			{!timeline && <p className='muted'>Health history unavailable.</p>}
@@ -137,7 +158,6 @@ export const HealthTimeline = ({
 							{health}
 						</span>
 					))}
-					<span>● Brief transitions / events</span>
 				</div>
 			)}
 		</figure>
