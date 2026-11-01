@@ -9,6 +9,17 @@ import type { Endpoint } from "./types.ts";
 const old: Endpoint = { address: "10.0.0.1", port: 8080, healthcheckPath: "/ready", public: true };
 const replacement: Endpoint = { ...old, address: "10.0.0.2" };
 
+test("cleanup removes legacy and resource routes for removed services and republishes the retained snapshot", async () => {
+	const f = fixture();
+	await f.service.routeTo("gone", old);
+	await f.service.routeTo("site.gone", { ...old, static: true });
+	await f.service.routeTo("site.demo", { ...old, static: true });
+	expect((await f.service.pruneServices((id) => id === "demo")).routes).toEqual({
+		"site.demo": { ...old, static: true },
+	});
+	expect(f.snapshots.at(-1)).toEqual({ "site.demo": { ...old, static: true } });
+});
+
 function fixture() {
 	const snapshots: Record<string, Endpoint>[] = [];
 	const endpoints = new EndpointsStore(new InMemoryKeyValueStore<unknown>());

@@ -77,13 +77,7 @@ const fixture = (health: HealthStatus = "Degraded") => {
 		networks: { demo: { address: "172.1.0.2", aliases: ["app"] } },
 	}));
 	const followLogs = vi.fn(
-		async (
-			_serviceId: string,
-			_containerId: string,
-			_secrets: string[],
-			receive: (content: string) => void,
-			_signal: AbortSignal,
-		) => {
+		async (_serviceId: string, _containerId: string, receive: (content: string) => void, _signal: AbortSignal) => {
 			receive("safe tail");
 		},
 	);
@@ -240,12 +234,12 @@ test.each(["db", "old"])(
 	},
 );
 
-test("live logs verify configured service/resource/container and require descriptor redaction before opening a follow", async () => {
+test("live logs verify configured service/resource/container without depending on Git", async () => {
 	const f = fixture();
 	const receive = vi.fn();
 	const signal = new AbortController().signal;
 	await f.service.followLogs("demo", "app", "c", receive, signal);
-	expect(f.followLogs).toHaveBeenCalledWith("demo", "c", ["env-canary"], expect.any(Function), signal);
+	expect(f.followLogs).toHaveBeenCalledWith("demo", "c", expect.any(Function), signal);
 	expect(receive).toHaveBeenCalledWith({ containerId: "c", content: "safe tail", tail: 200 });
 	f.followLogs.mockClear();
 	for (const [service, resource, container] of [
@@ -258,10 +252,8 @@ test("live logs verify configured service/resource/container and require descrip
 		});
 	expect(f.followLogs).not.toHaveBeenCalled();
 	f.fetchFile.mockRejectedValue(new Error("private Git error"));
-	await expect(f.service.followLogs("demo", "app", "c", receive, signal)).rejects.toMatchObject({
-		kind: "unavailable",
-	});
-	expect(f.followLogs).not.toHaveBeenCalled();
+	await f.service.followLogs("demo", "app", "c", receive, signal);
+	expect(f.followLogs).toHaveBeenCalledTimes(1);
 });
 
 test("service detail reads metadata for each exact revision and redacts known secrets", async () => {
@@ -568,7 +560,7 @@ test("joins every desired resource with live containers, retaining resources abs
 	});
 	expect(await service.getLogs("demo", "app", "c")).toEqual({
 		containerId: "c",
-		content: "hello [redacted]\n",
+		content: "hello env-canary\n",
 		tail: 200,
 	});
 });
@@ -638,14 +630,14 @@ test("secret-reference snapshots never expose resolved Docker environment values
 	});
 });
 
-test("Git failures preserve live resource visibility and disable logs when redaction inputs cannot be loaded", async () => {
+test("Git failures preserve live resource visibility and log access", async () => {
 	const f = fixture();
 	f.fetchFile.mockRejectedValue(new Error("secret-canary"));
 	const detail = await f.service.getService("demo");
 	expect(detail.descriptorStatus).toBe("unavailable");
 	expect(detail).not.toHaveProperty("descriptor", expect.anything());
 	expect(detail.resources.map((r) => r.resourceId)).toEqual(["app", "old"]);
-	await expect(f.service.getLogs("demo", "app", "c")).rejects.toMatchObject({ kind: "unavailable" });
+	await expect(f.service.getLogs("demo", "app", "c")).resolves.toMatchObject({ content: "hello env-canary\n" });
 });
 
 test("list and detail aggregate live health independently of failed deployment checkpoints", async () => {

@@ -48,17 +48,20 @@ The platform reads its configuration from:
 
 Host paths:
 
-| Path                                                         | Purpose                                  |
-| ------------------------------------------------------------ | ---------------------------------------- |
-| `/etc/homelab-paas/config.yaml`                              | Platform configuration and credentials   |
-| `/etc/homelab-paas/env/{serviceId}.env`                      | User-managed service secrets             |
-| `/var/homelab-paas/{serviceId}/{resourceId}/`                | Platform-managed resource storage        |
-| `/var/homelab-paas/{serviceId}/{resourceId}/credentials.env` | Platform-generated resource credentials  |
-| `/var/homelab-paas/_paas/`                                   | Platform state and ACME account material |
-| `/var/homelab-paas/_paas/ingress.pem`                        | TLS certificate chain and private key    |
-| `/var/homelab-paas/__paas/static/{serviceId}/{resourceId}/`  | Published static bundle files            |
+| Path                                                         | Purpose                                            |
+| ------------------------------------------------------------ | -------------------------------------------------- |
+| `/etc/homelab-paas/config.yaml`                              | Platform configuration and credentials             |
+| `/etc/homelab-paas/env/{serviceId}.env`                      | User-managed service secrets                       |
+| `/var/homelab-paas/{serviceId}/{resourceId}/`                | Platform-managed resource storage                  |
+| `/var/homelab-paas/{serviceId}/{resourceId}/credentials.env` | Platform-generated resource credentials            |
+| `/var/homelab-paas/_paas/`                                   | Platform state and ACME account material           |
+| `/var/homelab-paas/_paas/envoy/`                             | Generated Envoy bootstrap, discovery and TLS files |
+| `/var/homelab-paas/_paas/envoy/ingress.pem`                  | TLS certificate chain and private key              |
+| `/var/homelab-paas/_paas/static/{serviceId}/{resourceId}/`   | Published static bundle files                      |
 
 The control-plane container mounts the Docker socket and the required configuration and state directories. Paths supplied to Docker for bind mounts refer to the **host filesystem**.
+
+`_paas` is the only internal state namespace. Its generated artifacts are subject to [six-hour cleanup](reconciliation-and-deployments.md#docker-disk-cleanup); application data and credentials are retained. Envoy mounts only `_paas/envoy/`, read-only. Its generated `envoy.yaml` bootstrap, `cds.yaml`, `lds.yaml`, `sds.yaml` and `ingress.pem` all live there; the ACME account key remains outside that mount at `_paas/acme-account.pem`. Startup generates the bootstrap before reporting the control plane healthy. There is no filesystem migration or legacy read fallback.
 
 Application volumes support service-relative and arbitrary absolute Docker host paths using `hostPath` and `mountPath`. See [configuration](configuration.md#volumes-and-resource-limits) for path resolution, mount semantics and operator responsibilities.
 

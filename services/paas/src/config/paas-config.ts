@@ -28,7 +28,7 @@ const environmentFields: Record<string, string> = {
 const secretFields = new Set(["auth.github.clientSecret", "auth.session.signingKey", "tls.dns.credentials.apiToken"]);
 
 export interface IPaasConfig {
-	createLogRedactor(additionalSecrets?: string[]): ILogRedactor;
+	createLogRedactor(): ILogRedactor;
 	getClusterId(): string;
 	getIngressConfig(): PlatformConfig["ingress"];
 	getAuthConfig(): PlatformConfig["auth"];
@@ -244,8 +244,8 @@ export class PaasConfig implements IPaasConfig {
 		return redactSecrets(value, this.logSecrets(additionalSecrets));
 	}
 
-	createLogRedactor(additionalSecrets: string[] = []): ILogRedactor {
-		return new LogRedactor(this.logSecrets(additionalSecrets));
+	createLogRedactor(): ILogRedactor {
+		return new LogRedactor();
 	}
 
 	private logSecrets(additionalSecrets: string[]): string[] {

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 
+import type { IStorageAccess } from "../store/internal-storage.ts";
 import { atomicWriteFile, createFileIfMissing, mkdir } from "../util/file.ts";
 
 /** Wire/filesystem boundary. Failures are translated by EnvoyClient. */
@@ -18,16 +19,25 @@ export class NodeEnvoyTransport implements IEnvoyTransport {
 			timeoutMs: number;
 			maxResponseBytes: number;
 		},
+		private readonly storage?: IStorageAccess,
 	) {}
 
 	async writeDiscoveryFile(name: "cds.yaml" | "lds.yaml", content: string): Promise<void> {
-		await mkdir(this.options.directory, { recursive: true, mode: 0o700 });
-		await atomicWriteFile(join(this.options.directory, name), content, { mode: 0o600 });
+		const write = async () => {
+			await mkdir(this.options.directory, { recursive: true, mode: 0o700 });
+			await atomicWriteFile(join(this.options.directory, name), content, { mode: 0o600 });
+		};
+		if (this.storage) await this.storage.use(write);
+		else await write();
 	}
 
 	async createDiscoveryFile(name: "cds.yaml" | "lds.yaml", content: string): Promise<void> {
-		await mkdir(this.options.directory, { recursive: true, mode: 0o700 });
-		await createFileIfMissing(join(this.options.directory, name), content, { mode: 0o600 });
+		const write = async () => {
+			await mkdir(this.options.directory, { recursive: true, mode: 0o700 });
+			await createFileIfMissing(join(this.options.directory, name), content, { mode: 0o600 });
+		};
+		if (this.storage) await this.storage.use(write);
+		else await write();
 	}
 
 	async readConfigDump(): Promise<{ status: number; body: string }> {

@@ -81,13 +81,7 @@ export const testConfig = (
 		return null;
 	};
 	const source: IPaasConfig = {
-		createLogRedactor: (additional = []) =>
-			new LogRedactor([
-				value.auth?.github.clientSecret ?? "",
-				value.auth?.session.signingKey ?? "",
-				value.tls?.dns.credentials.apiToken ?? "",
-				...additional,
-			]),
+		createLogRedactor: () => new LogRedactor(),
 		getClusterId: () => value.metadata.clusterId,
 		getIngressConfig: () => value.ingress,
 		getAuthConfig: () => value.auth,

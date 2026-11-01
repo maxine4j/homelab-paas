@@ -62,9 +62,6 @@ export class ContainerEnvironment {
 		await this.git.commit(this.descriptions);
 		await mkdir(`${this.directory}/etc`, { recursive: true, mode: 0o700 });
 		await writeFile(`${this.directory}/etc/config.yaml`, stringifyYaml(this.config), { mode: 0o600 });
-		await writeFile(`${this.directory}/etc/envoy.yaml`, (await readFile(join(fixtures, "envoy.yaml")))!, {
-			mode: 0o600,
-		});
 		const tls = await createTls(
 			`${this.directory}/tls`,
 			this.config.ingress.baseDomain,
@@ -72,7 +69,7 @@ export class ContainerEnvironment {
 		);
 		this.ca = tls.ca;
 		this.caPath = tls.caPath;
-		await seedTls(`${this.directory}/var/_paas`, tls, "/var/homelab-paas/_paas");
+		await seedTls(`${this.directory}/var/_paas/envoy`, tls, "/var/homelab-paas/_paas/envoy");
 		this.composeEnvironment = {
 			...process.env,
 			PAAS_IMAGE: this.paasImage,

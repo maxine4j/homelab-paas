@@ -33,7 +33,7 @@ services:
         networks: [platform]
     envoy:
         image: envoyproxy/envoy:v1.37.0
-        command: [-c, /etc/homelab-paas/envoy.yaml]
+        command: [-c, /var/homelab-paas/_paas/envoy/envoy.yaml]
         environment:
             ENVOY_UID: "0"
         labels:
@@ -43,8 +43,7 @@ services:
             - "127.0.0.1:80:80"
             - "127.0.0.1:443:443"
         volumes:
-            - ./etc:/etc/homelab-paas:ro
-            - ./var:/var/homelab-paas:ro
+            - ./var/_paas/envoy:/var/homelab-paas/_paas/envoy:ro
         depends_on:
             paas:
                 condition: service_healthy

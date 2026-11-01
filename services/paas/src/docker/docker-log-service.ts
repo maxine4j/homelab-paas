@@ -19,7 +19,6 @@ export interface IDockerLogService {
 	follow(
 		serviceId: string,
 		containerId: string,
-		secrets: string[],
 		receive: (content: string) => void,
 		signal: AbortSignal,
 	): Promise<void>;
@@ -34,13 +33,12 @@ export class DockerLogService implements IDockerLogService {
 	async follow(
 		serviceId: string,
 		containerId: string,
-		secrets: string[],
 		receive: (content: string) => void,
 		signal: AbortSignal,
 	): Promise<void> {
 		const container = await this.docker.inspectServiceContainer(serviceId, containerId);
 		if (!container) throw new DockerServiceError("not-found");
-		await this.followContainer(container, secrets, receive, signal);
+		await this.followContainer(container, receive, signal);
 	}
 
 	async followControlPlane(
@@ -48,22 +46,21 @@ export class DockerLogService implements IDockerLogService {
 		signal: AbortSignal,
 	): Promise<void> {
 		const container = await this.docker.inspectControlPlaneContainer();
-		await this.followContainer(container, [], (content) => receive(container.id, content), signal);
+		await this.followContainer(container, (content) => receive(container.id, content), signal);
 	}
 
 	async followIngress(receive: (containerId: string, content: string) => void, signal: AbortSignal): Promise<void> {
 		const container = await this.docker.inspectEnvoyContainer();
-		await this.followContainer(container, [], (content) => receive(container.id, content), signal);
+		await this.followContainer(container, (content) => receive(container.id, content), signal);
 	}
 
 	private async followContainer(
 		container: DockerContainerDetails,
-		secrets: string[],
 		receive: (content: string) => void,
 		signal: AbortSignal,
 	): Promise<void> {
 		if (signal.aborted) return;
-		const redactor = this.config.createLogRedactor([...Object.values(container.env ?? {}), ...secrets]);
+		const redactor = this.config.createLogRedactor();
 		let tail = "";
 		const append = (text: string): void => {
 			if (signal.aborted) return;

@@ -14,6 +14,7 @@ The documents below define the intended platform. Align changes with them; exist
 - Run `nvm use` from the repository root before running any commands to select the Node.js version pinned in `.nvmrc`.
 - Preserve the existing Node.js 24, pnpm, TypeScript, Vitest, and Oxc tooling. Use repository scripts and configuration.
 - Ask the owner before adding a third-party dependency.
+- This is a greenfield project. Do not add migrations, legacy fallbacks, or backward-compatibility machinery unless the owner explicitly requests them.
 - Keep requirements in one authoritative document and cross-link related topics. Update the relevant document when changing a contract.
 - Follow the [backend logging contract](docs/development.md#backend-logging); keep secrets out of status responses. Preserve persistent data and generated credentials when removing resources.
 - Backend filesystem operations use `src/util/file.ts`; YAML parsing and serialization use `src/util/yaml.ts`; timers use injected `ISleep` from `src/util/sleep.ts`. Only the filesystem utility's boundary tests use raw filesystem APIs to independently verify persisted bytes and permissions. See [development](docs/development.md#backend-infrastructure-boundaries) for adapter exceptions.

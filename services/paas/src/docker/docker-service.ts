@@ -150,7 +150,7 @@ export class DockerService implements IDockerService, IDockerInfrastructure, ICl
 	async readServiceContainerLogs(serviceId: string, containerId: string): Promise<string> {
 		const container = await this.inspectServiceContainer(serviceId, containerId);
 		if (!container) throw new DockerServiceError("not-found");
-		return this.config.redact(await this.client.readContainerLogs(containerId), Object.values(container.env ?? {}));
+		return this.config.createLogRedactor().push(await this.client.readContainerLogs(containerId), true);
 	}
 
 	async prepareServiceNetwork(serviceId: string): Promise<void> {

@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 
 import type { GitDirectoryFile } from "../git/types.ts";
+import type { IStorageAccess } from "../store/internal-storage.ts";
 import type * as files from "../util/file.ts";
 import type { StaticIdentity, StaticSnapshot } from "./types.ts";
 
@@ -28,6 +29,7 @@ export class StaticStore implements IStaticStore {
 	constructor(
 		private readonly root: string,
 		private readonly fs: typeof files,
+		private readonly storage?: IStorageAccess,
 	) {}
 	publish(identity: StaticIdentity, bundle: GitDirectoryFile[]): Promise<void> {
 		return this.serialize(identity.serviceId, identity.resourceId, async () => {
@@ -162,7 +164,7 @@ export class StaticStore implements IStaticStore {
 		const key = `${serviceId}/${resourceId}`;
 		const result = (this.pending.get(key) ?? Promise.resolve())
 			.catch(() => {})
-			.then(run)
+			.then(() => (this.storage ? this.storage.use(run) : run()))
 			.catch((cause: unknown) => {
 				throw new StaticStoreError({ cause });
 			});

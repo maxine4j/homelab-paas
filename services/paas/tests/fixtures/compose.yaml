@@ -25,7 +25,7 @@ services:
             retries: 30
     envoy:
         image: envoyproxy/envoy:v1.37.0
-        command: [-c, /etc/homelab-paas/envoy.yaml]
+        command: [-c, /var/homelab-paas/_paas/envoy/envoy.yaml]
         environment:
             ENVOY_UID: "0"
         labels:
@@ -35,8 +35,7 @@ services:
             - "127.0.0.1:${TEST_HTTP_PORT}:${TEST_HTTP_PORT}"
             - "127.0.0.1:${TEST_HTTPS_PORT}:${TEST_HTTPS_PORT}"
         volumes:
-            - ${TEST_DIRECTORY}/etc:/etc/homelab-paas:ro
-            - ${TEST_DIRECTORY}/var:/var/homelab-paas:ro
+            - ${TEST_DIRECTORY}/var/_paas/envoy:/var/homelab-paas/_paas/envoy:ro
         depends_on:
             paas:
                 condition: service_healthy

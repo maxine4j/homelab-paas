@@ -307,7 +307,7 @@ export class EnvoyService implements IEnvoyService {
 										{
 											name: "ingress",
 											sds_config: {
-												path_config_source: { path: "/var/homelab-paas/_paas/sds.yaml" },
+												path_config_source: { path: "/var/homelab-paas/_paas/envoy/sds.yaml" },
 											},
 										},
 									],

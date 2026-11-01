@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 
+import type { IStorageAccess } from "../store/internal-storage.ts";
 import { createLogger } from "../util/logger.ts";
+import { gitCacheKey } from "./git-cache-key.ts";
 import type { IGitClient } from "./git-client.ts";
 import { GitServiceError } from "./types.ts";
 import type { GitCommit, GitCredentials, GitDirectoryFile, GitFile, GitFileSource } from "./types.ts";
@@ -49,6 +50,7 @@ export class GitService implements IGitCacheService, IGitDirectoryService {
 	constructor(
 		private readonly client: IGitClient,
 		private readonly directory: string,
+		private readonly storage?: IStorageAccess,
 	) {}
 
 	readDirectory(
@@ -218,17 +220,7 @@ export class GitService implements IGitCacheService, IGitDirectoryService {
 	}
 
 	private key(serviceId: string, source: GitFileSource): string {
-		return `${serviceId}/${createHash("sha256")
-			.update(
-				JSON.stringify([
-					source.remote,
-					source.branch ?? (source.remote === "local" ? "HEAD" : DEFAULT_GIT_BRANCH),
-					source.descriptorPath,
-					source.accessToken,
-					source.privateKeyPath,
-				]),
-			)
-			.digest("hex")}`;
+		return gitCacheKey(serviceId, source);
 	}
 
 	private activate(serviceId: string, key: string): void {
@@ -249,7 +241,9 @@ export class GitService implements IGitCacheService, IGitDirectoryService {
 	}
 
 	private serialize<T>(serviceId: string, run: () => Promise<T>): Promise<T> {
-		const result = (this.pending.get(serviceId) ?? Promise.resolve()).catch(() => {}).then(run);
+		const result = (this.pending.get(serviceId) ?? Promise.resolve())
+			.catch(() => {})
+			.then(() => (this.storage ? this.storage.use(run) : run()));
 		this.pending.set(serviceId, result);
 		void result
 			.finally(() => {

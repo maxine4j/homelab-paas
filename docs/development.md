@@ -157,12 +157,12 @@ Copy `local/.env.example` to `local/.env` and supply `GITHUB_CLIENT_ID`, `GITHUB
 
 Local ingress uses `local.maxine4j.com` with HTTPS on port 443. Register `https://auth.local.maxine4j.com/auth/callback` in the GitHub OAuth application. Point the base domain and wildcard hostnames at `127.0.0.1` using DNS or local resolver configuration. The DigitalOcean token must manage the domain's DNS zone for certificate issuance.
 
-- `etc/` maps to `/etc/homelab-paas` and holds `config.yaml` and the Envoy bootstrap `envoy.yaml`. The control plane mounts this directory writable for [management edits](configuration.md#management-edits); Envoy retains read-only access. Recreate existing bootstrap containers to apply the changed mount permissions.
+- `etc/` maps to `/etc/homelab-paas` and holds `config.yaml`, service secrets and optional deploy keys. The control plane mounts this directory writable for [management edits](configuration.md#management-edits).
 - `var/` maps to `/var/homelab-paas` and is ignored by Git. `docker compose down` retains it.
 - The Docker socket is mounted for Engine integration.
 - The repository is mounted read-only at `/mnt/repo`. The magic `remote: local` reads `/mnt/repo/services/test-service/test-service.sd.yaml` through Git at the checkout's `HEAD`. Commit descriptor edits before reconciliation can see them.
 - Bootstrap containers carry cluster/role labels for network attachment. PaaS attaches itself and Envoy to each dedicated service network.
-- Envoy's admin listener uses container port 9901 for configuration acceptance checks. It has no host port publication. Restart Envoy after changing its bootstrap configuration.
+- Envoy mounts only `var/_paas/envoy/`, read-only. The control plane generates its bootstrap there before reporting healthy. Envoy's admin listener uses container port 9901 for configuration acceptance checks and has no host port publication.
 - Envoy retains UID 0 via `ENVOY_UID` to read the control plane's root-owned, restricted state and certificate files.
 
 The control plane reads platform configuration at startup and [reloads it every minute](configuration.md#platform-configuration-reload), serves `/health` internally on port 8080, and runs the [deployment MVP](configuration.md#implemented-deployment-mvp). Desired-input changes and persisted retry deadlines use the serialized targeted scheduler. Health polling and management state refresh follow the [resource-health cadence](reconciliation-and-deployments.md#resource-health). Remote Git refresh uses the single `git.pollIntervalSeconds` setting, defaulting to five minutes; local Git sources discover committed refs on that same interval. The fixture descriptor already matches the MVP schema and explicitly uses `/health`. Local configuration enables GitHub auth and DigitalOcean TLS; advanced resources are omitted.
@@ -176,7 +176,7 @@ curl --fail https://test-service.local.maxine4j.com/health
 curl --fail --resolve test-service.local.maxine4j.com:443:127.0.0.1 https://test-service.local.maxine4j.com/health
 ```
 
-Both checks return `{"status":"up"}` once the workload is ready. Envoy reads generated `cds.yaml` and `lds.yaml` from `local/var/_paas/`; deployment checkpoints and routes are YAML files beside them. No database is used. Stop or remove the managed workload to exercise targeted drift recovery. Restarting the control plane preserves the workload and routing state.
+Both checks return `{"status":"up"}` once the workload is ready. Envoy reads generated `cds.yaml` and `lds.yaml` from `local/var/_paas/envoy/`; deployment checkpoints and routes remain under `local/var/_paas/`. See the [filesystem layout](architecture.md#configuration-and-filesystem-layout) and [disk cleanup](reconciliation-and-deployments.md#docker-disk-cleanup). No database is used. Stop or remove the managed workload to exercise targeted drift recovery. Restarting the control plane preserves the workload and routing state.
 
 For an end-to-end deployment check, also request `/ping` on `test-service.local.maxine4j.com` and expect `{"message":"pong"}`. Private ingress requires a browser login first. Record the workload ID and image with `docker inspect`, remove only that test-service container, and wait for reconciliation. Verify a new container ID uses the published test-service image, has no published ports, and serves both `/health` and `/ping` through Envoy. Check `local/var/_paas/test-service.state.yaml` reports `phase: ready` and the expected committed revision. Restart the control plane and repeat the requests; the replacement workload ID should remain unchanged.
 

@@ -129,7 +129,7 @@ fi
         self.assertIn("ghcr.io/maxine4j/homelab-paas:" + SHA, (self.etc / "docker-compose.yaml").read_text())
         for path in (self.etc, self.etc / "env", self.var):
             self.assertEqual(path.stat().st_mode & 0o777, 0o700)
-        for name in ("config.yaml", "envoy.yaml", "docker-compose.yaml"):
+        for name in ("config.yaml", "docker-compose.yaml"):
             self.assertEqual((self.etc / name).stat().st_mode & 0o777, 0o600)
         self.assertIn("services", output)
         self.assertIn("https://auth." + SETTINGS[0] + "/auth/callback", output)

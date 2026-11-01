@@ -2,71 +2,38 @@ import { expect, test } from "vitest";
 
 import { LogRedactor } from "./log-redactor.ts";
 
-test("holds split secrets, multiline values and URL credentials before publishing bounded safe text", () => {
-	const redact = new LogRedactor(["supersecret", "multi\nline"]);
-	expect(redact.push("hello sup")).toBe("hello ");
-	expect(redact.push("ersecret multi\n")).toBe("[redacted] ");
-	expect(redact.push("line https://alice:pass")).toBe("[redacted] ");
-	expect(redact.push("word@host/path\n")).toBe("https://[redacted]@host/path\n");
-	expect(redact.push("https://alice:password", true)).toBe("[redacted]");
+test("preserves ordinary log text, timestamps and status codes", () => {
+	const text = '2026-11-01T07:23:50Z {"status":200,"durationMs":15004,"message":"token secret password 0"}\n';
+	expect(new LogRedactor().push(text, true)).toBe(text);
 });
 
-test("rejects unbounded pending tokens without disclosing their contents", () => {
-	const redact = new LogRedactor([]);
-	expect(() => redact.push(`https://${"x".repeat(262145)}`)).toThrow("Log output exceeds pending limit");
-});
-
-test("redacts URL path secrets and holds overlapping secrets across all chunk splits", () => {
-	for (let split = 0; split <= 26; split++) {
-		const redactor = new LogRedactor(["abcd", "abcdef", "TOKEN"]);
-		const text = "abcdef https://host/TOKEN\n";
-		expect(redactor.push(text.slice(0, split)) + redactor.push(text.slice(split), true)).toBe(
-			"[redacted] https://host/[redacted]\n",
-		);
+test.each([
+	["Authorization: Bearer abc def\n", "Authorization: [redacted]\n"],
+	["proxy-authorization=Basic abc\n", "proxy-authorization=[redacted]\n"],
+	["Cookie: session=abc; other=def\n", "Cookie: [redacted]\n"],
+	["Set-Cookie: session=abc; HttpOnly\n", "Set-Cookie: [redacted]\n"],
+	[
+		'{"headers":{"Authorization":"Bearer abc","cookie":"sid=abc"},"status":200}\n',
+		'{"headers":{"Authorization":"[redacted]","cookie":"[redacted]"},"status":200}\n',
+	],
+	[
+		'{"password":"a\\\"b","accessToken":"abc","client_secret":"def","apiKey":"ghi"}\n',
+		'{"password":"[redacted]","accessToken":"[redacted]","client_secret":"[redacted]","apiKey":"[redacted]"}\n',
+	],
+	["PASSWORD=abc\nmessage: ready\n", "PASSWORD=[redacted]\nmessage: ready\n"],
+])("masks named credential fields across every chunk split: %s", (text, expected) => {
+	for (let split = 0; split <= text.length; split++) {
+		const redactor = new LogRedactor();
+		expect(redactor.push(text.slice(0, split)) + redactor.push(text.slice(split), true)).toBe(expected);
 	}
 });
 
-test("URL credentials remain secret when known secrets overlap schemes or cross credential boundaries", () => {
-	for (const secrets of [["http"], ["password@host/tail"]]) {
-		const text = "https://user:password@host/tail\n";
-		for (let split = 0; split < text.length; split++) {
-			const redactor = new LogRedactor(secrets);
-			const output = redactor.push(text.slice(0, split)) + redactor.push(text.slice(split), true);
-			expect(output).not.toContain("user");
-			expect(output).not.toContain("password");
-		}
-	}
+test("retains unfinished lines until complete and masks final unterminated fields", () => {
+	const redactor = new LogRedactor();
+	expect(redactor.push("Authorization: Bearer abc")).toBe("");
+	expect(redactor.push("", true)).toBe("Authorization: [redacted]");
 });
 
-test("multiline secret holdback cannot divide a terminated URL and publish its credential prefix", () => {
-	const redactor = new LogRedactor(["pass@host\nsuffix"]);
-	expect(redactor.push("https://user:pass@host\n")).toBe("");
-	const output = redactor.push("suffix\n");
-	expect(output).not.toContain("user");
-	expect(output).not.toContain("pass");
-	expect(output).not.toContain("suffix");
-});
-
-test("valid URL userinfo is redacted even with an absent or empty password", () => {
-	for (const value of ["https://alice@host/\n", "https://alice:@host/\n", "https://:password@host/\n"]) {
-		const redactor = new LogRedactor([]);
-		expect(redactor.push(value)).toBe("https://[redacted]@host/\n");
-	}
-	const value = "HTTP://alice:password@host/\n";
-	for (let split = 0; split <= value.length; split++) {
-		const redactor = new LogRedactor([]);
-		expect(redactor.push(value.slice(0, split)) + redactor.push(value.slice(split), true)).toBe(
-			"HTTP://[redacted]@host/\n",
-		);
-	}
-});
-
-test("userinfo containing raw at-signs is masked through the authority's last delimiter", () => {
-	const value = "http://alpha:p@ss@host/path?q=public@value\n";
-	for (let split = 0; split <= value.length; split++) {
-		const redactor = new LogRedactor([]);
-		expect(redactor.push(value.slice(0, split)) + redactor.push(value.slice(split), true)).toBe(
-			"http://[redacted]@host/path?q=public@value\n",
-		);
-	}
+test("rejects oversized pending lines without disclosing their contents", () => {
+	expect(() => new LogRedactor().push("x".repeat(262145))).toThrow("Log output exceeds pending limit");
 });

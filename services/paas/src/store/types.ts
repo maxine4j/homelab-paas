@@ -9,3 +9,11 @@ export interface StoreCodec<TValue> {
 	serialize(value: TValue): string;
 	deserialize(content: string): unknown;
 }
+export interface InternalRetention {
+	/** Keep publications created during plan preparation, before they have a route. */
+	before?: number;
+	services: ReadonlySet<string>;
+	git: ReadonlySet<string>;
+	/** Absent entry preserves all static publications when desired inputs are unavailable. */
+	static?: ReadonlyMap<string, ReadonlySet<string>>;
+}

@@ -120,7 +120,6 @@ main() (
     for name in config.yaml docker-compose.yaml; do
         install -m 0600 "$checkout/$name" "$config_dir/$name"
     done
-    install -m 0600 "$templates/envoy.yaml" "$config_dir/envoy.yaml"
     printf '✅ Configuration installed. No containers have been started.\n'
     printf '✏️  Edit /etc/homelab-paas/config.yaml (for example: sudo nano /etc/homelab-paas/config.yaml).\n'
     printf '   Add only your service configurations under services; platform settings are ready.\n'

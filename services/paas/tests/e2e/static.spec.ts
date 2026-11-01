@@ -33,7 +33,7 @@ test("static bundles retain ingress policy, clean replacements and shared primar
 	expect((await env.request(env.url("assets.public", "/api/ui/cluster"))).status).toBe(404);
 	expect(await (await env.request(env.url("app.public", "/version"))).json()).toEqual({ version: "v1" });
 	expect(await env.workloadIds("public")).toEqual(ids);
-	await writeFile(`${env.directory}/var/__paas/static/public/assets/stale`, "stale");
+	await writeFile(`${env.directory}/var/_paas/static/public/assets/stale`, "stale");
 	await rm(`${env.git.work}/bundle/old.js`);
 	descriptor.resources["site"] = { type: "static", path: "bundle" };
 	descriptor.resources["assets"] = { type: "static", path: "/bundle", ingress: { public: true }, primary: true };

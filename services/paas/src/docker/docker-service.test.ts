@@ -631,17 +631,17 @@ test("log reads verify service ownership before accessing container output", asy
 	expect(calls).toEqual(["c"]);
 });
 test.each(["old-secret", "rotated-secret"])(
-	"log output redacts actual container secret values across rotation: %s",
+	"log output masks password fields while preserving ordinary text across rotation: %s",
 	async (secret) => {
 		const f = fixture({
 			async inspectContainer() {
 				return { ...details, env: { PASSWORD: secret } };
 			},
 			async readContainerLogs() {
-				return `PASSWORD=${secret}\n`;
+				return `PASSWORD=${secret}\nordinary ${secret}\n`;
 			},
 		});
-		expect(await f.service.readServiceContainerLogs("demo", "c")).toBe("PASSWORD=[redacted]\n");
+		expect(await f.service.readServiceContainerLogs("demo", "c")).toBe(`PASSWORD=[redacted]\nordinary ${secret}\n`);
 	},
 );
 test.each(["healthy", "alias", "missing", "identity", "stopped", "attachment", "ambiguous"])(

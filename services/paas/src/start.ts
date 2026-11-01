@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import acme from "acme-client";
@@ -76,6 +77,8 @@ import { StaticService } from "./static/static-service.ts";
 import { StaticStore } from "./static/static-store.ts";
 import { ResourceStatusService } from "./status/resource-status-service.ts";
 import { FileSystemKeyValueStore } from "./store/file-system-store.ts";
+import { InternalCleanup } from "./store/internal-cleanup.ts";
+import { InternalStorage } from "./store/internal-storage.ts";
 import { PeriodicTaskRunner } from "./task/periodic.ts";
 import type { StartOptions } from "./types.ts";
 import * as staticFiles from "./util/file.ts";
@@ -91,11 +94,15 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const changes = new ChangeBus();
 	const config = new PaasConfig(new FileConfigStore(readFile, atomicWriteFile), process.env, changes);
 	await config.load();
+	const storage = new InternalStorage("/var/homelab-paas", staticFiles);
+	await storage.initialize();
 	let serviceSnapshots: IPaasUiService["listServices"] = async () => [];
 	const metrics = new MetricsService(config.getClusterId(), config.getBuildRevision(), () => serviceSnapshots());
 	const secureWrite: FileWriter = async (path, content) => {
-		await mkdir(STATE_DIRECTORY, { recursive: true, mode: 0o700 });
-		await atomicWriteFile(path, content, { mode: 0o600 });
+		await storage.use(async () => {
+			await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+			await atomicWriteFile(path, content, { mode: 0o600 });
+		});
 	};
 	const remove = async (path: string): Promise<void> => {
 		await rm(path, { force: true });
@@ -117,12 +124,15 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const dockerLogs = new DockerLogService(docker, new DockerLogClient(dockerTransport), config);
 	const envoy = new EnvoyService(
 		new EnvoyClient(
-			new NodeEnvoyTransport({
-				directory: STATE_DIRECTORY,
-				adminUrl: "http://envoy:9901",
-				timeoutMs: 2000,
-				maxResponseBytes: 16 * 1024 * 1024,
-			}),
+			new NodeEnvoyTransport(
+				{
+					directory: `${STATE_DIRECTORY}/envoy`,
+					adminUrl: "http://envoy:9901",
+					timeoutMs: 2000,
+					maxResponseBytes: 16 * 1024 * 1024,
+				},
+				storage,
+			),
 			sleep,
 			{ attempts: 30, intervalMs: 1000 },
 		),
@@ -130,8 +140,9 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	);
 	await envoy.bootstrap();
 	const networking = new NetworkingService(endpoints, envoy);
-	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/git`);
-	const staticStore = new StaticStore("/var/homelab-paas/__paas/static", staticFiles);
+	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/git`, storage);
+	const staticStore = new StaticStore(`${STATE_DIRECTORY}/static`, staticFiles, storage);
+	const internalCleanup = new InternalCleanup(config, git, decodeDescriptorYaml, networking, storage, Date.now);
 	const observations = new RuntimeObservations(docker, Date.now);
 	const health = new ResourceHealthService(
 		config,
@@ -209,7 +220,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		.use(createRequestLogger())
 		.use(createHealthCheckRouter().routes());
 	app.on("error", (err) => logger.error({ err }, "HTTP request failed"));
-	const certificates = new FileCertificateStore(STATE_DIRECTORY, readFile, secureWrite);
+	const certificates = new FileCertificateStore(`${STATE_DIRECTORY}/envoy`, readFile, secureWrite);
 	let renewal: TlsCertRenewalTask | undefined;
 	let sessions: AuthService | undefined;
 	if (config.getAuthConfig() && config.getTlsConfig()) {
@@ -396,17 +407,28 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		new PeriodicTaskRunner({
 			lifecycle,
 			periodMs: 6 * 60 * 60 * 1000,
-			taskName: "docker-prune",
+			taskName: "disk-cleanup",
 			generateTaskId: nanoid,
 			task: {
 				run: async () => {
-					const reclaimedBytes = await dockerClient.pruneUnused();
-					logger.info({ reclaimedBytes }, "Docker cleanup completed");
+					const results = await Promise.allSettled([
+						dockerClient
+							.pruneUnused()
+							.then((reclaimedBytes) => logger.info({ reclaimedBytes }, "Docker cleanup completed")),
+						internalCleanup.run().then(() => logger.info("Internal platform cleanup completed")),
+					]);
+					const failures = results
+						.filter((result) => result.status === "rejected")
+						.map((result) => result.reason);
+					if (failures.length) throw new AggregateError(failures, "Disk cleanup failed");
 				},
 			},
 			pause,
 			report: (err) =>
-				logger.error({ err }, "Docker cleanup failed; check Docker access; will retry in six hours"),
+				logger.error(
+					{ err },
+					"Disk cleanup failed; check Docker and internal storage access; will retry in six hours",
+				),
 		}),
 		new PeriodicTaskRunner({
 			lifecycle,

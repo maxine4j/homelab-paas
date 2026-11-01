@@ -8,3 +8,7 @@ export interface Endpoint {
 	/** Resource-scoped routes may also receive the service hostname. Legacy routes omit this. */
 	primary?: boolean;
 }
+export interface RoutingSnapshot {
+	routes: Record<string, Endpoint>;
+	generation: number;
+}

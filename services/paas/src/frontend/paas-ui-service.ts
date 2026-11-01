@@ -114,12 +114,10 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 			const containers = await this.docker.listServiceContainers(serviceId, resourceId);
 			if (!containers.some((container) => container.id === containerId && container.resourceId === resourceId))
 				throw new PaasUiError("not-found");
-			const file = await this.descriptor(serviceId);
-			if (!file || !this.logs) throw new PaasUiError("unavailable");
+			if (!this.logs) throw new PaasUiError("unavailable");
 			await this.logs.follow(
 				serviceId,
 				containerId,
-				this.secrets(file.descriptor),
 				(content) => receive({ containerId, content, tail: 200 }),
 				signal,
 			);
@@ -219,12 +217,7 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 			const containers = await this.docker.listServiceContainers(serviceId, resourceId);
 			if (!containers.some((container) => container.id === containerId && container.resourceId === resourceId))
 				throw new PaasUiError("not-found");
-			const file = await this.descriptor(serviceId);
-			if (!file) throw new PaasUiError("unavailable");
-			const content = this.config.redact(
-				await this.docker.readServiceContainerLogs(serviceId, containerId),
-				this.secrets(file.descriptor),
-			);
+			const content = await this.docker.readServiceContainerLogs(serviceId, containerId);
 			return { containerId, content, tail: 200 };
 		} catch (error) {
 			if (error instanceof PaasUiError) throw error;

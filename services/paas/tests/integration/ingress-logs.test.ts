@@ -116,9 +116,12 @@ test("ingress subscription discovers owned Envoy and streams bounded redacted Do
 		socket.send(JSON.stringify({ type: "subscribe", id: "ingress", target: { kind: "ingress-logs" } }));
 		await expect.poll(() => stream !== undefined).toBe(true);
 		stream!.enqueue(frame("envoy-can"));
-		stream!.enqueue(frame("ary\nready\n"));
+		stream!.enqueue(frame("ary\nAuthorization: Bearer cred"));
+		stream!.enqueue(frame("ential\nready\n"));
 		await expect.poll(() => snapshots.join("")).toContain("ready");
-		expect(snapshots.join("")).not.toContain("envoy-can");
+		expect(snapshots.join("")).toContain("envoy-canary");
+		expect(snapshots.join("")).not.toContain("credential");
+		expect(snapshots.join("")).toContain("Authorization: [redacted]");
 		stream!.enqueue(frame(Array.from({ length: 210 }, (_, index) => `line-${index}\n`).join("")));
 		await expect.poll(() => snapshots.at(-1)).toContain("line-209");
 		const latest = JSON.parse(snapshots.at(-1)!);
