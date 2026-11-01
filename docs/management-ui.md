@@ -1,5 +1,7 @@
 # Management UI
 
+The browser favicon is the 🍝 emoji.
+
 The React management UI is served by the control plane at the cluster's base hostname. It supports platform configuration edits, service secret edits and read-only service/resource inspection. With auth/TLS configured, open `https://{baseDomain}` (including a nonstandard HTTPS port). Envoy requires the existing GitHub allowlisted session before serving the UI or its API; missing or invalid sessions redirect to login, including API requests. OAuth accepts this hostname as a return target. Platform cookies are retained only for the management upstream; workload cookie stripping is unchanged. The authentication hostname still exposes only login and callback routes. Management ingress blocks API paths outside `/api/ui/`.
 
 Without auth/TLS, the base hostname serves HTTP without authentication for trusted local development only. No management hostname, credentials, roles, dependencies, or configuration fields are added. Bootstrap port publication remains operator-owned.
