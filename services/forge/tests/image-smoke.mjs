@@ -58,6 +58,42 @@ try {
 	assert.equal(created.status, 201);
 	const project = JSON.parse(created.body);
 	assert.equal(project.status, "ready");
+	const workspaceResponse = request(`/api/projects/${project.id}/workspaces`, {
+		method: "POST",
+		headers,
+		body: '{"name":"Terminal smoke"}',
+	});
+	assert.equal(workspaceResponse.status, 201);
+	const workspace = JSON.parse(workspaceResponse.body);
+	const terminalResponse = request(`/api/workspaces/${workspace.id}/terminal`, {
+		method: "POST",
+		headers,
+		body: '{"cols":80,"rows":24}',
+	});
+	assert.equal(terminalResponse.status, 201);
+	const terminal = JSON.parse(terminalResponse.body);
+	assert.equal(terminal.status, "running");
+	// Real production glibc addon, nonroot PTY and authenticated upgrade. Leave the shell
+	// alive after detaching to exercise application shutdown below.
+	assert.equal(
+		execute(`
+		import WebSocket from 'ws';
+		const client = new WebSocket('ws://127.0.0.1:8080/api/terminals/${terminal.id}/socket?after=0', {headers:${JSON.stringify(headers)}});
+		let output = '';
+		await new Promise((resolve,reject) => {
+			const timeout = setTimeout(()=>reject(Error('terminal smoke timed out')),5000);
+			client.on('error',reject);
+			client.on('message',bytes=>{
+				const frame=JSON.parse(bytes.toString());
+				if(frame.type==='status' && frame.session.status==='running') client.send(JSON.stringify({type:'input',data:"printf 'PTY:%s' ok\\r"}));
+				if(frame.type==='output') output+=frame.data;
+				if(output.includes('PTY:ok')) { clearTimeout(timeout); client.terminate(); resolve(); }
+			});
+		});
+		console.log('pty-ok');
+	`),
+		"pty-ok",
+	);
 	// Real shipped CLI/protocol, no live login or credentials.
 	const accounts = JSON.parse(request("/api/accounts", { headers }).body);
 	assert.equal(accounts.codex.connection, "available");
@@ -84,6 +120,7 @@ try {
 	assert.doesNotMatch(docker("logs", name), /exited unsuccessfully|Forge shutting down|Codex disconnected/);
 	docker("start", name);
 	await waitFor(() => assert.equal(request("/health").status, 200));
+	assert.equal(JSON.parse(request(`/api/terminals/${terminal.id}`, { headers }).body).status, "closed");
 	assert.equal(JSON.parse(request("/api/projects", { headers }).body)[0].id, project.id);
 	assert.equal(
 		execute(

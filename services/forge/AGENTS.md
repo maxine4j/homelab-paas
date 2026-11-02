@@ -351,6 +351,77 @@ release-tag or main `latest` tags under the repository's image convention.
 Building does not deploy the descriptor; add it to platform configuration only
 when ready, retaining the [private ingress trust boundary](../../docs/networking-and-auth.md#authenticated-workload-identity-headers).
 
+#### Slice 2 terminal contract
+
+The supported terminal runtime is the Node 24 Debian Linux container. Native
+macOS/Windows terminal requests return `terminal-unavailable`; health, accounts,
+and workspace APIs remain available. `node-pty` 1.1.0 and `ws` 8.22.1 are pinned;
+native build prerequisites live only in image build stages and the integration
+runner. Native-module loading is deferred until explicit terminal creation.
+
+Browser contracts are exported from `@homelab-paas/forge-contracts/terminal`.
+Owner services verify workspace ownership and readiness before starting `/bin/sh -i`
+at its verified path. Shell environment contains only PATH, workspace HOME,
+LANG, TERM, `HISTFILE=/dev/null`, and `ENV=/dev/null`; ambient credentials and shell
+startup configuration are excluded. The shell shares the application's mounted
+storage and UID. Workspace API branch protection is not hostile shell containment;
+arbitrary shell commands can change shared files and Git metadata. No pause or
+foreground-job suspension guarantee is offered.
+
+| Route                                  | Contract                                                                                     |
+| -------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `POST /api/workspaces/:id/terminal`    | Explicit create `{cols,rows}`; returns session, HTTP 201. Never implicit on attach.          |
+| `GET /api/workspaces/:id/terminal`     | Latest retained `{session?}`; absence is `{}`.                                               |
+| `GET /api/terminals/:id`               | Inspect one session.                                                                         |
+| `DELETE /api/terminals/:id`            | Close live shell, await cleanup, retain metadata/files.                                      |
+| `WS /api/terminals/:id/socket?after=N` | Attach an existing session; exact configured HTTPS Origin and owner required before upgrade. |
+
+Sessions expose UUIDs, workspace ID, dimensions, timestamps, normalized
+`starting/running/exited/closed/lost` status, and optional exit code; never paths,
+PIDs, raw diagnostics or environment. SQLite intent precedes spawn. Startup marks
+interrupted active records `lost`; it never silently replaces a shell. Disconnect
+only detaches the browser. A fresh shell always requires explicit create.
+
+WebSockets accept JSON `{type:"input",data}` or `{type:"resize",cols,rows}`.
+Server frames are `{type:"output",sequence,data}`, `{type:"gap",through}`, and
+`{type:"status",session}`. Sequence starts at 1 per session; reconnect supplies
+the last rendered sequence as `after` (default 0, nonnegative safe integer).
+Replay precedes status and subsequent live output. A gap means bytes through
+that cursor are unavailable; reconnect to a retained ended/lost session sends a
+gap at the supplied cursor then status. Clients must show the interruption and
+must not infer a new shell from an empty replay. Transcripts are bounded transient
+memory, never authoritative durable history. Terminal bytes are never logged.
+
+Bounds: one live shell per workspace, eight live shells overall, 1000 retained
+session records, four browser attachments per live shell, 32 sockets overall,
+16 pending upgrades (five-second deadline), four queued frames per socket, and
+64 service operations. Dimensions are 2–500 columns and 1–200 rows. Client wire
+frames and input chunks are at most 16 KiB; accepted input is at most 1 MiB per
+session. Replay holds at most 256 KiB/1024 frames; output chunks split at Unicode
+code points. A slow socket is disconnected above 256 KiB queued output. A shell
+closes after eight hours or 16 MiB output. Socket ping/pong detects abandoned
+connections. Limits fail explicitly with fixed terminal error codes; a new shell
+requires explicit owner action.
+
+Shutdown terminates sockets and owned PTY sessions before SQLite closure. Linux
+`/proc` inventory uses the canonical filesystem boundary, captures session leader
+start time and device, and selects groups by that SID, including ordinary jobs
+whose controlling terminal clears on leader exit. It rejects a reused leader.
+Inventory is capped at 4096 `/proc` entries and one second per cancellable scan.
+Cleanup sends TERM, waits at most a
+second, then KILL and awaits PTY exit with a one-second bound. Natural leader exit
+also cleans remaining session groups. Tini reaps orphans. Processes deliberately
+escaping their session (for example `setsid`) are outside this application cleanup
+boundary. This is not a sandbox; containers retain the existing resource limits.
+
+Run host unit tests/checks normally. On macOS the real Linux PTY integration cases
+are explicitly skipped; `pnpm test:containers integration` runs them in the
+supported Linux runner (whose Python/make/C++ tools build node-pty). Also run
+`pnpm image:forge` and `pnpm test:forge:image` to verify nonroot glibc packaging.
+The [node-pty build requirements](https://github.com/microsoft/node-pty#dependencies)
+and [ws upgrade authentication](https://github.com/websockets/ws#client-authentication)
+define the external adapter setup. No live credentials are needed for these tests.
+
 #### Slice 2 manual workspace foundation
 
 Manual workspaces are project resources without tickets in milestone 2. Ticket
