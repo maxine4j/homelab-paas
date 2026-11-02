@@ -125,9 +125,9 @@ test.each(["metrics", "other-service"])("resolves %s volumes before ownership an
 		},
 	});
 	const volumes = [
-		{ hostPath: "grafana", mountPath: "/data", ownership: { uid: 472, gid: 0 } },
-		{ hostPath: "./nested/config", mountPath: "/config", readOnly: true },
-		{ hostPath: "unowned", mountPath: "/unowned", ownership: false as const },
+		{ name: "grafana", mountPath: "/data", ownership: { uid: 472, gid: 0 } },
+		{ mountPath: "/home/agent/.config/gh", readOnly: true },
+		{ name: "unowned", mountPath: "/unowned", ownership: false as const },
 		{ hostPath: "/var/run/docker.sock", mountPath: "/var/run/docker.sock", readOnly: true },
 	];
 	await f.service.createResourceContainer({
@@ -140,7 +140,7 @@ test.each(["metrics", "other-service"])("resolves %s volumes before ownership an
 	});
 	expect(f.calls.find(({ operation }) => operation === "prepareVolumeOwnership")?.args).toEqual([
 		container.imageId,
-		[`/var/homelab-paas/${serviceId}/grafana`],
+		[`/var/homelab-paas/${serviceId}/volumes/_grafana`],
 		{
 			"homelab-paas.cluster": "local",
 			"homelab-paas.owner-service": serviceId,
@@ -151,19 +151,22 @@ test.each(["metrics", "other-service"])("resolves %s volumes before ownership an
 	expect(f.calls.find(({ operation }) => operation === "createContainer")?.args).toEqual([
 		expect.objectContaining({
 			volumes: [
-				{ ...volumes.at(0), hostPath: `/var/homelab-paas/${serviceId}/grafana` },
-				{ ...volumes.at(1), hostPath: `/var/homelab-paas/${serviceId}/nested/config` },
-				{ ...volumes.at(2), hostPath: `/var/homelab-paas/${serviceId}/unowned` },
+				{
+					mountPath: "/data",
+					ownership: { uid: 472, gid: 0 },
+					hostPath: `/var/homelab-paas/${serviceId}/volumes/_grafana`,
+				},
+				{ ...volumes.at(1), hostPath: `/var/homelab-paas/${serviceId}/volumes/app/home/agent/.config/gh` },
+				{
+					mountPath: "/unowned",
+					ownership: false,
+					hostPath: `/var/homelab-paas/${serviceId}/volumes/_unowned`,
+				},
 				volumes.at(3),
 			],
 		}),
 	]);
-	expect(volumes.map(({ hostPath }) => hostPath)).toEqual([
-		"grafana",
-		"./nested/config",
-		"unowned",
-		"/var/run/docker.sock",
-	]);
+	expect(volumes.map(({ hostPath }) => hostPath)).toEqual([undefined, undefined, undefined, "/var/run/docker.sock"]);
 });
 
 test("preserves descriptor mounts and resource limits for the Docker adapter", async () => {

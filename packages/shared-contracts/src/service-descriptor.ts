@@ -17,24 +17,33 @@ const absolutePath = z
 	.string()
 	.startsWith("/")
 	.refine((path) => !path.includes("\0") && !path.includes(":"));
-const volume = z.strictObject({
-	hostPath: z
-		.string()
-		.min(1)
-		.refine((path) => !path.includes("\0") && !path.includes(":"))
-		.refine((path) => path.startsWith("/") || !path.split("/").includes("..")),
-	mountPath: absolutePath.refine((path) => path !== "/"),
-	readOnly: z.boolean().optional(),
-	ownership: z
-		.union([
-			z.literal(false),
-			z.strictObject({
-				uid: z.number().int().min(0).max(4294967294),
-				gid: z.number().int().min(0).max(4294967294),
-			}),
-		])
-		.optional(),
-});
+const normalizedPath = absolutePath.refine(
+	(path) =>
+		path === "/"
+		|| path
+			.slice(1)
+			.split("/")
+			.every((part) => part !== "" && part !== "." && part !== ".."),
+);
+const volume = z
+	.strictObject({
+		hostPath: normalizedPath.optional(),
+		name: id.optional(),
+		mountPath: normalizedPath.refine((path) => path !== "/"),
+		readOnly: z.boolean().optional(),
+		ownership: z
+			.union([
+				z.literal(false),
+				z.strictObject({
+					uid: z.number().int().min(0).max(4294967294),
+					gid: z.number().int().min(0).max(4294967294),
+				}),
+			])
+			.optional(),
+	})
+	.refine((volume) => volume.hostPath === undefined || volume.name === undefined, {
+		message: "Volume hostPath and name are mutually exclusive",
+	});
 const devicePath = absolutePath.refine(
 	(path) =>
 		path !== "/"
@@ -115,6 +124,18 @@ const workload = {
 	volumes: z
 		.array(volume)
 		.refine((volumes) => new Set(volumes.map(({ mountPath }) => mountPath)).size === volumes.length)
+		.refine(
+			(volumes) => {
+				const generated = volumes.filter(({ hostPath, name }) => hostPath === undefined && name === undefined);
+				return !generated.some((volume, index) =>
+					generated.some(
+						(other, otherIndex) =>
+							index !== otherIndex && volume.mountPath.startsWith(`${other.mountPath}/`),
+					),
+				);
+			},
+			{ message: "Unnamed volume storage paths must not overlap" },
+		)
 		.optional(),
 	egress: z.array(id).optional(),
 };

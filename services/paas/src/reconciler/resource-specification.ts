@@ -76,8 +76,9 @@ export class ResourceSpecification implements IResourceSpecification {
 			command: resource.command ?? null,
 			env,
 			volumes:
-				resource.volumes?.map(({ hostPath, mountPath, readOnly, ownership }) => ({
+				resource.volumes?.map(({ hostPath, name, mountPath, readOnly, ownership }) => ({
 					hostPath,
+					...(name === undefined ? {} : { name }),
 					mountPath,
 					readOnly: readOnly ?? false,
 					selinux: "z",

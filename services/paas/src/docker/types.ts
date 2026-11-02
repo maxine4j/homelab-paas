@@ -1,3 +1,8 @@
+import type { ResourceVolume } from "@homelab-paas/shared-contracts";
+
+/** Docker receives resolved absolute sources, never descriptor storage selectors. */
+export type DockerVolume = Omit<ResourceVolume, "hostPath" | "name"> & { hostPath: string };
+
 export type Labels = Record<string, string>;
 
 export interface ClusterWorkload {

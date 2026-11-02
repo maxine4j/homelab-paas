@@ -6,6 +6,13 @@ import { ResourceSpecification } from "./resource-specification.ts";
 const specification = new ResourceSpecification();
 const web: DeploymentWebResource = { type: "web", image: "app:1", ingress: { public: true, port: 8080 } };
 const worker: DeploymentWorkerResource = { type: "worker", image: "app:1", healthcheckPort: 9090 };
+
+test("changing a named volume changes the workload specification", () => {
+	const original = { ...worker, volumes: [{ name: "data", mountPath: "/data" }] };
+	expect(specification.get("app", { ...original, volumes: [{ name: "other", mountPath: "/data" }] })).not.toBe(
+		specification.get("app", original),
+	);
+});
 const settings = {
 	selinuxLabeling: false,
 	command: ["app", "--serve"],

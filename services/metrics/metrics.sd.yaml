@@ -12,8 +12,7 @@ resources:
             public: false
             port: 3000
         volumes:
-            - hostPath: grafana
-              mountPath: /var/lib/grafana
+            - mountPath: /var/lib/grafana
               ownership:
                   uid: 472
                   gid: 0
@@ -24,8 +23,7 @@ resources:
         healthcheckPort: 8428
         healthcheckUrl: /health
         volumes:
-            - hostPath: victoriametrics
-              mountPath: /storage
+            - mountPath: /storage
     victorialogs:
         type: worker
         image: victoriametrics/victoria-logs:v1.53.0
@@ -36,8 +34,7 @@ resources:
             - -storageDataPath=/storage
             - -retentionPeriod=14d
         volumes:
-            - hostPath: victorialogs
-              mountPath: /storage
+            - mountPath: /storage
     telegraf:
         type: worker
         selinuxLabeling: false
@@ -51,6 +48,5 @@ resources:
             - hostPath: /var/run/docker.sock
               mountPath: /var/run/docker.sock
               readOnly: true
-            - hostPath: telegraf
-              mountPath: /var/lib/telegraf
+            - mountPath: /var/lib/telegraf
               ownership: false

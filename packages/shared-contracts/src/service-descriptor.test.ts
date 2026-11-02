@@ -424,8 +424,8 @@ test.each([
 	).toThrow("Invalid service descriptor");
 });
 
-test.each(["/srv/media", "/mnt/other disk/data", "/etc/application.conf", "grafana", "nested/data", "./data"])(
-	"accepts absolute and service-relative Docker host paths: %s",
+test.each(["/srv/media", "/mnt/other disk/data", "/etc/application.conf"])(
+	"accepts absolute Docker host paths: %s",
 	(hostPath) => {
 		expect(
 			parseDescriptor(
@@ -438,6 +438,57 @@ test.each(["/srv/media", "/mnt/other disk/data", "/etc/application.conf", "grafa
 		).toMatchObject({ volumes: [{ hostPath, mountPath: "/data" }] });
 	},
 );
+
+test.each(["web", "worker"])("accepts unnamed and named volumes for %s", (type) => {
+	const app = type === "web" ? descriptor.resources.app : { type, image: "jobs:1", healthcheckPort: 8080 };
+	const volumes = [{ mountPath: "/home/agent/.config/gh" }, { name: "gh-config", mountPath: "/config" }];
+	expect(
+		parseDescriptor({ ...descriptor, resources: { app: { ...app, volumes } } }, "test-service").resources["app"],
+	).toMatchObject({ volumes });
+});
+
+test.each(
+	[
+		...["grafana", "nested/data", "./data", "/srv/../data", "/srv/./data", "/srv//data", "/srv/data/"].map(
+			(hostPath) => [{ hostPath, mountPath: "/data" }],
+		),
+		...["/data/", "/data//cache", "/data/./cache", "/data/../cache"].map((mountPath) => [{ mountPath }]),
+		...["", "gh_config", "../data", "foo/bar", "Upper", "-data"].map((name) => [{ name, mountPath: "/data" }]),
+		[{ hostPath: "/srv/data", name: "data", mountPath: "/data" }],
+		[{ mountPath: "/data" }, { mountPath: "/data/cache" }],
+		[{ mountPath: "/data/cache" }, { mountPath: "/data" }],
+	].map((volumes) => ({ volumes })),
+)("rejects invalid volume selection or overlapping generated storage: %j", ({ volumes }) => {
+	expect(() =>
+		parseDescriptor(
+			{ ...descriptor, resources: { app: { ...descriptor.resources.app, volumes } } },
+			"test-service",
+		),
+	).toThrow("Invalid service descriptor");
+});
+
+test.each(
+	[
+		[{ mountPath: "/data" }, { mountPath: "/database" }],
+		[
+			{ name: "data", mountPath: "/data" },
+			{ name: "cache", mountPath: "/data/cache" },
+		],
+		[{ mountPath: "/data" }, { name: "cache", mountPath: "/data/cache" }],
+		[{ hostPath: "/srv/data", mountPath: "/data" }, { mountPath: "/data/cache" }],
+		[
+			{ name: "shared", mountPath: "/data" },
+			{ name: "shared", mountPath: "/cache" },
+		],
+	].map((volumes) => ({ volumes })),
+)("accepts independent generated storage and deliberate named sharing: %j", ({ volumes }) => {
+	expect(() =>
+		parseDescriptor(
+			{ ...descriptor, resources: { app: { ...descriptor.resources.app, volumes } } },
+			"test-service",
+		),
+	).not.toThrow();
+});
 
 test.each([
 	{ volumes: [{ hostPath: "", mountPath: "/data" }] },

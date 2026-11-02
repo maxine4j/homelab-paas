@@ -246,15 +246,33 @@ Web and worker resources may declare persistent volumes:
 
 ```yaml
 volumes:
-    - hostPath: /srv/example/uploads
-      mountPath: /app/uploads
+    - mountPath: /app/uploads
       readOnly: false
       ownership:
           uid: 472
           gid: 0
+    - name: shared-cache
+      mountPath: /app/cache
+    - hostPath: /srv/media
+      mountPath: /media
+      readOnly: true
 ```
 
-`hostPath` is a nonempty path on the **Docker host**. Relative paths resolve under `/var/homelab-paas/{serviceId}/`: for service `metrics`, `hostPath: grafana` binds `/var/homelab-paas/metrics/grafana`. Nested relative paths and a leading `./` are supported; relative paths containing a `..` segment are rejected. Arbitrary absolute paths remain supported unchanged, including paths outside `/var/homelab-paas/`. Workloads and descriptor authors are trusted to choose host files or directories. `mountPath` is an absolute path inside the workload container, other than `/`; mount destinations must be unique and neither path may contain NUL bytes or colons (Docker's bind-string separator). `readOnly` defaults to `false`. The old `source` and `target` fields are rejected.
+`mountPath` is an absolute normalized path inside the workload container, other than `/`. Mount destinations must be unique within each resource. Storage selection uses exactly one of these modes:
+
+| Selector                      | Docker host source                                                                         |
+| ----------------------------- | ------------------------------------------------------------------------------------------ |
+| Neither `hostPath` nor `name` | `/var/homelab-paas/{serviceId}/volumes/{resourceId}/{mountPath without its leading slash}` |
+| `name: shared-cache`          | `/var/homelab-paas/{serviceId}/volumes/_shared-cache`                                      |
+| `hostPath: /srv/media`        | `/srv/media`, unchanged                                                                    |
+
+For service `metrics`, resource `grafana`, unnamed `mountPath: /var/lib/grafana` binds `/var/homelab-paas/metrics/volumes/grafana/var/lib/grafana`. The directory hierarchy is preserved without flattening or escaping. Unnamed mounts are isolated by service and resource; changing the mount destination selects different storage. Unnamed mount paths must not overlap within a resource: `/data` and `/data/cache` are rejected together. Use separate names or explicit absolute host paths when mounting nested destinations with independent storage.
+
+`name` identifies a service-scoped storage root independently of the mount destination. It follows resource-ID syntax: lowercase letters, digits and single separating hyphens, starting with a letter, at most 63 characters; underscores are rejected. Resources in the same service using the same name share storage even at different mount destinations. Different names select separate storage. The `_` prefix separates named storage from resource directories. Named mounts retain their storage when their mount destinations change. `hostPath` and `name` are mutually exclusive.
+
+`hostPath` must be an absolute normalized path on the **Docker host**; relative host paths are rejected. Both host and mount paths reject empty, `.` and `..` segments, repeated or trailing slashes, NUL bytes and colons (Docker's bind-string separator). `/` is accepted only as a host source. Absolute host sources may be outside `/var/homelab-paas/`; workloads and descriptor authors are trusted to choose host files or directories, including deliberate sharing. `readOnly` defaults to `false`. The old `source` and `target` fields are rejected.
+
+There is no migration or fallback for previous relative host paths. Existing host data is retained; operators must move it to the selected storage location or use an explicit absolute `hostPath` to continue mounting it.
 
 Docker bind mounts use the resolved absolute host paths through the Engine API's `HostConfig.Binds`, with explicit `ro` or `rw` access and the shared SELinux `z` option. Docker relabels the source for access by multiple confined containers, including overlapping surge revisions. This changes host SELinux labels recursively, even for read-only mounts; choose dedicated application paths rather than system directories or paths requiring a different host policy. Unix ownership and permissions still apply.
 

@@ -1,18 +1,18 @@
-import type { ResourceDevice, ResourceHostPort, ResourceLimits, ResourceVolume } from "@homelab-paas/shared-contracts";
+import type { ResourceDevice, ResourceHostPort, ResourceLimits } from "@homelab-paas/shared-contracts";
 import { z } from "zod";
 
 import { DockerLogDecoder } from "./docker-log-decoder.ts";
 import type { IDockerTransport } from "./docker-transport.ts";
 import { DockerClientError } from "./errors.ts";
 export { DockerClientError } from "./errors.ts";
-import type { DockerContainer, DockerContainerDetails, DockerNetwork, Labels } from "./types.ts";
+import type { DockerContainer, DockerContainerDetails, DockerNetwork, DockerVolume, Labels } from "./types.ts";
 
 export interface CreateContainerOptions {
 	name: string;
 	image: string;
 	command?: string[];
 	env?: Record<string, string>;
-	volumes?: ResourceVolume[];
+	volumes?: DockerVolume[];
 	devices?: ResourceDevice[];
 	supplementaryGroups?: number[];
 	selinuxLabeling?: boolean;

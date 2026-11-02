@@ -241,11 +241,16 @@ export class DockerService implements IDockerService, IDockerInfrastructure, ICl
 	}
 
 	async createResourceContainer(options: CreateResourceContainerOptions): Promise<string> {
-		const volumes = options.volumes?.map((volume) => ({
+		const volumes = options.volumes?.map(({ name, ...volume }) => ({
 			...volume,
-			hostPath: posix.isAbsolute(volume.hostPath)
-				? volume.hostPath
-				: posix.join("/var/homelab-paas", options.serviceId, volume.hostPath),
+			hostPath:
+				volume.hostPath
+				?? posix.join(
+					"/var/homelab-paas",
+					options.serviceId,
+					"volumes",
+					...(name === undefined ? [options.resourceId, volume.mountPath.slice(1)] : [`_${name}`]),
+				),
 		}));
 		const ownershipGroups = new Map<string, Set<string>>();
 		for (const { hostPath, readOnly, ownership } of volumes ?? []) {
