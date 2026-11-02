@@ -32,8 +32,9 @@ test("preformatted inspection content keeps long lines in horizontal scroll area
 	};
 	await page.goto(env.url("", "/#/services/public/descriptor"));
 	await checkBlocks('pre[aria-label="Service descriptor YAML"]');
+	await page.goto(env.url("", "/#/services/public/resources/app/descriptor"));
+	await checkBlocks('pre[aria-label="Resource descriptor YAML"]');
 	await page.goto(env.url("", "/#/services/public/resources/app"));
-	await page.getByText("Descriptor YAML", { exact: true }).click();
 	await page.getByText("Live state JSON", { exact: true }).click();
 	await checkBlocks(".inspection-panel pre");
 	await page.goto(env.url("", "/#/services/public/resources/app/logs"));

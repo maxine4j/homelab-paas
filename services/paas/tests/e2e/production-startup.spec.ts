@@ -1,4 +1,5 @@
 import { atomicWriteFile, readFile, mkdir, readdir } from "../../src/util/file.ts";
+import { stringifyYaml } from "../../src/util/yaml.ts";
 import { test, expect } from "../util/browser-fixtures.ts";
 import { waitFor } from "../util/wait.ts";
 
@@ -26,7 +27,9 @@ test("production startup uses the isolated Envoy directory and cleans obsolete i
 	for (const name of [...obsolete, ...retained]) {
 		const path = `${root}/${name}`;
 		await mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true, mode: 0o700 });
-		await atomicWriteFile(path, "sentinel", { mode: 0o600 });
+		await atomicWriteFile(path, name === "gone/state.yaml" ? stringifyYaml({ phase: "ready" }) : "sentinel", {
+			mode: 0o600,
+		});
 	}
 	const pem = await readFile(`${root}/_paas/envoy/ingress.pem`);
 	await env.compose(["start", "paas"]);
