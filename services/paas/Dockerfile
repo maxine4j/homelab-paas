@@ -7,17 +7,20 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY services/paas/package.json services/paas/package.json
 COPY services/paas-ui/package.json services/paas-ui/package.json
 COPY packages/shared-contracts/package.json packages/shared-contracts/package.json
+COPY packages/backend-infrastructure/package.json packages/backend-infrastructure/package.json
 
 FROM manifests AS builder
 RUN --mount=type=cache,id=homelab-paas-pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @homelab-paas/paas... --filter @homelab-paas/ui... --store-dir /pnpm/store
 COPY tsconfig.json ./
 COPY packages/shared-contracts packages/shared-contracts
+COPY packages/backend-infrastructure packages/backend-infrastructure
 COPY services/paas/tsconfig*.json services/paas/
 COPY services/paas/src services/paas/src
 COPY services/paas-ui services/paas-ui
 ARG BUILD_SHA=unknown
 RUN pnpm --filter @homelab-paas/shared-contracts build \
+    && pnpm --filter @homelab-paas/backend-infrastructure build \
     && pnpm --filter @homelab-paas/paas build \
     && BUILD_SHA="$BUILD_SHA" pnpm --filter @homelab-paas/ui build
 
@@ -37,6 +40,9 @@ COPY --from=installer /app/services/paas/node_modules services/paas/node_modules
 COPY --from=installer /app/packages/shared-contracts/package.json packages/shared-contracts/package.json
 COPY --from=installer /app/packages/shared-contracts/node_modules packages/shared-contracts/node_modules
 COPY --from=builder /app/packages/shared-contracts/dist packages/shared-contracts/dist
+COPY --from=installer /app/packages/backend-infrastructure/package.json packages/backend-infrastructure/package.json
+COPY --from=installer /app/packages/backend-infrastructure/node_modules packages/backend-infrastructure/node_modules
+COPY --from=builder /app/packages/backend-infrastructure/dist packages/backend-infrastructure/dist
 COPY --from=builder /app/services/paas/dist services/paas/dist
 COPY --from=builder /app/services/paas-ui/dist services/paas-ui/dist
 WORKDIR /app/services/paas

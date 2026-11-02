@@ -142,6 +142,72 @@ pairing:
   credential and ingress arrangement explicitly before exposing Git hosting; a
   browser session alone is not a Git credential.
 
+#### Slice 1 foundation contract
+
+Forge uses the [PaaS authenticated workload identity
+headers](../../docs/networking-and-auth.md#authenticated-workload-identity-headers).
+Private ingress (`public: false`) and no published HTTP host port are mandatory:
+Envoy strips client identity headers and supplies `X-WEBAUTH-USER`. Forge validates
+that GitHub username and authorizes only the configured `FORGE_OWNER`, compared
+case-insensitively. Missing, malformed, duplicate, or disallowed identities fail
+closed. Optional email/full-name headers never grant access. These assertions are
+trusted only on the private proxy path; Forge does not authenticate direct HTTP
+clients. Every mutation and future WebSocket handshake requires the exact
+configured `FORGE_ORIGIN` HTTPS origin. Services recheck owner authorization.
+
+Backend foundation configuration:
+
+| Variable               | Contract                                                                          |
+| ---------------------- | --------------------------------------------------------------------------------- |
+| `FORGE_OWNER`          | Required GitHub username; the single application owner.                           |
+| `FORGE_ORIGIN`         | Required canonical HTTPS origin, without path/trailing slash.                     |
+| `FORGE_DATA_DIRECTORY` | Absolute persistent directory; defaults to `/data`.                               |
+| `FORGE_PORT`           | HTTP listener port; defaults to `8080`; no host publication.                      |
+| `FORGE_IMPORT_HOSTS`   | Optional comma-separated exact DNS host allowlist; defaults to no remote imports. |
+
+The initial project API exposes `GET/POST /api/projects`,
+`GET /api/projects/:id`, and `POST /api/projects/:id/retry`. Inputs and responses
+use `@homelab-paas/forge-contracts`; public project values contain only ID, name,
+creation timestamp, and `creating/ready/failed` status. Repository IDs initially
+equal project UUIDs. Inputs are limited to a 120-character name and optional
+2048-character HTTPS source; JSON bodies are limited to 16 KiB. The initial store
+supports at most 1000 projects. Errors expose fixed codes, never credentials,
+paths, source URLs, SQL, or subprocess diagnostics. `GET /health` is an internal
+liveness endpoint and discloses only `{"status":"up"}`.
+
+Creation persists a `creating` intent before Git operations. Bare repositories are
+prepared beneath an owned staging directory and published by rename. An exclusive
+sibling claim file reserves staging ownership before directory creation; recovery
+can complete interrupted initialization without adopting unclaimed directories.
+Ownership markers and bare-repository validation are required before adopting any existing
+path. Startup reconciles `creating` intents and verifies `ready` paths before
+serving requests. Failures retain intent and data as `failed`; only explicit retry
+repeats failed work. Recovery never deletes or overwrites unrelated paths. Import
+fetches heads/tags idempotently and preserves the remote symbolic HEAD when
+available. It does not create a checkout or run hooks/submodules.
+
+Remote import supports credential-free HTTPS on port 443 only, without query or
+fragment, against the configured exact host allowlist. The owner must trust the
+configured hosts and their DNS/network destinations. Redirects, local paths,
+other Git protocols, credential helpers, interactive prompts, hooks, and global
+Git configuration are disabled. Each Git command has a 120-second deadline and
+1 MiB output bound. Private-repository credentials and authenticated Git HTTPS
+hosting are deferred; no Git hosting endpoint is exposed by the foundation.
+
+Pinned Node 24.22.0 was evaluated with built-in SQLite 3.53.4. `DatabaseSync` runs
+in a dedicated worker behind an asynchronous contract, with WAL, foreign keys,
+full synchronous durability, a five-second busy timeout, serialized requests,
+at most 100 statements per transaction, 100 queued requests, and 1000 result rows.
+Worker startup/exit failures reject pending operations; close drains accepted work.
+Startup must set `umask(0o077)`, create/restrict the data directory to `0700`, and
+complete database/schema initialization and project recovery before listening.
+The runtime must retain the single-instance `recreate` deployment policy.
+
+This foundation provides local projects, persistence, repository import, access
+policy, and project HTTP adapters. Account setup/Codex integration and the served
+frontend are subsequent work within slice 1; their status must come from real
+adapters rather than success placeholders.
+
 ### Ticket and PR workflow
 
 ```text

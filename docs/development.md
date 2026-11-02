@@ -15,12 +15,14 @@ Keep versions and commands in their existing manifests and configuration files. 
 
 ## Workspace
 
-| Path                         | Purpose                                                       |
-| ---------------------------- | ------------------------------------------------------------- |
-| `services/paas/`             | TypeScript/Node.js control plane                              |
-| `services/paas-ui/`          | Read-only management UI; see [its contract](management-ui.md) |
-| `packages/shared-contracts/` | Public contracts shared by the control plane and UI           |
-| `scripts/`                   | Repository tooling and development scripts                    |
+| Path                               | Purpose                                                                                              |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `services/paas/`                   | TypeScript/Node.js control plane                                                                     |
+| `services/paas-ui/`                | Read-only management UI; see [its contract](management-ui.md)                                        |
+| `packages/shared-contracts/`       | Public contracts shared by the control plane and UI                                                  |
+| `packages/backend-infrastructure/` | Canonical filesystem, YAML, timer and logger boundaries shared by backends                           |
+| `services/forge/`                  | Forge backend and service-local browser contracts; see [Forge contract](../services/forge/AGENTS.md) |
+| `scripts/`                         | Repository tooling and development scripts                                                           |
 
 The [architecture](architecture.md) and linked requirements describe the intended platform. Existing implementation, packaging, and deployment scripts may need later changes to match it; their presence does not establish additional product requirements.
 
@@ -67,11 +69,11 @@ The control-plane Docker image retains `BUILD_SHA` for telemetry identity. Custo
 
 ## Backend infrastructure boundaries
 
-Backend filesystem operations go through `services/paas/src/util/file.ts`, including Git and Envoy transports, stores, and startup wiring. Optional text reads return absence only for `ENOENT`; permission and other I/O failures propagate to the owning adapter for contextual error translation with the original `cause`. Binary reads preserve bytes. Atomic writes use an exclusively created, restricted, unique sibling file and rename, cleaning up temporary files after failure. Exclusive create-if-missing preserves existing discovery files. Callers create private directories with mode `0700`; private files default to `0600`. Existing files are not rewritten merely to initialize them.
+Backend filesystem operations go through `@homelab-paas/backend-infrastructure/file`, implemented in `packages/backend-infrastructure/src/file.ts` and re-exported by the PaaS `util/file.ts` facade, including Git and Envoy transports, stores, and startup wiring. Optional text reads return absence only for `ENOENT`; permission and other I/O failures propagate to the owning adapter for contextual error translation with the original `cause`. Binary reads preserve bytes. Atomic writes use an exclusively created, restricted, unique sibling file and rename, cleaning up temporary files after failure. Exclusive create-if-missing preserves existing discovery files. Callers create private directories with mode `0700`; private files default to `0600`. Existing files are not rewritten merely to initialize them.
 
-YAML parsing and serialization use `util/yaml.ts`. Parsing rejects errors, duplicate keys and warnings, limits aliases, and retains parser failures as causes beneath a contextual message and file location. This applies to configuration, descriptors, persisted YAML, and Envoy discovery. Tests also use these utilities; only the filesystem utility's own boundary tests use raw filesystem APIs to independently inspect bytes and permissions. Oxc enforces these import boundaries.
+YAML parsing and serialization use `@homelab-paas/backend-infrastructure/yaml` (the PaaS `util/yaml.ts` facade re-exports it). Parsing rejects errors, duplicate keys and warnings, limits aliases, and retains parser failures as causes beneath a contextual message and file location. This applies to configuration, descriptors, persisted YAML, and Envoy discovery. Tests also use these utilities; only the filesystem utility's own boundary tests use raw filesystem APIs to independently inspect bytes and permissions. Oxc enforces these import boundaries.
 
-Services receive infrastructure effects through constructor contracts. Timers use injected `ISleep` from `util/sleep.ts`, including abortable delays for cancellation and deadlines. Concrete implementations are supplied by `start.ts`. Direct global `fetch` is permitted inside clients, infrastructure transports and the `util/healthcheck.ts` HTTP probe adapter, which belong to the client layer; injection remains available for testing. These adapters own protocol details, validation and sanitized failures; a generic HTTP wrapper adds no required boundary. The canonical logger is also an intentional shared dependency. Git retains its bounded, noninteractive `execFile` transport; do not build shell commands through a general subprocess helper.
+Services receive infrastructure effects through constructor contracts. Timers use injected `ISleep` from `@homelab-paas/backend-infrastructure/sleep` (also re-exported by PaaS `util/sleep.ts`), including abortable delays for cancellation and deadlines. Concrete implementations are supplied by `start.ts`. Direct global `fetch` is permitted inside clients, infrastructure transports and the `util/healthcheck.ts` HTTP probe adapter, which belong to the client layer; injection remains available for testing. These adapters own protocol details, validation and sanitized failures; a generic HTTP wrapper adds no required boundary. The canonical logger is also an intentional shared dependency. Git retains its bounded, noninteractive `execFile` transport; do not build shell commands through a general subprocess helper.
 
 Generic file key-value stores own serialization and key-to-path mapping. Domain stores own state validation and error translation, receive injected key-value stores, and keep filesystem paths out of services. The [persisted-state contract](reconciliation-and-deployments.md#implemented-deployment-mvp) remains compatible across this separation.
 
@@ -81,7 +83,7 @@ Private Git sources use the existing Git/OpenSSH runtime tools. Put deploy keys 
 
 ## Backend logging
 
-The control plane writes Pino JSON lines to stdout with ISO UTC timestamps, numeric severity, and a message. Import `logger` or use `private readonly log = createLogger(Component.name)` from `services/paas/src/util/logger.ts`; child loggers add a stable `component` field. Source file/line stack inspection is intentionally omitted; component and event fields identify operations without per-log stack capture or production source maps.
+The control plane writes Pino JSON lines to stdout with ISO UTC timestamps, numeric severity, and a message. Import `logger` or use `private readonly log = createLogger(Component.name)` from `@homelab-paas/backend-infrastructure/logger` (also re-exported by PaaS `util/logger.ts`); child loggers add a stable `component` field. Source file/line stack inspection is intentionally omitted; component and event fields identify operations without per-log stack capture or production source maps.
 
 Task runners establish AsyncLocalStorage context for each execution. Every nested log automatically receives `task` (the configured task name) and `taskId` (a fresh nanoid generated at execution, including retries). Supply the ID generator from the composition root. Queued task envelopes receive the execution ID when dispatched. Callers never pass tracing fields to log methods. Context remains isolated across overlapping runs and is restored when an execution finishes; failure reports run inside the same context.
 

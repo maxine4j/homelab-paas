@@ -24,7 +24,50 @@ importers:
         specifier: 3.2.4
         version: 3.2.4(@types/node@24.19.2)(yaml@2.9.1)
 
+  packages/backend-infrastructure:
+    dependencies:
+      pino:
+        specifier: 10.4.0
+        version: 10.4.0
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
+
   packages/shared-contracts:
+    dependencies:
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
+  services/forge:
+    dependencies:
+      '@homelab-paas/backend-infrastructure':
+        specifier: workspace:*
+        version: link:../../packages/backend-infrastructure
+      '@homelab-paas/forge-contracts':
+        specifier: workspace:*
+        version: link:packages/contracts
+      '@koa/bodyparser':
+        specifier: 6.1.0
+        version: 6.1.0(koa@3.2.1)
+      '@koa/router':
+        specifier: 15.7.0
+        version: 15.7.0(koa@3.2.1)
+      koa:
+        specifier: 3.2.1
+        version: 3.2.1
+      pino:
+        specifier: 10.4.0
+        version: 10.4.0
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@types/koa':
+        specifier: 3.0.3
+        version: 3.0.3
+
+  services/forge/packages/contracts:
     dependencies:
       zod:
         specifier: 4.6.7
@@ -32,6 +75,9 @@ importers:
 
   services/paas:
     dependencies:
+      '@homelab-paas/backend-infrastructure':
+        specifier: workspace:*
+        version: link:../../packages/backend-infrastructure
       '@homelab-paas/shared-contracts':
         specifier: workspace:*
         version: link:../../packages/shared-contracts

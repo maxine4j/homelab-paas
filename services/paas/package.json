@@ -16,6 +16,7 @@
 		"start": "node dist/main.js"
 	},
 	"dependencies": {
+		"@homelab-paas/backend-infrastructure": "workspace:*",
 		"@homelab-paas/shared-contracts": "workspace:*",
 		"@koa/bodyparser": "6.1.0",
 		"@koa/router": "15.7.0",

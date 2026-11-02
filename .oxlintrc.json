@@ -7,12 +7,17 @@
 	"ignorePatterns": ["**/dist/**"],
 	"overrides": [
 		{
-			"files": ["services/paas/src/**/*.ts"],
+			"files": [
+				"services/paas/src/**/*.ts",
+				"services/forge/src/**/*.ts",
+				"packages/backend-infrastructure/src/**/*.ts"
+			],
 			"excludeFiles": [
-				"services/paas/src/util/file.test.ts",
-				"services/paas/src/util/file.ts",
 				"services/paas/src/util/yaml.ts",
-				"services/paas/src/util/sleep.ts"
+				"packages/backend-infrastructure/src/file.test.ts",
+				"packages/backend-infrastructure/src/file.ts",
+				"packages/backend-infrastructure/src/yaml.ts",
+				"packages/backend-infrastructure/src/sleep.ts"
 			],
 			"rules": {
 				"no-restricted-imports": [

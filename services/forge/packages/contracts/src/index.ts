@@ -1,0 +1,44 @@
+import { z } from "zod";
+
+// Control characters are intentionally rejected at this untrusted browser boundary.
+// eslint-disable-next-line no-control-regex
+const controlCharacters = /[\u0000-\u001f\u007f]/u;
+export const projectIdSchema = z.uuid();
+export const remoteSourceSchema = z
+	.string()
+	.max(2048)
+	.url()
+	.refine((source) => {
+		if (!URL.canParse(source)) return false;
+		const url = new URL(source);
+		return (
+			url.protocol === "https:"
+			&& !url.username
+			&& !url.password
+			&& !url.search
+			&& !url.hash
+			&& !/\s/u.test(source)
+			&& !controlCharacters.test(source)
+		);
+	}, "Use a credential-free HTTPS Git URL without query or fragment");
+export const createProjectSchema = z.strictObject({
+	name: z
+		.string()
+		.trim()
+		.min(1)
+		.max(120)
+		.refine((name) => !controlCharacters.test(name)),
+	source: remoteSourceSchema.optional(),
+});
+export const projectSchema = z.strictObject({
+	id: projectIdSchema,
+	name: z.string().min(1).max(120),
+	status: z.enum(["creating", "ready", "failed"]),
+	createdAt: z.iso.datetime(),
+});
+export const projectsSchema = z.array(projectSchema).max(1000);
+export const apiErrorSchema = z.strictObject({
+	error: z.enum(["invalid-request", "access-denied", "project-not-found", "project-unavailable", "internal-error"]),
+});
+
+export type { CreateProject, Project } from "./types.ts";

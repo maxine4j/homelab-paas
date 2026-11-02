@@ -1,0 +1,27 @@
+{
+	"name": "@homelab-paas/forge",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "tsc -p tsconfig.build.json",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"test:integration": "vitest run --config tests/vitest.integration.config.ts"
+	},
+	"dependencies": {
+		"@homelab-paas/backend-infrastructure": "workspace:*",
+		"@homelab-paas/forge-contracts": "workspace:*",
+		"@koa/bodyparser": "6.1.0",
+		"@koa/router": "15.7.0",
+		"koa": "3.2.1",
+		"pino": "10.4.0",
+		"zod": "4.6.7"
+	},
+	"devDependencies": {
+		"@types/koa": "3.0.3"
+	},
+	"engines": {
+		"node": ">=24 <25"
+	}
+}
