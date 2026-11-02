@@ -486,6 +486,256 @@ summary {
 	border: 1px solid #30363d;
 	border-radius: 6px;
 }
+.repository-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	margin-bottom: 16px;
+	flex-wrap: wrap;
+}
+.branch-picker {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	padding: 6px 12px;
+	border: 1px solid #30363d;
+	border-radius: 6px;
+	background: #21262d;
+	max-width: 100%;
+}
+.branch-picker select {
+	font: inherit;
+	color: #e6edf3;
+	background: #21262d;
+	border: 0;
+	max-width: 200px;
+	min-width: 0;
+}
+.repository-toolbar nav {
+	flex: 1;
+	min-width: 0;
+	font-size: 14px;
+}
+.repository-toolbar nav button {
+	border: 0;
+	background: transparent;
+	color: #58a6ff;
+	padding: 2px;
+}
+.file-actions {
+	position: relative;
+}
+.file-actions[open] {
+	padding: 12px;
+	border: 1px solid #30363d;
+	border-radius: 6px;
+	background: #161b22;
+}
+.repository-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 24px;
+}
+.repository-layout.has-file {
+	grid-template-columns: 220px minmax(0, 1fr);
+}
+.repository-sidebar {
+	min-width: 0;
+	border-right: 1px solid #30363d;
+	padding-right: 16px;
+}
+.repository-sidebar .tree-entry {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.file-tree-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+.file-tree-list .file-tree-list {
+	padding-left: 14px;
+	border-left: 1px solid #30363d;
+	margin-left: 8px;
+}
+.file-tree-list .tree-entry {
+	padding: 5px 3px;
+}
+.file-tree-list .tree-entry[aria-current] {
+	background: #21262d;
+	border-color: #30363d;
+}
+.repository-main {
+	border: 1px solid #30363d;
+	border-radius: 6px;
+	min-width: 0;
+	overflow: hidden;
+}
+.file-list-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 16px;
+	background: #161b22;
+	border-bottom: 1px solid #30363d;
+	font-size: 14px;
+	font-weight: 600;
+}
+.file-list-header > div {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.history-button {
+	display: inline-flex;
+	padding: 5px;
+	background: transparent;
+	border-color: transparent;
+}
+.repository-files {
+	width: 100%;
+	border-collapse: collapse;
+	table-layout: fixed;
+	font-size: 13px;
+}
+.repository-files tr + tr {
+	border-top: 1px solid #21262d;
+}
+.repository-files tr:hover {
+	background: #161b22;
+}
+.repository-files td {
+	padding: 9px 16px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: #8b949e;
+}
+.repository-files td:first-child {
+	width: 38%;
+}
+.repository-files td:last-child {
+	width: 150px;
+	text-align: right;
+	font-size: 12px;
+}
+.repository-files button {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	border: 0;
+	padding: 0;
+	background: transparent;
+	font-weight: 400;
+	width: 100%;
+	text-align: left;
+}
+.repository-files button:hover {
+	color: #58a6ff;
+	text-decoration: underline;
+}
+.repository-files button span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.file-icon {
+	flex-shrink: 0;
+	color: #8b949e;
+}
+.file-icon-folder,
+.file-icon-typescript {
+	color: #58a6ff;
+}
+.file-icon-javascript,
+.file-icon-config,
+.file-icon-python {
+	color: #e3b341;
+}
+.file-icon-style,
+.file-icon-rust {
+	color: #d2a8ff;
+}
+.file-icon-shell,
+.file-icon-go {
+	color: #7ee787;
+}
+.file-icon-html,
+.file-icon-image {
+	color: #f78166;
+}
+.show-files {
+	width: 100%;
+	border: 0;
+	border-top: 1px solid #30363d;
+	border-radius: 0;
+	padding: 10px;
+	color: #58a6ff;
+	background: #161b22;
+}
+.repository-empty,
+.parent-row {
+	padding: 12px 16px;
+}
+.parent-row {
+	border-bottom: 1px solid #30363d;
+}
+.repository-code {
+	padding: 0 12px 12px;
+}
+.repository-code .code-editor {
+	margin-top: 12px;
+}
+.repository-readme {
+	margin-top: 24px;
+	border: 1px solid #30363d;
+	border-radius: 6px;
+	overflow: hidden;
+}
+.readme-heading {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 14px 20px;
+	border-bottom: 1px solid #30363d;
+	font-size: 14px;
+}
+.readme-content {
+	padding: 24px 32px;
+}
+.readme-content h1,
+.readme-content h2 {
+	padding-bottom: 12px;
+	border-bottom: 1px solid #21262d;
+	margin-bottom: 16px;
+}
+.readme-content p {
+	color: #e6edf3;
+	font-size: 15px;
+	white-space: pre-wrap;
+}
+.readme-content pre {
+	padding: 16px;
+	background: #161b22;
+	border-radius: 6px;
+}
+.commit-history {
+	padding: 16px;
+}
+.commit-history article {
+	border: 1px solid #30363d;
+	border-radius: 6px;
+	margin: 12px 0;
+	padding: 16px;
+	font-size: 14px;
+}
+.commit-history code {
+	color: #58a6ff;
+	font-size: 12px;
+}
 @media (max-width: 800px) {
 	.workspace-grid,
 	.account-grid {
@@ -493,6 +743,33 @@ summary {
 	}
 }
 @media (max-width: 600px) {
+	.repository-layout.has-file {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.repository-sidebar {
+		display: none;
+	}
+	.repository-files .file-commit {
+		display: none;
+	}
+	.repository-files td:first-child {
+		width: auto;
+	}
+	.repository-files td:last-child {
+		width: 112px;
+	}
+	.repository-files td {
+		padding: 10px;
+	}
+	.readme-content {
+		padding: 20px;
+	}
+	.repository-toolbar {
+		gap: 10px;
+	}
+	.repository-code {
+		padding: 0 6px 6px;
+	}
 	header {
 		padding: 12px 16px;
 		gap: 12px;

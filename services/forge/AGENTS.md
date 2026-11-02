@@ -502,8 +502,8 @@ only on Config. Account errors never clutter project views. Switching to Config
 preserves the open project and its unsaved drafts.
 
 Projects retains creation/import/retry. Opening a ready project shows its identity
-and five section tabs, in order: Files, Tasks, Agents, Pipelines, Terminals.
-Files is the default. Tasks, Agents and Pipelines explicitly say they are not
+and five section tabs, in order: Code, Tasks, Agents, Pipelines, Terminals.
+Code is the default. Tasks, Agents and Pipelines explicitly say they are not
 available yet; no ticket, agent-turn or remote CI functionality is implied.
 Tab navigation stays usable on narrow screens without widening the page.
 
@@ -515,7 +515,31 @@ internally named Project files checkout), or prepare one automatically when none
 exists. A failed checkout requires explicit Retry opening files. Preparation
 never starts an agent or shell. Preserve existing files and metadata.
 
-Files contains directory navigation and the editor, with Changes and Pull requests
+Code contains a GitHub-style bordered directory listing followed by a safe README
+preview. Each directory initially shows ten entries, with Show all/Show fewer
+controls; the 1,000-entry server bound remains explicit. Folder and common file
+types have themed icons. Opening a file replaces the overview with the editor;
+Back to files preserves drafts. The left directory tree appears alongside code on
+tablet and laptop widths (above 600 CSS pixels), and is hidden on slab phones.
+
+The branch dropdown defaults to Working changes, the retained editing checkout.
+Local file dates are filesystem modification timestamps. Other named branches
+show committed files read-only, with each entry's latest commit subject and date.
+Browsing never switches or resets the editing checkout. Internal generated branch
+names stay out of the dropdown. A history icon in the top-right of the file panel
+loads the selected branch's commits, thirty at a time, with explicit pagination.
+Pagination rejects a changed branch head rather than mixing histories.
+
+Read-only repository APIs are under `/api/projects/:id/repository`: `branches`,
+`tree?branch=&path=`, `file?branch=&path=`, and `history?branch=&offset=`. They
+validate owner/project readiness, exact branch names and safe paths. Git reads
+resolve the branch to a commit before reading content. They use bounded system
+Git commands, at most 1,000 branches/entries, at most eight concurrent per-entry
+log reads, and the existing 256 KiB text-file bound. Symlinks, submodules, binary
+content and restricted metadata cannot be opened as code. Errors reuse the safe
+workspace/file error contract. Repository HTML is displayed as text, never executed.
+
+Code includes Changes and Pull requests
 in initially collapsed disclosures. PR review includes closed PRs. Terminals
 contains the shell controls and output. Remove infrastructure notes, raw revision
 summaries and session IDs from the primary UI; retain actionable errors, file

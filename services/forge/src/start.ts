@@ -29,6 +29,9 @@ import { PullRequestService } from "./pull-requests/pull-request-service.ts";
 import { PullRequestStore } from "./pull-requests/pull-request-store.ts";
 import { GitDiffClient } from "./repositories/git-diff-client.ts";
 import { GitTransport } from "./repositories/git-transport.ts";
+import { RepositoryBrowserClient } from "./repositories/repository-browser-client.ts";
+import { RepositoryBrowserRouter } from "./repositories/repository-browser-router.ts";
+import { RepositoryBrowserService } from "./repositories/repository-browser-service.ts";
 import { RepositoryClient } from "./repositories/repository-client.ts";
 import { TerminalInventory } from "./terminal/terminal-inventory.ts";
 import { TerminalProcess } from "./terminal/terminal-process.ts";
@@ -142,6 +145,13 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 		[
 			new AccountRouter(accounts),
 			new WorkspaceRouter(workspaces),
+			new RepositoryBrowserRouter(
+				new RepositoryBrowserService(
+					new RepositoryBrowserClient(config.dataDirectory, git, repositories),
+					projects,
+					access,
+				),
+			),
 			new TerminalRouter(terminals),
 			new PullRequestRouter(pullRequests),
 		],

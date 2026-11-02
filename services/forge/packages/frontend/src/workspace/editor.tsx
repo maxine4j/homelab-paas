@@ -9,10 +9,12 @@ export const Editor = ({
 	content,
 	path,
 	change,
+	readOnly = false,
 }: {
 	content: string;
 	path: string;
 	change: (content: string) => void;
+	readOnly?: boolean;
 }) => {
 	const element = useRef<HTMLDivElement>(null);
 	const callback = useRef(change);
@@ -27,6 +29,7 @@ export const Editor = ({
 			doc: initialContent,
 			extensions: [
 				basicSetup,
+				EditorView.editable.of(!readOnly),
 				syntaxHighlighting(
 					HighlightStyle.define([
 						{ tag: [tags.keyword, tags.operator], color: "#ff7b72" },
@@ -65,6 +68,6 @@ export const Editor = ({
 			],
 		});
 		return () => view.destroy();
-	}, [path, initialContent]);
+	}, [path, initialContent, readOnly]);
 	return <div className='code-editor' ref={element} />;
 };

@@ -172,7 +172,7 @@ test("integrated production bundle styles editor/terminal on desktop/mobile and 
 		expect(await page.evaluate(() => (window as unknown as { cspViolations: string[] }).cspViolations)).toEqual([
 			"script-src-elem",
 		]);
-		await page.getByRole("tab", { name: "Files", exact: true }).click();
+		await page.getByRole("tab", { name: "Code", exact: true }).click();
 		expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe("dark");
 		const colors = await page
 			.locator(".cm-content span")

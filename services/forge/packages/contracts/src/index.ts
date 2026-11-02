@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export * from "./workspace.ts";
+export * from "./repository.ts";
 export type {
 	Workspace,
 	CreateWorkspace,

@@ -137,7 +137,7 @@ test("open project, edit tabs, retain unsaved content through conflict and navig
 	await page.getByRole("tab", { name: "Tasks", exact: true }).click();
 	await page.getByRole("link", { name: "Config", exact: true }).click();
 	await page.getByRole("link", { name: "Projects", exact: true }).click();
-	await page.getByRole("tab", { name: "Files", exact: true }).click();
+	await page.getByRole("tab", { name: "Code", exact: true }).click();
 	await expect(editor).toContainText("const local = 3;");
 	await page.getByRole("button", { name: "Projects", exact: true }).click();
 	await expect(page.getByText("Unsaved edits remain")).toBeVisible();
@@ -209,6 +209,7 @@ test("failed project files retry explicitly; a delayed save retains newer typing
 	await page.goto("/");
 	await page.getByRole("button", { name: "Open Project" }).click();
 	await page.getByRole("button", { name: "Retry opening files", exact: true }).click();
+	await page.getByText("New file", { exact: true }).click();
 	await page.getByLabel("New file path").fill("new.ts");
 	await page.getByRole("button", { name: "Create file", exact: true }).click();
 	const editor = page.getByRole("textbox", { name: "File editor" });

@@ -15,6 +15,9 @@ import { ProjectService } from "../../src/projects/project-service.ts";
 import { ProjectStore } from "../../src/projects/project-store.ts";
 import { GitDiffClient } from "../../src/repositories/git-diff-client.ts";
 import { GitTransport } from "../../src/repositories/git-transport.ts";
+import { RepositoryBrowserClient } from "../../src/repositories/repository-browser-client.ts";
+import { RepositoryBrowserRouter } from "../../src/repositories/repository-browser-router.ts";
+import { RepositoryBrowserService } from "../../src/repositories/repository-browser-service.ts";
 import { RepositoryClient } from "../../src/repositories/repository-client.ts";
 import { WorkspaceClient } from "../../src/workspaces/workspace-client.ts";
 import { WorkspaceDiffClient } from "../../src/workspaces/workspace-diff-client.ts";
@@ -55,6 +58,51 @@ const setup = async () => {
 	);
 	return { root, db, git, store, client, service, project, projects, access };
 };
+
+test("repository HTTP serves branch-specific trees, files and history behind owner authorization", async () => {
+	const { service, project, projects, access, root, git } = await setup();
+	const workspace = await service.create(owner, project.id, { name: "Browser" });
+	await service.createFile(owner, workspace.id, { path: "README.md", content: "# Browser\n" });
+	expect((await service.tree(owner, workspace.id, "")).entries.at(0)?.lastChangedAt).toEqual(expect.any(String));
+	await service.stage(owner, workspace.id, { paths: ["README.md"] });
+	await service.commit(owner, workspace.id, { message: "Documentation", expectedHead: workspace.head! });
+	const client = new RepositoryBrowserClient(root, git, new RepositoryClient(root, [], files, git));
+	const browser = new RepositoryBrowserService(client, projects, access);
+	const server = createServer(
+		new HttpApplication(new ProjectRouter(projects), access)
+			.create([new RepositoryBrowserRouter(browser)])
+			.callback(),
+	);
+	cleanup.push(
+		() => new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+	);
+	server.listen(0, "127.0.0.1");
+	await once(server, "listening");
+	const address = server.address();
+	if (!address || typeof address === "string") throw new Error("No listener");
+	const url = `http://127.0.0.1:${address.port}/api/projects/${project.id}/repository/`;
+	const request = (path: string, user = "owner") => fetch(url + path, { headers: { "x-webauth-user": user } });
+	expect((await request("branches", "intruder")).status).toBe(403);
+	expect((await (await request("branches")).json()).map((b: { name: string }) => b.name)).toContain("main");
+	const branch = encodeURIComponent(workspace.branch);
+	const tree = await (await request(`tree?branch=${branch}&path=`)).json();
+	expect(tree.entries.at(0)).toMatchObject({ name: "README.md", lastCommit: { subject: "Documentation" } });
+	expect((await (await request("tree?branch=main&path=")).json()).entries).toEqual([]);
+	expect(await (await request(`file?branch=${branch}&path=README.md`)).json()).toEqual({
+		path: "README.md",
+		content: "# Browser\n",
+	});
+	expect((await (await request(`history?branch=${branch}&offset=0`)).json()).commits.at(0).subject).toBe(
+		"Documentation",
+	);
+	for (const path of [
+		"tree?branch=--all",
+		"file?branch=main&path=../secret",
+		"history?branch=main&offset=-1",
+		"tree?branch=main&branch=other",
+	])
+		expect((await request(path)).status).toBe(400);
+});
 
 test("manual workspace preserves edits, versions, staged and branch diffs, commits and archive across recovery", async () => {
 	const { root, git, store, client, service, project } = await setup();

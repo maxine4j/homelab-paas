@@ -91,7 +91,7 @@ test("dark project tabs hide infrastructure and keep account setup in Config", a
 	await expect(page.getByRole("region", { name: "ChatGPT" })).toBeVisible();
 	await expect(page.getByRole("tablist")).toBeHidden();
 	await page.getByRole("link", { name: "Projects", exact: true }).click();
-	await page.getByRole("tab", { name: "Files", exact: true }).click();
+	await page.getByRole("tab", { name: "Code", exact: true }).click();
 	await expect(page.getByRole("button", { name: "readme.md", exact: true })).toBeVisible();
 	await page.getByRole("button", { name: "Projects", exact: true }).click();
 	await page.getByRole("button", { name: "Open Forge" }).click();

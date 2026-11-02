@@ -190,7 +190,12 @@ export class WorkspaceClient implements IWorkspaceClient {
 					truncated = true;
 					break;
 				}
-				entries.push({ name, path: relative, kind: meta.isDirectory() ? "directory" : "file" });
+				entries.push({
+					name,
+					path: relative,
+					kind: meta.isDirectory() ? "directory" : "file",
+					lastChangedAt: new Date(meta.mtimeMs).toISOString(),
+				});
 			}
 			return { path, entries, truncated };
 		});

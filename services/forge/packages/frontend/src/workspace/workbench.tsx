@@ -12,6 +12,7 @@ import type { IWorkspaceApi } from "../api/workspace-api.ts";
 import { Changes } from "./changes.tsx";
 import { Editor } from "./editor.tsx";
 import { PullRequests } from "./pull-requests.tsx";
+import { RepositoryBrowser } from "./repository-browser.tsx";
 import { WorkspaceTerminal } from "./terminal.tsx";
 
 interface Draft {
@@ -23,7 +24,7 @@ interface Draft {
 
 export const Workbench = ({ project, api, leave }: { project: Project; api: IWorkspaceApi; leave: () => void }) => {
 	const [workspace, setWorkspace] = useState<Workspace>();
-	const [tab, setTab] = useState("Files");
+	const [tab, setTab] = useState("Code");
 	const preparing = useRef<Promise<Workspace> | undefined>(undefined);
 	const [error, setError] = useState("");
 	const [busy, setBusy] = useState(true);
@@ -143,7 +144,7 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 				<h1>{project.name}</h1>
 			</div>
 			<div className='project-tabs' role='tablist' aria-label='Project sections'>
-				{["Files", "Tasks", "Agents", "Pipelines", "Terminals"].map((name) => (
+				{["Code", "Tasks", "Agents", "Pipelines", "Terminals"].map((name) => (
 					<button
 						key={name}
 						id={`tab-${name}`}
@@ -206,81 +207,51 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 					)}
 					{workspace.status === "ready" && (
 						<>
-							<section
-								id='panel-Files'
-								role='tabpanel'
-								aria-labelledby='tab-Files'
-								hidden={tab !== "Files"}
-							>
-								<div className='ide-grid'>
-									<aside aria-label='File tree'>
-										<h3>Files</h3>
-										<button disabled={busy} onClick={() => void run(() => directory(""))}>
-											Root
-										</button>
-										{tree && (
-											<>
-												<p>{tree.path || "/"}</p>
-												{tree.path && (
-													<button
-														onClick={() =>
-															void run(() =>
-																directory(tree.path.split("/").slice(0, -1).join("/")),
-															)
-														}
-													>
-														Parent directory
-													</button>
-												)}
-												{tree.entries.map((entry) => (
-													<button
-														key={entry.path}
-														className='tree-entry'
-														disabled={busy}
-														onClick={() =>
-															void run(() =>
-																entry.kind === "directory"
-																	? directory(entry.path)
-																	: open(entry.path),
-															)
-														}
-													>
-														{entry.kind === "directory" ? `${entry.name}/` : entry.name}
-													</button>
-												))}
-												{tree.truncated && <p>File list truncated</p>}
-											</>
-										)}
-										<label>
-											New file path
-											<input
-												value={fileName}
-												onChange={(event) => setFileName(event.target.value)}
-											/>
-										</label>
-										<button
-											disabled={busy || !fileName}
-											onClick={() =>
-												void run(async () => {
-													const file = await api.read(
-														`workspaces/${workspace.id}/file`,
-														workspaceFileSchema,
-														"POST",
-														{ path: fileName, content: "" },
-													);
-													setDrafts((current) => ({
-														...current,
-														[file.path]: { file, content: file.content, generation: 0 },
-													}));
-													setActive(file.path);
-													setFileName("");
-													await directory(tree?.path ?? "");
-												})
-											}
-										>
-											Create file
-										</button>
-									</aside>
+							<section id='panel-Code' role='tabpanel' aria-labelledby='tab-Code' hidden={tab !== "Code"}>
+								<RepositoryBrowser
+									projectId={project.id}
+									workspace={workspace}
+									api={api}
+									tree={tree}
+									active={active}
+									busy={busy}
+									directory={directory}
+									open={open}
+									back={() => setActive("")}
+									fileActions={
+										<>
+											<label>
+												New file path
+												<input
+													value={fileName}
+													onChange={(event) => setFileName(event.target.value)}
+												/>
+											</label>
+											<button
+												disabled={busy || !fileName}
+												onClick={() =>
+													void run(async () => {
+														const file = await api.read(
+															`workspaces/${workspace.id}/file`,
+															workspaceFileSchema,
+															"POST",
+															{ path: fileName, content: "" },
+														);
+														setDrafts((current) => ({
+															...current,
+															[file.path]: { file, content: file.content, generation: 0 },
+														}));
+														setActive(file.path);
+														setFileName("");
+														await directory(tree?.path ?? "");
+													})
+												}
+											>
+												Create file
+											</button>
+										</>
+									}
+								>
 									<div className='editor-pane'>
 										<nav className='toolbar' aria-label='Editor tabs'>
 											{Object.entries(drafts).map(([path, value]) => (
@@ -362,11 +333,9 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 													</section>
 												)}
 											</>
-										) : (
-											<p>Open a file to edit.</p>
-										)}
+										) : null}
 									</div>
-								</div>
+								</RepositoryBrowser>
 								<details className='review-panel'>
 									<summary>Changes</summary>
 									{diff && (

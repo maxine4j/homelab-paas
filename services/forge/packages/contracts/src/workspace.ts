@@ -51,7 +51,14 @@ export const saveWorkspaceFileSchema = createWorkspaceFileSchema.extend({
 export const workspaceTreeSchema = z.strictObject({
 	path: treePathSchema,
 	entries: z
-		.array(z.strictObject({ name: z.string(), path: filePathSchema, kind: z.enum(["file", "directory"]) }))
+		.array(
+			z.strictObject({
+				name: z.string(),
+				path: filePathSchema,
+				kind: z.enum(["file", "directory"]),
+				lastChangedAt: z.iso.datetime().optional(),
+			}),
+		)
 		.max(1000),
 	truncated: z.boolean(),
 });

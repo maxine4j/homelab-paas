@@ -10,7 +10,7 @@ export interface WorkspaceLocation {
 }
 export interface IWorkspaceFiles {
 	mkdir(path: string, options?: { recursive?: boolean; mode?: number }): Promise<void>;
-	lstat(path: string): Promise<FileMetadata & { size: number; mode: number }>;
+	lstat(path: string): Promise<FileMetadata & { size: number; mode: number; mtimeMs: number }>;
 	readFile(path: string): Promise<string | undefined>;
 	readFileBytes(path: string): Promise<Buffer>;
 	createFileIfMissing(path: string, data: string, options?: { mode?: number }): Promise<boolean>;
