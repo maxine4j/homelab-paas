@@ -55,13 +55,30 @@ test("system Git executes without a shell and rejects forbidden protocols with s
 	await expect(git.run(["ls-remote", "file:///SECRET_LOCAL_PATH"])).rejects.toThrow(/^Git operation failed$/);
 	await expect(git.run(["ls-remote", "ext::echo SECRET"])).rejects.toThrow(/^Git operation failed$/);
 });
+
+test("binary transport preserves bytes while text transport rejects invalid UTF-8", async () => {
+	const root = await mkdtemp(join(tmpdir(), "forge-git-bytes-"));
+	const git = new GitTransport();
+	try {
+		await git.run(["init", "--bare", root]);
+		const input = join(root, "bytes");
+		const bytes = Buffer.from([255, 254, 10, 0]);
+		await writeFile(input, bytes);
+		const hash = (await git.run(["-C", root, "hash-object", "-w", input])).trim();
+		expect(await git.runBytes(["-C", root, "cat-file", "blob", hash])).toEqual(bytes);
+		await expect(git.run(["-C", root, "cat-file", "blob", hash])).rejects.toThrow("Git operation failed");
+	} finally {
+		await git.close();
+		await rm(root, { recursive: true, force: true });
+	}
+});
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { mkdtemp, readFile, rm } from "@homelab-paas/backend-infrastructure/file";
+import { mkdtemp, readFile, rm, writeFile } from "@homelab-paas/backend-infrastructure/file";
 import { sleep } from "@homelab-paas/backend-infrastructure/sleep";
 
 test("close cancels only owned Git groups and waits for their streams; later commands are rejected", async () => {

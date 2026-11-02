@@ -16,7 +16,11 @@ export interface IGitTransport {
 	/** Noninteractive system Git, 120s deadline and 1 MiB output bound; throws GitError. */
 	run(arguments_: string[]): Promise<string>;
 }
-export interface IGitRuntime extends IGitTransport {
+export interface IGitBinaryTransport extends IGitTransport {
+	/** Same process/time/output bounds; preserves bytes for binary-aware callers. */
+	runBytes(arguments_: string[]): Promise<Buffer>;
+}
+export interface IGitRuntime extends IGitBinaryTransport {
 	close(): Promise<void>;
 }
 export class GitTransport implements IGitRuntime {
@@ -28,6 +32,14 @@ export class GitTransport implements IGitRuntime {
 		private readonly config: GitTransportConfiguration = {},
 	) {}
 	async run(arguments_: string[]): Promise<string> {
+		try {
+			return new TextDecoder("utf-8", { fatal: true }).decode(await this.runBytes(arguments_));
+		} catch (cause) {
+			if (cause instanceof GitError) throw cause;
+			throw new GitError({ cause });
+		}
+	}
+	async runBytes(arguments_: string[]): Promise<Buffer> {
 		if (this.closing) throw new GitError();
 		let child;
 		try {
@@ -65,7 +77,7 @@ export class GitTransport implements IGitRuntime {
 			throw new GitError({ cause });
 		}
 		let failure: unknown;
-		let stdout = "";
+		const stdout: Buffer[] = [];
 		let stderr = "";
 		let bytes = 0;
 		let exited = false;
@@ -88,16 +100,15 @@ export class GitTransport implements IGitRuntime {
 				[child.stdout, true],
 				[child.stderr, false],
 			] as const) {
-				stream.setEncoding("utf8");
-				stream.on("data", (chunk: string) => {
-					bytes += Buffer.byteLength(chunk);
+				stream.on("data", (chunk: Buffer) => {
+					bytes += chunk.length;
 					if (bytes > 1024 * 1024) {
 						failure = new Error("Git output exceeded bound");
 						signalGroup("SIGKILL");
 						return;
 					}
-					if (output) stdout += chunk;
-					else stderr += chunk;
+					if (output) stdout.push(chunk);
+					else stderr += chunk.toString("utf8");
 				});
 			}
 			child.on("exit", () => {
@@ -113,7 +124,7 @@ export class GitTransport implements IGitRuntime {
 							failure,
 							new Error(`Git exit code ${code}; signal ${signal}`),
 							new Error(stderr),
-							new Error(stdout),
+							new Error(Buffer.concat(stdout).toString("utf8")),
 						],
 						"Git command failed",
 					);
@@ -145,7 +156,7 @@ export class GitTransport implements IGitRuntime {
 		try {
 			await done;
 			if (failure) throw new GitError({ cause: failure });
-			return stdout;
+			return Buffer.concat(stdout);
 		} finally {
 			this.active.delete(stop);
 		}

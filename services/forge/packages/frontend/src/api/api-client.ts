@@ -95,6 +95,12 @@ export class ApiClient implements IApiClient {
 				"project-unavailable":
 					"Project operation failed. Check server storage and import-host configuration, then retry.",
 				"internal-error": "Request failed. Try again.",
+				"workspace-not-found": "Workspace no longer exists. Refresh the list.",
+				"workspace-unavailable": "Workspace unavailable. Check its status and server storage.",
+				"workspace-conflict": "Workspace changed. Refresh before retrying.",
+				"file-not-found": "File no longer exists. Refresh the file tree.",
+				"file-conflict": "File changed. Reload it before saving.",
+				"file-unsupported": "File is binary, too large, or unsupported.",
 			};
 			throw new Error(failure.success ? messages[failure.data.error] : "Request failed. Try again.");
 		}

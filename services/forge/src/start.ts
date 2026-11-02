@@ -26,6 +26,11 @@ import { ProjectStore } from "./projects/project-store.ts";
 import { GitTransport } from "./repositories/git-transport.ts";
 import { RepositoryClient } from "./repositories/repository-client.ts";
 import type { StartOptions } from "./types.ts";
+import { WorkspaceClient } from "./workspaces/workspace-client.ts";
+import { WorkspaceDiffClient } from "./workspaces/workspace-diff-client.ts";
+import { WorkspaceRouter } from "./workspaces/workspace-router.ts";
+import { WorkspaceService } from "./workspaces/workspace-service.ts";
+import { WorkspaceStore } from "./workspaces/workspace-store.ts";
 
 export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): Promise<void> => {
 	process.umask(0o077);
@@ -53,6 +58,21 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 		await recovery.catch(() => {});
 	});
 	recovery = projects.recover();
+	await recovery;
+	if (!lifecycle.isOpen()) return;
+	const workspaceStore = new WorkspaceStore(database);
+	await workspaceStore.initialize();
+	const workspaceClient = new WorkspaceClient(config.dataDirectory, files, git, repositories);
+	const workspaces = new WorkspaceService(
+		workspaceStore,
+		workspaceClient,
+		projects,
+		access,
+		randomUUID,
+		() => new Date(),
+		new WorkspaceDiffClient(workspaceClient, git, files),
+	);
+	recovery = workspaces.recover();
 	await recovery;
 	if (!lifecycle.isOpen()) return;
 	const attempts = new AccountAttemptStore(database);
@@ -83,7 +103,10 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 	const assets = new StaticAssets(fileURLToPath(new URL("../packages/frontend/dist", import.meta.url)), files);
 	if (!(await assets.read("/"))) throw new Error("Build Forge frontend before starting the application");
 	if (!lifecycle.isOpen()) return;
-	const app = new HttpApplication(new ProjectRouter(projects), access).create([new AccountRouter(accounts)], assets);
+	const app = new HttpApplication(new ProjectRouter(projects), access).create(
+		[new AccountRouter(accounts), new WorkspaceRouter(workspaces)],
+		assets,
+	);
 	app.on("error", (err) => log.error({ err }, "HTTP request failed"));
 	const server = createServer(app.callback());
 	let listening: Promise<void> = Promise.resolve();

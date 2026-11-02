@@ -8,6 +8,17 @@ const project = {
 	status: "ready",
 	createdAt: "2026-11-02T00:00:00.000Z",
 };
+test.each([
+	["workspace-not-found", "Workspace no longer exists. Refresh the list."],
+	["workspace-unavailable", "Workspace unavailable. Check its status and server storage."],
+	["workspace-conflict", "Workspace changed. Refresh before retrying."],
+	["file-not-found", "File no longer exists. Refresh the file tree."],
+	["file-conflict", "File changed. Reload it before saving."],
+	["file-unsupported", "File is binary, too large, or unsupported."],
+])("maps %s to a fixed message", async (error, message) => {
+	const api = new ApiClient(vi.fn<typeof fetch>().mockResolvedValue(Response.json({ error }, { status: 409 })));
+	await expect(api.projects()).rejects.toThrow(message);
+});
 test("validates successful responses and never leaks raw response errors", async () => {
 	const request = vi.fn<typeof fetch>();
 	const api = new ApiClient(request);

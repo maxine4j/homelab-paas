@@ -1,5 +1,19 @@
 import { z } from "zod";
 
+export * from "./workspace.ts";
+export type {
+	Workspace,
+	CreateWorkspace,
+	WorkspaceFile,
+	CreateWorkspaceFile,
+	SaveWorkspaceFile,
+	WorkspaceTree,
+	WorkspacePaths,
+	WorkspaceCommit,
+	DiffSection,
+	WorkspaceDiff,
+} from "./types.ts";
+
 // Control characters are intentionally rejected at this untrusted browser boundary.
 // eslint-disable-next-line no-control-regex
 const controlCharacters = /[\u0000-\u001f\u007f]/u;
@@ -38,7 +52,19 @@ export const projectSchema = z.strictObject({
 });
 export const projectsSchema = z.array(projectSchema).max(1000);
 export const apiErrorSchema = z.strictObject({
-	error: z.enum(["invalid-request", "access-denied", "project-not-found", "project-unavailable", "internal-error"]),
+	error: z.enum([
+		"invalid-request",
+		"access-denied",
+		"project-not-found",
+		"project-unavailable",
+		"internal-error",
+		"workspace-not-found",
+		"workspace-unavailable",
+		"workspace-conflict",
+		"file-not-found",
+		"file-conflict",
+		"file-unsupported",
+	]),
 });
 
 export const accountProviderSchema = z.enum(["codex", "github"]);

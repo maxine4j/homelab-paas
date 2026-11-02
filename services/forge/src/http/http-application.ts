@@ -7,6 +7,7 @@ import { AccessDeniedError, type IAccessService } from "../auth/access-service.t
 import type { Actor } from "../auth/types.ts";
 import { InvalidProjectError, ProjectNotFoundError, ProjectUnavailableError } from "../projects/errors.ts";
 import type { IProjectRouter } from "../projects/project-router.ts";
+import { WorkspaceError } from "../workspaces/errors.ts";
 import type { IStaticAssets } from "./static-assets.ts";
 
 export interface IHttpApplication {
@@ -33,7 +34,19 @@ export class HttpApplication implements IHttpApplication {
 				failure = err;
 				const badBody = err instanceof Error && "status" in err && err.status === 400;
 				const tooLarge = err instanceof Error && "status" in err && err.status === 413;
-				if (err instanceof AccessDeniedError) {
+				if (err instanceof WorkspaceError) {
+					ctx.status =
+						err.code === "invalid-request"
+							? 400
+							: err.code === "workspace-not-found" || err.code === "file-not-found"
+								? 404
+								: err.code === "file-conflict" || err.code === "workspace-conflict"
+									? 409
+									: err.code === "file-unsupported"
+										? 415
+										: 503;
+					ctx.body = { error: err.code };
+				} else if (err instanceof AccessDeniedError) {
 					ctx.status = 403;
 					ctx.body = { error: "access-denied" };
 				} else if (err instanceof InvalidProjectError || badBody || tooLarge) {
@@ -83,7 +96,14 @@ export class HttpApplication implements IHttpApplication {
 			);
 			await next();
 		});
-		app.use(bodyParser({ enableTypes: ["json"], jsonLimit: "16kb" }));
+		const ordinaryBody = bodyParser({ enableTypes: ["json"], jsonLimit: "16kb" });
+		// JSON escapes can expand a valid 256 KiB text file by six times.
+		const fileBody = bodyParser({ enableTypes: ["json"], jsonLimit: "2mb" });
+		app.use((ctx, next) =>
+			/^\/api\/workspaces\/[^/]+\/file$/u.test(ctx.path) && ["POST", "PUT"].includes(ctx.method)
+				? fileBody(ctx, next)
+				: ordinaryBody(ctx, next),
+		);
 		const router = this.projectRouter.create();
 		app.use(router.routes()).use(router.allowedMethods());
 		for (const extension of extensions) {

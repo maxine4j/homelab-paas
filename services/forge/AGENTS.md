@@ -351,6 +351,73 @@ release-tag or main `latest` tags under the repository's image convention.
 Building does not deploy the descriptor; add it to platform configuration only
 when ready, retaining the [private ingress trust boundary](../../docs/networking-and-auth.md#authenticated-workload-identity-headers).
 
+#### Slice 2 manual workspace foundation
+
+Manual workspaces are project resources without tickets in milestone 2. Ticket
+linkage and agent pause/edit/resume enter with the later ticket/agent slices;
+this slice does not dispatch turns, schedule jobs, host Git HTTPS, run remote CI,
+or merge `main`.
+
+`@homelab-paas/forge-contracts` exports workspace schemas from `workspace.ts`.
+Workspace values contain ID, project ID, name, deterministic
+`forge/workspace/{workspaceId}` branch, creation timestamp, creation `baseSha`,
+status (`creating/ready/failed/archived`), and current `head` when ready. They never
+contain filesystem paths. Creation starts from local `main`; an entirely empty
+repository gets one empty Forge initialization commit on `main`. A nonempty
+repository without `main` requires operator repair and fails closed. No API
+switches branches or writes directly to an existing `main`.
+
+Workspace routes, all subject to the foundation owner/origin policy:
+
+| Route                                          | Contract                                                                       |
+| ---------------------------------------------- | ------------------------------------------------------------------------------ |
+| `GET/POST /api/projects/:projectId/workspaces` | List/create; creation accepts `{name}`.                                        |
+| `GET/PATCH/DELETE /api/workspaces/:id`         | Inspect/rename/archive; PATCH accepts `{name}`.                                |
+| `POST /api/workspaces/:id/retry`               | Explicitly retry failed creation; archived workspaces remain archived.         |
+| `GET /api/workspaces/:id/tree?path=`           | One directory level, up to 1000 entries, explicit truncation.                  |
+| `GET /api/workspaces/:id/file?path=...`        | UTF-8 text, SHA-256 content version.                                           |
+| `POST/PUT /api/workspaces/:id/file`            | Exclusive create `{path,content}` / save `{path,content,version}`.             |
+| `GET /api/workspaces/:id/diff`                 | Separate branch, staged, unstaged, untracked sections.                         |
+| `POST /api/workspaces/:id/stage` or `/unstage` | `{paths}`: 1–100 explicit files; directories/globs are not staged recursively. |
+| `POST /api/workspaces/:id/commit`              | `{message,expectedHead}`; atomic expected-head branch update.                  |
+
+SQLite intent precedes worktree creation. Exclusive claims and immutable base
+markers live beside worktrees, outside editable/visible source. Git worktrees are
+locked against pruning; recovery verifies claims, repository ownership, linked
+worktree metadata and branch identity before use. Interrupted creation may
+complete; failed state needs explicit retry. Recovery never resets branches,
+overwrites files, adopts unrelated paths, or deletes partial work. Archives retain
+SQLite metadata, worktree, branch and files; file/Git operations reject archives.
+The initial limit is 1000 retained workspaces across projects.
+
+Files are limited to 256 KiB of valid UTF-8 without NUL. Absolute paths, traversal,
+backslashes, control characters, symlinks, Git metadata and `.forge-*` components
+are rejected. Existing parent directories are required when creating a file.
+File mutation JSON bodies allow 2 MiB for JSON escaping; other bodies retain the
+16 KiB limit. Version mismatches fail with `file-conflict`; simultaneous Forge
+saves using one version have one winner. API operations share a serialized
+application queue. Atomic replacement preserves executable permissions. These
+checks detect observed external edits; arbitrary local shells share storage and
+cannot provide cross-process atomic editor saves or hostile process isolation.
+
+Branch diffs compare `merge-base(main, workspace)..workspace`, independently of
+the recorded immutable creation base. Each of the four sections contains at most
+100 paths, 1000 patch lines and 256 KiB patch bytes, with explicit `truncated`
+metadata. Binary/non-UTF8 content has path metadata without text patches. Git
+commands retain their 120-second/1 MiB process bounds; a diff command exceeding
+its output bound yields explicit truncation. Restricted metadata is omitted from
+diff previews and cannot be committed through Forge. Diff results are observations
+of shared mutable Git/files, not transactional snapshots against terminal commands.
+
+Safe errors are `invalid-request`, `workspace-not-found`, `workspace-unavailable`,
+`workspace-conflict`, `file-not-found`, `file-conflict`, and `file-unsupported`.
+HTTP maps them to 400/404/503/409/415 respectively, without diagnostic strings.
+Services recheck owner authorization for all operations. Internal
+`IWorkspaceService.resolve(actor,id)` returns the verified path for future terminal
+integration; entry points must never serialize it. Future PR services can inspect
+workspace identity/head through the same service interface. Startup initializes
+the workspace store and completes recovery before listening.
+
 ### Ticket and PR workflow
 
 ```text

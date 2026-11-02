@@ -1,3 +1,29 @@
+import type { z } from "zod";
+
+import type {
+	workspaceSchema,
+	createWorkspaceSchema,
+	workspaceFileSchema,
+	createWorkspaceFileSchema,
+	saveWorkspaceFileSchema,
+	workspaceTreeSchema,
+	workspacePathsSchema,
+	workspaceCommitSchema,
+	diffSectionSchema,
+	workspaceDiffSchema,
+} from "./workspace.ts";
+
+export type Workspace = z.infer<typeof workspaceSchema>;
+export type CreateWorkspace = z.infer<typeof createWorkspaceSchema>;
+export type WorkspaceFile = z.infer<typeof workspaceFileSchema>;
+export type CreateWorkspaceFile = z.infer<typeof createWorkspaceFileSchema>;
+export type SaveWorkspaceFile = z.infer<typeof saveWorkspaceFileSchema>;
+export type WorkspaceTree = z.infer<typeof workspaceTreeSchema>;
+export type WorkspacePaths = z.infer<typeof workspacePathsSchema>;
+export type WorkspaceCommit = z.infer<typeof workspaceCommitSchema>;
+export type DiffSection = z.infer<typeof diffSectionSchema>;
+export type WorkspaceDiff = z.infer<typeof workspaceDiffSchema>;
+
 export interface CreateProject {
 	name: string;
 	source?: string;
