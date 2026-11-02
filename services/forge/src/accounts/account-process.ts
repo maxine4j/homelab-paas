@@ -5,7 +5,12 @@ import { chmod, isFileError, lstat, mkdir } from "@homelab-paas/backend-infrastr
 import { createLogger } from "@homelab-paas/backend-infrastructure/logger";
 import type { ISleep } from "@homelab-paas/backend-infrastructure/sleep";
 
-import type { AccountProcessConfiguration, AccountProcessHandle, AccountProcessSpec } from "./types.ts";
+import type {
+	AccountProcessConfiguration,
+	AccountProcessHandle,
+	AccountProcessSpec,
+	IAccountDiagnostics,
+} from "./types.ts";
 
 export class AccountProcessError extends Error {
 	constructor(options?: ErrorOptions) {
@@ -20,12 +25,12 @@ export interface IAccountProcess {
 	spawn(spec: AccountProcessSpec): AccountProcessHandle;
 }
 export class AccountProcess implements IAccountProcess {
-	private readonly log = createLogger(AccountProcess.name);
 	private ready = false;
 	private codexOwned = false;
 	constructor(
 		private readonly config: AccountProcessConfiguration,
 		private readonly sleep: ISleep,
+		private readonly log: IAccountDiagnostics = createLogger(AccountProcess.name),
 	) {}
 	async initialize(): Promise<void> {
 		try {
@@ -86,6 +91,7 @@ export class AccountProcess implements IAccountProcess {
 		let outputBytes = 0;
 		let stopPromise: Promise<void> | undefined;
 		let exited = false;
+		let expectedStop = false;
 		const signalGroup = (signal: NodeJS.Signals): boolean => {
 			if (!child.pid) return false;
 			try {
@@ -134,10 +140,9 @@ export class AccountProcess implements IAccountProcess {
 					signalGroup("SIGKILL");
 					return;
 				}
-				// gh presents its device flow on stderr; never expose arbitrary diagnostics above this adapter.
-				if (!codex) {
+				if (spec.onStderr) {
 					try {
-						spec.onOutput(chunk);
+						spec.onStderr(chunk);
 					} catch (err) {
 						failure = err;
 						signalGroup("SIGKILL");
@@ -153,7 +158,7 @@ export class AccountProcess implements IAccountProcess {
 				if (codex) this.codexOwned = false;
 				if (failure) reject(new AccountProcessError({ cause: failure }));
 				else {
-					if (code !== 0)
+					if (code !== 0 && !expectedStop && !spec.expectedExitCodes?.includes(code ?? -1))
 						this.log.warn(
 							{ err: new Error(stderr), exitCode: code },
 							"Account command exited unsuccessfully",
@@ -171,6 +176,7 @@ export class AccountProcess implements IAccountProcess {
 				child.stdin.write(data);
 			},
 			stop: () => {
+				expectedStop = true;
 				stopPromise ??= (async () => {
 					if (!exited && signalGroup("SIGTERM")) {
 						const timer = new AbortController();

@@ -14,6 +14,7 @@ COPY packages/shared-contracts/package.json packages/shared-contracts/package.js
 COPY packages/backend-infrastructure/package.json packages/backend-infrastructure/package.json
 COPY services/forge/package.json services/forge/package.json
 COPY services/forge/packages/contracts/package.json services/forge/packages/contracts/package.json
+COPY services/forge/packages/frontend/package.json services/forge/packages/frontend/package.json
 RUN --mount=type=cache,id=homelab-paas-test-pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --store-dir /pnpm/store
 COPY tsconfig.json ./

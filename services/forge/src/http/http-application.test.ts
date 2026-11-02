@@ -34,7 +34,12 @@ const fixture = async () => {
 	const app = new HttpApplication(
 		new ProjectRouter(projects),
 		new AccessService({ owner: "owner", origin: "https://forge.example.com" }),
-	).create();
+	).create([], {
+		read: async (path) =>
+			path.startsWith("/api")
+				? undefined
+				: { bytes: Buffer.from("<main>Forge</main>"), type: "text/html", immutable: false },
+	});
 	const server = createServer(app.callback());
 	servers.push(server);
 	server.listen(0, "127.0.0.1");
@@ -72,6 +77,21 @@ test("HTTP routes validate input and pass the PaaS actor to project services", a
 	});
 	expect(response.status).toBe(400);
 	expect((await request("/api/projects/not-a-uuid", { headers })).status).toBe(400);
+});
+
+test("frontend inherits owner access, HEAD and security headers; unknown APIs remain JSON 404", async () => {
+	const { request } = await fixture();
+	expect((await request("/")).status).toBe(403);
+	const headers = { "x-webauth-user": "owner" };
+	const response = await request("/projects/one", { headers });
+	expect(response.status).toBe(200);
+	expect(response.headers.get("content-type")).toContain("text/html");
+	expect(response.headers.get("content-security-policy")).toContain("default-src 'self'");
+	expect(await response.text()).toBe("<main>Forge</main>");
+	expect(await (await request("/", { headers, method: "HEAD" })).text()).toBe("");
+	const missing = await request("/api/missing", { headers });
+	expect(missing.status).toBe(404);
+	expect(await missing.json()).toEqual({ error: "not-found" });
 });
 
 test("access and origin checks precede parsing/effects; API errors never expose diagnostics", async () => {

@@ -1,4 +1,10 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
+
+import { isFileError } from "@homelab-paas/backend-infrastructure/file";
+import { createLogger } from "@homelab-paas/backend-infrastructure/logger";
+import { sleep, type ISleep } from "@homelab-paas/backend-infrastructure/sleep";
+
+import type { GitTransportConfiguration } from "./types.ts";
 
 export class GitError extends Error {
 	constructor(options?: ErrorOptions) {
@@ -10,12 +16,25 @@ export interface IGitTransport {
 	/** Noninteractive system Git, 120s deadline and 1 MiB output bound; throws GitError. */
 	run(arguments_: string[]): Promise<string>;
 }
-export class GitTransport implements IGitTransport {
+export interface IGitRuntime extends IGitTransport {
+	close(): Promise<void>;
+}
+export class GitTransport implements IGitRuntime {
+	private readonly log = createLogger(GitTransport.name);
+	private readonly active = new Set<() => Promise<void>>();
+	private closing: Promise<void> | undefined;
+	constructor(
+		private readonly pause: ISleep = sleep,
+		private readonly config: GitTransportConfiguration = {},
+	) {}
 	async run(arguments_: string[]): Promise<string> {
-		return new Promise((resolve, reject) => {
-			execFile(
-				"git",
+		if (this.closing) throw new GitError();
+		let child;
+		try {
+			child = spawn(
+				this.config.executable ?? "git",
 				[
+					...(this.config.prefix ?? []),
 					"-c",
 					"protocol.allow=never",
 					"-c",
@@ -29,10 +48,8 @@ export class GitTransport implements IGitTransport {
 					...arguments_,
 				],
 				{
-					timeout: 120_000,
-					maxBuffer: 1024 * 1024,
-					encoding: "utf8",
-					killSignal: "SIGKILL",
+					detached: true,
+					stdio: ["ignore", "pipe", "pipe"],
 					env: {
 						PATH: process.env["PATH"],
 						LANG: "C",
@@ -43,11 +60,101 @@ export class GitTransport implements IGitTransport {
 						GIT_ASKPASS: "/bin/false",
 					},
 				},
-				(cause, stdout) => {
-					if (cause) reject(new GitError({ cause }));
-					else resolve(stdout);
-				},
 			);
+		} catch (cause) {
+			throw new GitError({ cause });
+		}
+		let failure: unknown;
+		let stdout = "";
+		let stderr = "";
+		let bytes = 0;
+		let exited = false;
+		const deadline = new AbortController();
+		const signalGroup = (signal: NodeJS.Signals): boolean => {
+			if (!child.pid) return false;
+			try {
+				process.kill(-child.pid, signal);
+				return true;
+			} catch (err) {
+				if (!isFileError(err, "ESRCH")) this.log.error({ err }, "Git process group signal failed");
+				return false;
+			}
+		};
+		const done = new Promise<void>((resolve) => {
+			child.on("error", (error) => {
+				failure = error;
+			});
+			for (const [stream, output] of [
+				[child.stdout, true],
+				[child.stderr, false],
+			] as const) {
+				stream.setEncoding("utf8");
+				stream.on("data", (chunk: string) => {
+					bytes += Buffer.byteLength(chunk);
+					if (bytes > 1024 * 1024) {
+						failure = new Error("Git output exceeded bound");
+						signalGroup("SIGKILL");
+						return;
+					}
+					if (output) stdout += chunk;
+					else stderr += chunk;
+				});
+			}
+			child.on("exit", () => {
+				exited = true;
+				signalGroup("SIGKILL");
+			});
+			child.on("close", (code, signal) => {
+				exited = true;
+				deadline.abort();
+				if (code !== 0 || failure)
+					failure = new AggregateError(
+						[
+							failure,
+							new Error(`Git exit code ${code}; signal ${signal}`),
+							new Error(stderr),
+							new Error(stdout),
+						],
+						"Git command failed",
+					);
+				resolve();
+			});
 		});
+		let stopping: Promise<void> | undefined;
+		const stop = (): Promise<void> => {
+			stopping ??= (async () => {
+				failure ??= new Error("Git operation cancelled");
+				if (!exited && signalGroup("SIGTERM")) {
+					const grace = new AbortController();
+					await Promise.race([done, this.pause(1000, grace.signal).catch(() => {})]);
+					grace.abort();
+					signalGroup("SIGKILL");
+				}
+				await done;
+			})();
+			return stopping;
+		};
+		this.active.add(stop);
+		void this.pause(this.config.deadlineMs ?? 120_000, deadline.signal).then(
+			() => {
+				failure = new Error("Git command deadline exceeded");
+				signalGroup("SIGKILL");
+			},
+			() => {},
+		);
+		try {
+			await done;
+			if (failure) throw new GitError({ cause: failure });
+			return stdout;
+		} finally {
+			this.active.delete(stop);
+		}
+	}
+	/** Stops accepting commands, cancels only owned Unix groups, and awaits direct-child stream closure. */
+	close(): Promise<void> {
+		this.closing ??= Promise.resolve().then(async () => {
+			await Promise.all([...this.active].map((stop) => stop()));
+		});
+		return this.closing;
 	}
 }

@@ -3,6 +3,7 @@ import { createInterface } from "node:readline";
 const emit = (message) => process.stdout.write(JSON.stringify(message) + "\n");
 const command = process.argv[2];
 if (command === "api") {
+	process.stdout.write("HTTP/2.0 200 OK\r\n\r\n");
 	emit({ login: "owner", extraSecret: "SECRET" });
 } else if (command === "auth") {
 	process.stderr.write("! First copy your one-time code: GHGH-CODE\n");

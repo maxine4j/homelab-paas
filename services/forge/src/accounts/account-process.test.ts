@@ -3,11 +3,74 @@ import { join } from "node:path";
 
 import { mkdtemp, rm, stat } from "@homelab-paas/backend-infrastructure/file";
 import { sleep } from "@homelab-paas/backend-infrastructure/sleep";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { AccountProcess } from "./account-process.ts";
 
 describe("AccountProcess", () => {
+	it("keeps gh diagnostics separate from structured stdout", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "forge-account-streams-"));
+		try {
+			const processes = new AccountProcess(
+				{
+					dataDirectory: directory,
+					path: process.env["PATH"] ?? "",
+					codexExecutable: process.execPath,
+					githubExecutable: process.execPath,
+				},
+				sleep,
+			);
+			await processes.initialize();
+			let stdout = "";
+			let stderr = "";
+			const child = processes.spawn({
+				program: "github",
+				arguments: ["-e", "process.stdout.write('structured');process.stderr.write('diagnostic')"],
+				onOutput: (chunk) => {
+					stdout += chunk;
+				},
+				onStderr: (chunk) => {
+					stderr += chunk;
+				},
+			});
+			await child.done;
+			expect(stdout).toBe("structured");
+			expect(stderr).toBe("diagnostic");
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	});
+	it("expected process shutdown does not emit an unsuccessful-command warning", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "forge-account-stop-"));
+		const warn = vi.fn();
+		try {
+			const processes = new AccountProcess(
+				{
+					dataDirectory: directory,
+					path: process.env["PATH"] ?? "",
+					codexExecutable: process.execPath,
+					githubExecutable: process.execPath,
+				},
+				sleep,
+				{ warn, error: vi.fn() },
+			);
+			await processes.initialize();
+			let ready: () => void = () => {};
+			const started = new Promise<void>((resolve) => {
+				ready = resolve;
+			});
+			const child = processes.spawn({
+				program: "codex",
+				arguments: ["-e", "setInterval(()=>{},1000);process.stdout.write('ready')"],
+				onOutput: () => ready(),
+			});
+			await started;
+			await child.stop();
+			expect(warn).not.toHaveBeenCalled();
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	});
 	it("bounds combined stdout and stderr for short account commands", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "forge-account-combined-"));
 		try {

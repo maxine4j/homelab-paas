@@ -5,6 +5,46 @@ import type { IAccountProcess } from "./account-process.ts";
 import { GithubAccountClient } from "./github-account-client.ts";
 
 describe("GithubAccountClient", () => {
+	it("maps a validated HTTP401 /user response to signed-out and rejects other failures", async () => {
+		let status = 401;
+		const client = new GithubAccountClient(
+			{
+				initialize: async () => {},
+				spawn: (spec) => {
+					expect(spec.arguments).toEqual(["api", "--include", "--hostname", "github.com", "user"]);
+					spec.onOutput(
+						`HTTP/2.0 ${status} Unauthorized\r\nContent-Type: application/json\r\n\r\n`
+							+ JSON.stringify({ message: "Requires authentication", status: String(status) }),
+					);
+					return { done: Promise.resolve(1), stop: async () => {}, write: () => {} };
+				},
+			},
+			sleep,
+			{ pending: async () => false, save: async () => {} },
+		);
+		expect(await client.status()).toMatchObject({ connection: "available", login: { state: "idle" } });
+		status = 403;
+		expect((await client.status()).connection).toBe("unavailable");
+	});
+	it("retries credential-home initialization after permissions are repaired", async () => {
+		let repaired = false;
+		let initialized = false;
+		const processes: IAccountProcess = {
+			initialize: async () => {
+				if (!repaired) throw new Error("permissions");
+				initialized = true;
+			},
+			spawn: (spec) => {
+				if (!initialized) throw new Error("not initialized");
+				spec.onOutput("HTTP/2.0 200 OK\r\n\r\n" + JSON.stringify({ login: "owner" }));
+				return { done: Promise.resolve(0), write: () => {}, stop: async () => {} };
+			},
+		};
+		const client = new GithubAccountClient(processes, sleep, { pending: async () => false, save: async () => {} });
+		expect((await client.status()).connection).toBe("unavailable");
+		repaired = true;
+		expect(await client.status()).toMatchObject({ connection: "available", account: { name: "owner" } });
+	});
 	it("permits explicit retry after a failed process even while verification is unavailable", async () => {
 		let starts = 0;
 		let finish: (code: number) => void = () => {};
@@ -44,7 +84,7 @@ describe("GithubAccountClient", () => {
 			initialize: async () => {},
 			spawn: (spec) => {
 				if (spec.arguments[0] === "api") {
-					spec.onOutput(JSON.stringify({ login: "owner", token: "SECRET" }));
+					spec.onOutput("HTTP/2.0 200 OK\r\n\r\n" + JSON.stringify({ login: "owner", token: "SECRET" }));
 					verified = true;
 					return { done: Promise.resolve(0), write: () => {}, stop: async () => {} };
 				}

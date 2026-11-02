@@ -3,7 +3,7 @@ import type { ISleep } from "@homelab-paas/backend-infrastructure/sleep";
 import { z } from "zod";
 
 import type { IAccountProcess } from "./account-process.ts";
-import type { AccountNotification, AccountProcessHandle } from "./types.ts";
+import type { AccountNotification, AccountProcessHandle, IAccountDiagnostics } from "./types.ts";
 
 export class CodexConnectionError extends Error {
 	constructor(options?: ErrorOptions) {
@@ -39,7 +39,6 @@ const methods = new Map<string, z.ZodType>([
 ]);
 
 export class CodexConnection implements ICodexConnection {
-	private readonly log = createLogger(CodexConnection.name);
 	private handle: AccountProcessHandle | undefined;
 	private initialization: Promise<void> | undefined;
 	private stopping: Promise<void> = Promise.resolve();
@@ -52,6 +51,7 @@ export class CodexConnection implements ICodexConnection {
 		private readonly processes: IAccountProcess,
 		private readonly sleep: ISleep,
 		private readonly deadlineMs: number = 15_000,
+		private readonly log: IAccountDiagnostics = createLogger(CodexConnection.name),
 	) {}
 	async initialize(): Promise<void> {
 		if (this.closed) throw new CodexConnectionError();
@@ -72,19 +72,21 @@ export class CodexConnection implements ICodexConnection {
 		return () => this.listeners.delete(listener);
 	}
 	async restart(): Promise<void> {
-		this.disconnect(new Error("Explicit account connection reset"));
+		this.disconnect(new Error("Explicit account connection reset"), true);
 		await this.stopping;
 		await this.initialize();
 	}
 	async close(): Promise<void> {
 		this.closed = true;
-		this.disconnect(new Error("Forge shutting down"));
+		this.disconnect(new Error("Forge shutting down"), true);
 		await this.stopping;
 	}
 	private async connect(): Promise<void> {
 		await this.stopping;
 		if (this.closed) throw new CodexConnectionError();
 		try {
+			await this.processes.initialize();
+			if (this.closed) throw new CodexConnectionError();
 			const handle = this.processes.spawn({
 				program: "codex",
 				arguments: ["app-server", "-c", 'cli_auth_credentials_store="file"'],
@@ -182,7 +184,7 @@ export class CodexConnection implements ICodexConnection {
 			throw new Error("Missing Codex result");
 		}
 	}
-	private disconnect(cause: unknown): void {
+	private disconnect(cause: unknown, expected = false): void {
 		const handle = this.handle;
 		this.handle = undefined;
 		this.initialization = undefined;
@@ -193,8 +195,8 @@ export class CodexConnection implements ICodexConnection {
 		}
 		this.pending.clear();
 		if (handle) {
-			this.log.warn({ err: cause }, "Codex disconnected; pending work will not be replayed");
-			for (const listener of this.listeners) listener("connection/lost", {});
+			if (!expected) this.log.warn({ err: cause }, "Codex disconnected; pending work will not be replayed");
+			if (!this.closed) for (const listener of this.listeners) listener("connection/lost", {});
 			this.stopping = handle.stop().catch((err: unknown) => {
 				this.log.error({ err }, "Codex process cleanup failed");
 			});

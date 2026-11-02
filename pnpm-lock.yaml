@@ -76,6 +76,37 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
+  services/forge/packages/frontend:
+    dependencies:
+      '@homelab-paas/forge-contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      react:
+        specifier: 19.1.0
+        version: 19.1.0
+      react-dom:
+        specifier: 19.1.0
+        version: 19.1.0(react@19.1.0)
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.1
+        version: 1.64.1
+      '@types/react':
+        specifier: 19.1.6
+        version: 19.1.6
+      '@types/react-dom':
+        specifier: 19.1.5
+        version: 19.1.5(@types/react@19.1.6)
+      '@vitejs/plugin-react':
+        specifier: 4.5.0
+        version: 4.5.0(vite@6.4.4(@types/node@26.6.5)(yaml@2.9.1))
+      vite:
+        specifier: 6.4.4
+        version: 6.4.4(@types/node@26.6.5)(yaml@2.9.1)
+      vitest:
+        specifier: 3.2.4
+        version: 3.2.4(@types/node@26.6.5)(yaml@2.9.1)
+
   services/paas:
     dependencies:
       '@homelab-paas/backend-infrastructure':

@@ -11,3 +11,8 @@ export interface IRepositoryFiles {
 	atomicWriteFile(path: string, data: string): Promise<void>;
 	rename(from: string, to: string): Promise<void>;
 }
+export interface GitTransportConfiguration {
+	executable?: string;
+	prefix?: string[];
+	deadlineMs?: number;
+}

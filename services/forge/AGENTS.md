@@ -255,9 +255,96 @@ orphaned descendants. Long-lived Codex stderr retains a bounded 64 KiB diagnosti
 tail rather than accumulating without limit. Recreate deployment remains mandatory
 to prevent multiple application instances sharing account homes.
 
-This backend provides local projects, persistence, repository import, access
-policy, project/account HTTP adapters, and private Codex account integration.
-The served frontend and production composition are subsequent work within slice 1.
+Slice 1 serves a responsive React interface from the same application as its API.
+Owners can list/create/import/retry projects and connect ChatGPT/GitHub using
+verification links, one-time codes, cancellation, verification and explicit retry.
+Account polling is serialized with actions, aborts on unmount, and never blocks
+project use. Failed creation refreshes durable project intent for explicit retry.
+All API responses are validated by the browser; device links are limited to the
+provider's exact verification page. No editor, terminal, tickets, PRs or agent-turn
+UI is included in this slice.
+
+Production startup restricts the data root, initializes SQLite/schema and recovers
+projects before listening. Codex initializes asynchronously after HTTP starts;
+unavailable account processes/homes do not withhold health or project access.
+Account checks/retries reattempt credential-home initialization after permission
+repairs. GitHub verification uses bounded, separate stdout/stderr: `gh api
+--include user` must return a validated HTTP 200 and username; HTTP 401 means
+signed out, other failed verification stays unavailable. Shutdown closes HTTP,
+GitHub and Codex before SQLite, in reverse acquisition order. HTTP stops accepting
+requests, then cancels owned Git process groups before waiting for request drain;
+SQLite remains available to persist failed import intents. Git helpers are also
+terminated on leader exit and the 120-second deadline, with a 1 MiB combined
+output bound and injected timers. Interrupted startup recovery finishes recording
+its result before database closure. Expected process
+shutdown does not report a provider failure. Partial startup and listener errors
+exit unsuccessfully after registered cleanup.
+
+Built assets require owner access, reject traversal/symlinks, and serve only
+approved public file types. Navigation falls back to the frontend; unknown
+`/api` paths return JSON 404 and missing assets never fall back. Hashed assets
+use private immutable caching; HTML/API responses use no-store. CSP permits
+same-origin scripts/styles and blocks framing; device pages open separately.
+
+#### Run, package and verify slice 1
+
+Run `nvm use` from the repository root before the following commands:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm check
+pnpm test
+pnpm test:integration
+pnpm build
+pnpm test:forge:browser
+pnpm image:forge
+pnpm test:forge:image
+```
+
+Browser tests use controlled API responses in Chromium, including mobile layout,
+account setup states and project recovery controls. They do not claim production
+ingress authentication or live login. Install the repository's pinned Chromium
+with `pnpm --filter @homelab-paas/forge-ui exec playwright install chromium` if
+needed. Screenshots/diagnostics live under ignored `artifacts/forge*/`.
+The image smoke uses a disposable Docker volume and internal container HTTP,
+with no host ports. It checks nonroot execution, restricted directories, real
+Git/SQLite recovery, synthetic credential-home file persistence, bundled Codex
+initialization/account-read, shipped gh flags and signed-out verification,
+orphan reaping, graceful signals, partial startup and listener failures. A separate
+composition test uses a controlled Git CLI peer for a hanging remote fetch:
+real HTTP/SQLite shutdown cancels its group and preserves a failed project for
+explicit retry. It does not claim a live remote import or bypass HTTPS validation.
+The gh
+signed-out check reaches GitHub's credential-free `/user` endpoint; it needs
+network connectivity. It never performs a real login. Real credential persistence
+and successful live ChatGPT/GitHub login remain manual checks.
+
+`pnpm dev:forge` builds contracts/infrastructure/frontend and watches the backend;
+set `FORGE_OWNER`, `FORGE_ORIGIN` and an absolute writable `FORGE_DATA_DIRECTORY`
+first. This is a private proxy workload: browse through authenticated HTTPS PaaS
+ingress. The standalone Vite server is used for controlled browser tests; it does
+not inject a trusted application identity or provide an alternative login.
+
+The image is one Node 24.22.0 Debian trixie application (glibc, avoiding musl
+compatibility assumptions), UID/GID 1000, with Git 2.47.3, gh 2.46.0, pinned
+Codex 0.164.0 and approved tini 0.19.0 as PID 1. Exact tested Debian package
+revisions are in `Dockerfile`; dependency changes require revalidation. Tini
+reaps orphaned descendants. Process-group cleanup covers ordinary descendants;
+deliberately escaped live processes are outside that application-level boundary.
+
+`forge.sd.yaml` uses private ingress, one replica, recreate rollout and persistent
+`/data`, with no HTTP host ports. Configure the owner's actual GitHub username as
+`FORGE_OWNER` in the [PaaS service secret file](../../docs/configuration.md#environment-variables-and-secrets)
+`/etc/homelab-paas/env/forge.env`; the descriptor supplies `FORGE_ORIGIN` from
+`https://${SERVICE_DOMAIN}`. No placeholder username is accepted automatically.
+Remote imports remain disabled until the operator adds a literal `FORGE_IMPORT_HOSTS`
+environment entry to the descriptor, or declares it with `secret: true` and adds
+its exact DNS allowlist to `forge.env`. Undeclared secret-file entries are not injected.
+Build locally with `pnpm image:forge`; CI builds and validates
+the image and publishes `ghcr.io/maxine4j/homelab-paas/forge` with full SHA,
+release-tag or main `latest` tags under the repository's image convention.
+Building does not deploy the descriptor; add it to platform configuration only
+when ready, retaining the [private ingress trust boundary](../../docs/networking-and-auth.md#authenticated-workload-identity-headers).
 
 ### Ticket and PR workflow
 

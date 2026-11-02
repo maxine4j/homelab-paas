@@ -7,9 +7,10 @@ import { AccessDeniedError, type IAccessService } from "../auth/access-service.t
 import type { Actor } from "../auth/types.ts";
 import { InvalidProjectError, ProjectNotFoundError, ProjectUnavailableError } from "../projects/errors.ts";
 import type { IProjectRouter } from "../projects/project-router.ts";
+import type { IStaticAssets } from "./static-assets.ts";
 
 export interface IHttpApplication {
-	create(extensions?: IHttpRouter[]): Koa;
+	create(extensions?: IHttpRouter[], assets?: IStaticAssets): Koa;
 }
 export interface IHttpRouter {
 	create(): Router<{ actor: Actor }>;
@@ -21,7 +22,7 @@ export class HttpApplication implements IHttpApplication {
 		private readonly access: IAccessService,
 		private readonly now: () => number = () => performance.now(),
 	) {}
-	create(extensions: IHttpRouter[] = []): Koa {
+	create(extensions: IHttpRouter[] = [], assets?: IStaticAssets): Koa {
 		const app = new Koa();
 		app.use(async (ctx, next) => {
 			const started = this.now();
@@ -66,6 +67,11 @@ export class HttpApplication implements IHttpApplication {
 		app.use(async (ctx, next) => {
 			ctx.set("cache-control", "no-store");
 			ctx.set("x-content-type-options", "nosniff");
+			ctx.set(
+				"content-security-policy",
+				"default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+			);
+			ctx.set("referrer-policy", "no-referrer");
 			if (ctx.path === "/health" && ctx.method === "GET") {
 				ctx.body = { status: "up" };
 				return;
@@ -84,6 +90,19 @@ export class HttpApplication implements IHttpApplication {
 			const routes = extension.create();
 			app.use(routes.routes()).use(routes.allowedMethods());
 		}
+		app.use(async (ctx) => {
+			if (assets && ["GET", "HEAD"].includes(ctx.method)) {
+				const file = await assets.read(ctx.path);
+				if (file) {
+					ctx.type = file.type;
+					ctx.set("cache-control", file.immutable ? "private, max-age=31536000, immutable" : "no-store");
+					ctx.body = file.bytes;
+					return;
+				}
+			}
+			ctx.status = 404;
+			ctx.body = { error: "not-found" };
+		});
 		return app;
 	}
 }

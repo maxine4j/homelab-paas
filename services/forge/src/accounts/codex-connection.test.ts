@@ -1,11 +1,53 @@
 import { sleep } from "@homelab-paas/backend-infrastructure/sleep";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { IAccountProcess } from "./account-process.ts";
 import { CodexConnection } from "./codex-connection.ts";
 import type { AccountProcessSpec } from "./types.ts";
 
 describe("CodexConnection", () => {
+	it("normal shutdown stops the child without reporting connection failure", async () => {
+		const warn = vi.fn();
+		const notifications = vi.fn();
+		const stop = vi.fn(async () => {});
+		let output: (chunk: string) => void = () => {};
+		let initialized = false;
+		const processes: IAccountProcess = {
+			initialize: async () => {
+				initialized = true;
+			},
+			spawn: (spec) => {
+				output = spec.onOutput;
+				return {
+					done: new Promise(() => {}),
+					stop,
+					write: (data) => {
+						const message = JSON.parse(data);
+						if (message.method === "initialize")
+							output(
+								JSON.stringify({
+									id: message.id,
+									result: {
+										userAgent: "codex/0.164.0",
+										codexHome: "/data/codex",
+										platformFamily: "unix",
+										platformOs: "linux",
+									},
+								}) + "\n",
+							);
+					},
+				};
+			},
+		};
+		const connection = new CodexConnection(processes, sleep, 100, { warn, error: vi.fn() });
+		connection.subscribe(notifications);
+		await connection.initialize();
+		expect(initialized).toBe(true);
+		await connection.close();
+		expect(stop).toHaveBeenCalledOnce();
+		expect(warn).not.toHaveBeenCalled();
+		expect(notifications).not.toHaveBeenCalled();
+	});
 	it("initializes once, correlates responses and rejects pending work on exit", async () => {
 		let output: (chunk: string) => void = () => {};
 		let exit: (code: number) => void = () => {};

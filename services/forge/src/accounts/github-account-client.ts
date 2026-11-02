@@ -69,8 +69,20 @@ export class GithubAccountClient implements IAccountProvider {
 		});
 		const timer = new AbortController();
 		let acceptingPrompt = true;
+		const acceptPrompt = (chunk: string): void => {
+			if (!acceptingPrompt) return;
+			buffer = (buffer + chunk).slice(-65536);
+			const clean = stripVTControlCharacters(buffer);
+			const code = /First copy your one-time code: ([A-Z0-9-]{1,128})\r?\n/.exec(clean)?.at(1);
+			const url = /Open this URL to continue in your web browser: (\S+)\r?\n/.exec(clean)?.at(1);
+			if (code && url === "https://github.com/login/device") {
+				this.login = { state: "pending", verificationUrl: url, userCode: code };
+				ready();
+			}
+		};
 		try {
 			await this.restore();
+			await this.processes.initialize();
 			await this.attempts.save("github", true);
 			const handle = this.processes.spawn({
 				program: "github",
@@ -85,17 +97,8 @@ export class GithubAccountClient implements IAccountProvider {
 					"--insecure-storage",
 				],
 				outputLimit: 65536,
-				onOutput: (chunk) => {
-					if (!acceptingPrompt) return;
-					buffer = (buffer + chunk).slice(-65536);
-					const clean = stripVTControlCharacters(buffer);
-					const code = /First copy your one-time code: ([A-Z0-9-]{1,128})\r?\n/.exec(clean)?.at(1);
-					const url = /Open this URL to continue in your web browser: (\S+)\r?\n/.exec(clean)?.at(1);
-					if (code && url === "https://github.com/login/device") {
-						this.login = { state: "pending", verificationUrl: url, userCode: code };
-						ready();
-					}
-				},
+				onOutput: acceptPrompt,
+				onStderr: acceptPrompt,
 			});
 			const attempt = { handle, timer, result: undefined as number | undefined };
 			this.attempt = attempt;
@@ -180,13 +183,19 @@ export class GithubAccountClient implements IAccountProvider {
 		this.loaded = true;
 	}
 	private async verify(): Promise<string | undefined> {
+		await this.processes.initialize();
 		let output = "";
+		let diagnostics = "";
 		const handle = this.processes.spawn({
 			program: "github",
-			arguments: ["api", "--hostname", "github.com", "user"],
+			arguments: ["api", "--include", "--hostname", "github.com", "user"],
+			expectedExitCodes: [1, 4],
 			outputLimit: 65536,
 			onOutput: (chunk) => {
 				output += chunk;
+			},
+			onStderr: (chunk) => {
+				diagnostics += chunk;
 			},
 		});
 		const timer = new AbortController();
@@ -198,8 +207,17 @@ export class GithubAccountClient implements IAccountProvider {
 				}),
 			]);
 			if (code === 4) return undefined;
+			const normalized = output.replaceAll("\r\n", "\n");
+			const status = /^HTTP\/\d(?:\.\d)? (\d{3})[^\n]*\n/.exec(normalized)?.at(1);
+			if (code === 1 && status === "401") return undefined;
 			if (code !== 0) throw new Error("GitHub verification failed");
-			return z.object({ login: usernameSchema }).parse(JSON.parse(output)).login;
+			const body = normalized.indexOf("\n\n");
+			if (status !== "200" || body < 0) throw new Error("Invalid GitHub verification response");
+			return z.object({ login: usernameSchema }).parse(JSON.parse(normalized.slice(body + 2))).login;
+		} catch (cause) {
+			throw new Error("GitHub verification failed", {
+				cause: new AggregateError([cause, new Error(diagnostics), new Error(output)], "GitHub CLI diagnostics"),
+			});
 		} finally {
 			timer.abort();
 			await handle.stop();

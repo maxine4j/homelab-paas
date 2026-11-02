@@ -4,6 +4,10 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
+		"dev:forge": "pnpm --filter @homelab-paas/backend-infrastructure --filter @homelab-paas/forge-contracts build && pnpm --filter @homelab-paas/forge-ui build && pnpm --filter @homelab-paas/forge dev",
+		"image:forge": "docker build -f services/forge/Dockerfile -t homelab-paas/forge:dev .",
+		"test:forge:image": "node services/forge/tests/image-smoke.mjs",
+		"test:forge:browser": "pnpm --filter @homelab-paas/forge-contracts build && pnpm --filter @homelab-paas/forge-ui test:browser",
 		"build": "pnpm -r build",
 		"typecheck": "pnpm --filter './packages/*' --filter @homelab-paas/forge-contracts build && pnpm -r typecheck",
 		"test": "pnpm --filter './packages/*' --filter @homelab-paas/forge-contracts build && pnpm -r test",
