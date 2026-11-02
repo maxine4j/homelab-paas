@@ -82,7 +82,7 @@ export class HttpApplication implements IHttpApplication {
 			ctx.set("x-content-type-options", "nosniff");
 			ctx.set(
 				"content-security-policy",
-				"default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+				"default-src 'self'; style-src-elem 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
 			);
 			ctx.set("referrer-policy", "no-referrer");
 			if (ctx.path === "/health" && ctx.method === "GET") {

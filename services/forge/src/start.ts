@@ -23,6 +23,11 @@ import { StaticAssets } from "./http/static-assets.ts";
 import { ProjectRouter } from "./projects/project-router.ts";
 import { ProjectService } from "./projects/project-service.ts";
 import { ProjectStore } from "./projects/project-store.ts";
+import { PullRequestClient } from "./pull-requests/pull-request-client.ts";
+import { PullRequestRouter } from "./pull-requests/pull-request-router.ts";
+import { PullRequestService } from "./pull-requests/pull-request-service.ts";
+import { PullRequestStore } from "./pull-requests/pull-request-store.ts";
+import { GitDiffClient } from "./repositories/git-diff-client.ts";
 import { GitTransport } from "./repositories/git-transport.ts";
 import { RepositoryClient } from "./repositories/repository-client.ts";
 import { TerminalInventory } from "./terminal/terminal-inventory.ts";
@@ -56,6 +61,7 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 	if (!lifecycle.isOpen()) return;
 	const access = new AccessService(config);
 	const git = options.git ?? new GitTransport(sleep);
+	const differences = new GitDiffClient(git);
 	const repositories = new RepositoryClient(config.dataDirectory, config.importHosts, files, git);
 	const projects = new ProjectService(store, repositories, access, randomUUID, () => new Date());
 	let recovery = Promise.resolve();
@@ -76,12 +82,21 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 		access,
 		randomUUID,
 		() => new Date(),
-		new WorkspaceDiffClient(workspaceClient, git, files),
+		new WorkspaceDiffClient(workspaceClient, git, files, differences),
 	);
 	recovery = workspaces.recover();
 	await recovery;
 	if (!lifecycle.isOpen()) return;
 	const terminalStore = new TerminalStore(database);
+	const pullRequestStore = new PullRequestStore(database);
+	await pullRequestStore.initialize();
+	const pullRequests = new PullRequestService(
+		pullRequestStore,
+		new PullRequestClient(workspaces, git, differences),
+		access,
+		randomUUID,
+		() => new Date(),
+	);
 	await terminalStore.initialize();
 	const terminals = new TerminalService(
 		terminalStore,
@@ -124,7 +139,12 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 	if (!(await assets.read("/"))) throw new Error("Build Forge frontend before starting the application");
 	if (!lifecycle.isOpen()) return;
 	const app = new HttpApplication(new ProjectRouter(projects), access).create(
-		[new AccountRouter(accounts), new WorkspaceRouter(workspaces), new TerminalRouter(terminals)],
+		[
+			new AccountRouter(accounts),
+			new WorkspaceRouter(workspaces),
+			new TerminalRouter(terminals),
+			new PullRequestRouter(pullRequests),
+		],
 		assets,
 	);
 	app.on("error", (err) => log.error({ err }, "HTTP request failed"));

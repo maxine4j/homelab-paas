@@ -5,6 +5,8 @@ import type { FormEvent } from "react";
 
 import type { IApiClient } from "./api/api-client.ts";
 import { ResourcePoller } from "./api/resource-poller.ts";
+import type { IWorkspaceApi } from "./api/workspace-api.ts";
+import { Workbench } from "./workspace/workbench.tsx";
 
 const failureMessages = {
 	unavailable: "Check the CLI installation and credential-home permissions on the server.",
@@ -96,7 +98,8 @@ const AccountCard = ({
 	);
 };
 
-export const App = ({ api }: { api: IApiClient }) => {
+export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWorkspaceApi }) => {
+	const [selected, setSelected] = useState<Project>();
 	const [projects, setProjects] = useState<Project[]>();
 	const [accounts, setAccounts] = useState<AccountsStatus>();
 	const [projectError, setProjectError] = useState("");
@@ -185,7 +188,7 @@ export const App = ({ api }: { api: IApiClient }) => {
 				</span>
 			</header>
 			<main>
-				<div className='intro'>
+				<div className='intro' hidden={!!selected}>
 					<div>
 						<p className='eyebrow'>YOUR DEVELOPMENT HOME</p>
 						<h1>Make room for your next idea.</h1>
@@ -195,7 +198,15 @@ export const App = ({ api }: { api: IApiClient }) => {
 						⑂
 					</span>
 				</div>
-				<div className='workspace-grid'>
+				{selected && (
+					<Workbench
+						key={selected.id}
+						project={selected}
+						api={workspaceApi}
+						leave={() => setSelected(undefined)}
+					/>
+				)}
+				<div className='workspace-grid' hidden={!!selected}>
 					<section aria-labelledby='projects-heading' className='projects-section'>
 						<div className='section-heading'>
 							<div>
@@ -238,6 +249,15 @@ export const App = ({ api }: { api: IApiClient }) => {
 										</div>
 										<div className='project-info'>
 											<h3>{project.name}</h3>
+											{project.status === "ready" && (
+												<button
+													aria-label={`Open ${project.name}`}
+													disabled={!!selected}
+													onClick={() => setSelected(project)}
+												>
+													Open
+												</button>
+											)}
 											<p>
 												Created{" "}
 												{new Date(project.createdAt).toLocaleDateString(undefined, {

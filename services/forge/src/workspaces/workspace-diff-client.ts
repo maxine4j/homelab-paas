@@ -2,6 +2,7 @@ import { join } from "node:path";
 
 import { filePathSchema, gitShaSchema, type DiffSection, type WorkspaceDiff } from "@homelab-paas/forge-contracts";
 
+import type { IGitDiffClient } from "../repositories/git-diff-client.ts";
 import type { IGitBinaryTransport } from "../repositories/git-transport.ts";
 import { WorkspaceError } from "./errors.ts";
 import type { IWorkspaceFiles, WorkspaceRecord } from "./types.ts";
@@ -16,6 +17,7 @@ export class WorkspaceDiffClient implements IWorkspaceDiffClient {
 		private readonly workspaces: IWorkspaceClient,
 		private readonly git: IGitBinaryTransport,
 		private readonly files: IWorkspaceFiles,
+		private readonly differences: IGitDiffClient,
 	) {}
 	async diff(record: WorkspaceRecord): Promise<WorkspaceDiff> {
 		try {
@@ -28,56 +30,15 @@ export class WorkspaceDiffClient implements IWorkspaceDiffClient {
 				comparison: "merge-base(main, workspace)..workspace",
 				baseSha,
 				head,
-				branch: await this.section(path, [baseSha, head]),
-				staged: await this.section(path, ["--cached"]),
-				unstaged: await this.section(path, []),
+				branch: await this.differences.section(path, [baseSha, head]),
+				staged: await this.differences.section(path, ["--cached"]),
+				unstaged: await this.differences.section(path, []),
 				untracked: await this.untracked(path),
 			};
 		} catch (cause) {
 			if (cause instanceof WorkspaceError) throw cause;
 			throw new WorkspaceError("workspace-unavailable", { cause });
 		}
-	}
-	private async section(path: string, revisions: string[]): Promise<DiffSection> {
-		const section: DiffSection = { files: [], patch: "", truncated: false };
-		const prefix = ["--literal-pathspecs", "-C", path, "diff", "--no-ext-diff", "--no-textconv", "--no-renames"];
-		let names: string[];
-		try {
-			names = (await this.git.run([...prefix, "--name-only", "-z", ...revisions, "--"]))
-				.split("\0")
-				.filter(Boolean);
-		} catch {
-			return { ...section, truncated: true };
-		}
-		for (const name of names) {
-			if (!filePathSchema.safeParse(name).success) {
-				section.truncated = true;
-				continue;
-			}
-			if (section.files.length === 100) {
-				section.truncated = true;
-				break;
-			}
-			const numstat = await this.git.run([...prefix, "--numstat", ...revisions, "--", name]);
-			const binary = numstat.startsWith("-\t-\t");
-			const file = { path: name, binary };
-			section.files.push(file);
-			if (binary) continue;
-			try {
-				const bytes = await this.git.runBytes([...prefix, "--unified=3", ...revisions, "--", name]);
-				let patch: string;
-				try {
-					patch = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-				} catch {
-					file.binary = true;
-					continue;
-				}
-				this.append(section, patch);
-			} catch {
-				section.truncated = true;
-			}
-		}
-		return section;
 	}
 	private async untracked(path: string): Promise<DiffSection> {
 		const section: DiffSection = { files: [], patch: "", truncated: false };

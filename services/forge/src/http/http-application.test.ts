@@ -87,6 +87,8 @@ test("frontend inherits owner access, HEAD and security headers; unknown APIs re
 	expect(response.status).toBe(200);
 	expect(response.headers.get("content-type")).toContain("text/html");
 	expect(response.headers.get("content-security-policy")).toContain("default-src 'self'");
+	expect(response.headers.get("content-security-policy")).toContain("style-src-elem 'self' 'unsafe-inline'");
+	expect(response.headers.get("content-security-policy")).not.toContain("unsafe-eval");
 	expect(await response.text()).toBe("<main>Forge</main>");
 	expect(await (await request("/", { headers, method: "HEAD" })).text()).toBe("");
 	const missing = await request("/api/missing", { headers });

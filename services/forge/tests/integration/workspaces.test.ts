@@ -13,6 +13,7 @@ import { HttpApplication } from "../../src/http/http-application.ts";
 import { ProjectRouter } from "../../src/projects/project-router.ts";
 import { ProjectService } from "../../src/projects/project-service.ts";
 import { ProjectStore } from "../../src/projects/project-store.ts";
+import { GitDiffClient } from "../../src/repositories/git-diff-client.ts";
 import { GitTransport } from "../../src/repositories/git-transport.ts";
 import { RepositoryClient } from "../../src/repositories/repository-client.ts";
 import { WorkspaceClient } from "../../src/workspaces/workspace-client.ts";
@@ -50,7 +51,7 @@ const setup = async () => {
 		access,
 		randomUUID,
 		() => new Date(),
-		new WorkspaceDiffClient(client, git, files),
+		new WorkspaceDiffClient(client, git, files, new GitDiffClient(git)),
 	);
 	return { root, db, git, store, client, service, project, projects, access };
 };
@@ -227,6 +228,25 @@ test("concurrent versioned writes have exactly one winner and file staging canno
 	});
 });
 
+test("stage and unstage a tracked deletion after all parent directories are removed", async () => {
+	const { service, project } = await setup();
+	const workspace = await service.create(owner, project.id, { name: "Deleted parents" });
+	const { path } = await service.resolve(owner, workspace.id);
+	await files.mkdir(join(path, "nested", "parent"), { recursive: true });
+	await service.createFile(owner, workspace.id, { path: "nested/parent/file.txt", content: "tracked\n" });
+	await service.stage(owner, workspace.id, { paths: ["nested/parent/file.txt"] });
+	await service.commit(owner, workspace.id, { message: "Track nested file", expectedHead: workspace.head! });
+	await files.rm(join(path, "nested"), { recursive: true });
+	await service.stage(owner, workspace.id, { paths: ["nested/parent/file.txt"] });
+	expect((await service.diff(owner, workspace.id)).staged.patch).toContain("-tracked");
+	await service.unstage(owner, workspace.id, { paths: ["nested/parent/file.txt"] });
+	expect((await service.diff(owner, workspace.id)).staged.files).toEqual([]);
+	expect((await service.diff(owner, workspace.id)).unstaged.patch).toContain("-tracked");
+	await expect(
+		service.createFile(owner, workspace.id, { path: "nested/parent/file.txt", content: "blocked" }),
+	).rejects.toMatchObject({ code: "file-not-found" });
+});
+
 test("bounded diff sections retain paths and identify non-UTF8 staged content as binary", async () => {
 	const { service, project } = await setup();
 	const workspace = await service.create(owner, project.id, { name: "Bounded" });
@@ -307,7 +327,7 @@ test("workspace metadata and working files survive closing and reopening SQLite"
 		access,
 		randomUUID,
 		() => new Date(),
-		new WorkspaceDiffClient(client, git, files),
+		new WorkspaceDiffClient(client, git, files, new GitDiffClient(git)),
 	);
 	await resumed.recover();
 	expect(await resumed.get(owner, workspace.id)).toEqual(workspace);

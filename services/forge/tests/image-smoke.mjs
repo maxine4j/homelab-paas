@@ -17,7 +17,7 @@ const execute = (code) => docker("exec", name, "node", "--input-type=module", "-
 const request = (path, options = {}) =>
 	JSON.parse(
 		execute(
-			`const r = await fetch(${JSON.stringify(`http://127.0.0.1:8080${path}`)}, ${JSON.stringify(options)}); console.log(JSON.stringify({status:r.status, type:r.headers.get('content-type'), body:await r.text()}));`,
+			`const r = await fetch(${JSON.stringify(`http://127.0.0.1:8080${path}`)}, ${JSON.stringify(options)}); console.log(JSON.stringify({status:r.status, type:r.headers.get('content-type'), csp:r.headers.get('content-security-policy'), cache:r.headers.get('cache-control'), body:await r.text()}));`,
 		),
 	);
 const headers = { "x-webauth-user": "owner", origin: "https://forge.example.test", "content-type": "application/json" };
@@ -44,7 +44,15 @@ try {
 	assert.equal(inspect.Config.User, "node");
 	assert.equal(Object.keys(inspect.HostConfig.PortBindings ?? {}).length, 0);
 	assert.equal(request("/").status, 403);
-	assert.equal(request("/", { headers }).type, "text/html; charset=utf-8");
+	const html = request("/", { headers });
+	assert.equal(html.type, "text/html; charset=utf-8");
+	assert.equal(html.cache, "no-store");
+	assert.match(html.csp, /default-src 'self'; style-src-elem 'self' 'unsafe-inline';/u);
+	assert.match(html.csp, /frame-ancestors 'none'/u);
+	assert.doesNotMatch(html.csp, /unsafe-eval|script-src[^;]*unsafe-inline/u);
+	const asset = html.body.match(/src="(\/assets\/[^" ]+\.js)"/u)?.[1];
+	assert.ok(asset);
+	assert.equal(request(asset, { headers }).cache, "private, max-age=31536000, immutable");
 	assert.equal(request("/api/missing", { headers }).status, 404);
 	assert.equal(
 		request("/api/projects", {
@@ -65,6 +73,64 @@ try {
 	});
 	assert.equal(workspaceResponse.status, 201);
 	const workspace = JSON.parse(workspaceResponse.body);
+	const file = request(`/api/workspaces/${workspace.id}/file`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ path: "review.ts", content: "export const reviewed = true;\n" }),
+	});
+	assert.equal(file.status, 201);
+	assert.equal(
+		request(`/api/workspaces/${workspace.id}/stage`, {
+			method: "POST",
+			headers,
+			body: JSON.stringify({ paths: ["review.ts"] }),
+		}).status,
+		200,
+	);
+	const committed = request(`/api/workspaces/${workspace.id}/commit`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ message: "Add review file", expectedHead: workspace.head }),
+	});
+	assert.equal(committed.status, 200);
+	const previewResponse = request(`/api/workspaces/${workspace.id}/pull-request-revision`, { headers });
+	assert.equal(previewResponse.status, 200);
+	const preview = JSON.parse(previewResponse.body);
+	assert.equal(preview.hasChanges, true);
+	const expected = { expectedHead: preview.revision.head, expectedBase: preview.revision.baseSha };
+	const createdPr = request(`/api/projects/${project.id}/pull-requests`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			workspaceId: workspace.id,
+			title: "Production review",
+			body: "Image smoke",
+			...expected,
+		}),
+	});
+	assert.equal(createdPr.status, 201);
+	const pr = JSON.parse(createdPr.body);
+	const prDiff = request(`/api/pull-requests/${pr.id}/diff`, { headers });
+	assert.equal(prDiff.status, 200);
+	assert.match(JSON.parse(prDiff.body).diff.patch, /\+export const reviewed = true/u);
+	const reviewed = request(`/api/pull-requests/${pr.id}/reviews`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ ...expected, decision: "approve", body: "Verified image" }),
+	});
+	assert.equal(reviewed.status, 200);
+	assert.equal(JSON.parse(reviewed.body).approval, "approved");
+	for (const status of ["closed", "open"])
+		assert.equal(
+			JSON.parse(
+				request(`/api/pull-requests/${pr.id}`, {
+					method: "PATCH",
+					headers,
+					body: JSON.stringify({ ...expected, status }),
+				}).body,
+			).status,
+			status,
+		);
 	const terminalResponse = request(`/api/workspaces/${workspace.id}/terminal`, {
 		method: "POST",
 		headers,
@@ -122,6 +188,10 @@ try {
 	await waitFor(() => assert.equal(request("/health").status, 200));
 	assert.equal(JSON.parse(request(`/api/terminals/${terminal.id}`, { headers }).body).status, "closed");
 	assert.equal(JSON.parse(request("/api/projects", { headers }).body)[0].id, project.id);
+	const persistedPr = request(`/api/pull-requests/${pr.id}`, { headers });
+	assert.equal(persistedPr.status, 200);
+	assert.equal(JSON.parse(persistedPr.body).approval, "approved");
+	assert.equal(JSON.parse(persistedPr.body).discussion[0].body, "Verified image");
 	assert.equal(
 		execute(
 			`import {readFile} from '@homelab-paas/backend-infrastructure/file'; console.log(await readFile('/data/codex/persistence-probe'));`,

@@ -54,7 +54,7 @@ const setup = async () => {
 		access,
 		randomUUID,
 		() => new Date(),
-		new WorkspaceDiffClient(wc, git, files),
+		new WorkspaceDiffClient(wc, git, files, new GitDiffClient(git)),
 	);
 	const workspace = await ws.create(owner, project.id, { name: "PR source" });
 	const store = new PullRequestStore(db);
@@ -179,7 +179,7 @@ test("real HTTP PR lifecycle binds commits, persists reviews, protects main and 
 		f.access,
 		randomUUID,
 		() => new Date(),
-		new WorkspaceDiffClient(f.wc, f.git, files),
+		new WorkspaceDiffClient(f.wc, f.git, files, new GitDiffClient(f.git)),
 	);
 	await resumedWs.recover();
 	const resumed = new PullRequestService(

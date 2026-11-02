@@ -284,7 +284,11 @@ Built assets require owner access, reject traversal/symlinks, and serve only
 approved public file types. Navigation falls back to the frontend; unknown
 `/api` paths return JSON 404 and missing assets never fall back. Hashed assets
 use private immutable caching; HTML/API responses use no-store. CSP permits
-same-origin scripts/styles and blocks framing; device pages open separately.
+same-origin scripts and styles, allows inline style elements needed by the editor
+and terminal, and blocks framing; device pages open separately. The explicit
+`style-src-elem 'self' 'unsafe-inline'` exception does not authorize inline scripts,
+eval or inline style attributes. Browser validation configures Zod's supported
+`jitless` mode before loading schemas, avoiding its eval capability probe.
 
 #### Run, package and verify slice 1
 
@@ -488,6 +492,82 @@ Services recheck owner authorization for all operations. Internal
 integration; entry points must never serialize it. Future PR services can inspect
 workspace identity/head through the same service interface. Startup initializes
 the workspace store and completes recovery before listening.
+
+#### Slice 2 integrated manual workspace and PR review
+
+The project screen retains project creation/import/retry and account setup. Open
+a ready project to list/create/retry/archive manual workspaces and inspect its PR
+list, including closed PRs. Archiving preserves files and metadata. No tickets,
+agent turns, remote CI, Git HTTPS hosting or merge action is exposed in this slice.
+
+The responsive workspace combines directory navigation, file creation, editor
+tabs, real CodeMirror 6 editing (JavaScript/TypeScript highlighting), four change
+comparisons and a real xterm.js 6 terminal with its fit addon. API responses are
+validated against browser-safe contracts. Tabs retain drafts; project/workspace
+navigation and page exit guard unsaved edits. Saves send the observed content
+version. A conflict keeps the local draft and offers an explicit server-content
+comparison followed by an explicit discard/reload action. Typing while a save is
+pending remains dirty after that save completes. External shell edits remain
+subject to the [workspace version-check boundary](#slice-2-manual-workspace-foundation).
+
+Changes label branch (merge base to HEAD), staged (HEAD to index), unstaged (index
+to worktree), and untracked comparisons separately. Each section shows its files,
+inline patch, binary markers and truncation. Stage/unstage act on explicit paths;
+commit sends the HEAD displayed with that diff and rejects a changed branch.
+The workspace and PR adapters share `GitDiffClient` for tracked patches.
+
+Terminal creation and closure are explicit. Opening a workspace inspects its
+retained session and may attach that session, never creates a shell. Disconnects
+offer reconnect to the same session; replay gaps remain visible for that session.
+Lost/exited states remain explicit. Reconnect drains xterm's public write queue
+before choosing the rendered cursor, and new sessions reset the display only
+after old writes drain. Input chunks include JSON escaping in the 16 KiB wire
+bound. Fit observes container resize and sends bounded PTY dimensions.
+
+PR summaries contain metadata only; patches/discussion are fetched on explicit
+detail/diff reads. The browser loads a committed diff before enabling revision
+mutations. Detail and diff revisions must match; mismatch/failure clears the
+actionable diff. Create explicitly previews the current refs; review/comment,
+metadata and status mutations send the refs of the displayed diff. Backend
+`revision-conflict` requires an explicit refresh, so a stale displayed patch
+cannot be approved using independently refreshed refs. Approvals become stale
+if either main or workspace HEAD changes. Archived/failed/missing source
+workspaces retain metadata/discussion while approval is unavailable.
+
+Browser-safe PR contracts are exported from
+`@homelab-paas/forge-contracts/pull-requests`. All routes retain owner/origin checks:
+
+| Route                                                    | Contract                                                                       |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `GET/POST /api/projects/:projectId/pull-requests`        | Summary list / create `{workspaceId,title,body,expectedHead,expectedBase}`.    |
+| `GET /api/workspaces/:workspaceId/pull-request-revision` | `{revision,hasChanges}`; `baseSha` is current main, with separate `mergeBase`. |
+| `GET/PATCH /api/pull-requests/:id`                       | Detail / expected refs plus optional title/body or `status: open/closed`.      |
+| `GET /api/pull-requests/:id/diff`                        | Explicit committed patch, comparison label and revision.                       |
+| `POST /api/pull-requests/:id/comments`                   | Expected refs and body.                                                        |
+| `POST /api/pull-requests/:id/reviews`                    | Expected refs, body and `approve/request-changes`.                             |
+
+There is no merge endpoint. Review requests and discussion persist in SQLite;
+startup initializes their store and registers the production router. Tests cover
+real Git revision races, persistence and unavailable sources, controlled browser
+editor/terminal/review flows, mobile width and screenshots. A separate production
+bundle fixture uses the actual `HttpApplication` CSP and `StaticAssets`, without
+Vite's development runtime, to check terminal style compatibility. This check must
+pass before the integrated UI is considered production ready; do not weaken CSP
+or patch third-party DOM internals to bypass a failure.
+
+Run the checks listed [above](#run-package-and-verify-slice-1), plus
+`pnpm test:containers integration` for the supported Linux PTY runtime. The image
+smoke verifies production workspace/PR routing and native terminal packaging.
+Browser artifacts remain under `artifacts/forge*`.
+
+Production CSP explicitly permits generated style elements through
+`style-src-elem 'self' 'unsafe-inline'`, approved after the production xterm probe
+demonstrated eight blocked style elements under the original policy. All script
+and other restrictions remain. The integrated production browser case checks
+the actual built application/editor/terminal on desktop and mobile, no unexpected
+policy violations, real syntax colors/output, and an intentional inline script
+that remains blocked. It uses controlled API/WebSocket data; native PTY/PR runtime
+behavior is verified separately in Linux integration and the real image smoke.
 
 ### Ticket and PR workflow
 
