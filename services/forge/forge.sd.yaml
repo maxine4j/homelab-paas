@@ -13,9 +13,11 @@ resources:
         healthcheckUrl: /health
         env:
             - name: FORGE_OWNER
-              secret: true
+              value: maxine4j
             - name: FORGE_ORIGIN
               value: https://${SERVICE_DOMAIN}
+            - name: FORGE_IMPORT_HOSTS
+              value: github.com
         volumes:
             - mountPath: /data
         termination:

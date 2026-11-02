@@ -333,13 +333,18 @@ reaps orphaned descendants. Process-group cleanup covers ordinary descendants;
 deliberately escaped live processes are outside that application-level boundary.
 
 `forge.sd.yaml` uses private ingress, one replica, recreate rollout and persistent
-`/data`, with no HTTP host ports. Configure the owner's actual GitHub username as
-`FORGE_OWNER` in the [PaaS service secret file](../../docs/configuration.md#environment-variables-and-secrets)
-`/etc/homelab-paas/env/forge.env`; the descriptor supplies `FORGE_ORIGIN` from
-`https://${SERVICE_DOMAIN}`. No placeholder username is accepted automatically.
-Remote imports remain disabled until the operator adds a literal `FORGE_IMPORT_HOSTS`
-environment entry to the descriptor, or declares it with `secret: true` and adds
-its exact DNS allowlist to `forge.env`. Undeclared secret-file entries are not injected.
+`/data`, with no HTTP host ports. Its deployment defaults set `FORGE_OWNER` to
+`maxine4j`, derive `FORGE_ORIGIN` from `https://${SERVICE_DOMAIN}`, and allow
+credential-free HTTPS imports from `github.com` through `FORGE_IMPORT_HOSTS`.
+No owner secret file is required. The production cluster must allow `maxine4j`
+through its GitHub login and provide authenticated HTTPS ingress on port 443.
+For another deployment, edit the literal owner, origin or exact DNS import
+allowlist as appropriate; an empty import allowlist disables remote imports.
+The [PaaS service secret file](../../docs/configuration.md#environment-variables-and-secrets)
+can supply an environment value only when its descriptor entry uses `secret: true`;
+undeclared secret-file entries are not injected. Keep credentials out of literal
+descriptor values. Private-repository imports remain unsupported, including after
+GitHub account sign-in.
 Build locally with `pnpm image:forge`; CI builds and validates
 the image and publishes `ghcr.io/maxine4j/homelab-paas/forge` with full SHA,
 release-tag or main `latest` tags under the repository's image convention.
