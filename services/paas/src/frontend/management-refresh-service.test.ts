@@ -2,6 +2,24 @@ import { expect, test, vi } from "vitest";
 
 import { ManagementRefreshService } from "./management-refresh-service.ts";
 
+test.each(["pause", "resume"] as const)("%s refreshes management state after success and failure", async (action) => {
+	const run = vi.fn(async () => {});
+	const operation = vi.fn(async (_id: string) => {});
+	const service = new ManagementRefreshService(
+		{ refreshOne: async () => {}, refreshAll: async () => [] },
+		{ run },
+		undefined,
+		undefined,
+		{ pause: operation, resume: operation },
+	);
+	await service[action]("demo");
+	expect(operation).toHaveBeenCalledWith("demo");
+	expect(run).toHaveBeenCalledOnce();
+	operation.mockRejectedValueOnce(new Error("lifecycle failed"));
+	await expect(service[action]("demo")).rejects.toThrow("lifecycle failed");
+	expect(run).toHaveBeenCalledTimes(2);
+});
+
 test("manual refresh audits the selected service and settles resulting repair before observation", async () => {
 	const order: string[] = [];
 	const service = new ManagementRefreshService(

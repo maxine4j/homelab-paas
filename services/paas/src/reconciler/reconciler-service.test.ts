@@ -20,6 +20,62 @@ const descriptor = {
 	resources: { app: { type: "web", image: "app:1", ingress: { public: true, port: 8080 } } },
 };
 
+test("pause is durable, blocks all reconciliation and redeploy, and resume reads the latest inputs", async () => {
+	const f = fixture();
+	await f.service.reconcile();
+	await f.service.pause("demo");
+	expect(f.states.get("demo")).toMatchObject({ paused: true, activeRevision: "rev" });
+	expect(f.enforcePause).toHaveBeenCalledWith("demo");
+	f.reconcile.mockClear();
+	f.fetchFile.mockClear();
+	f.fetchFile.mockResolvedValue({ revision: "new", content: JSON.stringify(descriptor) });
+	const restarted = f.createService();
+	await restarted.reconcile();
+	await restarted.reconcileOne("demo");
+	await expect(restarted.redeploy("demo")).rejects.toThrow("Service is paused");
+	expect(f.reconcile).not.toHaveBeenCalled();
+	expect(f.fetchFile).not.toHaveBeenCalled();
+	await restarted.resume("demo");
+	expect(f.states.get("demo")).toMatchObject({ activeRevision: "new", phase: "ready" });
+	expect(f.states.get("demo")?.paused).toBeFalsy();
+	expect(f.reconcile).toHaveBeenCalledWith(expect.objectContaining({ revision: "new" }));
+});
+
+test("failed pause retains intent and retries shutdown without fetching invalid desired inputs", async () => {
+	const f = fixture();
+	f.enforcePause.mockRejectedValueOnce(new Error("shutdown failed"));
+	await expect(f.service.pause("demo")).rejects.toThrow("Cannot pause service");
+	expect(f.states.get("demo")).toMatchObject({ paused: true, failures: 1, retryAt: 1000 });
+	f.advance(1000);
+	await f.service.reconcileOne("demo");
+	expect(f.states.get("demo")).toMatchObject({ paused: true });
+	expect(f.states.get("demo")?.retryAt).toBeUndefined();
+	expect(f.fetchFile).not.toHaveBeenCalled();
+	expect(f.enforcePause).toHaveBeenCalledTimes(2);
+});
+
+test("pause serializes behind deployment and cannot race queued automatic work", async () => {
+	const f = fixture();
+	let finish = () => {};
+	f.reconcile.mockImplementationOnce(
+		() =>
+			new Promise<void>((resolve) => {
+				finish = resolve;
+			}),
+	);
+	const running = f.service.reconcileOne("demo");
+	await vi.waitFor(() => expect(f.reconcile).toHaveBeenCalledOnce());
+	const pause = f.service.pause("demo");
+	const hint = f.service.reconcileOne("demo");
+	expect(f.enforcePause).not.toHaveBeenCalled();
+	finish();
+	await Promise.all([running, pause, hint]);
+	expect(f.reconcile).toHaveBeenCalledOnce();
+	expect(f.states.get("demo")?.paused).toBe(true);
+	await expect(f.service.pause("missing")).rejects.toMatchObject({ kind: "not-found" });
+	await expect(f.service.resume("missing")).rejects.toMatchObject({ kind: "not-found" });
+});
+
 test("static resources dispatch independently, checkpoint success and retry failures", async () => {
 	const f = fixture();
 	f.fetchFile.mockResolvedValue({
@@ -187,6 +243,7 @@ function fixture() {
 	const reconcile = vi.fn(async () => {});
 	const reconcileWorker = vi.fn(async () => {});
 	const reconcileStatic = vi.fn(async () => {});
+	const enforcePause = vi.fn(async (_id: string) => {});
 	const readSecrets = vi.fn(async (): Promise<string | undefined> => undefined);
 	const appendEvent = vi.fn(async (_serviceId: string, _event: UiServiceEvent) => {});
 	const bus = new ChangeBus();
@@ -232,6 +289,7 @@ function fixture() {
 			bus,
 			{ reconciliation },
 			{ reconcile: reconcileStatic },
+			{ enforce: enforcePause },
 		);
 	};
 	return {
@@ -243,6 +301,7 @@ function fixture() {
 		reconcile,
 		reconcileWorker,
 		reconcileStatic,
+		enforcePause,
 		readSecrets,
 		appendEvent,
 		resolveHostPath,

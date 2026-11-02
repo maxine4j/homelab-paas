@@ -3,6 +3,30 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { App, AppView, viewPaths } from "./app.tsx";
 
+test("paused service snapshots offer Resume beside Refresh and Redeploy", () => {
+	const html = renderToStaticMarkup(
+		<AppView
+			route={{ page: "service", serviceId: "demo" }}
+			snapshot={{
+				refresh: () => {},
+				data: {
+					serviceId: "demo",
+					source: {},
+					descriptorStatus: "available",
+					resources: [],
+					health: "Paused",
+					sync: "OutOfSync",
+				},
+			}}
+			events={{ refresh: () => {} }}
+			logs={{}}
+		/>,
+	);
+	expect(html).toContain("Resume</button>");
+	expect(html).toContain('aria-label="Health: Paused"');
+	expect(html).toContain('aria-label="Sync: OutOfSync"');
+});
+
 test.each([
 	{ page: "service", serviceId: "demo", tab: "overview" },
 	{ page: "service", serviceId: "demo", tab: "resources" },

@@ -83,6 +83,8 @@ export const AppView = ({
 			<GitRefreshControl
 				key={`${route.page}:${route.serviceId}:${route.page === "service" ? (route.tab ?? "overview") : ""}`}
 				serviceId={route.serviceId}
+				paused={Boolean(snapshot.data && "health" in snapshot.data && snapshot.data.health === "Paused")}
+				unavailable={!snapshot.data}
 				onComplete={() => {
 					snapshot.refresh();
 					events.refresh();

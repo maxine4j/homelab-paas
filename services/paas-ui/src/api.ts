@@ -6,6 +6,30 @@ import type {
 	UiSecretsUpdate,
 } from "@homelab-paas/shared-contracts";
 
+/** Cancellation stops waiting; persisted manual intent may already have changed. */
+export const changeServiceLifecycle = async (
+	serviceId: string,
+	action: "pause" | "resume",
+	signal: AbortSignal,
+	request: typeof fetch = fetch,
+): Promise<void> => {
+	const response = await request(`/api/ui/services/${encodeURIComponent(serviceId)}/${action}`, {
+		method: "POST",
+		cache: "no-store",
+		credentials: "same-origin",
+		headers: { "x-paas-lifecycle": "1" },
+		signal,
+	});
+	if (!response.ok)
+		throw new Error(
+			response.status === 401
+				? "A platform session is required. Sign in again."
+				: response.status === 404
+					? "Service is not configured. Reload the service list."
+					: `Cannot ${action} service. The request may have completed; reload the page to check.`,
+		);
+};
+
 export async function saveSecrets(
 	serviceId: string,
 	update: UiSecretsUpdate,

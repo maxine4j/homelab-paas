@@ -2,7 +2,7 @@ import type { HealthStatus, UiHealthTimeline, UiServiceEvent } from "@homelab-pa
 import { useEffect, useState } from "react";
 
 const day = 86_400_000;
-const statuses: HealthStatus[] = ["Healthy", "Progressing", "Degraded", "Missing", "Unknown"];
+const statuses: HealthStatus[] = ["Healthy", "Progressing", "Degraded", "Missing", "Unknown", "Paused"];
 
 interface HealthTimelineProps {
 	label: string;

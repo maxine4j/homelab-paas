@@ -1,7 +1,63 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test, vi } from "vitest";
 
-import { GitRefreshFeedback, runGitRefresh, runRedeploy } from "./git-refresh.tsx";
+import { GitRefreshFeedback, runGitRefresh, runRedeploy, runServiceLifecycle } from "./git-refresh.tsx";
+
+test("service actions show Pause or Resume and block redeploy while paused", () => {
+	const render = (paused: boolean, pending = false) =>
+		renderToStaticMarkup(
+			<GitRefreshFeedback
+				serviceId='demo'
+				paused={paused}
+				pending={pending}
+				onRefresh={() => {}}
+				onRedeploy={() => {}}
+				onLifecycle={() => {}}
+			/>,
+		);
+	expect(render(false)).toContain("Pause</button>");
+	expect(render(true)).toContain("Resume</button>");
+	expect(render(true).match(/disabled/g)).toHaveLength(1);
+	expect(render(false, true).match(/disabled/g)).toHaveLength(3);
+});
+
+test.each(["pause", "resume"] as const)(
+	"%s feedback refreshes snapshots after success or uncertain failure",
+	async (action) => {
+		const update = vi.fn();
+		const reload = vi.fn();
+		const controller = new AbortController();
+		await runServiceLifecycle(
+			"demo",
+			action,
+			controller.signal,
+			update,
+			reload,
+			async () => new Response(null, { status: 204 }),
+		);
+		expect(update.mock.calls.at(-1)?.at(0)).toMatchObject({
+			pending: false,
+			message: action === "pause" ? "Service paused." : "Service resumed.",
+		});
+		await runServiceLifecycle(
+			"demo",
+			action,
+			controller.signal,
+			update,
+			reload,
+			async () => new Response(null, { status: 503 }),
+		);
+		expect(update.mock.calls.at(-1)?.at(0)).toMatchObject({ error: expect.stringContaining(`Cannot ${action}`) });
+		expect(reload).toHaveBeenCalledTimes(2);
+		update.mockClear();
+		await runServiceLifecycle("demo", action, controller.signal, update, reload, async () => {
+			controller.abort();
+			return new Response(null, { status: 204 });
+		});
+		expect(update).toHaveBeenCalledTimes(1);
+		expect(reload).toHaveBeenCalledTimes(2);
+	},
+);
 
 test("service actions include warning redeploy and info refresh, disabled together", () => {
 	const html = renderToStaticMarkup(

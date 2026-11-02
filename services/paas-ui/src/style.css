@@ -63,6 +63,9 @@
 .health-progressing {
 	--health-colour: #0dadea;
 }
+.health-paused {
+	--health-colour: #c4a0f5;
+}
 .health-degraded {
 	--health-colour: #e96d76;
 }
@@ -447,10 +450,18 @@ main {
 .service-actions {
 	display: inline-grid;
 	grid-auto-flow: column;
-	grid-auto-columns: 1fr;
+	grid-auto-columns: minmax(0, 1fr);
 	gap: 12px;
 	order: 1;
 	flex-shrink: 0;
+	min-width: 0;
+}
+@media (max-width: 700px) {
+	.service-actions button {
+		font-size: 0.8rem;
+		padding-inline: 0.35rem;
+		gap: 0.25rem;
+	}
 }
 .git-refresh .action-info {
 	color: #bfdbfe;
@@ -467,6 +478,14 @@ main {
 }
 .git-refresh .action-warning:hover {
 	background: #563e18;
+}
+.git-refresh .action-pause {
+	color: #c4a0f5;
+	background: #302140;
+	border-color: #725194;
+}
+.git-refresh .action-pause:hover {
+	background: #443058;
 }
 .action-pending {
 	position: absolute;
@@ -797,6 +816,11 @@ p {
 	background: #16382e;
 	border-color: #2b5648;
 }
+.badge-paused {
+	color: #c4a0f5;
+	background: #302140;
+	border-color: #725194;
+}
 .badge-degraded,
 .badge-dead,
 .badge-error,
@@ -812,7 +836,6 @@ p {
 	background: #1e304c;
 	border-color: #3d5b86;
 }
-.badge-paused,
 .badge-created,
 .badge-mixed,
 .badge-unknown {

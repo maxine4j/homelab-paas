@@ -6,7 +6,7 @@ import { ServicePage } from "../pages/service-page.tsx";
 import { ServicesPage } from "../pages/services-page.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 
-test.each(["Healthy", "Progressing", "Degraded", "Missing", "Unknown"] as const)(
+test.each(["Healthy", "Progressing", "Degraded", "Missing", "Unknown", "Paused"] as const)(
 	"health badge identifies %s accessibly",
 	(status) => {
 		const html = renderToStaticMarkup(<StatusBadge kind='Health' status={status} />);

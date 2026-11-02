@@ -3,6 +3,14 @@ import { expect, test } from "vitest";
 import { InMemoryKeyValueStore } from "../store/in-memory-store.ts";
 import { HealthHistoryStore } from "./health-history-store.ts";
 
+test("records intentional pause periods across restarts", async () => {
+	const backing = new InMemoryKeyValueStore<unknown>();
+	await new HealthHistoryStore(backing).record("demo", { $service: "Paused" }, 100, false);
+	expect((await new HealthHistoryStore(backing).read("demo"))["$service"]?.periods).toEqual([
+		{ start: 100, end: 100, health: "Paused" },
+	]);
+});
+
 test("persists isolated service/resource histories and merges consecutive health observations", async () => {
 	const backing = new InMemoryKeyValueStore<unknown>();
 	const store = new HealthHistoryStore(backing);

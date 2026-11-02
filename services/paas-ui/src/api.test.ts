@@ -1,6 +1,29 @@
 import { expect, test, vi } from "vitest";
 
-import { fetchUi, saveConfig, refreshGit, redeployService, saveSecrets } from "./api.ts";
+import { fetchUi, saveConfig, refreshGit, redeployService, saveSecrets, changeServiceLifecycle } from "./api.ts";
+
+test.each(["pause", "resume"] as const)("%s sends explicit same-origin intent and safe errors", async (action) => {
+	const signal = new AbortController().signal;
+	const request = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+	await changeServiceLifecycle("demo/a", action, signal, request);
+	expect(request).toHaveBeenCalledWith(
+		`/api/ui/services/demo%2Fa/${action}`,
+		expect.objectContaining({
+			method: "POST",
+			credentials: "same-origin",
+			headers: { "x-paas-lifecycle": "1" },
+			signal,
+		}),
+	);
+	for (const [status, message] of [
+		[401, "session"],
+		[404, "not configured"],
+		[503, `Cannot ${action}`],
+	] as const)
+		await expect(
+			changeServiceLifecycle("demo", action, signal, async () => new Response("secret-canary", { status })),
+		).rejects.toThrow(message);
+});
 
 test("redeploy sends same-origin intent, cancellation and safe errors", async () => {
 	const signal = new AbortController().signal;

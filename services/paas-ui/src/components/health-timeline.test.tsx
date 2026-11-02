@@ -26,7 +26,7 @@ test("offers a native range button and lists only health statuses in the legend"
 	expect(html).toContain('<button type="button"');
 	expect(html).toContain(">Last 24 hours</button>");
 	expect(html).not.toContain("Brief transitions / events");
-	for (const status of ["Healthy", "Progressing", "Degraded", "Missing", "Unknown"]) {
+	for (const status of ["Healthy", "Progressing", "Degraded", "Missing", "Unknown", "Paused"]) {
 		expect(html).toContain(status);
 	}
 });

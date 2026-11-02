@@ -68,7 +68,7 @@ const period = z
 	.strictObject({
 		start: timestamp,
 		end: timestamp,
-		health: z.enum(["Healthy", "Progressing", "Degraded", "Missing", "Unknown"]),
+		health: z.enum(["Healthy", "Progressing", "Degraded", "Missing", "Unknown", "Paused"]),
 	})
 	.refine(({ start, end }) => end >= start);
 const timeline = z

@@ -1,9 +1,25 @@
 import { expect, test } from "vitest";
 
 import { InMemoryKeyValueStore } from "../../store/in-memory-store.ts";
+import { ReconciliationStore } from "../reconciliation-store.ts";
 import { EndpointsStore } from "./endpoints-store.ts";
 
 const endpoint = { address: "10.0.0.2", port: 80, public: true };
+test("paused routes are hidden from every reader across restart, and service withdrawal removes all routes", async () => {
+	const values = new InMemoryKeyValueStore<unknown>();
+	const state = new ReconciliationStore(values);
+	const services = async () => ["demo", "other"];
+	const store = new EndpointsStore(values, services, state);
+	await store.set("web.demo", endpoint);
+	await store.set("site.demo", { ...endpoint, static: true, primary: true });
+	await store.set("web.other", endpoint);
+	await state.write("demo", { phase: "ready", paused: true });
+	expect(await new EndpointsStore(values, services, state).getAll()).toEqual({ "web.other": endpoint });
+	await store.set("demo", undefined);
+	await state.write("demo", { phase: "ready", paused: false });
+	expect(await store.getAll()).toEqual({ "web.other": endpoint });
+	expect(await values.get("demo.routes")).toEqual({});
+});
 test("writes only the affected service and restores a complete snapshot including removed services", async () => {
 	const values = new InMemoryKeyValueStore<unknown>();
 	const services = async () => ["demo", "gone"];

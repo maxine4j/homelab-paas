@@ -4,7 +4,7 @@ import { expect, test, vi } from "vitest";
 import { ConfigEditError } from "../config/paas-config.ts";
 import { SecretEditError } from "../config/secret-store.ts";
 import { GitRefreshError } from "../git/git-refresh-service.ts";
-import { RedeployError } from "../reconciler/reconciler-service.ts";
+import { RedeployError, ServiceLifecycleError } from "../reconciler/reconciler-service.ts";
 import { captureLogs } from "../util/test/logs.ts";
 import { startTestApi } from "../util/test/router.ts";
 import { createPaasUiRouter } from "./paas-ui-router.ts";
@@ -54,6 +54,8 @@ const fixture = async (authenticated = true) => {
 		{ serviceId: "broken", refreshed: false },
 	]);
 	const redeploy = vi.fn(async (_id: string) => {});
+	const pause = vi.fn(async (_id: string) => {});
+	const resume = vi.fn(async (_id: string) => {});
 	const secrets = {
 		read: vi.fn(async (_id: string) => ({
 			revision: "r1",
@@ -70,10 +72,65 @@ const fixture = async (authenticated = true) => {
 			redeploy,
 		},
 		secrets,
+		{ pause, resume },
 	);
 	const server = await startTestApi(new Koa().use(router.routes()).use(router.allowedMethods()));
-	return { ...server, calls, verifyAuthCookie, updateConfig, refreshOne, refreshAll, redeploy, secrets };
+	return {
+		...server,
+		calls,
+		verifyAuthCookie,
+		updateConfig,
+		refreshOne,
+		refreshAll,
+		redeploy,
+		secrets,
+		pause,
+		resume,
+	};
 };
+
+test.each(["pause", "resume"] as const)(
+	"%s requires a session and same-origin intent, maps errors and completes without a body",
+	async (action) => {
+		const f = await fixture();
+		try {
+			const path = `${f.origin}/api/ui/services/demo/${action}`;
+			const headers = { origin: f.origin, "x-paas-lifecycle": "1" };
+			expect((await fetch(path, { method: "POST" })).status).toBe(403);
+			expect(
+				(await fetch(path, { method: "POST", headers: { ...headers, origin: "https://attacker.test" } }))
+					.status,
+			).toBe(403);
+			expect(f[action]).not.toHaveBeenCalled();
+			expect((await fetch(path, { method: "POST", headers })).status).toBe(204);
+			expect(f[action]).toHaveBeenCalledWith("demo");
+			f[action].mockRejectedValueOnce(new ServiceLifecycleError("not-found", action));
+			expect((await fetch(path, { method: "POST", headers })).status).toBe(404);
+			f[action].mockRejectedValueOnce(
+				new ServiceLifecycleError("unavailable", action, { cause: new Error("secret-canary") }),
+			);
+			const failed = await fetch(path, { method: "POST", headers });
+			expect(failed.status).toBe(503);
+			expect(await failed.text()).not.toContain("secret-canary");
+		} finally {
+			await f.close();
+		}
+		const unauthenticated = await fixture(false);
+		try {
+			expect(
+				(
+					await fetch(`${unauthenticated.origin}/api/ui/services/demo/${action}`, {
+						method: "POST",
+						headers: { origin: unauthenticated.origin, "x-paas-lifecycle": "1" },
+					})
+				).status,
+			).toBe(401);
+			expect(unauthenticated[action]).not.toHaveBeenCalled();
+		} finally {
+			await unauthenticated.close();
+		}
+	},
+);
 
 test("secret endpoints require authentication, same-origin JSON intent, strict bounded edits and safe errors", async () => {
 	const f = await fixture();

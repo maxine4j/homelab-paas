@@ -8,7 +8,12 @@ import { SecretEditError } from "../config/secret-store.ts";
 import type { IServiceSecrets } from "../config/service-secrets.ts";
 import { GitRefreshError, type IGitRefreshService } from "../git/git-refresh-service.ts";
 import type { AuthedUserDetails } from "../ingress/auth/types.ts";
-import { RedeployError, type IServiceRedeployer } from "../reconciler/reconciler-service.ts";
+import {
+	RedeployError,
+	ServiceLifecycleError,
+	type IServiceLifecycle,
+	type IServiceRedeployer,
+} from "../reconciler/reconciler-service.ts";
 import { logger } from "../util/logger.ts";
 import { PaasUiError, type IPaasUiService } from "./paas-ui-service.ts";
 
@@ -33,6 +38,7 @@ export const createPaasUiRouter = (
 	managementOrigin?: () => string,
 	redeploy?: IServiceRedeployer,
 	secrets?: IServiceSecrets,
+	lifecycle?: IServiceLifecycle,
 ): Router => {
 	const router = new Router({ prefix: "/api/ui" });
 	router.use(async (context, next) => {
@@ -69,12 +75,15 @@ export const createPaasUiRouter = (
 								: error.kind === "conflict"
 									? 409
 									: 503
-							: (error instanceof PaasUiError
-										|| error instanceof GitRefreshError
-										|| error instanceof RedeployError)
-								  && error.kind === "not-found"
-								? 404
-								: 503;
+							: error instanceof RedeployError && error.kind === "paused"
+								? 409
+								: (error instanceof PaasUiError
+											|| error instanceof ServiceLifecycleError
+											|| error instanceof GitRefreshError
+											|| error instanceof RedeployError)
+									  && error.kind === "not-found"
+									? 404
+									: 503;
 			context.body = {
 				message:
 					error instanceof UiRequestError
@@ -82,12 +91,28 @@ export const createPaasUiRouter = (
 					|| error instanceof ConfigEditError
 					|| error instanceof GitRefreshError
 					|| error instanceof RedeployError
+					|| error instanceof ServiceLifecycleError
 					|| error instanceof SecretEditError
 						? error.message
 						: "Cluster data is unavailable; retry shortly",
 			};
 		}
 	});
+	for (const action of ["pause", "resume"] as const) {
+		router.post(`/services/:serviceId/${action}`, async (context) => {
+			if (
+				context.get("origin") !== (managementOrigin?.() ?? `${context.protocol}://${context.host}`)
+				|| context.get("x-paas-lifecycle") !== "1"
+			) {
+				context.status = 403;
+				context.body = { message: "Pause and resume require a same-origin request" };
+				return;
+			}
+			if (!lifecycle) throw new ServiceLifecycleError("unavailable", action);
+			await lifecycle[action](context.params["serviceId"]!);
+			context.status = 204;
+		});
+	}
 	router.get("/services/:serviceId/secrets", async (context) => {
 		if (!secrets) throw new SecretEditError("unavailable");
 		context.body = await secrets.read(context.params["serviceId"]!);

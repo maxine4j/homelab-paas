@@ -48,6 +48,8 @@ export interface UiServiceEvent {
 	timestamp: number;
 	level: "info" | "error";
 	event:
+		| "service.paused"
+		| "service.resumed"
 		| "deployment.started"
 		| "reconciliation.failed"
 		| "reconciliation.state-failed"
@@ -84,7 +86,7 @@ export interface UiContainer {
 }
 
 export type SyncStatus = "Synced" | "OutOfSync" | "Unknown";
-export type HealthStatus = "Healthy" | "Progressing" | "Degraded" | "Missing" | "Unknown";
+export type HealthStatus = "Healthy" | "Progressing" | "Degraded" | "Missing" | "Unknown" | "Paused";
 
 export interface UiHealthPeriod {
 	start: number;

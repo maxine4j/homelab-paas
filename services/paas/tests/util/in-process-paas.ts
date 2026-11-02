@@ -42,6 +42,7 @@ import { StaticResourceReconciler } from "../../src/reconciler/resources/static/
 import { WebResourceReconciler } from "../../src/reconciler/resources/web/web-reconciler.ts";
 import { WorkerResourceReconciler } from "../../src/reconciler/resources/worker/worker-reconciler.ts";
 import { ServiceEventStore } from "../../src/reconciler/service-event-store.ts";
+import { ServicePauseService } from "../../src/reconciler/service-pause-service.ts";
 import { StaticStore } from "../../src/static/static-store.ts";
 import { ResourceStatusService } from "../../src/status/resource-status-service.ts";
 import { ServiceStorage } from "../../src/store/service-storage.ts";
@@ -72,7 +73,7 @@ export const inProcessPaas = async (
 	});
 	const checkpoints = new ReconciliationStore(state);
 	const events = new ServiceEventStore(state);
-	const endpoints = new EndpointsStore(state, () => state.listServices());
+	const endpoints = new EndpointsStore(state, () => state.listServices(), checkpoints);
 	const dockerTransport = new NodeDockerTransport(
 		{ socketPath: dockerSocket, timeoutMs: 2000, maxResponseBytes: 1024 * 1024 },
 		sleep,
@@ -136,6 +137,7 @@ export const inProcessPaas = async (
 		changes,
 		undefined,
 		new StaticResourceReconciler(routing, git, staticStore, networking),
+		new ServicePauseService(docker, networking),
 	);
 	const scheduler = new ReconciliationScheduler(
 		config,
@@ -146,6 +148,7 @@ export const inProcessPaas = async (
 		now,
 		generateInstanceId,
 		changes,
+		reconciler,
 	);
 	scheduler.initialize();
 	const observations = new RuntimeObservations(docker, now);

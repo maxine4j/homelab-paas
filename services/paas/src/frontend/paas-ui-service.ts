@@ -201,7 +201,9 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 				}),
 			);
 			const health =
-				resource.type === "static" ? resource.health : this.health.refineStatus(resource.health, containers);
+				resource.type === "static" || resource.health === "Paused"
+					? resource.health
+					: this.health.refineStatus(resource.health, containers);
 			const sync =
 				resource.sync !== "Unknown"
 				&& (health === "Missing" || containers.some(({ state }) => state === "missing"))
@@ -280,13 +282,15 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 								containers: containers.filter((container) => container.resourceId === resourceId),
 							})
 						: "Unknown",
-					health: dockerAvailable
-						? this.health.getStatus(
-								serviceId,
-								resourceId,
-								containers.filter((container) => container.resourceId === resourceId),
-							)
-						: "Unknown",
+					health: state?.paused
+						? "Paused"
+						: dockerAvailable
+							? this.health.getStatus(
+									serviceId,
+									resourceId,
+									containers.filter((container) => container.resourceId === resourceId),
+								)
+							: "Unknown",
 					url:
 						resources[resourceId]?.type === "web" || resources[resourceId]?.type === "static"
 							? this.ingressUrl(`${resourceId}.${serviceId}`)
@@ -316,6 +320,12 @@ export class PaasUiService implements IPaasUiService, IPaasUiLogService {
 			return {
 				serviceId,
 				...this.status.aggregate(observedResources),
+				...(state?.paused
+					? {
+							health: "Paused" as const,
+							...(file && file.revision !== state.activeRevision ? { sync: "OutOfSync" as const } : {}),
+						}
+					: {}),
 				description:
 					file?.descriptor.metadata.description === undefined
 						? undefined

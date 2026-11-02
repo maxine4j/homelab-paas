@@ -38,6 +38,7 @@ const id = z
 	.regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/)
 	.max(63);
 const stateSchema = z.strictObject({
+	paused: z.boolean().optional(),
 	desiredRevision: z.string().optional(),
 	activeRevision: z.string().optional(),
 	phase: z

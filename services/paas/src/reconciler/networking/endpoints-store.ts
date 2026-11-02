@@ -1,11 +1,14 @@
 import { z } from "zod";
 
 import type { KeyValueStore } from "../../store/types.ts";
+import type { IReconciliationStateStore } from "../types.ts";
 import type { Endpoint } from "./types.ts";
 
 /** Desired endpoints, including changes whose publication outcome is uncertain. */
 export interface IEndpointsStore {
+	/** Effective routes exclude paused services; pause-state read failures reject the whole snapshot. */
 	getAll(): Promise<Record<string, Endpoint>>;
+	/** Undefined withdraws one resource, or all routes when given a bare service identity. */
 	set(serviceId: string, endpoint: Endpoint | undefined): Promise<void>;
 }
 
@@ -13,12 +16,16 @@ export class EndpointsStore implements IEndpointsStore {
 	constructor(
 		private readonly store: KeyValueStore<unknown>,
 		private readonly listServices: () => Promise<string[]>,
+		private readonly state?: IReconciliationStateStore,
 	) {}
 
 	async getAll(): Promise<Record<string, Endpoint>> {
 		try {
 			const routes: Record<string, Endpoint> = {};
-			for (const service of await this.listServices()) Object.assign(routes, await this.readService(service));
+			for (const service of await this.listServices()) {
+				if ((await this.state?.read(service))?.paused) continue;
+				Object.assign(routes, await this.readService(service));
+			}
 			return routes;
 		} catch (cause) {
 			throw new Error("Cannot read reconciliation data; check platform state files and permissions", { cause });
@@ -36,6 +43,7 @@ export class EndpointsStore implements IEndpointsStore {
 		}
 		const previous = JSON.stringify(routes);
 		const service = serviceId.split(".").at(1);
+		if (!service && !endpoint) routes = {};
 		// Legacy routes have no resource identity: any recreation may retire their destination.
 		if (service && !endpoint) delete routes[service];
 		if (service && endpoint?.primary) {

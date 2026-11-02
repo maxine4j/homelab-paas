@@ -49,7 +49,22 @@ test("static and web resources share the primary URL and expose resource links",
 	await f.service.getResource("demo", "site", snapshot);
 	expect(f.refineStatus).not.toHaveBeenCalled();
 });
-const fixture = (health: HealthStatus = "Degraded") => {
+test("paused service and resources retain Paused health while a newer commit is OutOfSync", async () => {
+	const f = fixture("Healthy", true);
+	const snapshot = await f.service.getService("demo");
+	expect(snapshot).toMatchObject({
+		health: "Paused",
+		sync: "OutOfSync",
+		activeRevision: "old",
+		desiredRevision: "new",
+	});
+	expect(snapshot.resources.every((resource) => resource.health === "Paused")).toBe(true);
+	f.refineStatus.mockImplementation(() => "Degraded");
+	expect(await f.service.getResource("demo", "app", snapshot)).toMatchObject({ health: "Paused" });
+	expect((await f.service.listServices())[0]).toMatchObject({ health: "Paused", sync: "OutOfSync" });
+});
+
+const fixture = (health: HealthStatus = "Degraded", paused = false) => {
 	const config = parseConfig({
 		version: 1,
 		metadata: { clusterId: "local" },
@@ -118,6 +133,7 @@ const fixture = (health: HealthStatus = "Degraded") => {
 			async read() {
 				return {
 					phase: "failed",
+					paused,
 					desiredRevision: "new",
 					activeRevision: "old",
 					failures: 1,

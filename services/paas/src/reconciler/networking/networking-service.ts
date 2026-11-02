@@ -21,7 +21,8 @@ export interface INetworkingService {
 	 * Rejects with NetworkingError; publication may have occurred. Keep both containers.
 	 */
 	routeTo(serviceId: string, endpoint: Endpoint): Promise<void>;
-	/** Stop assigning new requests before stopping containers. Resource withdrawal also removes unowned legacy service routes. Rejects with NetworkingError. */
+	/** Stop assigning new requests before stopping containers. A bare service identity withdraws all its routes.
+	 * Resource withdrawal also removes unowned legacy service routes. Rejects with NetworkingError. */
 	withdraw(serviceId: string): Promise<void>;
 }
 

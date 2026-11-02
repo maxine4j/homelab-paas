@@ -92,6 +92,10 @@ test("unavailable desired state and secret resolution report Unknown", async () 
 
 test("service sync and health aggregate independently", () => {
 	const { service } = fixture();
+	expect(service.aggregate([{ sync: "OutOfSync", health: "Paused" }])).toEqual({
+		sync: "OutOfSync",
+		health: "Paused",
+	});
 	expect(service.aggregate([{ sync: "OutOfSync", health: "Healthy" }])).toEqual({
 		sync: "OutOfSync",
 		health: "Healthy",

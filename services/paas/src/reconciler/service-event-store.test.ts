@@ -4,6 +4,13 @@ import { FileSystemKeyValueStore } from "../store/file-system-store.ts";
 import { InMemoryKeyValueStore } from "../store/in-memory-store.ts";
 import { ServiceEventStore } from "./service-event-store.ts";
 
+test("persists manual pause and resume events", async () => {
+	const store = new ServiceEventStore(new InMemoryKeyValueStore<unknown>());
+	for (const event of ["service.paused", "service.resumed"] as const)
+		await store.append("demo", { timestamp: 1, level: "info", event, message: "Manual action" });
+	expect(await store.list("demo")).toHaveLength(2);
+});
+
 const event = (timestamp: number) => ({
 	timestamp,
 	level: "error" as const,

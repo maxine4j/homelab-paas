@@ -30,6 +30,8 @@ export interface IReconcilerService {
 }
 
 export interface ReconciliationState {
+	/** Durable manual intent; only an explicit management Resume clears it. */
+	paused?: boolean;
 	desiredRevision?: string;
 	activeRevision?: string;
 	phase: "deploying" | "ready" | "failed";

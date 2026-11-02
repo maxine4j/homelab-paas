@@ -5,6 +5,32 @@ import { EnvoyService } from "./envoy-service.ts";
 import { EnvoyClientError, type EnvoyConfiguration } from "./types.ts";
 
 test.each([undefined, 443])(
+	"management pause/resume can outlast graceful container shutdown (TLS %s)",
+	async (httpsPort) => {
+		let configuration: EnvoyConfiguration | undefined;
+		await new EnvoyService(
+			{
+				bootstrap: async () => {},
+				apply: async (value) => {
+					configuration = value;
+				},
+			},
+			testConfig({ ingress: { baseDomain: "example.test", httpPort: 80, httpsPort } }),
+		).configureRoutes({});
+		const text = JSON.stringify(configuration?.listeners);
+		expect(text).toContain(
+			JSON.stringify({
+				match: {
+					safe_regex: { google_re2: {}, regex: "/api/ui/services/[^/]+/(pause|resume)" },
+					headers: [{ name: ":method", string_match: { exact: "POST" } }],
+				},
+				route: { cluster: "paas", timeout: "0s", idle_timeout: "0s" },
+			}),
+		);
+	},
+);
+
+test.each([undefined, 443])(
 	"strips supplied identity before authorization on every listener, TLS %s",
 	async (httpsPort) => {
 		let configuration: EnvoyConfiguration | undefined;

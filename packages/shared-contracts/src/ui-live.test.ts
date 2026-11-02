@@ -2,6 +2,33 @@ import { expect, test } from "vitest";
 
 import { uiLiveClientSchema, uiLiveServerSchema, uiLiveTargetFromPath } from "./ui-live.ts";
 
+test("live snapshots accept Paused independently of OutOfSync and include manual lifecycle events", () => {
+	expect(
+		uiLiveServerSchema.safeParse({
+			type: "snapshot",
+			id: "1",
+			target: { kind: "service", serviceId: "demo" },
+			data: {
+				serviceId: "demo",
+				health: "Paused",
+				sync: "OutOfSync",
+				source: {},
+				descriptorStatus: "available",
+				resources: [],
+				healthTimeline: { observedAt: 1, periods: [{ start: 1, end: 1, health: "Paused" }] },
+			},
+		}).success,
+	).toBe(true);
+	for (const event of ["service.paused", "service.resumed"])
+		expect(
+			uiLiveServerSchema.safeParse({
+				type: "event",
+				serviceId: "demo",
+				event: { timestamp: 1, level: "info", event, message: "Manual action" },
+			}).success,
+		).toBe(true);
+});
+
 test("live health timelines validate bounded chronological observations on services and resources", () => {
 	const healthTimeline = { observedAt: 200, periods: [{ start: 100, end: 200, health: "Healthy" }] };
 	const message = (timeline: unknown) => ({

@@ -12,12 +12,35 @@ import type { IStaticResourceReconciler } from "./resources/static/static-reconc
 import type { IWebResourceReconciler } from "./resources/web/web-reconciler.ts";
 import type { IWorkerResourceReconciler } from "./resources/worker/worker-reconciler.ts";
 import type { IServiceEventStore } from "./service-event-store.ts";
+import type { IServicePauseService } from "./service-pause-service.ts";
 import { serviceEventMessages } from "./types.ts";
 import type { IReconcilerService, IReconciliationStateStore, ReconciliationState } from "./types.ts";
 
 export interface IServiceRedeployer {
 	/** Serializes with reconciliation; validates inputs before forcing all workloads through their rollout strategy. Throws RedeployError. */
 	redeploy(serviceId: string): Promise<void>;
+}
+
+export interface IServiceLifecycle {
+	/** Persists manual intent before shutdown, serialized with deployments. Throws ServiceLifecycleError. */
+	pause(serviceId: string): Promise<void>;
+	/** Explicitly clears pause and reconciles latest inputs. Failures remain eligible for normal retry. */
+	resume(serviceId: string): Promise<void>;
+}
+
+export class ServiceLifecycleError extends Error {
+	constructor(
+		readonly kind: "not-found" | "unavailable",
+		action: "pause" | "resume",
+		options?: ErrorOptions,
+	) {
+		super(
+			kind === "not-found"
+				? "Service is not configured"
+				: `Cannot ${action} service; inspect service status and events`,
+			options,
+		);
+	}
 }
 
 export interface ITargetedReconciler extends IServiceRedeployer {
@@ -27,19 +50,21 @@ export interface ITargetedReconciler extends IServiceRedeployer {
 
 export class RedeployError extends Error {
 	constructor(
-		readonly kind: "not-found" | "unavailable",
+		readonly kind: "not-found" | "unavailable" | "paused",
 		options?: ErrorOptions,
 	) {
 		super(
 			kind === "not-found"
 				? "Service is not configured"
-				: "Cannot redeploy service; inspect service status and events",
+				: kind === "paused"
+					? "Service is paused; resume it before redeploying"
+					: "Cannot redeploy service; inspect service status and events",
 			options,
 		);
 	}
 }
 
-export class ReconcilerService implements IReconcilerService, ITargetedReconciler {
+export class ReconcilerService implements IReconcilerService, ITargetedReconciler, IServiceLifecycle {
 	private readonly log = createLogger(ReconcilerService.name);
 	private pending: Promise<void> = Promise.resolve();
 
@@ -55,6 +80,7 @@ export class ReconcilerService implements IReconcilerService, ITargetedReconcile
 		private readonly changes?: IChangeBus,
 		private readonly metrics?: IReconciliationMetrics,
 		private readonly staticResource?: IStaticResourceReconciler,
+		private readonly suspension?: IServicePauseService,
 	) {}
 
 	reconcile(): Promise<void> {
@@ -91,6 +117,7 @@ export class ReconcilerService implements IReconcilerService, ITargetedReconcile
 		const operation = this.pending.then(async () => {
 			const sources = this.config.getServices();
 			if (!Object.hasOwn(sources, serviceId)) throw new RedeployError("not-found");
+			if ((await this.state.read(serviceId))?.paused) throw new RedeployError("paused");
 			try {
 				this.inputs.invalidate(serviceId);
 				await this.reconcileService(serviceId, sources[serviceId]!, true);
@@ -100,6 +127,78 @@ export class ReconcilerService implements IReconcilerService, ITargetedReconcile
 		});
 		this.pending = operation.catch(() => {});
 		return operation;
+	}
+
+	pause(serviceId: string): Promise<void> {
+		return this.setPaused(serviceId, true);
+	}
+
+	resume(serviceId: string): Promise<void> {
+		return this.setPaused(serviceId, false);
+	}
+
+	private setPaused(serviceId: string, paused: boolean): Promise<void> {
+		const action = paused ? "pause" : "resume";
+		const operation = this.pending.then(async () => {
+			if (!Object.hasOwn(this.config.getServices(), serviceId))
+				throw new ServiceLifecycleError("not-found", action);
+			try {
+				const previous = await this.state.read(serviceId);
+				// Before exposing routes again, finish any interrupted shutdown while pause still applies.
+				if (!paused && previous?.paused) await this.enforcePause(serviceId, previous);
+				await this.checkpoint(serviceId, {
+					...previous,
+					phase: previous?.phase ?? "ready",
+					paused,
+					failures: undefined,
+					retryAt: undefined,
+					error: undefined,
+					deploymentStartedAt: undefined,
+				});
+				if (!paused) this.inputs.invalidate(serviceId);
+				await this.reconcileService(serviceId, this.config.getServices()[serviceId]!);
+				await this.recordEvent(serviceId, {
+					timestamp: this.now(),
+					level: "info",
+					event: paused ? "service.paused" : "service.resumed",
+					message: paused ? "Service paused manually" : "Service resumed manually",
+				});
+			} catch (cause) {
+				throw new ServiceLifecycleError("unavailable", action, { cause });
+			}
+		});
+		this.pending = operation.catch(() => {});
+		return operation;
+	}
+
+	private async enforcePause(serviceId: string, previous: ReconciliationState): Promise<void> {
+		try {
+			if (!this.suspension) throw new Error("Pause operations are unavailable");
+			await this.suspension.enforce(serviceId);
+			await this.checkpoint(serviceId, {
+				...previous,
+				paused: true,
+				failures: undefined,
+				retryAt: undefined,
+				error: undefined,
+			});
+		} catch (error) {
+			const failures = Math.min((previous.failures ?? 0) + 1, 1024);
+			const retry = this.config.getReconciliationConfig();
+			const retryAt =
+				this.now()
+				+ Math.min(retry.maxRetryBackoffSeconds, retry.retryBackoffSeconds * 2 ** Math.min(failures - 1, 30))
+					* 1000;
+			await this.checkpoint(serviceId, {
+				...previous,
+				paused: true,
+				failures,
+				retryAt,
+				error: "Cannot fully pause service; shutdown will retry",
+			});
+			this.log.error({ err: error, serviceId }, "Cannot fully pause service; shutdown will retry");
+			throw error;
+		}
 	}
 
 	private async reconcileService(serviceId: string, source: GitFileSource, force = false): Promise<void> {
@@ -112,6 +211,10 @@ export class ReconcilerService implements IReconcilerService, ITargetedReconcile
 			throw error;
 		}
 		if (!force && (previous?.retryAt ?? 0) > this.now()) return;
+		if (previous?.paused) {
+			await this.enforcePause(serviceId, previous);
+			return;
+		}
 		let outcome: "success" | "failure" = "failure";
 		let desiredRevision = previous?.desiredRevision;
 		let deploymentStartedAt = previous?.deploymentStartedAt;

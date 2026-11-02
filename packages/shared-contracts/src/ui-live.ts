@@ -30,7 +30,7 @@ export const uiLiveClientSchema = z.discriminatedUnion("type", [
 ]);
 const metadata = z.object({ authorName: z.string(), authoredAt: z.string(), message: z.string() });
 const sync = z.enum(["Synced", "OutOfSync", "Unknown"]);
-const health = z.enum(["Healthy", "Progressing", "Degraded", "Missing", "Unknown"]);
+const health = z.enum(["Healthy", "Progressing", "Degraded", "Missing", "Unknown", "Paused"]);
 const timestamp = z.number().finite().nonnegative();
 const healthTimeline = z
 	.object({
@@ -83,6 +83,8 @@ export const uiServiceEventSchema = z.object({
 	timestamp: z.number().finite().nonnegative(),
 	level: z.enum(["info", "error"]),
 	event: z.enum([
+		"service.paused",
+		"service.resumed",
 		"deployment.started",
 		"deployment.succeeded",
 		"reconciliation.failed",

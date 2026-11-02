@@ -75,6 +75,7 @@ import { StaticResourceReconciler } from "./reconciler/resources/static/static-r
 import { WebResourceReconciler } from "./reconciler/resources/web/web-reconciler.ts";
 import { WorkerResourceReconciler } from "./reconciler/resources/worker/worker-reconciler.ts";
 import { ServiceEventStore } from "./reconciler/service-event-store.ts";
+import { ServicePauseService } from "./reconciler/service-pause-service.ts";
 import type { DescriptorDecoder } from "./reconciler/types.ts";
 import { createStaticRouter } from "./static/static-router.ts";
 import { StaticService } from "./static/static-service.ts";
@@ -118,7 +119,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const state = new ServiceStorage(SERVICE_DIRECTORY, staticFiles, storage);
 	const store = new ReconciliationStore(state);
 	const events = new ServiceEventStore(state);
-	const endpoints = new EndpointsStore(state, () => state.listServices());
+	const endpoints = new EndpointsStore(state, () => state.listServices(), store);
 	const dockerTransport = new NodeDockerTransport(
 		{
 			socketPath: "/var/run/docker.sock",
@@ -202,6 +203,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		changes,
 		metrics,
 		new StaticResourceReconciler(routing, git, staticStore, networking),
+		new ServicePauseService(docker, networking),
 	);
 	const scheduler = new ReconciliationScheduler(
 		config,
@@ -212,6 +214,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		Date.now,
 		nanoid,
 		changes,
+		reconciler,
 	);
 	scheduler.initialize();
 	lifecycle.registerShutdownHandler(() => scheduler.stop());
@@ -318,7 +321,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	// Connect before the first owned inventory. Pending event hints survive the execution gate.
 	await watcher.start();
 	const gitRefreshService = new GitRefreshService(config, git, scheduler, changes);
-	const gitRefresh = new ManagementRefreshService(gitRefreshService, managementState, audit, scheduler);
+	const gitRefresh = new ManagementRefreshService(gitRefreshService, managementState, audit, scheduler, scheduler);
 	const managementOrigin = (): string => {
 		const { baseDomain, httpPort, httpsPort } = config.getIngressConfig();
 		const port = httpsPort ?? httpPort;
@@ -337,7 +340,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 		new SecretStore(secretDirectory, readFile, writeSecrets),
 		changes,
 	);
-	const ui = createPaasUiRouter(uiService, gitRefresh, sessions, managementOrigin, scheduler, secrets);
+	const ui = createPaasUiRouter(uiService, gitRefresh, sessions, managementOrigin, scheduler, secrets, gitRefresh);
 	app.use(ui.routes()).use(ui.allowedMethods());
 	app.use(
 		createFrontendRouter(

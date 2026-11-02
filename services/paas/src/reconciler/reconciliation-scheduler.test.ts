@@ -2,7 +2,7 @@ import { expect, test, vi } from "vitest";
 
 import { ChangeBus } from "../events/change-bus.ts";
 import { createLogger } from "../util/logger.ts";
-import type { ISleep } from "../util/sleep.ts";
+import { sleep, type ISleep } from "../util/sleep.ts";
 import { testConfig } from "../util/test/config.ts";
 import { ReconciliationScheduler } from "./reconciliation-scheduler.ts";
 import type { ReconciliationState } from "./types.ts";
@@ -18,6 +18,8 @@ const fixture = () => {
 		});
 	const reconcileOne = vi.fn(async (_id: string) => {});
 	const redeploy = vi.fn(async (_id: string) => {});
+	const pause = vi.fn(async (_id: string) => {});
+	const resume = vi.fn(async (_id: string) => {});
 	const refresh = vi.fn(async (_id: string) => false);
 	const invalidate = vi.fn();
 	const state = { read: vi.fn(async () => checkpoint), write: async () => {} };
@@ -32,11 +34,14 @@ const fixture = () => {
 		() => now,
 		() => `run-${++taskId}`,
 		changes,
+		{ pause, resume },
 	);
 	return {
 		scheduler,
 		reconcileOne,
 		redeploy,
+		pause,
+		resume,
 		refresh,
 		invalidate,
 		state,
@@ -50,6 +55,62 @@ const fixture = () => {
 		},
 	};
 };
+
+test("manual pause recovers shutdown retry deadlines and resume clears obsolete deployment backoff", async () => {
+	const f = fixture();
+	f.checkpoint({ phase: "failed", retryAt: 99999 });
+	await f.scheduler.start();
+	f.pause.mockImplementation(async () => {
+		f.checkpoint({ phase: "ready", paused: true, retryAt: 1000 });
+		throw new Error("shutdown failed");
+	});
+	await expect(f.scheduler.pause("demo")).rejects.toThrow("shutdown failed");
+	await f.scheduler.settle();
+	expect(f.waits.at(-1)?.delay).toBe(1000);
+	f.resume.mockImplementation(async () => {
+		f.checkpoint({ phase: "ready" });
+	});
+	await f.scheduler.resume("demo");
+	f.scheduler.invalidate("demo");
+	await f.scheduler.settle();
+	expect(f.reconcileOne).toHaveBeenCalledWith("demo");
+	await f.scheduler.stop();
+	await expect(f.scheduler.resume("demo")).rejects.toMatchObject({ kind: "unavailable" });
+});
+
+test("shutdown settles an accepted manual lifecycle operation", async () => {
+	const f = fixture();
+	let finish = () => {};
+	f.pause.mockImplementation(
+		() =>
+			new Promise<void>((resolve) => {
+				finish = resolve;
+			}),
+	);
+	await f.scheduler.start();
+	const pausing = f.scheduler.pause("demo");
+	await vi.waitFor(() => expect(f.pause).toHaveBeenCalledOnce());
+	let stopped = false;
+	const stopping = f.scheduler.stop().then(() => {
+		stopped = true;
+	});
+	await sleep(0);
+	expect(stopped).toBe(false);
+	finish();
+	await Promise.all([pausing, stopping]);
+	expect(stopped).toBe(true);
+});
+
+test("failed manual shutdown retains a bounded retry when its deadline could not be persisted", async () => {
+	const f = fixture();
+	f.checkpoint({ phase: "ready", paused: true });
+	f.pause.mockRejectedValueOnce(new Error("checkpoint write failed"));
+	await f.scheduler.start();
+	await expect(f.scheduler.pause("demo")).rejects.toThrow("checkpoint write failed");
+	await f.scheduler.settle();
+	expect(f.waits.at(-1)?.delay).toBe(1000);
+	await f.scheduler.stop();
+});
 
 test("each targeted execution establishes fresh task tracing without leaking context", async () => {
 	const f = fixture();

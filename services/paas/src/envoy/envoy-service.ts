@@ -101,6 +101,7 @@ export class EnvoyService implements IEnvoyService {
 														...virtualHost("paas", ingress.baseDomain, "paas"),
 														routes: [
 															this.liveRoute(),
+															this.lifecycleRoute(),
 															{ match: { prefix: "/" }, route: { cluster: "paas" } },
 														],
 													},
@@ -208,6 +209,16 @@ export class EnvoyService implements IEnvoyService {
 							...host.routes,
 						],
 					}),
+		};
+	}
+
+	private lifecycleRoute() {
+		return {
+			match: {
+				safe_regex: { google_re2: {}, regex: "/api/ui/services/[^/]+/(pause|resume)" },
+				headers: [{ name: ":method", string_match: { exact: "POST" } }],
+			},
+			route: { cluster: "paas", timeout: "0s", idle_timeout: "0s" },
 		};
 	}
 
@@ -346,6 +357,7 @@ export class EnvoyService implements IEnvoyService {
 										...virtualHost("management", ingress.baseDomain, "paas"),
 										routes: [
 											this.liveRoute(),
+											this.lifecycleRoute(),
 											{ match: { prefix: "/api/ui/" }, route: { cluster: "paas" } },
 											...["/api/", "/auth/", "/oauth/", "/health"].map((prefix) => ({
 												match: { prefix },

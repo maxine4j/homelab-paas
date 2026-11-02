@@ -2,7 +2,13 @@ import type { IPaasConfig } from "../config/paas-config.ts";
 import type { IChangeBus } from "../events/change-bus.ts";
 import { createLogger, withLogContext } from "../util/logger.ts";
 import type { ISleep } from "../util/sleep.ts";
-import { RedeployError, type IServiceRedeployer, type ITargetedReconciler } from "./reconciler-service.ts";
+import {
+	RedeployError,
+	ServiceLifecycleError,
+	type IServiceLifecycle,
+	type IServiceRedeployer,
+	type ITargetedReconciler,
+} from "./reconciler-service.ts";
 import type { IReconciliationStateStore } from "./types.ts";
 
 export interface IDesiredInputRefresh {
@@ -11,7 +17,7 @@ export interface IDesiredInputRefresh {
 	invalidate(serviceId: string): void;
 }
 
-export interface IReconciliationScheduler extends IServiceRedeployer {
+export interface IReconciliationScheduler extends IServiceRedeployer, IServiceLifecycle {
 	/** Subscribes to desired writes before APIs/audits accept work, while execution remains gated. */
 	initialize(): void;
 	/** Coalesced observation hint. Does not discard desired inputs or bypass persisted backoff. */
@@ -33,6 +39,7 @@ export class ReconciliationScheduler implements IReconciliationScheduler {
 	private readonly forced = new Map<string, { resolve: () => void; reject: (error: unknown) => void }[]>();
 	private readonly refreshes = new Map<string, Promise<void>>();
 	private readonly refreshAgain = new Set<string>();
+	private readonly actions = new Set<Promise<void>>();
 	private running: Promise<void> | undefined;
 	private timer: AbortController | undefined;
 	private timerWork: Promise<void> | undefined;
@@ -49,6 +56,7 @@ export class ReconciliationScheduler implements IReconciliationScheduler {
 		private readonly now: () => number,
 		private readonly generateTaskId: () => string,
 		private readonly changes?: IChangeBus,
+		private readonly lifecycle?: IServiceLifecycle,
 	) {}
 
 	initialize(): void {
@@ -101,8 +109,17 @@ export class ReconciliationScheduler implements IReconciliationScheduler {
 		return result;
 	}
 
+	pause(serviceId: string): Promise<void> {
+		return this.changeLifecycle(serviceId, "pause");
+	}
+
+	resume(serviceId: string): Promise<void> {
+		return this.changeLifecycle(serviceId, "resume");
+	}
+
 	async settle(): Promise<void> {
-		while (this.running || this.refreshes.size) {
+		while (this.running || this.refreshes.size || this.actions.size) {
+			await Promise.allSettled(this.actions);
 			await Promise.all(this.refreshes.values());
 			await this.running;
 		}
@@ -130,6 +147,27 @@ export class ReconciliationScheduler implements IReconciliationScheduler {
 				if (this.dirty.size && !this.stopped) this.dispatch();
 				else this.armTimer();
 			});
+	}
+
+	private changeLifecycle(serviceId: string, action: "pause" | "resume"): Promise<void> {
+		const operation = this.executeLifecycle(serviceId, action).finally(() => this.actions.delete(operation));
+		this.actions.add(operation);
+		return operation;
+	}
+
+	private async executeLifecycle(serviceId: string, action: "pause" | "resume"): Promise<void> {
+		if (!Object.hasOwn(this.config.getServices(), serviceId)) throw new ServiceLifecycleError("not-found", action);
+		if (this.stopped || !this.lifecycle) throw new ServiceLifecycleError("unavailable", action);
+		let fallback: number | undefined;
+		try {
+			await this.lifecycle[action](serviceId);
+		} catch (error) {
+			fallback = this.now() + this.config.getReconciliationConfig().retryBackoffSeconds * 1000;
+			throw error;
+		} finally {
+			await this.recoverDeadline(serviceId, fallback);
+			this.dispatch();
+		}
 	}
 
 	private async refreshDesired(serviceId: string): Promise<void> {

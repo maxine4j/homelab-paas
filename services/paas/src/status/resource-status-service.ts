@@ -52,7 +52,7 @@ export class ResourceStatusService implements IResourceStatusService {
 
 	aggregate(resources: readonly ResourceStatus[]): ResourceStatus {
 		if (!resources.length) return { sync: "Unknown", health: "Unknown" };
-		const severity: HealthStatus[] = ["Unknown", "Degraded", "Missing", "Progressing", "Healthy"];
+		const severity: HealthStatus[] = ["Paused", "Unknown", "Degraded", "Missing", "Progressing", "Healthy"];
 		return {
 			sync: resources.some(({ sync }) => sync === "Unknown")
 				? "Unknown"

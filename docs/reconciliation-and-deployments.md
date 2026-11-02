@@ -42,7 +42,17 @@ Stopped/missing/extra replicas, changed specifications, supported live limits, a
 
 Each audit forces Envoy verification from persisted routes, retaining unsupported and removed-service routes. It never publishes partial inventory as complete desired routing or routes to unready candidates. Persisted route mismatch is repaired by targeted reconciliation after fresh readiness; uncertain xDS acceptance remains retryable. Errors retain routes and queued recovery. Shutdown cancels stream/backoff and periodic timers, discards unstarted audit work and settles active scans, observations and deployment work. Watcher/audit executions carry injected task IDs under the [logging contract](development.md#backend-logging).
 
-The audit interval bounds missed-event detection only while Docker and the control plane are available. Scan duration, deployment backlog, retry backoff and readiness may delay repair further. Manual Docker stops remain repairable; there is no suspension policy. Independent [health polling](#resource-health), Git refresh, platform reload and certificate renewal retain their schedules.
+The audit interval bounds missed-event detection only while Docker and the control plane are available. Scan duration, deployment backlog, retry backoff and readiness may delay repair further. Manual Docker stops remain repairable unless the service is [paused](#manual-pause-and-resume). Independent [health polling](#resource-health), Git refresh, platform reload and certificate renewal retain their schedules.
+
+## Manual pause and resume
+
+The management UI's Pause action persists `paused: true` in the service's `state.yaml`, serialized with reconciliation and deployment actions. It then withdraws every service route, including resource hostnames, primary aliases and static resources, and stops every live service-owned container with a 30-second graceful-stop timeout. Container ownership checks still apply. Stopped containers, service networks, persistent data, generated credentials and published static bundles are retained.
+
+The shared endpoint reader excludes paused services, including immediately after control-plane restart and after interrupted route withdrawal. This applies to Envoy generation, authorization and static serving. Shutdown attempts every container even if route publication or another stop fails. Failed shutdown retains pause intent and records a sanitized error and a bounded retry deadline. Subsequent reconciliation only enforces shutdown; it cannot deploy paused workloads. Docker events and safety audits can stop containers that were externally restarted while paused.
+
+Git refresh, descriptor inspection and desired-input detection continue while paused. A newer commit is displayed as OutOfSync even if workload specifications are unchanged. Service and resource health display Paused independently of sync. Git/configuration/secret changes, retries, restarts and Redeploy never clear pause intent; Redeploy rejects a paused service. Removing and re-adding a configured source does not clear retained pause state.
+
+Only the explicit management Resume action clears pause intent. It first completes any interrupted shutdown, then reconciles the latest committed desired inputs through normal readiness and route publication. A deployment failure after clearing pause uses normal reconciliation retries. Pause and Resume API access and UI presentation are defined in [management UI](management-ui.md#manual-pause-and-resume).
 
 ## Implemented deployment MVP
 
@@ -84,7 +94,7 @@ Validated immutable container metadata (image identity, labels, environment and 
 
 Checkpoint and endpoint stores compare validated persisted values before writing and skip unchanged YAML replacements. Successful unchanged reconciliation emits no checkpoint change notifications. Endpoint reads still observe persisted changes; the confirmed Envoy publication and explicit startup/audit repair rules belong to [networking](networking-and-auth.md#networking).
 
-Management snapshots expose independent `sync` and `health` fields on services and resources, using Argo CD's vocabulary without Suspended. Deployment phase remains an internal persisted checkpoint for retries and recovery, separate from both statuses.
+Management snapshots expose independent `sync` and `health` fields on services and resources, using Argo CD's vocabulary without Suspended and adding Paused for [manual pause](#manual-pause-and-resume). Manual pause takes precedence over observed health and adds the documented service revision comparison to sync. Deployment phase remains an internal persisted checkpoint for retries and recovery, separate from both statuses.
 
 Sync is `Synced` when observed containers match the desired specification and replica count, `OutOfSync` when containers are missing, extra or differ, and `Unknown` when the descriptor, Docker observation or required secrets cannot be read, or the resource type is unsupported. Observed resources absent from an available descriptor are OutOfSync. Comparison reuses reconciliation's specification fingerprints, including resolved secrets and effective primary-web policy. Fingerprints and resolved values remain internal. Runtime readiness and container source revisions do not affect sync; unchanged specifications may retain containers from older commits. Sync comparison is read-only.
 
@@ -92,6 +102,7 @@ Service sync is Unknown if any resource comparison is Unknown, otherwise OutOfSy
 
 Each resource has one health status:
 
+- `Paused`: its service has durable manual pause intent; see [manual pause and resume](#manual-pause-and-resume).
 - `Progressing`: its rollout is in progress, including startup readiness. This takes precedence over missing containers during recreate. It ends on rollout success or failure; other resources retain their own health.
 - `Missing`: no containers are observed outside an active rollout.
 - `Healthy`: exactly the expected number of replicas are running. When an HTTP check is configured, each must also be attached to the service network with an address and return HTTP `200`.

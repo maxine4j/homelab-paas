@@ -26,6 +26,15 @@ const fileStore = (directory: string) =>
 	);
 
 const contract = (given: () => Promise<KeyValueStore<unknown>>) => {
+	test("persists manual pause intent across store recreation", async () => {
+		const values = await given();
+		await new ReconciliationStore(values).write("demo", { phase: "ready", paused: true, activeRevision: "old" });
+		expect(await new ReconciliationStore(values).read("demo")).toEqual({
+			phase: "ready",
+			paused: true,
+			activeRevision: "old",
+		});
+	});
 	test("stable checkpoints and endpoints perform no additional YAML writes; external edits are repaired", async () => {
 		const backing = await given();
 		let writes = 0;
