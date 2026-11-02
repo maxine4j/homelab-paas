@@ -25,6 +25,12 @@ import { ProjectService } from "./projects/project-service.ts";
 import { ProjectStore } from "./projects/project-store.ts";
 import { GitTransport } from "./repositories/git-transport.ts";
 import { RepositoryClient } from "./repositories/repository-client.ts";
+import { TerminalInventory } from "./terminal/terminal-inventory.ts";
+import { TerminalProcess } from "./terminal/terminal-process.ts";
+import { TerminalRouter } from "./terminal/terminal-router.ts";
+import { TerminalService } from "./terminal/terminal-service.ts";
+import { TerminalSocket } from "./terminal/terminal-socket.ts";
+import { TerminalStore } from "./terminal/terminal-store.ts";
 import type { StartOptions } from "./types.ts";
 import { WorkspaceClient } from "./workspaces/workspace-client.ts";
 import { WorkspaceDiffClient } from "./workspaces/workspace-diff-client.ts";
@@ -75,6 +81,20 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 	recovery = workspaces.recover();
 	await recovery;
 	if (!lifecycle.isOpen()) return;
+	const terminalStore = new TerminalStore(database);
+	await terminalStore.initialize();
+	const terminals = new TerminalService(
+		terminalStore,
+		new TerminalProcess(process.env["PATH"] ?? "", sleep, new TerminalInventory(files), process.platform),
+		workspaces,
+		access,
+		randomUUID,
+		() => new Date(),
+		sleep,
+	);
+	lifecycle.register(() => terminals.shutdown());
+	await terminals.recover();
+	if (!lifecycle.isOpen()) return;
 	const attempts = new AccountAttemptStore(database);
 	await attempts.initialize();
 	if (!lifecycle.isOpen()) return;
@@ -104,11 +124,14 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 	if (!(await assets.read("/"))) throw new Error("Build Forge frontend before starting the application");
 	if (!lifecycle.isOpen()) return;
 	const app = new HttpApplication(new ProjectRouter(projects), access).create(
-		[new AccountRouter(accounts), new WorkspaceRouter(workspaces)],
+		[new AccountRouter(accounts), new WorkspaceRouter(workspaces), new TerminalRouter(terminals)],
 		assets,
 	);
 	app.on("error", (err) => log.error({ err }, "HTTP request failed"));
 	const server = createServer(app.callback());
+	const terminalSockets = new TerminalSocket(terminals, access, sleep);
+	terminalSockets.register(server);
+	lifecycle.register(() => terminalSockets.close());
 	let listening: Promise<void> = Promise.resolve();
 	lifecycle.register(() =>
 		listening
@@ -122,6 +145,8 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 						server.close((error) => (error ? reject(error) : resolve())),
 					);
 					server.closeIdleConnections();
+					await terminalSockets.close();
+					await terminals.shutdown();
 					await git.close();
 					await drained;
 				})(),

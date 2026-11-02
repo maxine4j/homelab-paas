@@ -10,6 +10,8 @@ COPY services/forge/packages/contracts/package.json services/forge/packages/cont
 COPY services/forge/packages/frontend/package.json services/forge/packages/frontend/package.json
 
 FROM manifests AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends python3=3.13.5-1 make=4.4.1-2 g++=4:14.2.0-1 && rm -rf /var/lib/apt/lists/*
+ENV npm_config_build_from_source=true
 RUN --mount=type=cache,id=forge-pnpm,target=/pnpm/store pnpm install --frozen-lockfile --filter @homelab-paas/forge... --filter @homelab-paas/forge-ui... --store-dir /pnpm/store
 COPY tsconfig.json ./
 COPY packages/backend-infrastructure packages/backend-infrastructure
@@ -17,6 +19,8 @@ COPY services/forge services/forge
 RUN pnpm --filter @homelab-paas/backend-infrastructure build && pnpm --filter @homelab-paas/forge-contracts build && pnpm --filter @homelab-paas/forge build && pnpm --filter @homelab-paas/forge-ui build
 
 FROM manifests AS installer
+RUN apt-get update && apt-get install -y --no-install-recommends python3=3.13.5-1 make=4.4.1-2 g++=4:14.2.0-1 && rm -rf /var/lib/apt/lists/*
+ENV npm_config_build_from_source=true
 RUN --mount=type=cache,id=forge-pnpm,target=/pnpm/store pnpm install --prod --frozen-lockfile --filter @homelab-paas/forge... --store-dir /pnpm/store
 
 FROM base AS runner

@@ -2,3 +2,5 @@ packages:
     - packages/*
     - services/*
     - services/forge/packages/*
+onlyBuiltDependencies:
+    - node-pty
