@@ -1,13 +1,18 @@
 import { createLogger } from "@homelab-paas/backend-infrastructure/logger";
 import { bodyParser } from "@koa/bodyparser";
-import Koa, { type Middleware } from "koa";
+import type Router from "@koa/router";
+import Koa from "koa";
 
 import { AccessDeniedError, type IAccessService } from "../auth/access-service.ts";
+import type { Actor } from "../auth/types.ts";
 import { InvalidProjectError, ProjectNotFoundError, ProjectUnavailableError } from "../projects/errors.ts";
 import type { IProjectRouter } from "../projects/project-router.ts";
 
 export interface IHttpApplication {
-	create(extensions?: Middleware[]): Koa;
+	create(extensions?: IHttpRouter[]): Koa;
+}
+export interface IHttpRouter {
+	create(): Router<{ actor: Actor }>;
 }
 export class HttpApplication implements IHttpApplication {
 	private readonly log = createLogger(HttpApplication.name);
@@ -16,7 +21,7 @@ export class HttpApplication implements IHttpApplication {
 		private readonly access: IAccessService,
 		private readonly now: () => number = () => performance.now(),
 	) {}
-	create(extensions: Middleware[] = []): Koa {
+	create(extensions: IHttpRouter[] = []): Koa {
 		const app = new Koa();
 		app.use(async (ctx, next) => {
 			const started = this.now();
@@ -75,7 +80,10 @@ export class HttpApplication implements IHttpApplication {
 		app.use(bodyParser({ enableTypes: ["json"], jsonLimit: "16kb" }));
 		const router = this.projectRouter.create();
 		app.use(router.routes()).use(router.allowedMethods());
-		for (const extension of extensions) app.use(extension);
+		for (const extension of extensions) {
+			const routes = extension.create();
+			app.use(routes.routes()).use(routes.allowedMethods());
+		}
 		return app;
 	}
 }

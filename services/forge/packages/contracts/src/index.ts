@@ -41,4 +41,19 @@ export const apiErrorSchema = z.strictObject({
 	error: z.enum(["invalid-request", "access-denied", "project-not-found", "project-unavailable", "internal-error"]),
 });
 
-export type { CreateProject, Project } from "./types.ts";
+export const accountProviderSchema = z.enum(["codex", "github"]);
+export const accountStatusSchema = z.strictObject({
+	connection: z.enum(["available", "unavailable"]),
+	account: z.strictObject({ name: z.string().min(1).max(320) }).optional(),
+	login: z.strictObject({
+		state: z.enum(["idle", "pending", "completed", "failed", "cancelled", "uncertain"]),
+		verificationUrl: z.url().max(2048).optional(),
+		userCode: z
+			.string()
+			.regex(/^[A-Z0-9-]{1,128}$/)
+			.optional(),
+		failure: z.enum(["login-failed", "verification-failed", "connection-lost", "unavailable"]).optional(),
+	}),
+});
+export const accountsStatusSchema = z.strictObject({ codex: accountStatusSchema, github: accountStatusSchema });
+export type { AccountProvider, AccountStatus, AccountsStatus, CreateProject, Project } from "./types.ts";

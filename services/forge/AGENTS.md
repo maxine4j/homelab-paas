@@ -203,10 +203,61 @@ Startup must set `umask(0o077)`, create/restrict the data directory to `0700`, a
 complete database/schema initialization and project recovery before listening.
 The runtime must retain the single-instance `recreate` deployment policy.
 
-This foundation provides local projects, persistence, repository import, access
-policy, and project HTTP adapters. Account setup/Codex integration and the served
-frontend are subsequent work within slice 1; their status must come from real
-adapters rather than success placeholders.
+The account backend pins `@openai/codex` to `0.164.0`. Its supported account
+protocol was checked against that binary's generated JSON schemas and exercised
+with a credential-free stdio initialization/account-read integration test. Live
+ChatGPT/GitHub sign-in remains a manual validation; automated tests use no live
+credentials. One
+long-lived private app-server connection initializes once, sends `initialized`,
+correlates numeric request IDs, and accepts only the three account operations
+needed here. Requests have a 15-second deadline, at most 32 pending requests,
+and a 1 MiB maximum JSON frame. A malformed frame, process exit, or missed
+deadline rejects pending work and invalidates the connection; no request is
+replayed. Status polling may reconnect and read actual account state, but never
+starts login or agent execution.
+
+Account APIs are `GET /api/accounts` and
+`POST /api/accounts/:provider/{login,retry,cancel}`, where provider is `codex` or
+`github`. Mutations accept no fields. They use the same owner and origin policy
+as project APIs. Browser-safe contracts expose provider connection availability,
+an optional verified account name, and login state
+`idle/pending/completed/failed/cancelled/uncertain`. Only pending states carry a
+validated provider verification URL and one-time code; expiry is not fabricated.
+Failures contain fixed actionable codes: `unavailable` (check CLI installation
+and credential-home permissions), `verification-failed` (check connectivity and
+account access), `login-failed` (request a fresh code and check device-login
+settings), or `connection-lost` (outcome uncertain; verify then explicitly cancel
+or retry). Raw CLI diagnostics remain operator-only. Successful login requires
+an actual ChatGPT `account/read` or GitHub `gh api user` result; a completion
+notification or zero exit code alone is insufficient.
+
+SQLite `account_login_attempts` stores only pending intent, never codes, IDs or
+credentials. Intent precedes login. After application restart, an interrupted
+attempt remains uncertain alongside the verified current account until explicit
+cancel/retry. An uncertain Codex attempt resets the old app-server connection
+before another login; late notifications cannot complete a replacement attempt.
+GitHub login uses `gh auth login --web --insecure-storage` against `github.com`
+with HTTPS Git, validates the known device prompt, bounds prompt/verification
+commands to 15 seconds and 64 KiB output, and stops an outstanding login after
+a local 15-minute deadline. This deadline is not a provider code-expiry claim.
+
+Account process initialization creates/restricts `/data/codex` and `/data/github`
+to `0700` and existing credential files to `0600`. Startup's `0077` umask applies
+to new credentials. Codex uses `cli_auth_credentials_store="file"`; GitHub uses
+`GH_CONFIG_DIR`. Child environments exclude ambient API keys and GitHub tokens,
+so verified account status reflects persistent credentials. One process adapter
+owns at most one app-server. Children run in dedicated Unix process groups;
+shutdown sends TERM, waits up to one second, then KILLs the group and awaits
+direct-child stream closure. A naturally exiting leader also terminates remaining
+group members. Descendants that deliberately escape their process group are
+outside this boundary; container startup must provide an init process to reap
+orphaned descendants. Long-lived Codex stderr retains a bounded 64 KiB diagnostic
+tail rather than accumulating without limit. Recreate deployment remains mandatory
+to prevent multiple application instances sharing account homes.
+
+This backend provides local projects, persistence, repository import, access
+policy, project/account HTTP adapters, and private Codex account integration.
+The served frontend and production composition are subsequent work within slice 1.
 
 ### Ticket and PR workflow
 
