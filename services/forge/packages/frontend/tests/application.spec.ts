@@ -16,7 +16,7 @@ test("create/import and retry projects while account infrastructure is unavailab
 	});
 	await page.goto("/");
 	await expect(page.getByText("No projects yet")).toBeVisible();
-	await expect(page.getByRole("alert")).toContainText("Request failed");
+	await expect(page.getByRole("alert")).toHaveCount(0);
 	await page.getByLabel("Project name").fill("Documentation");
 	await page.getByLabel("Import repository (optional)").fill("https://github.com/example/docs.git");
 	await page.getByRole("button", { name: "Create project", exact: true }).click();
@@ -56,6 +56,7 @@ test("account verification code/link, completion, cancellation, uncertainty and 
 		return route.fulfill({ json: codex });
 	});
 	await page.goto("/");
+	await page.getByRole("link", { name: "Config", exact: true }).click();
 	const card = page.getByRole("region", { name: "ChatGPT" });
 	await card.getByRole("button", { name: "Sign in" }).click();
 	await expect(card.getByText("ABCD-EFGH")).toBeVisible();

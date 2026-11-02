@@ -186,18 +186,14 @@ export const PullRequests = ({
 				<article aria-label='PR detail'>
 					<h4>{selected.title}</h4>
 					<p>{selected.body}</p>
-					<p>
-						{selected.branch} → main · {selected.status}
-					</p>
+					<p>Review into main · {selected.status}</p>
 					<p>Approval: {selected.approval}</p>
 					<button disabled={busy} onClick={() => void run(() => load(selected.id))}>
 						Refresh review
 					</button>
 					{patch && (
 						<>
-							<p className='branch'>
-								{patch.comparison} · {patch.revision.baseSha} → {patch.revision.head}
-							</p>
+							<p className='branch'>Committed changes into main</p>
 							<Patch section={patch.diff} />
 						</>
 					)}

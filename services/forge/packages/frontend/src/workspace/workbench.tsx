@@ -6,7 +6,7 @@ import {
 	workspaceDiffSchema,
 } from "@homelab-paas/forge-contracts";
 import type { Project, Workspace, WorkspaceFile, WorkspaceTree, WorkspaceDiff } from "@homelab-paas/forge-contracts";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { IWorkspaceApi } from "../api/workspace-api.ts";
 import { Changes } from "./changes.tsx";
@@ -22,9 +22,9 @@ interface Draft {
 }
 
 export const Workbench = ({ project, api, leave }: { project: Project; api: IWorkspaceApi; leave: () => void }) => {
-	const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
 	const [workspace, setWorkspace] = useState<Workspace>();
-	const [name, setName] = useState("");
+	const [tab, setTab] = useState("Files");
+	const preparing = useRef<Promise<Workspace> | undefined>(undefined);
 	const [error, setError] = useState("");
 	const [busy, setBusy] = useState(true);
 	const [tree, setTree] = useState<WorkspaceTree>();
@@ -45,16 +45,49 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 			setBusy(false);
 		}
 	};
-	const list = async () => {
-		setWorkspaces(await api.read(`projects/${project.id}/workspaces`, workspacesSchema));
-	};
+	const prepare = useCallback(async (): Promise<Workspace> => {
+		const values = await api.read(`projects/${project.id}/workspaces`, workspacesSchema);
+		const existing =
+			values.find((value) => value.name === "Project files" && value.status !== "archived")
+			?? values.find((value) => value.status !== "archived");
+		return (
+			existing
+			?? api.read(`projects/${project.id}/workspaces`, workspaceSchema, "POST", { name: "Project files" })
+		);
+	}, [api, project.id]);
+	const refresh = useCallback(
+		async (value: Workspace, cancelled: () => boolean = () => false): Promise<void> => {
+			setTree(undefined);
+			setComparison(undefined);
+			setWorkspace(value);
+			if (value.status !== "ready") {
+				return;
+			}
+			const tree = await api.read(`workspaces/${value.id}/tree?path=`, workspaceTreeSchema);
+			const valueDiff = await api.read(`workspaces/${value.id}/diff`, workspaceDiffSchema);
+			if (cancelled()) return;
+			setTree(tree);
+			setComparison({ id: value.id, value: valueDiff });
+		},
+		[api],
+	);
 	useEffect(() => {
-		void api
-			.read(`projects/${project.id}/workspaces`, workspacesSchema)
-			.then(setWorkspaces)
-			.catch(() => setError("Workspace list unavailable. Refresh workspaces to retry."))
-			.finally(() => setBusy(false));
-	}, [project.id, api]);
+		let cancelled = false;
+		preparing.current ??= prepare();
+		void preparing.current
+			.then(async (value) => {
+				if (!cancelled) await refresh(value, () => cancelled);
+			})
+			.catch(() => {
+				if (!cancelled) setError("Project files unavailable. Retry opening files.");
+			})
+			.finally(() => {
+				if (!cancelled) setBusy(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [prepare, refresh]);
 	useEffect(() => {
 		const guard = (event: BeforeUnloadEvent) => {
 			if (dirty) event.preventDefault();
@@ -74,16 +107,6 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 			setTree(
 				await api.read(`workspaces/${workspace.id}/tree?path=${encodeURIComponent(path)}`, workspaceTreeSchema),
 			);
-	};
-	const refresh = async (value: Workspace) => {
-		setTree(undefined);
-		setComparison(undefined);
-		setWorkspace(value);
-		if (value.status !== "ready") {
-			return;
-		}
-		setTree(await api.read(`workspaces/${value.id}/tree?path=`, workspaceTreeSchema));
-		setComparison({ id: value.id, value: await api.read(`workspaces/${value.id}/diff`, workspaceDiffSchema) });
 	};
 	const open = async (path: string) => {
 		if (!workspace) return;
@@ -111,92 +134,64 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 		});
 	};
 	return (
-		<section className='workbench' aria-label='Project workspace'>
-			<div className='toolbar'>
+		<section className='workbench' aria-label='Project'>
+			<div className='project-heading'>
 				<button disabled={busy} onClick={() => navigate(leave)}>
-					Back to projects
+					Projects
 				</button>
-				<h2>{project.name}</h2>
+				<span aria-hidden='true'>/</span>
+				<h1>{project.name}</h1>
 			</div>
+			<div className='project-tabs' role='tablist' aria-label='Project sections'>
+				{["Files", "Tasks", "Agents", "Pipelines", "Terminals"].map((name) => (
+					<button
+						key={name}
+						id={`tab-${name}`}
+						role='tab'
+						aria-selected={tab === name}
+						aria-controls={`panel-${name}`}
+						onClick={() => setTab(name)}
+					>
+						{name}
+					</button>
+				))}
+			</div>
+			{["Tasks", "Agents", "Pipelines"].map((name) => (
+				<section
+					key={name}
+					id={`panel-${name}`}
+					role='tabpanel'
+					aria-labelledby={`tab-${name}`}
+					hidden={tab !== name}
+					className='empty feature-empty'
+				>
+					<h2>{name}</h2>
+					<p>{name} are not available yet.</p>
+				</section>
+			))}
 			{error && (
 				<p role='alert' className='error'>
 					{error}
 				</p>
 			)}
-			<div className='toolbar'>
-				<label>
-					Workspace name
-					<input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} />
-				</label>
+			{busy && !workspace && <p role='status'>Opening project files…</p>}
+			{!busy && (!workspace || workspace.status !== "ready" || !tree) && (
 				<button
-					disabled={busy || !name.trim()}
 					onClick={() =>
 						void run(async () => {
-							await api.read(`projects/${project.id}/workspaces`, workspaceSchema, "POST", { name });
-							setName("");
-							await list();
+							const value =
+								workspace?.status === "failed"
+									? await api.read(`workspaces/${workspace.id}/retry`, workspaceSchema, "POST", {})
+									: await prepare();
+							await refresh(value);
 						})
 					}
 				>
-					Create workspace
+					Retry opening files
 				</button>
-				<button disabled={busy} onClick={() => void run(list)}>
-					Refresh workspaces
-				</button>
-			</div>
-			<nav className='toolbar' aria-label='Workspaces'>
-				{workspaces.map((value) => (
-					<div key={value.id}>
-						<button
-							disabled={busy}
-							onClick={() =>
-								navigate(() => {
-									setDrafts({});
-									setActive("");
-									void run(() => refresh(value));
-								})
-							}
-							aria-label={`Open ${value.name}`}
-						>
-							{value.name} · {value.status}
-						</button>
-						{value.status === "failed" && (
-							<button
-								disabled={busy}
-								onClick={() =>
-									void run(async () => {
-										await api.read(`workspaces/${value.id}/retry`, workspaceSchema, "POST", {});
-										await list();
-									})
-								}
-							>
-								Retry {value.name}
-							</button>
-						)}
-					</div>
-				))}
-			</nav>
+			)}
 			{workspace && (
 				<>
-					<p className='branch'>
-						{workspace.branch} · {workspace.status}
-					</p>
-					<button
-						disabled={busy || workspace.status === "archived"}
-						onClick={() =>
-							navigate(
-								() =>
-									void run(async () => {
-										await refresh(
-											await api.read(`workspaces/${workspace.id}`, workspaceSchema, "DELETE"),
-										);
-										await list();
-									}),
-							)
-						}
-					>
-						Archive workspace (preserve files)
-					</button>
 					{dirty && (
 						<button
 							disabled={busy}
@@ -211,175 +206,199 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 					)}
 					{workspace.status === "ready" && (
 						<>
-							<div className='ide-grid'>
-								<aside aria-label='File tree'>
-									<h3>Files</h3>
-									<button disabled={busy} onClick={() => void run(() => directory(""))}>
-										Root
-									</button>
-									{tree && (
-										<>
-											<p>{tree.path || "/"}</p>
-											{tree.path && (
-												<button
-													onClick={() =>
-														void run(() =>
-															directory(tree.path.split("/").slice(0, -1).join("/")),
-														)
-													}
-												>
-													Parent directory
-												</button>
-											)}
-											{tree.entries.map((entry) => (
-												<button
-													key={entry.path}
-													className='tree-entry'
-													disabled={busy}
-													onClick={() =>
-														void run(() =>
-															entry.kind === "directory"
-																? directory(entry.path)
-																: open(entry.path),
-														)
-													}
-												>
-													{entry.kind === "directory" ? `${entry.name}/` : entry.name}
-												</button>
-											))}
-											{tree.truncated && <p>File list truncated</p>}
-										</>
-									)}
-									<label>
-										New file path
-										<input value={fileName} onChange={(event) => setFileName(event.target.value)} />
-									</label>
-									<button
-										disabled={busy || !fileName}
-										onClick={() =>
-											void run(async () => {
-												const file = await api.read(
-													`workspaces/${workspace.id}/file`,
-													workspaceFileSchema,
-													"POST",
-													{ path: fileName, content: "" },
-												);
-												setDrafts((current) => ({
-													...current,
-													[file.path]: { file, content: file.content, generation: 0 },
-												}));
-												setActive(file.path);
-												setFileName("");
-												await directory(tree?.path ?? "");
-											})
-										}
-									>
-										Create file
-									</button>
-								</aside>
-								<div className='editor-pane'>
-									<nav className='toolbar' aria-label='Editor tabs'>
-										{Object.entries(drafts).map(([path, value]) => (
-											<button
-												key={path}
-												aria-pressed={active === path}
-												onClick={() => setActive(path)}
-											>
-												{path}
-												{value.content !== value.file.content ? " *" : ""}
-											</button>
-										))}
-									</nav>
-									{draft ? (
-										<>
-											<Editor
-												key={`${active}:${draft.generation}`}
-												path={active}
-												content={draft.content}
-												change={(content) =>
-													setDrafts((current) => ({
-														...current,
-														[active]: { ...current[active]!, content },
-													}))
-												}
-											/>
-											<div className='toolbar'>
-												<button
-													disabled={busy || draft.content === draft.file.content}
-													onClick={() => void run(save)}
-												>
-													Save file
-												</button>
-												<span>
-													{draft.content === draft.file.content ? "Saved" : "Unsaved changes"}
-												</span>
-												<button
-													disabled={busy}
-													onClick={() =>
-														void run(async () => {
-															const server = await api.read(
-																`workspaces/${workspace.id}/file?path=${encodeURIComponent(active)}`,
-																workspaceFileSchema,
-															);
-															setDrafts((current) => ({
-																...current,
-																[active]: { ...current[active]!, server },
-															}));
-														})
-													}
-												>
-													Compare server version
-												</button>
-											</div>
-											{draft.server && (
-												<section aria-label='Conflict recovery'>
-													<h3>Server version</h3>
-													<pre>{draft.server.content}</pre>
-													<p>
-														Your draft remains in the editor. Copy it before discarding if
-														needed.
-													</p>
+							<section
+								id='panel-Files'
+								role='tabpanel'
+								aria-labelledby='tab-Files'
+								hidden={tab !== "Files"}
+							>
+								<div className='ide-grid'>
+									<aside aria-label='File tree'>
+										<h3>Files</h3>
+										<button disabled={busy} onClick={() => void run(() => directory(""))}>
+											Root
+										</button>
+										{tree && (
+											<>
+												<p>{tree.path || "/"}</p>
+												{tree.path && (
 													<button
 														onClick={() =>
-															setDrafts((current) => ({
-																...current,
-																[active]: {
-																	file: draft.server!,
-																	content: draft.server!.content,
-																	generation: draft.generation + 1,
-																},
-															}))
+															void run(() =>
+																directory(tree.path.split("/").slice(0, -1).join("/")),
+															)
 														}
 													>
-														Use server version and discard draft
+														Parent directory
 													</button>
-												</section>
-											)}
-										</>
-									) : (
-										<p>Open a file to edit.</p>
-									)}
+												)}
+												{tree.entries.map((entry) => (
+													<button
+														key={entry.path}
+														className='tree-entry'
+														disabled={busy}
+														onClick={() =>
+															void run(() =>
+																entry.kind === "directory"
+																	? directory(entry.path)
+																	: open(entry.path),
+															)
+														}
+													>
+														{entry.kind === "directory" ? `${entry.name}/` : entry.name}
+													</button>
+												))}
+												{tree.truncated && <p>File list truncated</p>}
+											</>
+										)}
+										<label>
+											New file path
+											<input
+												value={fileName}
+												onChange={(event) => setFileName(event.target.value)}
+											/>
+										</label>
+										<button
+											disabled={busy || !fileName}
+											onClick={() =>
+												void run(async () => {
+													const file = await api.read(
+														`workspaces/${workspace.id}/file`,
+														workspaceFileSchema,
+														"POST",
+														{ path: fileName, content: "" },
+													);
+													setDrafts((current) => ({
+														...current,
+														[file.path]: { file, content: file.content, generation: 0 },
+													}));
+													setActive(file.path);
+													setFileName("");
+													await directory(tree?.path ?? "");
+												})
+											}
+										>
+											Create file
+										</button>
+									</aside>
+									<div className='editor-pane'>
+										<nav className='toolbar' aria-label='Editor tabs'>
+											{Object.entries(drafts).map(([path, value]) => (
+												<button
+													key={path}
+													aria-pressed={active === path}
+													onClick={() => setActive(path)}
+												>
+													{path}
+													{value.content !== value.file.content ? " *" : ""}
+												</button>
+											))}
+										</nav>
+										{draft ? (
+											<>
+												<Editor
+													key={`${active}:${draft.generation}`}
+													path={active}
+													content={draft.content}
+													change={(content) =>
+														setDrafts((current) => ({
+															...current,
+															[active]: { ...current[active]!, content },
+														}))
+													}
+												/>
+												<div className='toolbar'>
+													<button
+														disabled={busy || draft.content === draft.file.content}
+														onClick={() => void run(save)}
+													>
+														Save file
+													</button>
+													<span>
+														{draft.content === draft.file.content
+															? "Saved"
+															: "Unsaved changes"}
+													</span>
+													<button
+														disabled={busy}
+														onClick={() =>
+															void run(async () => {
+																const server = await api.read(
+																	`workspaces/${workspace.id}/file?path=${encodeURIComponent(active)}`,
+																	workspaceFileSchema,
+																);
+																setDrafts((current) => ({
+																	...current,
+																	[active]: { ...current[active]!, server },
+																}));
+															})
+														}
+													>
+														Compare server version
+													</button>
+												</div>
+												{draft.server && (
+													<section aria-label='Conflict recovery'>
+														<h3>Server version</h3>
+														<pre>{draft.server.content}</pre>
+														<p>
+															Your draft remains in the editor. Copy it before discarding
+															if needed.
+														</p>
+														<button
+															onClick={() =>
+																setDrafts((current) => ({
+																	...current,
+																	[active]: {
+																		file: draft.server!,
+																		content: draft.server!.content,
+																		generation: draft.generation + 1,
+																	},
+																}))
+															}
+														>
+															Use server version and discard draft
+														</button>
+													</section>
+												)}
+											</>
+										) : (
+											<p>Open a file to edit.</p>
+										)}
+									</div>
 								</div>
-							</div>
-							{diff && (
-								<Changes
-									id={workspace.id}
-									key={workspace.id}
-									api={api}
-									value={diff}
-									update={(value) =>
-										setComparison((current) =>
-											current?.id === workspace.id ? { id: workspace.id, value } : current,
-										)
-									}
-								/>
+								<details className='review-panel'>
+									<summary>Changes</summary>
+									{diff && (
+										<Changes
+											id={workspace.id}
+											key={workspace.id}
+											api={api}
+											value={diff}
+											update={(value) =>
+												setComparison((current) =>
+													current?.id === workspace.id
+														? { id: workspace.id, value }
+														: current,
+												)
+											}
+										/>
+									)}
+								</details>
+								<details className='review-panel'>
+									<summary>Pull requests</summary>
+									<PullRequests projectId={project.id} workspace={workspace} api={api} />
+								</details>
+							</section>
+							{tab === "Terminals" && (
+								<section id='panel-Terminals' role='tabpanel' aria-labelledby='tab-Terminals'>
+									<WorkspaceTerminal id={workspace.id} key={`terminal:${workspace.id}`} api={api} />
+								</section>
 							)}
-							<WorkspaceTerminal id={workspace.id} key={`terminal:${workspace.id}`} api={api} />
 						</>
 					)}
 				</>
 			)}
-			<PullRequests projectId={project.id} workspace={workspace} api={api} />
 		</section>
 	);
 };

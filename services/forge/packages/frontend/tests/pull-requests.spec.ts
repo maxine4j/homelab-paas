@@ -46,6 +46,23 @@ test("PR reviews bind to the displayed committed diff, detect races and retain d
 		route.fulfill({ json: [{ id: projectId, name: "Project", status: "ready", createdAt }] }),
 	);
 	await page.route(`**/api/projects/${projectId}/workspaces`, (route) => route.fulfill({ json: [workspace] }));
+	await page.route(`**/api/workspaces/${id}/tree?*`, (route) =>
+		route.fulfill({ json: { path: "", entries: [], truncated: false } }),
+	);
+	await page.route(`**/api/workspaces/${id}/diff`, (route) => {
+		const empty = { files: [], patch: "", truncated: false };
+		return route.fulfill({
+			json: {
+				comparison: "merge-base(main, workspace)..workspace",
+				baseSha: revision.baseSha,
+				head: revision.head,
+				branch: empty,
+				staged: empty,
+				unstaged: empty,
+				untracked: empty,
+			},
+		});
+	});
 	await page.route(`**/api/projects/${projectId}/pull-requests`, (route) => route.fulfill({ json: [summary] }));
 	await page.route(`**/api/pull-requests/${prId}`, (route) => {
 		if (route.request().method() === "PATCH") {
@@ -106,6 +123,7 @@ test("PR reviews bind to the displayed committed diff, detect races and retain d
 	});
 	await page.goto("/");
 	await page.getByRole("button", { name: "Open Project" }).click();
+	await page.getByText("Pull requests", { exact: true }).first().click();
 	await expect(page.getByRole("button", { name: "Review code", exact: true })).toBeVisible({ timeout: 1000 });
 	await page.getByRole("button", { name: "Review code", exact: true }).click();
 	await expect(page.getByText("Revision changed while loading. Refresh review.")).toBeVisible();
@@ -116,7 +134,7 @@ test("PR reviews bind to the displayed committed diff, detect races and retain d
 	await page.getByLabel("Review or comment").fill("Looks good");
 	await page.getByRole("button", { name: "Approve", exact: true }).click();
 	await expect(page.getByText("Approval: approved", { exact: true })).toBeVisible();
-	await page.getByLabel("PR title").fill("Revised title");
+	await page.getByLabel("PR title", { exact: true }).fill("Revised title");
 	await page.getByRole("button", { name: "Save PR metadata" }).click();
 	await expect(page.getByRole("heading", { name: "Revised title", exact: true })).toBeVisible();
 	await page.getByLabel("Review or comment").fill("Please revise");
@@ -205,7 +223,7 @@ test("create PR explicitly previews the revision and sends both expected refs", 
 	});
 	await page.goto("/");
 	await page.getByRole("button", { name: "Open Project" }).click();
-	await page.getByRole("button", { name: "Open Manual" }).click();
+	await page.getByText("Pull requests", { exact: true }).first().click();
 	await expect(page.getByRole("button", { name: "Preview PR revision" })).toBeVisible({ timeout: 1000 });
 	await page.getByLabel("New PR title").fill("New PR");
 	await page.getByLabel("New PR description").fill("Description");

@@ -26,3 +26,14 @@ test("save transmits exact expected content version with same-origin credentials
 		expect.objectContaining({ method: "PUT", credentials: "same-origin", body: JSON.stringify(file) }),
 	);
 });
+
+test.each([
+	"workspace-not-found",
+	"workspace-conflict",
+	"workspace-unavailable",
+	"no-changes",
+	"pull-request-unavailable",
+])("presents %s without internal workspace terminology", async (error) => {
+	const api = new WorkspaceApi(async () => Response.json({ error }, { status: 503 }));
+	await expect(api.read("projects/id/workspaces", workspacesSchema)).rejects.not.toThrow(/workspace/i);
+});

@@ -148,15 +148,10 @@ export const WorkspaceTerminal = ({ id, api }: { id: string; api: IWorkspaceApi 
 		}
 	};
 	return (
-		<section aria-label='Workspace terminal'>
+		<section aria-label='Terminal'>
 			<h3>Terminal</h3>
 			<p>Shell: {session?.status ?? "none"}</p>
-			{session && (
-				<p className='branch'>
-					Session {session.id}
-					{session.exitCode === undefined ? "" : ` · Exit code ${session.exitCode}`}
-				</p>
-			)}
+			{session?.exitCode !== undefined && <p>Exit code {session.exitCode}</p>}
 			<p>{connection}</p>
 			{error && (
 				<p role='alert' className='error'>

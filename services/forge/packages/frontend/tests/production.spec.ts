@@ -122,11 +122,33 @@ test("integrated production bundle styles editor/terminal on desktop/mobile and 
 		expect(response?.headers()["cache-control"]).toBe("no-store");
 		expect(response?.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
 		await page.getByRole("button", { name: "Open Production project" }).click();
-		await page.getByRole("button", { name: "Open Manual" }).click();
 		await page.getByRole("button", { name: "file.ts", exact: true }).click();
 		await expect(page.getByRole("textbox", { name: "File editor" })).toContainText(
 			"export const highlighted = 42;",
 		);
+		const contrast = await page.locator(".cm-content span").evaluateAll((spans) => {
+			const luminance = (color: string) => {
+				const channels = color
+					.match(/\d+/gu)!
+					.slice(0, 3)
+					.map((value) => {
+						const channel = Number(value) / 255;
+						return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+					});
+				return channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
+			};
+			const background = luminance(getComputedStyle(document.querySelector(".cm-editor")!).backgroundColor);
+			return spans
+				.filter((span) => span.textContent?.trim())
+				.map((span) => {
+					const foreground = luminance(getComputedStyle(span).color);
+					return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+				});
+		});
+		expect(contrast.length).toBeGreaterThan(0);
+		for (const ratio of contrast) expect(ratio).toBeGreaterThanOrEqual(4.5);
+		await page.screenshot({ path: "../../../../artifacts/forge/files-desktop.png", fullPage: true });
+		await page.getByRole("tab", { name: "Terminals", exact: true }).click();
 		await page.getByRole("button", { name: "Create shell", exact: true }).click();
 		await expect(page.locator(".xterm-rows")).toContainText("Production terminal output");
 		await expect.poll(() => sizes.length).toBeGreaterThan(0);
@@ -150,6 +172,8 @@ test("integrated production bundle styles editor/terminal on desktop/mobile and 
 		expect(await page.evaluate(() => (window as unknown as { cspViolations: string[] }).cspViolations)).toEqual([
 			"script-src-elem",
 		]);
+		await page.getByRole("tab", { name: "Files", exact: true }).click();
+		expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe("dark");
 		const colors = await page
 			.locator(".cm-content span")
 			.evaluateAll((spans) => spans.map((span) => getComputedStyle(span).color));

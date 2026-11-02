@@ -75,7 +75,7 @@ test("terminal explicitly creates, fits, reattaches same session, shows gaps/los
 	});
 	await page.goto("/");
 	await page.getByRole("button", { name: "Open Project" }).click();
-	await page.getByRole("button", { name: "Open Manual" }).click();
+	await page.getByRole("tab", { name: "Terminals", exact: true }).click();
 	await expect(page.getByRole("button", { name: "Create shell", exact: true })).toBeVisible({ timeout: 1000 });
 	expect(creates).toBe(0);
 	expect(attaches).toBe(0);

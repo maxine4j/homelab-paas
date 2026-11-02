@@ -15,58 +15,7 @@ const workspace = {
 };
 const empty = { files: [], patch: "", truncated: false };
 
-test("failed workspace switch clears old actionable tree and diff", async ({ page }) => {
-	const other = {
-		...workspace,
-		id: "123e4567-e89b-42d3-a456-426614174003",
-		name: "Other",
-		branch: "forge/workspace/123e4567-e89b-42d3-a456-426614174003",
-	};
-	await page.route(
-		(url) => url.pathname.startsWith("/api/"),
-		(route) => {
-			const path = new URL(route.request().url()).pathname;
-			if (path === "/api/projects")
-				return route.fulfill({
-					json: [{ id: projectId, name: "Project", status: "ready", createdAt: workspace.createdAt }],
-				});
-			if (path.endsWith("/workspaces")) return route.fulfill({ json: [workspace, other] });
-			if (path.endsWith("/pull-requests")) return route.fulfill({ json: [] });
-			if (path.endsWith("/terminal")) return route.fulfill({ json: {} });
-			if (path.includes(other.id))
-				return route.fulfill({ status: 503, json: { error: "workspace-unavailable" } });
-			if (path.endsWith("/tree"))
-				return route.fulfill({
-					json: { path: "", entries: [{ name: "old.ts", path: "old.ts", kind: "file" }], truncated: false },
-				});
-			if (path.endsWith("/diff"))
-				return route.fulfill({
-					json: {
-						comparison: "merge-base(main, workspace)..workspace",
-						baseSha: head,
-						head,
-						branch: empty,
-						staged: empty,
-						unstaged: empty,
-						untracked: { ...empty, files: [{ path: "old.ts", binary: false }] },
-					},
-				});
-			return route.fulfill({ status: 503, json: {} });
-		},
-	);
-	await page.goto("/");
-	await page.getByRole("button", { name: "Open Project" }).click();
-	await page.getByRole("button", { name: "Open Manual" }).click();
-	await expect(page.getByRole("button", { name: "Stage old.ts", exact: true })).toBeVisible();
-	await page.getByRole("button", { name: "Open Other" }).click();
-	await expect(page.getByRole("region", { name: "Project workspace" }).getByRole("alert").first()).toContainText(
-		"workspace-unavailable",
-	);
-	await expect(page.getByRole("button", { name: "old.ts", exact: true })).toHaveCount(0, { timeout: 1000 });
-	await expect(page.getByRole("button", { name: "Stage old.ts", exact: true })).toHaveCount(0);
-});
-
-test("workspace changes show four comparisons and commit uses the displayed head", async ({ page }) => {
+test("file changes show four comparisons and commit uses the displayed head", async ({ page }) => {
 	await page.route("**/api/accounts", (route) => route.fulfill({ status: 503, json: {} }));
 	await page.route("**/api/projects", (route) =>
 		route.fulfill({ json: [{ id: projectId, name: "Project", status: "ready", createdAt: workspace.createdAt }] }),
@@ -106,7 +55,7 @@ test("workspace changes show four comparisons and commit uses the displayed head
 	});
 	await page.goto("/");
 	await page.getByRole("button", { name: "Open Project" }).click();
-	await page.getByRole("button", { name: "Open Manual" }).click();
+	await page.getByText("Changes", { exact: true }).first().click();
 	await expect(page.getByRole("heading", { name: "Untracked", exact: true })).toBeVisible({ timeout: 1000 });
 	for (const name of ["Branch", "Staged", "Unstaged"])
 		await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
@@ -121,68 +70,7 @@ test("workspace changes show four comparisons and commit uses the displayed head
 	expect(committed).toBe(true);
 });
 
-test("an old pending stage cannot publish its diff into a newly selected workspace", async ({ page }) => {
-	const other = {
-		...workspace,
-		id: "123e4567-e89b-42d3-a456-426614174003",
-		name: "Other",
-		branch: "forge/workspace/123e4567-e89b-42d3-a456-426614174003",
-	};
-	let release: (() => void) | undefined;
-	let staging = false;
-	await page.route(
-		(url) => url.pathname.startsWith("/api/"),
-		async (route) => {
-			const path = new URL(route.request().url()).pathname;
-			if (path === "/api/projects")
-				return route.fulfill({
-					json: [{ id: projectId, name: "Project", status: "ready", createdAt: workspace.createdAt }],
-				});
-			if (path.endsWith("/workspaces")) return route.fulfill({ json: [workspace, other] });
-			if (path.endsWith("/pull-requests")) return route.fulfill({ json: [] });
-			if (path.endsWith("/terminal")) return route.fulfill({ json: {} });
-			if (path.endsWith("/tree")) return route.fulfill({ json: { path: "", entries: [], truncated: false } });
-			if (path.endsWith("/stage")) {
-				staging = true;
-				await new Promise<void>((resolve) => {
-					release = resolve;
-				});
-				return route.fulfill({ json: workspace });
-			}
-			if (path.endsWith("/diff"))
-				return route.fulfill({
-					json: {
-						comparison: "merge-base(main, workspace)..workspace",
-						baseSha: head,
-						head,
-						branch: empty,
-						staged: empty,
-						unstaged: empty,
-						untracked: {
-							...empty,
-							files: [{ path: path.includes(other.id) ? "new.ts" : "old.ts", binary: false }],
-						},
-					},
-				});
-			return route.fulfill({ status: 503, json: {} });
-		},
-	);
-	await page.goto("/");
-	await page.getByRole("button", { name: "Open Project" }).click();
-	await page.getByRole("button", { name: "Open Manual" }).click();
-	await page.getByRole("button", { name: "Stage old.ts", exact: true }).click();
-	await expect.poll(() => staging).toBe(true);
-	await page.getByRole("button", { name: "Open Other" }).click();
-	await expect(page.getByRole("button", { name: "Stage new.ts", exact: true })).toBeVisible();
-	const completed = page.waitForResponse(`**/api/workspaces/${id}/diff`);
-	release?.();
-	await (await completed).finished();
-	await page.evaluate(() => new Promise(requestAnimationFrame));
-	await expect(page.getByRole("button", { name: "Stage old.ts", exact: true })).toHaveCount(0);
-	await expect(page.getByRole("button", { name: "Stage new.ts", exact: true })).toBeVisible();
-});
-
-test("open workspace, edit tabs, retain unsaved content through conflict and navigation, explicitly recover", async ({
+test("open project, edit tabs, retain unsaved content through conflict and navigation, explicitly recover", async ({
 	page,
 }) => {
 	await page.route("**/api/accounts", (route) =>
@@ -240,14 +128,18 @@ test("open workspace, edit tabs, retain unsaved content through conflict and nav
 	});
 	await page.goto("/");
 	await page.getByRole("button", { name: "Open Project" }).click();
-	await page.getByRole("button", { name: "Open Manual" }).click();
 	await page.getByRole("button", { name: "file.ts", exact: true }).click();
 	const editor = page.getByRole("textbox", { name: "File editor" });
 	await editor.fill("const local = 3;");
 	await page.getByRole("button", { name: "Save file", exact: true }).click();
-	await expect(page.getByRole("alert")).toContainText("file-conflict");
+	await expect(page.getByRole("alert")).toContainText("Your draft is preserved");
 	await expect(editor).toContainText("const local = 3;");
-	await page.getByRole("button", { name: "Back to projects" }).click();
+	await page.getByRole("tab", { name: "Tasks", exact: true }).click();
+	await page.getByRole("link", { name: "Config", exact: true }).click();
+	await page.getByRole("link", { name: "Projects", exact: true }).click();
+	await page.getByRole("tab", { name: "Files", exact: true }).click();
+	await expect(editor).toContainText("const local = 3;");
+	await page.getByRole("button", { name: "Projects", exact: true }).click();
 	await expect(page.getByText("Unsaved edits remain")).toBeVisible();
 	conflict = false;
 	await page.getByRole("button", { name: "Compare server version" }).click();
@@ -264,9 +156,7 @@ test("open workspace, edit tabs, retain unsaved content through conflict and nav
 	await page.screenshot({ path: "../../../../artifacts/forge/workspace-mobile.png", fullPage: true });
 });
 
-test("workspace create/retry/archive and file creation preserve data; a delayed save retains newer typing", async ({
-	page,
-}) => {
+test("failed project files retry explicitly; a delayed save retains newer typing", async ({ page }) => {
 	await page.route("**/api/accounts", (route) => route.fulfill({ status: 503, json: {} }));
 	await page.route("**/api/projects", (route) =>
 		route.fulfill({ json: [{ id: projectId, name: "Project", status: "ready", createdAt: workspace.createdAt }] }),
@@ -274,21 +164,12 @@ test("workspace create/retry/archive and file creation preserve data; a delayed 
 	await page.route(`**/api/projects/${projectId}/pull-requests`, (route) => route.fulfill({ json: [] }));
 	let values = [{ ...workspace, status: "failed" }];
 	await page.route(`**/api/projects/${projectId}/workspaces`, (route) => {
-		if (route.request().method() === "POST") {
-			expect(route.request().postDataJSON()).toEqual({ name: "Created" });
-			values = [{ ...workspace, name: "Created" }];
-			return route.fulfill({ json: values[0] });
-		}
+		expect(route.request().method()).toBe("GET");
 		return route.fulfill({ json: values });
 	});
 	await page.route(`**/api/workspaces/${id}/retry`, (route) => {
 		values = [workspace];
 		return route.fulfill({ json: workspace });
-	});
-	await page.route(`**/api/workspaces/${id}`, (route) => {
-		expect(route.request().method()).toBe("DELETE");
-		values = [{ ...workspace, name: "Created", status: "archived" }];
-		return route.fulfill({ json: values[0] });
 	});
 	await page.route(`**/api/workspaces/${id}/terminal`, (route) => route.fulfill({ json: {} }));
 	await page.route(`**/api/workspaces/${id}/tree?*`, (route) =>
@@ -327,11 +208,7 @@ test("workspace create/retry/archive and file creation preserve data; a delayed 
 	});
 	await page.goto("/");
 	await page.getByRole("button", { name: "Open Project" }).click();
-	await page.getByRole("button", { name: "Retry Manual", exact: true }).click();
-	await expect(page.getByRole("button", { name: "Open Manual" })).toContainText("ready");
-	await page.getByLabel("Workspace name", { exact: true }).fill("Created");
-	await page.getByRole("button", { name: "Create workspace", exact: true }).click();
-	await page.getByRole("button", { name: "Open Created" }).click();
+	await page.getByRole("button", { name: "Retry opening files", exact: true }).click();
 	await page.getByLabel("New file path").fill("new.ts");
 	await page.getByRole("button", { name: "Create file", exact: true }).click();
 	const editor = page.getByRole("textbox", { name: "File editor" });
@@ -344,7 +221,5 @@ test("workspace create/retry/archive and file creation preserve data; a delayed 
 	await expect(editor).toContainText("newer typing");
 	await expect(page.getByRole("button", { name: "Save file", exact: true })).toBeEnabled();
 	await page.getByRole("button", { name: "Discard all drafts", exact: true }).click();
-	await page.getByRole("button", { name: "Archive workspace (preserve files)", exact: true }).click();
-	await expect(page.getByRole("button", { name: "Open Created" })).toContainText("archived");
-	await expect(page.getByRole("button", { name: "Create file", exact: true })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: /workspace/i })).toHaveCount(0);
 });

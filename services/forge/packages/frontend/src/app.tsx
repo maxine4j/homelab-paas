@@ -99,6 +99,12 @@ const AccountCard = ({
 };
 
 export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWorkspaceApi }) => {
+	const [config, setConfig] = useState(window.location.hash === "#/config");
+	useEffect(() => {
+		const navigate = () => setConfig(window.location.hash === "#/config");
+		window.addEventListener("hashchange", navigate);
+		return () => window.removeEventListener("hashchange", navigate);
+	}, []);
 	const [selected, setSelected] = useState<Project>();
 	const [projects, setProjects] = useState<Project[]>();
 	const [accounts, setAccounts] = useState<AccountsStatus>();
@@ -181,36 +187,38 @@ export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWor
 		<div className='shell'>
 			<header>
 				<a className='brand' href='/' aria-label='Forge home'>
-					<span aria-hidden='true'>F</span>forge<span className='brand-tag'>LOCAL WORKSPACE</span>
+					<span aria-hidden='true'>F</span>forge
 				</a>
-				<span className='private-label'>
-					<i /> Private · Single owner
-				</span>
+				<nav className='global-nav' aria-label='Forge'>
+					<a href='#/projects' aria-current={!config ? "page" : undefined}>
+						Projects
+					</a>
+					<a href='#/config' aria-current={config ? "page" : undefined}>
+						Config
+					</a>
+				</nav>
 			</header>
 			<main>
-				<div className='intro' hidden={!!selected}>
+				<div className='intro' hidden={!!selected || config}>
 					<div>
-						<p className='eyebrow'>YOUR DEVELOPMENT HOME</p>
-						<h1>Make room for your next idea.</h1>
-						<p>Create a local Git repository or bring an existing project into Forge.</p>
+						<h1>Your projects</h1>
+						<p>Build, review, and ship from one place.</p>
 					</div>
-					<span className='intro-mark' aria-hidden='true'>
-						⑂
-					</span>
 				</div>
 				{selected && (
-					<Workbench
-						key={selected.id}
-						project={selected}
-						api={workspaceApi}
-						leave={() => setSelected(undefined)}
-					/>
+					<div hidden={config}>
+						<Workbench
+							key={selected.id}
+							project={selected}
+							api={workspaceApi}
+							leave={() => setSelected(undefined)}
+						/>
+					</div>
 				)}
-				<div className='workspace-grid' hidden={!!selected}>
+				<div className='workspace-grid' hidden={!!selected || config}>
 					<section aria-labelledby='projects-heading' className='projects-section'>
 						<div className='section-heading'>
 							<div>
-								<p className='eyebrow'>WORKSPACE</p>
 								<h2 id='projects-heading'>
 									Projects <span className='count'>{projects?.length ?? "—"}</span>
 								</h2>
@@ -287,12 +295,8 @@ export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWor
 								))}
 							</div>
 						)}
-						<p className='section-note'>
-							Repositories and project data stay on your persistent Forge volume.
-						</p>
 					</section>
 					<section className='create-card' aria-labelledby='create-heading'>
-						<p className='eyebrow'>START SOMETHING</p>
 						<h2 id='create-heading'>New project</h2>
 						<p>A fresh repository, or a new home for existing code.</p>
 						<form onSubmit={(event) => void create(event)}>
@@ -329,11 +333,10 @@ export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWor
 						</form>
 					</section>
 				</div>
-				<section className='accounts-section' aria-labelledby='accounts-heading'>
+				<section className='accounts-section' aria-labelledby='accounts-heading' hidden={!config}>
 					<div className='section-heading'>
 						<div>
-							<p className='eyebrow'>CONNECTIONS</p>
-							<h2 id='accounts-heading'>Your accounts</h2>
+							<h1 id='accounts-heading'>Config</h1>
 						</div>
 						<button
 							className='quiet'
@@ -343,9 +346,7 @@ export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWor
 							Refresh accounts
 						</button>
 					</div>
-					<p className='accounts-description'>
-						Connect ChatGPT and GitHub here. You can manage projects independently.
-					</p>
+					<p className='accounts-description'>Connect ChatGPT for agents and GitHub for repository access.</p>
 					{accountError && (
 						<p role='alert' className='error'>
 							{accountError}
@@ -363,10 +364,6 @@ export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWor
 						))}
 					</div>
 				</section>
-				<footer>
-					<span className='footer-brand'>forge</span>
-					<span>Local code. Your control.</span>
-				</footer>
 			</main>
 		</div>
 	);

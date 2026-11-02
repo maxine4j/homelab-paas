@@ -1,0 +1,103 @@
+import { expect, test } from "@playwright/test";
+
+test("dark project tabs hide infrastructure and keep account setup in Config", async ({ page }) => {
+	const projectId = "123e4567-e89b-42d3-a456-426614174000";
+	const id = "123e4567-e89b-42d3-a456-426614174001";
+	const head = "a".repeat(40);
+	const createdAt = "2026-11-02T00:00:00.000Z";
+	const workspace = {
+		id,
+		projectId,
+		name: "Project files",
+		branch: `forge/workspace/${id}`,
+		head,
+		baseSha: head,
+		status: "ready",
+		createdAt,
+	};
+	let prepared = false;
+	let preparations = 0;
+	let shells = 0;
+	await page.route(
+		(url) => url.pathname.startsWith("/api/"),
+		(route) => {
+			const path = new URL(route.request().url()).pathname;
+			if (path === "/api/projects")
+				return route.fulfill({ json: [{ id: projectId, name: "Forge", status: "ready", createdAt }] });
+			if (path === "/api/accounts")
+				return route.fulfill({
+					json: {
+						codex: { connection: "available", login: { state: "idle" } },
+						github: { connection: "available", login: { state: "idle" } },
+					},
+				});
+			if (path.endsWith("/workspaces")) {
+				if (route.request().method() === "POST") {
+					preparations++;
+					prepared = true;
+					return route.fulfill({ status: 201, json: workspace });
+				}
+				return route.fulfill({ json: prepared ? [workspace] : [] });
+			}
+			if (path.endsWith("/tree"))
+				return route.fulfill({
+					json: {
+						path: "",
+						entries: [{ path: "readme.md", name: "readme.md", kind: "file" }],
+						truncated: false,
+					},
+				});
+			if (path.endsWith("/diff")) {
+				const empty = { files: [], patch: "", truncated: false };
+				return route.fulfill({
+					json: {
+						comparison: "merge-base(main, workspace)..workspace",
+						head,
+						baseSha: head,
+						branch: empty,
+						staged: empty,
+						unstaged: empty,
+						untracked: empty,
+					},
+				});
+			}
+			if (path.endsWith("/terminal")) {
+				if (route.request().method() === "POST") shells++;
+				return route.fulfill({ json: {} });
+			}
+			if (path.endsWith("/pull-requests")) return route.fulfill({ json: [] });
+			return route.fulfill({ status: 404, json: {} });
+		},
+	);
+	await page.goto("/");
+	await expect(page.getByRole("button", { name: "Open Forge" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Sign in", exact: true })).toHaveCount(0);
+	await page.getByRole("button", { name: "Open Forge" }).click();
+	await expect(page.getByRole("button", { name: "readme.md", exact: true })).toBeVisible();
+	expect(prepared).toBe(true);
+	expect(preparations).toBe(1);
+	await expect(page.getByText(/workspace/i)).toHaveCount(0);
+	await expect(page.getByText(head, { exact: false })).toHaveCount(0);
+	for (const name of ["Tasks", "Agents", "Pipelines"]) {
+		await page.getByRole("tab", { name, exact: true }).click();
+		await expect(page.getByRole("tab", { name, exact: true })).toHaveAttribute("aria-selected", "true");
+		await expect(page.getByRole("tabpanel", { name, exact: true })).toContainText("not available yet");
+	}
+	await page.getByRole("tab", { name: "Terminals", exact: true }).click();
+	await expect(page.getByRole("button", { name: "Create shell", exact: true })).toBeVisible();
+	expect(shells).toBe(0);
+	await page.getByRole("link", { name: "Config", exact: true }).click();
+	await expect(page).toHaveURL(/#\/config$/);
+	await expect(page.getByRole("region", { name: "ChatGPT" })).toBeVisible();
+	await expect(page.getByRole("tablist")).toBeHidden();
+	await page.getByRole("link", { name: "Projects", exact: true }).click();
+	await page.getByRole("tab", { name: "Files", exact: true }).click();
+	await expect(page.getByRole("button", { name: "readme.md", exact: true })).toBeVisible();
+	await page.getByRole("button", { name: "Projects", exact: true }).click();
+	await page.getByRole("button", { name: "Open Forge" }).click();
+	await expect(page.getByRole("button", { name: "readme.md", exact: true })).toBeVisible();
+	expect(preparations).toBe(1);
+	await page.setViewportSize({ width: 390, height: 844 });
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+	expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe("dark");
+});

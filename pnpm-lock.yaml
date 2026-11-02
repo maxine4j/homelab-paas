@@ -90,12 +90,18 @@ importers:
       '@codemirror/lang-javascript':
         specifier: 6.2.5
         version: 6.2.5
+      '@codemirror/language':
+        specifier: 6.13.1
+        version: 6.13.1
       '@codemirror/view':
         specifier: 6.43.15
         version: 6.43.15
       '@homelab-paas/forge-contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@lezer/highlight':
+        specifier: 1.2.5
+        version: 1.2.5
       '@xterm/addon-fit':
         specifier: 0.11.0
         version: 0.11.0

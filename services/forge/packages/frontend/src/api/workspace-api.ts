@@ -22,17 +22,17 @@ export class WorkspaceApi implements IWorkspaceApi {
 			const messages: Record<string, string> = {
 				"access-denied": "Sign in through PaaS as the configured owner.",
 				"invalid-request": "Check the supplied values.",
-				"workspace-not-found": "Refresh the workspace list.",
+				"workspace-not-found": "Project files no longer exist. Reopen the project.",
 				"workspace-conflict": "Refresh changes before retrying.",
-				"workspace-unavailable": "Check workspace status and server storage.",
+				"workspace-unavailable": "Project files unavailable. Retry opening files.",
 				"file-conflict": "Your draft is preserved. Compare the server version before retrying.",
 				"file-not-found": "Refresh the file tree.",
 				"file-unsupported": "The file is binary, too large, or uses an unsupported path.",
 				"revision-conflict": "Source refs changed. Refresh review before retrying.",
-				"no-changes": "Commit workspace changes before creating a PR.",
+				"no-changes": "Commit your changes before creating a PR.",
 				"pull-request-closed": "Reopen the PR before reviewing.",
 				"pull-request-unavailable":
-					"The source workspace is unavailable. Metadata and discussion remain available.",
+					"The source files are unavailable. Metadata and discussion remain available.",
 				"pull-request-not-found": "Refresh the PR list.",
 				"terminal-unavailable": "Shell unavailable. Check the supported Linux runtime and server logs.",
 				"terminal-not-found": "Refresh shell status before retrying.",
@@ -41,7 +41,7 @@ export class WorkspaceApi implements IWorkspaceApi {
 			};
 			throw new Error(
 				typeof error === "string" && Object.hasOwn(messages, error)
-					? `${error}: ${messages[error]}`
+					? messages[error]
 					: "Request failed. Refresh and try again.",
 			);
 		}

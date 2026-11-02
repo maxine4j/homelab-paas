@@ -59,11 +59,8 @@ export const Changes = ({
 		}
 	};
 	return (
-		<section aria-label='Workspace changes'>
+		<section aria-label='File changes'>
 			<h3>Changes</h3>
-			<p className='branch'>
-				{value.comparison} · {value.baseSha} → {value.head}
-			</p>
 			<button disabled={busy} onClick={() => void run(async () => {})}>
 				Refresh changes
 			</button>
@@ -75,15 +72,6 @@ export const Changes = ({
 			{(["branch", "staged", "unstaged", "untracked"] as const).map((kind) => (
 				<section key={kind} aria-label={`${kind} changes`}>
 					<h4>{kind[0]!.toUpperCase() + kind.slice(1)}</h4>
-					<p>
-						{kind === "branch"
-							? "Merge base of main → workspace HEAD (committed)"
-							: kind === "staged"
-								? "HEAD → index"
-								: kind === "unstaged"
-									? "Index → working tree"
-									: "Files outside the index"}
-					</p>
 					<Patch section={value[kind]} />
 					{kind !== "branch"
 						&& value[kind].files.map((file) => (
@@ -111,7 +99,6 @@ export const Changes = ({
 				Commit message
 				<input maxLength={4096} value={message} onChange={(event) => setMessage(event.target.value)} />
 			</label>
-			<p className='branch'>Expected HEAD: {value.head}</p>
 			<button
 				disabled={busy || !message.trim() || value.staged.files.length === 0}
 				onClick={() =>

@@ -495,15 +495,37 @@ the workspace store and completes recovery before listening.
 
 #### Slice 2 integrated manual workspace and PR review
 
-The project screen retains project creation/import/retry and account setup. Open
-a ready project to list/create/retry/archive manual workspaces and inspect its PR
-list, including closed PRs. Archiving preserves files and metadata. No tickets,
-agent turns, remote CI, Git HTTPS hosting or merge action is exposed in this slice.
+Forge uses a dark GitHub-style layout throughout, including the editor, forms,
+diffs and account setup. Global navigation separates Projects from Config at
+`#/config`; ChatGPT/GitHub status, device-code login, cancellation and retry live
+only on Config. Account errors never clutter project views. Switching to Config
+preserves the open project and its unsaved drafts.
+
+Projects retains creation/import/retry. Opening a ready project shows its identity
+and five section tabs, in order: Files, Tasks, Agents, Pipelines, Terminals.
+Files is the default. Tasks, Agents and Pipelines explicitly say they are not
+available yet; no ticket, agent-turn or remote CI functionality is implied.
+Tab navigation stays usable on narrow screens without widening the page.
+
+Workspaces are internal execution resources, not a user-facing concept. Do not
+show workspace creation, selection, archival, names, generated branches or raw
+execution identifiers. The current file/terminal adapters still use the internal
+workspace APIs: reuse the project's retained non-archived checkout (prefer the
+internally named Project files checkout), or prepare one automatically when none
+exists. A failed checkout requires explicit Retry opening files. Preparation
+never starts an agent or shell. Preserve existing files and metadata.
+
+Files contains directory navigation and the editor, with Changes and Pull requests
+in initially collapsed disclosures. PR review includes closed PRs. Terminals
+contains the shell controls and output. Remove infrastructure notes, raw revision
+summaries and session IDs from the primary UI; retain actionable errors, file
+conflict recovery, terminal connection/loss states and review approval status.
+Git HTTPS hosting and merging remain unavailable.
 
 The responsive workspace combines directory navigation, file creation, editor
 tabs, real CodeMirror 6 editing (JavaScript/TypeScript highlighting), four change
 comparisons and a real xterm.js 6 terminal with its fit addon. API responses are
-validated against browser-safe contracts. Tabs retain drafts; project/workspace
+validated against browser-safe contracts. Tabs retain drafts; project
 navigation and page exit guard unsaved edits. Saves send the observed content
 version. A conflict keeps the local draft and offers an explicit server-content
 comparison followed by an explicit discard/reload action. Typing while a save is
@@ -513,10 +535,10 @@ subject to the [workspace version-check boundary](#slice-2-manual-workspace-foun
 Changes label branch (merge base to HEAD), staged (HEAD to index), unstaged (index
 to worktree), and untracked comparisons separately. Each section shows its files,
 inline patch, binary markers and truncation. Stage/unstage act on explicit paths;
-commit sends the HEAD displayed with that diff and rejects a changed branch.
+commit sends the HEAD observed with that diff and rejects a changed branch.
 The workspace and PR adapters share `GitDiffClient` for tracked patches.
 
-Terminal creation and closure are explicit. Opening a workspace inspects its
+Terminal creation and closure are explicit. Opening the Terminals tab inspects its
 retained session and may attach that session, never creates a shell. Disconnects
 offer reconnect to the same session; replay gaps remain visible for that session.
 Lost/exited states remain explicit. Reconnect drains xterm's public write queue
