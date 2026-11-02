@@ -48,7 +48,6 @@ export class InternalStorage implements IInternalStorage {
 			await this.directory(this.root, true);
 			await this.directory(this.path(), true);
 			await this.directory(this.path("envoy"), true);
-			await this.directory(this.path("static"), true);
 			await this.fs.atomicWriteFile(
 				this.path("envoy/envoy.yaml"),
 				stringifyYaml({
@@ -103,6 +102,10 @@ export class InternalStorage implements IInternalStorage {
 	private async cleanGit(retain: () => InternalRetention): Promise<void> {
 		const root = this.path("git");
 		for (const service of await this.entries(root)) {
+			if (/^[a-f0-9]{64}$/.test(service)) {
+				if (!retain().git.has(service)) await this.remove(join(root, service));
+				continue;
+			}
 			if (!this.identity(service)) continue;
 			const directory = join(root, service);
 			if (!retain().services.has(service)) {
@@ -132,12 +135,19 @@ export class InternalStorage implements IInternalStorage {
 	}
 
 	private async cleanStatic(retain: () => InternalRetention): Promise<void> {
-		const root = this.path("static");
+		const root = this.root;
 		for (const service of await this.entries(root)) {
 			if (!this.identity(service)) continue;
-			const directory = join(root, service);
+			const serviceDirectory = join(root, service);
+			const info = await this.fs.lstat(serviceDirectory);
+			if (info.isSymbolicLink()) throw new Error("Expected a real service directory");
+			if (!info.isDirectory()) continue;
+			await this.cleanTemporaryFiles(serviceDirectory);
+			const directory = join(serviceDirectory, "static");
 			if (!retain().services.has(service)) {
 				await this.remove(directory);
+				for (const name of ["state.yaml", "events.yaml", "health.yaml", "routes.yaml"])
+					await this.remove(join(serviceDirectory, name));
 				continue;
 			}
 			const entries = await this.entries(directory);

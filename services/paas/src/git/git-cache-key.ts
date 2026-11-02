@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { GitFileSource } from "./types.ts";
 
-/** Shared on-disk namespace identity for repository access and garbage collection. */
+/** Descriptor identity for memory entries and durable source refs. */
 export const gitCacheKey = (serviceId: string, source: GitFileSource): string =>
 	`${serviceId}/${createHash("sha256")
 		.update(
@@ -15,3 +15,9 @@ export const gitCacheKey = (serviceId: string, source: GitFileSource): string =>
 			]),
 		)
 		.digest("hex")}`;
+
+/** Shared on-disk identity; branches and descriptor paths share immutable Git objects. */
+export const gitRepositoryKey = (source: GitFileSource): string =>
+	createHash("sha256")
+		.update(JSON.stringify([source.remote, source.accessToken, source.privateKeyPath]))
+		.digest("hex");

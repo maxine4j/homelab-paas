@@ -6,7 +6,7 @@ PostgreSQL and RabbitMQ are simple container presets with explicit image version
 
 The platform automatically:
 
-- Creates persistent storage under the resource directory.
+- Creates persistent storage under the resource directory defined in the [filesystem layout](architecture.md#configuration-and-filesystem-layout). Managed resources use the `resources/` namespace so resource IDs cannot collide with service-owned `static/` or `volumes/` directories.
 - Generates administrator credentials on first creation.
 - Stores credentials in the resource’s `credentials.env` file.
 - Configures the database or broker container.

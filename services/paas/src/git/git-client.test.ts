@@ -63,8 +63,12 @@ test("fetches an exact missing commit for a shallow repository", async () => {
 
 test("publishes the last successfully read descriptor under a durable ref", async () => {
 	const { client, transport } = fixture();
-	await client.publishRevision("/repo", revision);
-	expect(transport.execute).toHaveBeenCalledWith("/repo", ["update-ref", "refs/paas/descriptor", revision]);
+	await client.publishRevision("/repo", revision, "refs/paas/descriptors/" + "a".repeat(64));
+	expect(transport.execute).toHaveBeenCalledWith("/repo", [
+		"update-ref",
+		"refs/paas/descriptors/" + "a".repeat(64),
+		revision,
+	]);
 });
 
 test.each(["HEAD", "--output=/tmp/escape"])(

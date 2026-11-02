@@ -83,6 +83,7 @@ import { ResourceStatusService } from "./status/resource-status-service.ts";
 import { FileSystemKeyValueStore } from "./store/file-system-store.ts";
 import { InternalCleanup } from "./store/internal-cleanup.ts";
 import { InternalStorage } from "./store/internal-storage.ts";
+import { ServiceStorage } from "./store/service-storage.ts";
 import { PeriodicTaskRunner } from "./task/periodic.ts";
 import type { StartOptions } from "./types.ts";
 import * as staticFiles from "./util/file.ts";
@@ -92,6 +93,7 @@ import type { Lifecycle } from "./util/lifecycle.ts";
 import { createRequestLogger, logger, withLogContext } from "./util/logger.ts";
 import { sleep } from "./util/sleep.ts";
 
+const SERVICE_DIRECTORY = "/var/homelab-paas";
 const STATE_DIRECTORY = "/var/homelab-paas/_paas";
 
 export async function start(lifecycle: Lifecycle, options: StartOptions = {}): Promise<void> {
@@ -113,10 +115,10 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const remove = async (path: string): Promise<void> => {
 		await rm(path, { force: true });
 	};
-	const state = new FileSystemKeyValueStore<unknown>(STATE_DIRECTORY, readFile, secureWrite, remove, "yaml");
+	const state = new ServiceStorage(SERVICE_DIRECTORY, staticFiles, storage);
 	const store = new ReconciliationStore(state);
 	const events = new ServiceEventStore(state);
-	const endpoints = new EndpointsStore(state);
+	const endpoints = new EndpointsStore(state, () => state.listServices());
 	const dockerTransport = new NodeDockerTransport(
 		{
 			socketPath: "/var/run/docker.sock",
@@ -148,7 +150,7 @@ export async function start(lifecycle: Lifecycle, options: StartOptions = {}): P
 	const networking = new NetworkingService(endpoints, envoy);
 	const routing = new ResourceRoutingPolicy();
 	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${STATE_DIRECTORY}/git`, storage);
-	const staticStore = new StaticStore(`${STATE_DIRECTORY}/static`, staticFiles, storage);
+	const staticStore = new StaticStore(SERVICE_DIRECTORY, staticFiles, storage);
 	const internalCleanup = new InternalCleanup(config, git, decodeDescriptor, networking, storage, Date.now);
 	const observations = new RuntimeObservations(docker, Date.now);
 	const health = new ResourceHealthService(

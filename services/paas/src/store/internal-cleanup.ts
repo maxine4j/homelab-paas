@@ -1,4 +1,4 @@
-import { gitCacheKey } from "../git/git-cache-key.ts";
+import { gitCacheKey, gitRepositoryKey } from "../git/git-cache-key.ts";
 import type { IGitService } from "../git/git-service.ts";
 import type { GitFileSource } from "../git/types.ts";
 import type { IRouteCleanup } from "../reconciler/networking/networking-service.ts";
@@ -56,7 +56,7 @@ export class InternalCleanup implements IInternalCleanup {
 				git: new Set(
 					Object.entries(sources)
 						.filter(([, source]) => source.remote !== "local")
-						.map(([id, source]) => gitCacheKey(id, source)),
+						.map(([, source]) => gitRepositoryKey(source)),
 				),
 				static: new Map(
 					Object.entries(sources).flatMap(([id, source]) => {

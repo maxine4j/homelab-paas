@@ -22,7 +22,7 @@ test("cleanup removes legacy and resource routes for removed services and republ
 
 function fixture() {
 	const snapshots: Record<string, Endpoint>[] = [];
-	const endpoints = new EndpointsStore(new InMemoryKeyValueStore<unknown>());
+	const endpoints = new EndpointsStore(new InMemoryKeyValueStore<unknown>(), async () => ["demo", "other", "gone"]);
 	const envoy: IEnvoyService = {
 		async bootstrap() {},
 		async configureRoutes(routes) {

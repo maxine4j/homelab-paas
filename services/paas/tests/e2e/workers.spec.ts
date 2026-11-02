@@ -35,8 +35,8 @@ test("workers stay private through rollout, failed health checks, recovery and r
 		expect(Object.keys(container.HostConfig.PortBindings ?? {})).toEqual([]);
 		expect(container.Config.Labels["homelab-paas.resource"]).toBe("jobs");
 	}
-	const routes = () => readFile(`${env.directory}/var/_paas/routes.yaml`);
-	expect(await routes()).not.toContain("workers");
+	const routes = () => readFile(`${env.directory}/var/workers/routes.yaml`);
+	expect(await routes()).toBeUndefined();
 	expect(
 		(await env.request(env.url("workers", "/health"), `__Secure-paas_session=${env.session()}`)).status,
 	).not.toBe(200);
@@ -83,5 +83,5 @@ test("workers stay private through rollout, failed health checks, recovery and r
 	await env.compose(["restart", "paas"]);
 	await env.waitReady("public", "v1");
 	expect(await env.workloadIds("workers")).toEqual(beforeRestart);
-	expect(await routes()).not.toContain("workers");
+	expect(await routes()).toBeUndefined();
 });

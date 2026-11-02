@@ -107,7 +107,7 @@ test("OAuth state is bound to a browser nonce and expired state cannot log in", 
 });
 
 test("authorization errors fail closed for public ingress", async ({ environment: env }) => {
-	const filename = `${env.directory}/var/_paas/routes.yaml`;
+	const filename = `${env.directory}/var/public/routes.yaml`;
 	const original = (await readFile(filename))!;
 	await env.compose(["pause", "paas"]);
 	try {

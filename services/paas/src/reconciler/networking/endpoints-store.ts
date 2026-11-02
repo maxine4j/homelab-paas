@@ -10,12 +10,16 @@ export interface IEndpointsStore {
 }
 
 export class EndpointsStore implements IEndpointsStore {
-	constructor(private readonly store: KeyValueStore<unknown>) {}
+	constructor(
+		private readonly store: KeyValueStore<unknown>,
+		private readonly listServices: () => Promise<string[]>,
+	) {}
 
 	async getAll(): Promise<Record<string, Endpoint>> {
 		try {
-			const value = await this.store.get("routes");
-			return routesSchema.parse(value === undefined ? {} : value);
+			const routes: Record<string, Endpoint> = {};
+			for (const service of await this.listServices()) Object.assign(routes, await this.readService(service));
+			return routes;
 		} catch (cause) {
 			throw new Error("Cannot read reconciliation data; check platform state files and permissions", { cause });
 		}
@@ -23,7 +27,13 @@ export class EndpointsStore implements IEndpointsStore {
 
 	async set(serviceId: string, endpoint: Endpoint | undefined): Promise<void> {
 		if (!routeId.safeParse(serviceId).success) throw new Error("Invalid reconciliation service identity");
-		const routes = await this.getAll();
+		const owner = serviceId.split(".").at(-1)!;
+		let routes: Record<string, Endpoint>;
+		try {
+			routes = await this.readService(owner);
+		} catch (cause) {
+			throw new Error("Cannot read reconciliation data; check platform state files and permissions", { cause });
+		}
 		const previous = JSON.stringify(routes);
 		const service = serviceId.split(".").at(1);
 		// Legacy routes have no resource identity: any recreation may retire their destination.
@@ -39,10 +49,18 @@ export class EndpointsStore implements IEndpointsStore {
 		try {
 			const next = routesSchema.parse(routes);
 			if (JSON.stringify(next) === previous) return;
-			await this.store.set("routes", next);
+			await this.store.set(`${owner}.routes`, next);
 		} catch (cause) {
 			throw new Error("Cannot write reconciliation data; check platform state directory permissions", { cause });
 		}
+	}
+	private async readService(service: string): Promise<Record<string, Endpoint>> {
+		if (!id.safeParse(service).success) throw new Error("Invalid route owner");
+		const value = await this.store.get(`${service}.routes`);
+		const routes = routesSchema.parse(value === undefined ? {} : value);
+		if (Object.keys(routes).some((route) => route.split(".").at(-1) !== service))
+			throw new Error("Route belongs to another service");
+		return routes;
 	}
 }
 const id = z

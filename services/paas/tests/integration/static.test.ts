@@ -46,7 +46,7 @@ test("committed static bundles reconcile through real Git, disk, xDS and HTTP wi
 		Date.now,
 		async () => {},
 	);
-	const store = new StaticStore(`${directory}/state/static`, files);
+	const store = new StaticStore(`${directory}/state`, files);
 	const api = await startTestApi(new Koa().use(createStaticRouter(new StaticService(config, paas.endpoints, store))));
 	const get = (path: string, host = "site.demo.example.test"): Promise<{ status: number; body: string }> =>
 		new Promise((resolve, reject) => {
@@ -69,7 +69,7 @@ test("committed static bundles reconcile through real Git, disk, xDS and HTTP wi
 		expect((await get("/api/ui/cluster")).status).toBe(404);
 		expect((await get("/", "example.test")).status).toBe(404);
 		expect((await get("/%2e%2e/demo.yaml")).status).toBe(404);
-		await files.writeFile(`${directory}/state/static/demo/site/stale`, "stale");
+		await files.writeFile(`${directory}/state/demo/static/site/stale`, "stale");
 		await files.rm(`${git.work}/bundle/old.js`);
 		const second = await git.commit({ "bundle/index.html": "second" });
 		await files.writeFile(`${git.work}/bundle/index.html`, "uncommitted");
@@ -85,7 +85,7 @@ test("committed static bundles reconcile through real Git, disk, xDS and HTTP wi
 			health: "Healthy",
 			containers: [],
 		});
-		await files.writeFile(`${directory}/state/static/demo/site/index.html`, "tampered");
+		await files.writeFile(`${directory}/state/demo/static/site/index.html`, "tampered");
 		await paas.audit.run("demo");
 		await paas.scheduler.settle();
 		expect(await get("/")).toEqual({ status: 200, body: "second" });

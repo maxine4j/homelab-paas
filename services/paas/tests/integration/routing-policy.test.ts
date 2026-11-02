@@ -66,7 +66,7 @@ test.each(["web", "static", "mixed", "mixed-reversed"])(
 					.map((container) => container.Id);
 			const ids = workloadIds();
 			const inode =
-				mode === "web" ? undefined : (await files.lstat(`${directory}/state/static/demo/site/index.html`)).ino;
+				mode === "web" ? undefined : (await files.lstat(`${directory}/state/demo/static/site/index.html`)).ino;
 			for (const [index, primary] of (mixed
 				? ["app", "site", "app"]
 				: [mode === "web" ? "app" : "site"]
@@ -110,7 +110,7 @@ test.each(["web", "static", "mixed", "mixed-reversed"])(
 				});
 				expect(workloadIds()).toEqual(ids);
 				if (inode !== undefined)
-					expect((await files.lstat(`${directory}/state/static/demo/site/index.html`)).ino).toBe(inode);
+					expect((await files.lstat(`${directory}/state/demo/static/site/index.html`)).ino).toBe(inode);
 			}
 			if (mode === "static") {
 				expect(ids).toEqual([]);

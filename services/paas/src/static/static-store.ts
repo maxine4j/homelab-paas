@@ -40,7 +40,10 @@ export class StaticStore implements IStaticStore {
 				|| new Set(bundle.map((file) => file.path)).size !== bundle.length
 			)
 				throw new Error("Invalid static bundle paths");
-			const parent = join(this.root, identity.serviceId);
+			const service = join(this.root, identity.serviceId);
+			await this.fs.mkdir(service, { recursive: true, mode: 0o700 });
+			if (!(await this.fs.lstat(service)).isDirectory()) throw new Error("Invalid static service directory");
+			const parent = join(service, "static");
 			await this.fs.mkdir(parent, { recursive: true, mode: 0o700 });
 			if (!(await this.fs.lstat(parent)).isDirectory()) throw new Error("Invalid static service directory");
 			const target = join(parent, identity.resourceId);
@@ -89,8 +92,10 @@ export class StaticStore implements IStaticStore {
 
 	inspect(identity: StaticIdentity): Promise<StaticSnapshot> {
 		return this.serialize(identity.serviceId, identity.resourceId, async () => {
-			const parent = join(this.root, identity.serviceId);
+			const service = join(this.root, identity.serviceId);
+			const parent = join(service, "static");
 			try {
+				if (!(await this.fs.lstat(service)).isDirectory()) return "different";
 				if (!(await this.fs.lstat(parent)).isDirectory()) return "different";
 				const content = await this.fs.readFile(join(parent, `.${identity.resourceId}.json`));
 				if (!content) return "missing";
@@ -120,7 +125,7 @@ export class StaticStore implements IStaticStore {
 			if (!this.safePath(path)) return undefined;
 			let current = this.root;
 			try {
-				const components = [serviceId, resourceId, ...path.split("/")];
+				const components = [serviceId, "static", resourceId, ...path.split("/")];
 				for (const [index, component] of components.entries()) {
 					current = join(current, component);
 					const info = await this.fs.lstat(current);

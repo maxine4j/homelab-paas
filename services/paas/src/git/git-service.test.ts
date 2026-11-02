@@ -6,6 +6,13 @@ import { GitClientError, GitServiceError } from "./types.ts";
 
 const source = { remote: "https://example.com/repo", descriptorPath: "file.yaml" };
 const file = { revision: "a".repeat(40), content: "committed\n" };
+test("services selecting different descriptors and branches share one repository but retain independent source refs", async () => {
+	const { client, service } = fixture();
+	await service.refreshFile("demo", source);
+	await service.refreshFile("other", { ...source, branch: "release", descriptorPath: "other.yaml" });
+	expect(client.initRepo.mock.calls[0]![0]).toBe(client.initRepo.mock.calls[1]![0]);
+	expect(client.publishRevision.mock.calls[0]![2]).not.toBe(client.publishRevision.mock.calls[1]![2]);
+});
 const fixture = () => {
 	const refs = new Map<string, string>();
 	const client = {
@@ -16,15 +23,15 @@ const fixture = () => {
 			.fn<IGitClient["locateFile"]>()
 			.mockResolvedValue({ directory: "/repo", path: "nested/file.yaml" }),
 		resolveRevision: vi.fn<IGitClient["resolveRevision"]>().mockImplementation(async (directory, ref) => {
-			if (ref === "refs/paas/descriptor") {
-				const revision = refs.get(directory);
+			if (ref.startsWith("refs/paas/descriptors/")) {
+				const revision = refs.get(`${directory}:${ref}`);
 				if (!revision) throw new GitClientError();
 				return revision;
 			}
 			return file.revision;
 		}),
-		publishRevision: vi.fn<IGitClient["publishRevision"]>().mockImplementation(async (directory, revision) => {
-			refs.set(directory, revision);
+		publishRevision: vi.fn<IGitClient["publishRevision"]>().mockImplementation(async (directory, revision, ref) => {
+			refs.set(`${directory}:${ref}`, revision);
 		}),
 		readFile: vi.fn<IGitClient["readFile"]>().mockResolvedValue(file.content),
 		readCommit: vi
@@ -51,8 +58,9 @@ test("cold load populates memory and disk; warm reads do no Git I/O", async () =
 	expect(await service.fetchFile("demo", source)).toEqual(file);
 	expect(client.fetch).toHaveBeenCalledTimes(1);
 	expect(client.publishRevision).toHaveBeenCalledWith(
-		expect.stringMatching(/^\/state\/git\/demo\/[a-f0-9]{64}$/),
+		expect.stringMatching(/^\/state\/git\/[a-f0-9]{64}\/repo\.git$/),
 		file.revision,
+		expect.stringMatching(/^refs\/paas\/descriptors\/[a-f0-9]{64}$/),
 	);
 	client.readFile.mockClear();
 	client.resolveRevision.mockClear();
@@ -66,7 +74,10 @@ test("restart hydrates disk without awaiting the remote refresh", async () => {
 	await service.refreshFile("demo", source);
 	client.fetch.mockImplementation(() => new Promise(() => {}));
 	expect(await new GitService(client, "/state/git").fetchFile("demo", source)).toEqual(file);
-	expect(client.resolveRevision).toHaveBeenCalledWith(expect.any(String), "refs/paas/descriptor");
+	expect(client.resolveRevision).toHaveBeenCalledWith(
+		expect.any(String),
+		expect.stringMatching(/^refs\/paas\/descriptors\//),
+	);
 });
 test("restart disk metadata reads do not wait for the background remote refresh", async () => {
 	const { client, service } = fixture();
@@ -166,13 +177,15 @@ test.each([
 	{ descriptorPath: "other.yaml" },
 	{ accessToken: "rotated" },
 	{ privateKeyPath: "/keys/rotated" },
-])("source changes use a distinct disk namespace: %j", async (change) => {
+])("source changes use independent durable refs: %j", async (change) => {
 	const { client, service } = fixture();
 	await service.refreshFile("demo", source);
 	const oldDirectory = client.fetch.mock.calls.at(0)?.[0];
 	client.fetch.mockRejectedValue(new GitClientError());
 	await expect(service.fetchFile("demo", { ...source, ...change })).rejects.toBeInstanceOf(GitClientError);
-	expect(client.fetch.mock.calls.at(-1)?.[0]).not.toBe(oldDirectory);
+	if ("branch" in change || "descriptorPath" in change)
+		expect(client.fetch.mock.calls.at(-1)?.[0]).toBe(oldDirectory);
+	else expect(client.fetch.mock.calls.at(-1)?.[0]).not.toBe(oldDirectory);
 });
 test("different services refresh concurrently and same-service Git operations serialize", async () => {
 	const { client, service } = fixture();
@@ -181,12 +194,12 @@ test("different services refresh concurrently and same-service Git operations se
 		release = resolve;
 	});
 	client.fetch.mockImplementation(async (directory) => {
-		if (directory.includes("/slow/")) await blocked;
+		if (directory === client.fetch.mock.calls[0]?.[0]) await blocked;
 	});
 	const slow = service.refreshFile("slow", source);
 	client.readCommit.mockRejectedValueOnce(new GitClientError());
 	const commit = service.readCommit("slow", source, file.revision);
-	await service.refreshFile("fast", source);
+	await service.refreshFile("fast", { ...source, remote: "https://example.com/fast" });
 	expect(client.fetchCommit).not.toHaveBeenCalled();
 	release();
 	await Promise.all([slow, commit]);

@@ -15,11 +15,11 @@ test("production startup uses the isolated Envoy directory and cleans obsolete i
 	await env.compose(["stop", "paas"]);
 	const root = `${env.directory}/var`;
 	const obsolete = [
-		"_paas/gone.state.yaml",
-		"_paas/gone.events.yaml",
+		"gone/state.yaml",
+		"gone/events.yaml",
 		"_paas/git/private/" + "f".repeat(64) + "/HEAD",
 		"_paas/ui-git/gone/HEAD",
-		"_paas/static/gone/site/index.html",
+		"gone/static/site/index.html",
 		"__paas/static/gone/site/index.html",
 	];
 	const retained = ["private/data/keep", "private/credentials.env"];
@@ -35,7 +35,10 @@ test("production startup uses the isolated Envoy directory and cleans obsolete i
 	);
 	for (const name of retained) expect(await readFile(`${root}/${name}`)).toBe("sentinel");
 	expect(await readFile(`${root}/_paas/envoy/ingress.pem`)).toBe(pem);
-	expect((await readdir(`${root}/_paas/git/private`)).some((name) => /^[a-f0-9]{64}$/.test(name))).toBe(true);
+	expect((await readdir(`${root}/_paas/git`)).filter((name) => /^[a-f0-9]{64}$/.test(name))).toHaveLength(1);
+	expect(await readFile(`${root}/private/state.yaml`)).toContain("phase: ready");
+	for (const name of ["private.state.yaml", "private.events.yaml", "routes.yaml"])
+		expect(await readFile(`${root}/_paas/${name}`)).toBeUndefined();
 	expect((await env.request(env.url("public", "/version"))).status).toBe(200);
 });
 

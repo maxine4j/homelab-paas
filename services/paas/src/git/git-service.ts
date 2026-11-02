@@ -2,7 +2,7 @@ import { dirname, isAbsolute, join, normalize } from "node:path";
 
 import type { IStorageAccess } from "../store/internal-storage.ts";
 import { createLogger } from "../util/logger.ts";
-import { gitCacheKey } from "./git-cache-key.ts";
+import { gitCacheKey, gitRepositoryKey } from "./git-cache-key.ts";
 import type { IGitClient } from "./git-client.ts";
 import { GitServiceError } from "./types.ts";
 import type { GitCommit, GitCredentials, GitDirectoryFile, GitFile, GitFileSource } from "./types.ts";
@@ -60,11 +60,11 @@ export class GitService implements IGitCacheService, IGitDirectoryService {
 		path: string,
 	): Promise<GitDirectoryFile[]> {
 		this.validateSource(serviceId, source);
-		return this.serialize(serviceId, async () => {
+		return this.serialize(this.operationKey(serviceId, source), async () => {
 			const file =
 				source.remote === "local"
 					? await this.client.locateFile(source.descriptorPath)
-					: { directory: this.repositoryDirectory(serviceId, source), path: source.descriptorPath };
+					: { directory: this.repositoryDirectory(source), path: source.descriptorPath };
 			if (!path || /[\0\\]/.test(path)) throw new GitServiceError();
 			const parts = path.startsWith("/")
 				? []
@@ -85,12 +85,13 @@ export class GitService implements IGitCacheService, IGitDirectoryService {
 		this.validateSource(serviceId, source);
 		const key = this.key(serviceId, source);
 		this.activate(serviceId, key);
-		if (source.remote === "local") return this.serialize(serviceId, () => this.readDisk(serviceId, source));
+		if (source.remote === "local")
+			return this.serialize(this.operationKey(serviceId, source), () => this.readDisk(serviceId, source));
 		const cached = this.files.get(key);
 		if (cached) return { ...cached };
 		if (this.failures.has(key)) throw this.failures.get(key);
 		let hydrated = false;
-		const result = await this.serialize(serviceId, async () => {
+		const result = await this.serialize(this.operationKey(serviceId, source), async () => {
 			const current = this.files.get(key);
 			if (current) return current;
 			try {
@@ -116,7 +117,7 @@ export class GitService implements IGitCacheService, IGitDirectoryService {
 		this.activate(serviceId, key);
 		const current = this.refreshes.get(key);
 		if (current) return current.then((file) => ({ ...file }));
-		const result = this.serialize(serviceId, async () => {
+		const result = this.serialize(this.operationKey(serviceId, source), async () => {
 			try {
 				const file = await this.loadRemote(serviceId, source);
 				this.failures.delete(key);
@@ -166,7 +167,7 @@ export class GitService implements IGitCacheService, IGitDirectoryService {
 
 	private async loadRemote(serviceId: string, source: GitFileSource): Promise<GitFile> {
 		if (source.remote !== "local") {
-			const directory = this.repositoryDirectory(serviceId, source);
+			const directory = this.repositoryDirectory(source);
 			await this.client.initRepo(directory);
 			await this.client.fetch(
 				directory,
@@ -177,7 +178,11 @@ export class GitService implements IGitCacheService, IGitDirectoryService {
 		}
 		const file = await this.readDisk(serviceId, source, "FETCH_HEAD");
 		if (source.remote !== "local")
-			await this.client.publishRevision(this.repositoryDirectory(serviceId, source), file.revision);
+			await this.client.publishRevision(
+				this.repositoryDirectory(source),
+				file.revision,
+				this.descriptorRef(serviceId, source),
+			);
 		this.files.set(this.key(serviceId, source), file);
 		return file;
 	}
@@ -185,7 +190,7 @@ export class GitService implements IGitCacheService, IGitDirectoryService {
 	private async readDisk(
 		serviceId: string,
 		source: GitFileSource,
-		remoteRef = "refs/paas/descriptor",
+		remoteRef = this.descriptorRef(serviceId, source),
 	): Promise<GitFile> {
 		const local = source.remote === "local";
 
@@ -195,7 +200,7 @@ export class GitService implements IGitCacheService, IGitDirectoryService {
 			file = await this.client.locateFile(source.descriptorPath);
 			ref = source.branch ?? "HEAD";
 		} else {
-			file = { directory: this.repositoryDirectory(serviceId, source), path: source.descriptorPath };
+			file = { directory: this.repositoryDirectory(source), path: source.descriptorPath };
 			ref = remoteRef;
 		}
 		const revision = await this.client.resolveRevision(file.directory, ref);
@@ -207,11 +212,11 @@ export class GitService implements IGitCacheService, IGitDirectoryService {
 			const { directory } = await this.client.locateFile(source.descriptorPath);
 			return this.client.readCommit(directory, revision);
 		}
-		const directory = this.repositoryDirectory(serviceId, source);
+		const directory = this.repositoryDirectory(source);
 		try {
 			return await this.client.readCommit(directory, revision);
 		} catch {
-			return this.serialize(serviceId, async () => {
+			return this.serialize(this.operationKey(serviceId, source), async () => {
 				await this.client.initRepo(directory);
 				await this.client.fetchCommit(directory, source.remote, revision, ...this.credentials(source));
 				return this.client.readCommit(directory, revision);
@@ -236,8 +241,14 @@ export class GitService implements IGitCacheService, IGitDirectoryService {
 		this.sources.set(serviceId, key);
 	}
 
-	private repositoryDirectory(serviceId: string, source: GitFileSource): string {
-		return join(this.directory, this.key(serviceId, source));
+	private repositoryDirectory(source: GitFileSource): string {
+		return join(this.directory, gitRepositoryKey(source), "repo.git");
+	}
+	private operationKey(serviceId: string, source: GitFileSource): string {
+		return source.remote === "local" ? this.key(serviceId, source) : gitRepositoryKey(source);
+	}
+	private descriptorRef(serviceId: string, source: GitFileSource): string {
+		return `refs/paas/descriptors/${this.key(serviceId, source).split("/").at(-1)!}`;
 	}
 
 	private serialize<T>(serviceId: string, run: () => Promise<T>): Promise<T> {

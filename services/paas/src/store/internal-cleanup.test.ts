@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 
 import { decodeDescriptorYaml } from "../config/paas-config.ts";
-import { gitCacheKey } from "../git/git-cache-key.ts";
+import { gitRepositoryKey } from "../git/git-cache-key.ts";
 import { testConfig } from "../util/test/config.ts";
 import { InternalCleanup } from "./internal-cleanup.ts";
 import type { InternalRetention } from "./types.ts";
@@ -38,7 +38,7 @@ test("retains current repositories and desired or still-routed static bundles; d
 		() => 1000,
 	);
 	await cleanup.run();
-	expect(retention?.git).toEqual(new Set([gitCacheKey("demo", source), gitCacheKey("unavailable", source)]));
+	expect(retention?.git).toEqual(new Set([gitRepositoryKey(source)]));
 	expect(retention?.static?.get("demo")).toEqual(new Set(["desired", "live"]));
 	expect(retention?.static?.has("unavailable")).toBe(false);
 });
@@ -68,6 +68,6 @@ test("rechecks accepted config during filesystem cleanup and preserves publicati
 		() => 1000,
 	);
 	await cleanup.run();
-	expect(retention?.git).toEqual(new Set([gitCacheKey("demo", services["demo"]!)]));
+	expect(retention?.git).toEqual(new Set([gitRepositoryKey(services["demo"]!)]));
 	expect(retention?.static?.has("demo")).toBe(false);
 });

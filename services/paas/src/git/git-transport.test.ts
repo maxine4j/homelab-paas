@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 
 import { afterEach, expect, test } from "vitest";
 
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "../util/file.ts";
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "../util/file.ts";
 import { testConfig } from "../util/test/config.ts";
 import { GitClient } from "./git-client.ts";
 import { GitService } from "./git-service.ts";
@@ -144,6 +144,27 @@ test("remote workflows reuse their bare repository and fetch defaults, updates a
 	await expect(service.fetchFile("demo", { ...source, descriptorPath: "missing.yaml" })).rejects.toBeInstanceOf(
 		GitClientError,
 	);
+	await restarted.refreshFile("demo", source);
+});
+
+test("multiple services share one bare repository and restore independent branches and descriptor paths", async () => {
+	const { root, repo, git, service, client } = await fixture();
+	await writeFile(join(repo, "other.yaml"), "other initial\n");
+	await git("add", ".");
+	await git("commit", "-m", "other descriptor");
+	const initial = await git("rev-parse", "HEAD");
+	await git("branch", "release");
+	await writeFile(join(repo, "nested/file.yaml"), "main update\n");
+	await git("commit", "-am", "main update");
+	const latest = await git("rev-parse", "HEAD");
+	const main = { remote: repo, descriptorPath: "nested/file.yaml" };
+	const release = { remote: repo, branch: "release", descriptorPath: "other.yaml" };
+	await Promise.all([service.refreshFile("demo", main), service.refreshFile("other", release)]);
+	expect(await readdir(join(root, "cache"))).toHaveLength(1);
+	const restarted = new GitService(client, join(root, "cache"));
+	expect(await restarted.fetchFile("demo", main)).toEqual({ revision: latest, content: "main update\n" });
+	expect(await restarted.fetchFile("other", release)).toEqual({ revision: initial, content: "other initial\n" });
+	await Promise.all([restarted.refreshFile("demo", main), restarted.refreshFile("other", release)]);
 });
 
 test("local workflows use HEAD or an explicit ref and ignore modified and deleted working files through a symlink", async () => {

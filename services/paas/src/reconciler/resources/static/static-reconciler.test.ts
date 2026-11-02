@@ -11,7 +11,7 @@ const fixture = () => {
 	const readDirectory = vi.fn(async () => bundle);
 	const inspect = vi.fn(async () => "missing" as "missing" | "current");
 	const publish = vi.fn(async () => {});
-	const routes = new EndpointsStore(new InMemoryKeyValueStore<unknown>());
+	const routes = new EndpointsStore(new InMemoryKeyValueStore<unknown>(), async () => ["demo", "other", "gone"]);
 	const configureRoutes = vi.fn(async () => {});
 	const reconciler = new StaticResourceReconciler(
 		new ResourceRoutingPolicy(),

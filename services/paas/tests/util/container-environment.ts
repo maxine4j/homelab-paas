@@ -144,7 +144,7 @@ export class ContainerEnvironment {
 	async checkpoint(
 		service: string,
 	): Promise<{ phase: string; activeRevision?: string; desiredRevision?: string; failures?: number } | undefined> {
-		const value = await readFile(`${this.directory}/var/_paas/${service}.state.yaml`);
+		const value = await readFile(`${this.directory}/var/${service}/state.yaml`);
 		return value
 			? (parseYaml(value, "test checkpoint") as {
 					phase: string;

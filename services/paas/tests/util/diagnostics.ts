@@ -89,9 +89,15 @@ export const captureDiagnostics = async (environment: ContainerEnvironment): Pro
 		await writeFile(`${environment.directory}/${name}`, content, { mode: 0o600 });
 	}
 	// Checkpoints and discovery bytes already live in this retained artifact directory.
+	const routes = await Promise.all(
+		Object.keys(environment.config?.services ?? {}).map(async (service) => {
+			const content = await readFile(`${environment.directory}/var/${service}/routes.yaml`);
+			return `${service}: ${content ?? "No routes published"}`;
+		}),
+	);
 	await writeFile(
 		`${environment.directory}/diagnostics.txt`,
-		`Cluster: ${environment.cluster}\n${(await readFile(`${environment.directory}/var/_paas/routes.yaml`)) ?? "No routes published"}`,
+		`Cluster: ${environment.cluster}\n${routes.join("\n")}`,
 		{ mode: 0o600 },
 	);
 };

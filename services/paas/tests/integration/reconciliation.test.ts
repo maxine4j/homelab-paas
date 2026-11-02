@@ -98,7 +98,7 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 		}
 		unsubscribe();
 		expect(paas.writes).toHaveLength(6);
-		expect(paas.writes.every((path) => /\/(demo|other)\.health\.yaml$/.test(path))).toBe(true);
+		expect(paas.writes.every((path) => /\/(demo|other)\/health\.yaml$/.test(path))).toBe(true);
 		expect(envoy.server.requests.length - publications).toBe(0);
 		expect(notifications).toBe(0);
 		expect(docker.server.requests.length - dockerReads).toBe(18);
@@ -151,10 +151,10 @@ test("real Git, Docker socket and xDS transports preserve serving state through 
 		await paas.reconciler.reconcile();
 		expect(await paas.checkpoints.read("demo")).toMatchObject({ phase: "ready" });
 		expect(docker.containers.has(active.Id)).toBe(false);
-		const routes = await readFile(`${directory}/state/routes.yaml`);
+		const routes = await readFile(`${directory}/state/demo/routes.yaml`);
 		await git.commit({ "demo.sd.yaml": "invalid: descriptor" });
 		await paas.refresh.refreshAll();
-		expect(await readFile(`${directory}/state/routes.yaml`)).toBe(routes);
+		expect(await readFile(`${directory}/state/demo/routes.yaml`)).toBe(routes);
 		envoy.reject = true;
 		now += 1000;
 		// The mock shares one portable loopback address. Change route content explicitly

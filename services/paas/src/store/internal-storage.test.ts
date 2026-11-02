@@ -25,12 +25,12 @@ const fixture = async () => {
 
 test("generates a private Envoy bootstrap without changing existing TLS or static output", async () => {
 	const { root, storage, put } = await fixture();
-	await put("_paas/static/demo/site/index.html", "bundle");
+	await put("demo/static/site/index.html", "bundle");
 	await put("_paas/envoy/ingress.pem", "certificate and key");
 	await put("_paas/acme-account.pem", "account key");
 	await storage.initialize();
 	expect((await files.stat(join(root, "_paas/envoy/envoy.yaml"))).mode & 0o777).toBe(0o600);
-	expect(await files.readFile(join(root, "_paas/static/demo/site/index.html"))).toBe("bundle");
+	expect(await files.readFile(join(root, "demo/static/site/index.html"))).toBe("bundle");
 	expect(await files.readFile(join(root, "_paas/envoy/ingress.pem"))).toBe("certificate and key");
 	expect(await files.readFile(join(root, "_paas/acme-account.pem"))).toBe("account key");
 	const bootstrap = parseYaml((await files.readFile(join(root, "_paas/envoy/envoy.yaml")))!, "bootstrap");
@@ -48,43 +48,51 @@ test("cleanup removes only recognized obsolete internal output and preserves ser
 	for (const name of [
 		"demo/data/db",
 		"demo/credentials.env",
+		"gone/volumes/db/data",
+		"gone/resources/db/credentials.env",
 		"_paas/acme-account.pem",
 		"_paas/envoy/ingress.pem",
-		"_paas/demo.state.yaml",
-		"_paas/demo.events.yaml",
-		"_paas/demo.health.yaml",
+		"demo/state.yaml",
+		"demo/events.yaml",
+		"demo/health.yaml",
+		"demo/routes.yaml",
 		"_paas/unknown",
-		"_paas/static/demo/site/index.html",
-		"_paas/git/demo/" + "a".repeat(64) + "/objects/keep",
+		"demo/static/site/index.html",
+		"_paas/git/" + "a".repeat(64) + "/objects/keep",
 	])
 		await put(name);
 	const obsolete = [
-		"_paas/gone.state.yaml",
-		"_paas/gone.events.yaml",
-		"_paas/gone.health.yaml",
+		"gone/state.yaml",
+		"gone/events.yaml",
+		"gone/health.yaml",
+		"gone/routes.yaml",
+		"_paas/git/" + "b".repeat(64) + "/repo.git/HEAD",
 		"_paas/ui-git/gone/HEAD",
 		"_paas/git/demo/HEAD",
 		"_paas/git/demo/" + "b".repeat(64) + "/HEAD",
 		"_paas/git/gone/" + "c".repeat(64) + "/HEAD",
-		"_paas/static/gone/site/index.html",
+		"gone/static/site/index.html",
 		"_paas/cds.yaml",
 		"_paas/lds.yaml",
 		"_paas/sds.yaml",
 		"_paas/ingress.pem",
 	];
 	for (const name of obsolete) await put(name);
-	await storage.cleanup(() => ({ services: new Set(["demo"]), git: new Set(["demo/" + "a".repeat(64)]) }));
+	await storage.cleanup(() => ({ services: new Set(["demo"]), git: new Set(["a".repeat(64)]) }));
 	for (const name of obsolete) expect(await files.readFile(join(root, name)), name).toBeUndefined();
 	for (const name of [
 		"demo/data/db",
 		"demo/credentials.env",
+		"gone/volumes/db/data",
+		"gone/resources/db/credentials.env",
 		"_paas/acme-account.pem",
 		"_paas/envoy/ingress.pem",
-		"_paas/demo.state.yaml",
-		"_paas/demo.events.yaml",
-		"_paas/demo.health.yaml",
+		"demo/state.yaml",
+		"demo/events.yaml",
+		"demo/health.yaml",
+		"demo/routes.yaml",
 		"_paas/unknown",
-		"_paas/static/demo/site/index.html",
+		"demo/static/site/index.html",
 	])
 		expect(await files.readFile(join(root, name)), name).toBe("keep");
 });
@@ -126,15 +134,15 @@ test("cleans obsolete static bundles and abandoned writes but preserves new publ
 	await storage.initialize();
 	const abandoned = "demo.state.yaml.12345678-1234-1234-1234-123456789abc.tmp";
 	for (const name of [
-		"_paas/static/demo/old/index.html",
-		"_paas/static/demo/.old.json",
-		"_paas/static/demo/live/index.html",
-		"_paas/static/demo/.live.json",
-		"_paas/static/demo/.missing.json",
-		"_paas/static/demo/notes",
-		"_paas/static/demo/.staging-abcd/unfinished",
-		"_paas/static/demo/.staging-abcd.previous/backup",
-		"_paas/" + abandoned,
+		"demo/static/old/index.html",
+		"demo/static/.old.json",
+		"demo/static/live/index.html",
+		"demo/static/.live.json",
+		"demo/static/.missing.json",
+		"demo/static/notes",
+		"demo/static/.staging-abcd/unfinished",
+		"demo/static/.staging-abcd.previous/backup",
+		"demo/" + abandoned,
 		"_paas/envoy/" + abandoned,
 		"__paas/static/demo/old/index.html",
 		"etc/envoy.yaml",
@@ -148,28 +156,28 @@ test("cleans obsolete static bundles and abandoned writes but preserves new publ
 		static: new Map([["demo", new Set(["live", "missing"])]]),
 	}));
 	for (const name of [
-		"_paas/static/demo/old",
-		"_paas/static/demo/.old.json",
-		"_paas/static/demo/.staging-abcd",
+		"demo/static/old",
+		"demo/static/.old.json",
+		"demo/static/.staging-abcd",
 		"_paas/" + abandoned,
 		"_paas/envoy/" + abandoned,
 		"__paas",
 		"etc/envoy.yaml",
 	])
 		await expect(files.lstat(join(root, name)), name).rejects.toMatchObject({ code: "ENOENT" });
-	expect(await files.readFile(join(root, "_paas/static/demo/live/index.html"))).toBe("keep");
+	expect(await files.readFile(join(root, "demo/static/live/index.html"))).toBe("keep");
 	expect(await files.readFile(join(root, "_paas/do-not-delete.tmp"))).toBe("keep");
-	expect(await files.readFile(join(root, "_paas/static/demo/notes"))).toBe("keep");
+	expect(await files.readFile(join(root, "demo/static/notes"))).toBe("keep");
 	// A backup without proof of complete replacement is retained.
-	expect(await files.readFile(join(root, "_paas/static/demo/.staging-abcd.previous/backup"))).toBe("keep");
-	await put("_paas/static/demo/fresh/index.html");
+	expect(await files.readFile(join(root, "demo/static/.staging-abcd.previous/backup"))).toBe("keep");
+	await put("demo/static/fresh/index.html");
 	await storage.cleanup(() => ({
 		before: 0,
 		services: new Set(["demo"]),
 		git: new Set(),
 		static: new Map([["demo", new Set()]]),
 	}));
-	expect(await files.readFile(join(root, "_paas/static/demo/fresh/index.html"))).toBe("keep");
+	expect(await files.readFile(join(root, "demo/static/fresh/index.html"))).toBe("keep");
 });
 
 test("failed maintenance releases waiting operations and can be retried", async () => {

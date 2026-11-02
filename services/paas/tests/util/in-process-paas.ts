@@ -44,9 +44,9 @@ import { WorkerResourceReconciler } from "../../src/reconciler/resources/worker/
 import { ServiceEventStore } from "../../src/reconciler/service-event-store.ts";
 import { StaticStore } from "../../src/static/static-store.ts";
 import { ResourceStatusService } from "../../src/status/resource-status-service.ts";
-import { FileSystemKeyValueStore } from "../../src/store/file-system-store.ts";
+import { ServiceStorage } from "../../src/store/service-storage.ts";
 import * as staticFiles from "../../src/util/file.ts";
-import { atomicWriteFile, mkdir, readFile, rm } from "../../src/util/file.ts";
+import { atomicWriteFile, mkdir, readFile } from "../../src/util/file.ts";
 import { probe } from "../../src/util/healthcheck.ts";
 import { sleep, type ISleep } from "../../src/util/sleep.ts";
 
@@ -63,19 +63,16 @@ export const inProcessPaas = async (
 	await mkdir(directory, { recursive: true, mode: 0o700 });
 	const writes: string[] = [];
 	const changes = new ChangeBus();
-	const state = new FileSystemKeyValueStore<unknown>(
-		directory,
-		readFile,
-		async (path, content) => {
+	const state = new ServiceStorage(directory, {
+		...staticFiles,
+		atomicWriteFile: async (path, content, options) => {
 			writes.push(path);
-			await atomicWriteFile(path, content);
+			await atomicWriteFile(path, content, options);
 		},
-		(path) => rm(path, { force: true }),
-		"yaml",
-	);
+	});
 	const checkpoints = new ReconciliationStore(state);
 	const events = new ServiceEventStore(state);
-	const endpoints = new EndpointsStore(state);
+	const endpoints = new EndpointsStore(state, () => state.listServices());
 	const dockerTransport = new NodeDockerTransport(
 		{ socketPath: dockerSocket, timeoutMs: 2000, maxResponseBytes: 1024 * 1024 },
 		sleep,
@@ -119,7 +116,7 @@ export const inProcessPaas = async (
 		),
 	]);
 	const git = new GitService(new GitClient(new NodeGitTransport(config)), `${directory}/git`);
-	const staticStore = new StaticStore(`${directory}/static`, staticFiles);
+	const staticStore = new StaticStore(directory, staticFiles);
 	const desiredInputs = new DesiredInputs(
 		routing,
 		config,

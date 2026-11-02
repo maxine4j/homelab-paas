@@ -39,7 +39,7 @@ const contract = (given: () => Promise<KeyValueStore<unknown>>) => {
 			},
 		};
 		const checkpoints = new ReconciliationStore(values);
-		const routes = new EndpointsStore(values);
+		const routes = new EndpointsStore(values, async () => ["demo", "other"]);
 		await checkpoints.write("demo", { phase: "ready", activeRevision: "rev" });
 		await routes.set("app.demo", { ...endpoint, primary: true });
 		for (let pass = 0; pass < 3; pass++) {
@@ -47,15 +47,17 @@ const contract = (given: () => Promise<KeyValueStore<unknown>>) => {
 			await routes.set("app.demo", { ...endpoint, primary: true });
 		}
 		expect(writes).toBe(2);
-		await backing.set("routes", {});
+		await backing.set("demo.routes", {});
 		await routes.set("app.demo", { ...endpoint, primary: true });
 		expect(writes).toBe(3);
 	});
 	test.each([undefined, null])("persists routes without HTTP checks: %s", async (healthcheckPath) => {
 		const values = await given();
-		const store = new EndpointsStore(values);
+		const store = new EndpointsStore(values, async () => ["demo", "other"]);
 		await store.set("demo", { ...endpoint, healthcheckPath });
-		expect((await new EndpointsStore(values).getAll())["demo"]?.healthcheckPath).toBe(healthcheckPath);
+		expect(
+			(await new EndpointsStore(values, async () => ["demo", "other"]).getAll())["demo"]?.healthcheckPath,
+		).toBe(healthcheckPath);
 	});
 	test("persists deployment start times across store recreation and validates timestamps", async () => {
 		const values = await given();
@@ -91,7 +93,7 @@ const contract = (given: () => Promise<KeyValueStore<unknown>>) => {
 	});
 	test("preserves other routes and returns defensive copies with explicit policy", async () => {
 		const values = await given();
-		const store = new EndpointsStore(values);
+		const store = new EndpointsStore(values, async () => ["demo", "other"]);
 		expect(await store.getAll()).toEqual({});
 		await store.set("demo", endpoint);
 		await store.set("other", endpoint);
@@ -100,13 +102,15 @@ const contract = (given: () => Promise<KeyValueStore<unknown>>) => {
 		expect(await store.getAll()).toEqual({ demo: endpoint, other: endpoint });
 		await store.set("demo", undefined);
 		expect(await store.getAll()).toEqual({ other: endpoint });
-		await values.set("routes", { demo: { address: "10.0.0.2", port: 80 } });
+		await values.set("demo.routes", { demo: { address: "10.0.0.2", port: 80 } });
 		await expect(store.getAll()).rejects.toThrow("Cannot read reconciliation data");
 	});
 	test("rejects null routes instead of silently losing persisted state", async () => {
 		const values = await given();
-		await values.set("routes", null);
-		await expect(new EndpointsStore(values).getAll()).rejects.toThrow("Cannot read reconciliation data");
+		await values.set("demo.routes", null);
+		await expect(new EndpointsStore(values, async () => ["demo", "other"]).getAll()).rejects.toThrow(
+			"Cannot read reconciliation data",
+		);
 	});
 };
 
@@ -125,16 +129,16 @@ describe("filesystem domain wrappers", () => {
 		const directory = await mkdtemp(join(tmpdir(), "paas-state-"));
 		directories.push(directory);
 		await new ReconciliationStore(fileStore(directory)).write("demo", { phase: "ready" });
-		await new EndpointsStore(fileStore(directory)).set("demo", endpoint);
+		await new EndpointsStore(fileStore(directory), async () => ["demo", "other"]).set("demo", endpoint);
 		expect(await new ReconciliationStore(fileStore(directory)).read("demo")).toEqual({ phase: "ready" });
 		expect((await stat(join(directory, "demo.state.yaml"))).mode & 0o777).toBe(0o600);
-		expect(await readFile(join(directory, "routes.yaml"))).toContain("public: false");
-		await writeFile(join(directory, "routes.yaml"), "secret: [PASSWORD");
-		await expect(new EndpointsStore(fileStore(directory)).getAll()).rejects.toThrow(
+		expect(await readFile(join(directory, "demo.routes.yaml"))).toContain("public: false");
+		await writeFile(join(directory, "demo.routes.yaml"), "secret: [PASSWORD");
+		await expect(new EndpointsStore(fileStore(directory), async () => ["demo", "other"]).getAll()).rejects.toThrow(
 			"Cannot read reconciliation data",
 		);
-		await expect(new EndpointsStore(fileStore(join(directory, "routes.yaml"))).getAll()).rejects.toThrow(
-			"Cannot read reconciliation data",
-		);
+		await expect(
+			new EndpointsStore(fileStore(join(directory, "demo.routes.yaml")), async () => ["demo"]).getAll(),
+		).rejects.toThrow("Cannot read reconciliation data");
 	});
 });

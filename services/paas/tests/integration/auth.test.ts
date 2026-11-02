@@ -29,7 +29,7 @@ test("real OAuth composition enforces state, provider protocol, allowlist and co
 	let now = Date.now();
 	const tokens = new JwtClient(config, () => now);
 	const state = new InMemoryKeyValueStore<unknown>();
-	const endpoints = new EndpointsStore(state);
+	const endpoints = new EndpointsStore(state, async () => ["demo", "other"]);
 	await endpoints.set("demo", { address: "127.0.0.1", port: 8080, public: false, healthcheckPath: "/health" });
 	await endpoints.set("other", { address: "127.0.0.1", port: 8080, public: true, healthcheckPath: "/health" });
 	const auth = new AuthService(
@@ -148,7 +148,7 @@ test("real OAuth composition enforces state, provider protocol, allowlist and co
 			github[failure] = false;
 		}
 		expect((await request("/auth/check/", "other.example.test")).status).toBe(200);
-		await state.set("routes", "corrupt");
+		await state.set("other.routes", "corrupt");
 		expect((await request("/auth/check/", "other.example.test")).status).toBe(503);
 	} finally {
 		await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
