@@ -3,16 +3,14 @@ import {
 	repositoryTreeSchema,
 	repositoryFileSchema,
 	repositoryHistorySchema,
-	workspaceFileSchema,
-	workspaceTreeSchema,
+	repositoryCommitResultSchema,
+	filePathSchema,
 	type RepositoryBranch,
 	type RepositoryTree,
 	type RepositoryFile,
 	type RepositoryHistory,
-	type Workspace,
-	type WorkspaceTree,
 } from "@homelab-paas/forge-contracts";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 
 import type { IWorkspaceApi } from "../api/workspace-api.ts";
 import { Editor } from "./editor.tsx";
@@ -21,14 +19,13 @@ import { RepositoryFileTree } from "./repository-file-tree.tsx";
 
 const ChangedAt = ({ date }: { date?: string }) =>
 	date ? (
-		<time dateTime={date} title={new Date(date).toLocaleString()}>
+		<time dateTime={date}>
 			{new Date(date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
 		</time>
 	) : (
-		<span>Uncommitted</span>
+		<span>—</span>
 	);
 
-// Render text as React nodes; repository HTML is never inserted into the page.
 const Readme = ({ content }: { content: string }) => (
 	<div className='readme-content'>
 		{content.split(/\n\s*\n/u).map((block, index) => {
@@ -46,113 +43,90 @@ const Readme = ({ content }: { content: string }) => (
 	</div>
 );
 
-export const RepositoryBrowser = ({
-	projectId,
-	workspace,
+interface Draft {
+	original?: string;
+	content: string;
+}
+
+const BranchBrowser = ({
+	root,
+	branch,
 	api,
-	tree,
-	active,
-	busy,
-	directory,
-	open,
-	back,
-	fileActions,
-	children,
+	dirtyChange,
+	branchControl,
 }: {
-	projectId: string;
-	workspace: Workspace;
+	branchControl: ReactNode;
+	root: string;
+	branch: string;
 	api: IWorkspaceApi;
-	tree?: WorkspaceTree;
-	active: string;
-	busy: boolean;
-	directory: (path: string) => Promise<void>;
-	open: (path: string) => Promise<void>;
-	back: () => void;
-	fileActions: ReactNode;
-	children: ReactNode;
+	dirtyChange: (branch: string, dirty: boolean) => void;
 }) => {
-	const [branch, setBranch] = useState("");
-	const [branches, setBranches] = useState<RepositoryBranch[]>([]);
-	const [branchError, setBranchError] = useState("");
+	const editorId = useId();
+	const [tree, setTree] = useState<RepositoryTree>();
+	const [baseHead, setBaseHead] = useState("");
 	const [path, setPath] = useState("");
-	const [committedTree, setCommittedTree] = useState<RepositoryTree>();
-	const [file, setFile] = useState<RepositoryFile>();
+	const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+	const [active, setActive] = useState("");
 	const [readmeResult, setReadmeResult] = useState<{ key: string; file?: RepositoryFile; error?: string }>();
 	const [history, setHistory] = useState<RepositoryHistory>();
 	const [showAll, setShowAll] = useState(false);
-	const [loading, setLoading] = useState(false);
-	const [treeLoading, setTreeLoading] = useState(false);
+	const [busy, setBusy] = useState(false);
+	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
-	const root = `projects/${projectId}/repository`;
-	const selectedBranch = branch || workspace.branch;
-	const displayedTree = branch ? committedTree : tree;
-	const currentPath = branch ? path : (tree?.path ?? "");
-	const selectedFile = branch ? file?.path : active;
-	const disabled = busy || loading || treeLoading;
-	const entries = [...(displayedTree?.entries ?? [])].sort((a, b) =>
+	const [message, setMessage] = useState("");
+	const [newPath, setNewPath] = useState("");
+	const [revision, setRevision] = useState(0);
+	const [notice, setNotice] = useState("");
+	const changed = Object.entries(drafts).filter(([, draft]) => draft.original !== draft.content);
+	const dirty = changed.length > 0;
+	const disabled = busy || loading;
+	const draft = drafts[active];
+	const entries = [...(tree?.entries ?? [])].sort((a, b) =>
 		a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "directory" ? -1 : 1,
 	);
 	const readmePath = entries.find(
-		(e) => e.kind === "file" && /^readme(?:\.(?:md|markdown|txt))?$/iu.test(e.name),
+		(entry) => entry.kind === "file" && /^readme(?:\.(?:md|markdown|txt))?$/iu.test(entry.name),
 	)?.path;
-	const readmeKey = `${selectedBranch}:${readmePath ?? ""}`;
+	const readmeKey = `${revision}:${readmePath ?? ""}`;
 	const readme = readmeResult?.key === readmeKey ? readmeResult.file : undefined;
 	const readmeError = readmeResult?.key === readmeKey ? readmeResult.error : undefined;
-	const loadBranches = () => {
-		setBranchError("");
-		return api
-			.read(`${root}/branches`, repositoryBranchesSchema)
-			.then(setBranches)
-			.catch(() => setBranchError("Branch list unavailable."));
-	};
+	const loadTree = useCallback(
+		(directory: string) =>
+			api.read(
+				`${root}/tree?branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(directory)}`,
+				repositoryTreeSchema,
+			),
+		[api, root, branch],
+	);
+	useEffect(() => {
+		dirtyChange(branch, dirty);
+	}, [dirtyChange, branch, dirty]);
 	useEffect(() => {
 		let cancelled = false;
-		void api
-			.read(`${root}/branches`, repositoryBranchesSchema)
+		void loadTree(path)
 			.then((value) => {
-				if (!cancelled) setBranches(value);
+				if (cancelled) return;
+				setTree(value);
+				setBaseHead((current) => current || value.head);
 			})
 			.catch(() => {
-				if (!cancelled) setBranchError("Branch list unavailable.");
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [api, root]);
-	useEffect(() => {
-		if (!branch) return;
-		let cancelled = false;
-		void api
-			.read(
-				`${root}/tree?branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(path)}`,
-				repositoryTreeSchema,
-			)
-			.then((value) => {
-				if (!cancelled) setCommittedTree(value);
-			})
-			.catch((failure) => {
-				if (!cancelled) setError(failure instanceof Error ? failure.message : "Files unavailable");
+				if (!cancelled) setError("Files unavailable. Retry loading files.");
 			})
 			.finally(() => {
-				if (!cancelled) setTreeLoading(false);
+				if (!cancelled) setLoading(false);
 			});
 		return () => {
 			cancelled = true;
 		};
-	}, [api, root, branch, path]);
+	}, [loadTree, path, revision]);
 	useEffect(() => {
 		let cancelled = false;
-		if (readmePath) {
-			const request = branch
-				? api.read(
-						`${root}/file?branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(readmePath)}`,
-						repositoryFileSchema,
-					)
-				: api.read(
-						`workspaces/${workspace.id}/file?path=${encodeURIComponent(readmePath)}`,
-						workspaceFileSchema,
-					);
-			void request
+		if (readmePath)
+			void api
+				.read(
+					`${root}/file?branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(readmePath)}`,
+					repositoryFileSchema,
+				)
 				.then((value) => {
 					if (!cancelled) setReadmeResult({ key: readmeKey, file: value });
 				})
@@ -163,298 +137,469 @@ export const RepositoryBrowser = ({
 							error: "README preview unavailable. Open the file to inspect it.",
 						});
 				});
-		}
 		return () => {
 			cancelled = true;
 		};
-	}, [api, root, branch, workspace.id, readmePath, readmeKey, tree]);
+	}, [api, root, branch, readmePath, readmeKey]);
 	const run = async (action: () => Promise<void>) => {
-		setLoading(true);
+		setBusy(true);
 		setError("");
+		setNotice("");
 		try {
 			await action();
 		} catch (failure) {
 			setError(failure instanceof Error ? failure.message : "Operation failed");
 		} finally {
-			setLoading(false);
+			setBusy(false);
 		}
 	};
-	const browse = async (next: string) => {
-		if (branch) {
-			if (path !== next) {
-				setTreeLoading(true);
-				setCommittedTree(undefined);
-			}
-			setPath(next);
-			setFile(undefined);
-		} else {
-			await directory(next);
-			back();
+	const open = async (file: string) => {
+		if (!Object.hasOwn(drafts, file)) {
+			const value = await api.read(
+				`${root}/file?branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(file)}`,
+				repositoryFileSchema,
+			);
+			setDrafts((current) => ({ ...current, [file]: { original: value.content, content: value.content } }));
 		}
+		setActive(file);
+		setHistory(undefined);
+	};
+	const browse = (directory: string) => {
+		if (path !== directory) {
+			setLoading(true);
+			setTree(undefined);
+		}
+		setPath(directory);
+		setActive("");
 		setHistory(undefined);
 		setShowAll(false);
 	};
-	const select = async (entry: { path: string; kind: "file" | "directory" }) => {
-		if (entry.kind === "directory") return browse(entry.path);
-		if (branch)
-			setFile(
-				await api.read(
-					`${root}/file?branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(entry.path)}`,
-					repositoryFileSchema,
-				),
-			);
-		else await open(entry.path);
-		setHistory(undefined);
-	};
 	const showHistory = async (more = false) => {
 		const value = await api.read(
-			`${root}/history?branch=${encodeURIComponent(selectedBranch)}&offset=${more ? (history?.commits.length ?? 0) : 0}`,
+			`${root}/history?branch=${encodeURIComponent(branch)}&offset=${more ? (history?.commits.length ?? 0) : 0}`,
 			repositoryHistorySchema,
 		);
 		if (more && history && value.head !== history.head)
 			throw new Error("Branch changed. Reopen commit history to refresh.");
 		setHistory(more && history ? { ...value, commits: [...history.commits, ...value.commits] } : value);
 	};
-	const backToFiles = () => {
-		back();
-		setFile(undefined);
-		setHistory(undefined);
-	};
-	const loadTree = useCallback(
-		(directory: string): Promise<WorkspaceTree | RepositoryTree> =>
-			branch
-				? api.read(
-						`${root}/tree?branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(directory)}`,
-						repositoryTreeSchema,
-					)
-				: api.read(
-						`workspaces/${workspace.id}/tree?path=${encodeURIComponent(directory)}`,
-						workspaceTreeSchema,
-					),
-		[api, root, branch, workspace.id],
-	);
-
-	return (
-		<div className='repository-browser'>
-			<div className='repository-toolbar'>
-				<label className='branch-picker'>
-					<span aria-hidden='true'>⑂</span>
-					<select
-						aria-label='Branch'
+	const header = (
+		<div className='file-list-header'>
+			<span>{history ? "Commits" : active || path || "Files"}</span>
+			<div>
+				{(active || history) && (
+					<button
 						disabled={disabled}
-						value={branch}
-						onChange={(event) => {
-							setBranch(event.target.value);
-							setPath("");
-							setFile(undefined);
+						onClick={() => {
+							setActive("");
 							setHistory(undefined);
-							setShowAll(false);
-							setTreeLoading(Boolean(event.target.value));
-							setCommittedTree(undefined);
-							setError("");
 						}}
 					>
-						<option value=''>Working changes</option>
-						{branches
-							.filter((b) => !b.name.startsWith("forge/workspace/"))
-							.map((b) => (
-								<option key={b.name} value={b.name}>
-									{b.name}
-								</option>
-							))}
-					</select>
-				</label>
-				<nav aria-label='File path'>
-					<button disabled={disabled} onClick={() => void run(() => browse(""))}>
-						Root
+						Back to files
 					</button>
-					{currentPath
+				)}
+				<button
+					className='history-button'
+					aria-label='Commit history'
+					title='Commit history'
+					disabled={disabled}
+					onClick={() => void run(() => showHistory())}
+				>
+					<svg width='18' height='18' viewBox='0 0 20 20' aria-hidden='true'>
+						<path
+							d='M3 8a7 7 0 1 1 0 5M3 3v5h5m2-3v5l3 2'
+							fill='none'
+							stroke='currentColor'
+							strokeWidth='1.6'
+						/>
+					</svg>
+				</button>
+			</div>
+		</div>
+	);
+	return (
+		<div className='branch-browser' aria-busy={disabled}>
+			<div className='repository-toolbar'>
+				{branchControl}
+				<nav aria-label='File path'>
+					<button disabled={disabled} onClick={() => browse("")}>
+						/
+					</button>
+					{path
 						.split("/")
 						.filter(Boolean)
 						.map((part, index, parts) => (
 							<span key={index}>
-								{" "}
-								/{" "}
-								<button
-									disabled={disabled}
-									onClick={() => void run(() => browse(parts.slice(0, index + 1).join("/")))}
-								>
+								<button disabled={disabled} onClick={() => browse(parts.slice(0, index + 1).join("/"))}>
 									{part}
-								</button>
+								</button>{" "}
+								/{" "}
 							</span>
 						))}
-					{selectedFile && <span> / {selectedFile.split("/").at(-1)}</span>}
+					{active && <span>{active.split("/").at(-1)}</span>}
 				</nav>
-				{!branch && (
-					<details className='file-actions'>
-						<summary>New file</summary>
-						{fileActions}
-					</details>
-				)}
+				<details className='file-actions'>
+					<summary>New file</summary>
+					<label>
+						New file path
+						<input
+							value={newPath}
+							onChange={(event) => setNewPath(event.target.value)}
+							disabled={disabled}
+						/>
+					</label>
+					<button
+						disabled={disabled || !baseHead || !newPath}
+						onClick={() =>
+							void run(async () => {
+								if (!filePathSchema.safeParse(newPath).success || Object.hasOwn(drafts, newPath))
+									throw new Error("Choose a new, valid file path.");
+								const parts = newPath.split("/");
+								let directory = "";
+								for (const [index, part] of parts.entries()) {
+									const value = await loadTree(directory);
+									if (value.head !== baseHead)
+										throw new Error("The branch changed. Discard drafts to reload it.");
+									if (value.truncated)
+										throw new Error("Directory is too large to verify a new file path.");
+									const entry = value.entries.find((entry) => entry.name === part);
+									if (!entry) break;
+									if (index === parts.length - 1 || entry.kind !== "directory")
+										throw new Error("That path already exists. Open it from the file list.");
+									directory = entry.path;
+								}
+								setDrafts((current) => ({ ...current, [newPath]: { content: "" } }));
+								setActive(newPath);
+								setHistory(undefined);
+								setNewPath("");
+							})
+						}
+					>
+						Create file
+					</button>
+				</details>
 			</div>
-			{branchError && (
-				<p>
-					{branchError} <button onClick={() => void loadBranches()}>Retry branches</button>
-				</p>
-			)}
 			{error && (
 				<p className='error' role='alert'>
 					{error}
 				</p>
 			)}
-			{treeLoading && <p role='status'>Loading files…</p>}
-			<div className={selectedFile && !history ? "repository-layout has-file" : "repository-layout"}>
-				{selectedFile && !history && (
+			{notice && <p role='status'>{notice}</p>}
+			{loading && <p role='status'>Loading files…</p>}
+			{!tree && !loading && (
+				<button
+					onClick={() => {
+						setLoading(true);
+						setError("");
+						setRevision((value) => value + 1);
+					}}
+				>
+					Retry loading files
+				</button>
+			)}
+			<div className={active && !history ? "repository-layout has-file" : "repository-layout"}>
+				{active && !history && (
 					<aside className='repository-sidebar' aria-label='File tree'>
 						<h3>Files</h3>
 						<RepositoryFileTree
-							key={selectedBranch}
-							initial={currentPath === "" ? displayedTree : undefined}
+							key={revision}
+							initial={path === "" ? tree : undefined}
 							load={loadTree}
-							open={(path) => run(() => select({ path, kind: "file" }))}
+							open={(file) => run(() => open(file))}
 							disabled={disabled}
-							active={selectedFile}
+							active={active}
 						/>
 					</aside>
 				)}
 				<div className='repository-main'>
-					<div className='file-list-header'>
-						<span>
-							{history
-								? "Commits"
-								: selectedFile
-									? selectedFile.split("/").at(-1)
-									: currentPath || "Files"}
-						</span>
-						<div>
-							{(selectedFile || history) && (
-								<button disabled={disabled} onClick={backToFiles}>
-									Back to files
-								</button>
-							)}
-							<button
-								className='history-button'
-								aria-label='Commit history'
-								title='Commit history'
-								disabled={disabled}
-								onClick={() => void run(() => showHistory())}
+					{!history && Object.keys(drafts).length > 0 && (
+						<>
+							<div className='editor-tabs' role='tablist' aria-label='Editor tabs'>
+								{Object.entries(drafts).map(([file, value], index) => (
+									<button
+										key={file}
+										id={`${editorId}-tab-${index}`}
+										role='tab'
+										aria-selected={active === file}
+										aria-controls={`${editorId}-panel`}
+										disabled={disabled}
+										onClick={() => setActive(file)}
+									>
+										<FileIcon name={file} />
+										{file}
+										{value.original !== value.content ? " *" : ""}
+									</button>
+								))}
+							</div>
+						</>
+					)}
+					{active && !history ? (
+						<div className='editor-pane'>
+							<section
+								id={`${editorId}-panel`}
+								role='tabpanel'
+								aria-labelledby={`${editorId}-tab-${Object.keys(drafts).indexOf(active)}`}
 							>
-								<svg width='18' height='18' viewBox='0 0 20 20' aria-hidden='true'>
-									<path
-										d='M3 8a7 7 0 1 1 0 5M3 3v5h5m2-3v5l3 2'
-										fill='none'
-										stroke='currentColor'
-										strokeWidth='1.6'
-									/>
-								</svg>
-							</button>
-						</div>
-					</div>
-					{history ? (
-						<section className='commit-history' aria-label='Commit history'>
-							<h2>{branch || "Working changes"}</h2>
-							{history.commits.map((commit) => (
-								<article key={commit.sha}>
-									<strong>{commit.subject}</strong>
-									<p>
-										{commit.author} · <ChangedAt date={commit.date} />
-									</p>
-									<code>{commit.sha.slice(0, 7)}</code>
-								</article>
-							))}
-							{!history.commits.length && <p>No commits yet.</p>}
-							{history.hasMore && (
-								<button disabled={disabled} onClick={() => void run(() => showHistory(true))}>
-									Load more commits
-								</button>
-							)}
-						</section>
-					) : selectedFile ? (
-						<div className='repository-code'>
-							{branch && file ? (
-								<>
-									<p className='code-caption'>{branch} · Read-only</p>
-									<Editor
-										key={`${branch}:${file.path}`}
-										path={file.path}
-										content={file.content}
-										change={() => {}}
-										readOnly
-									/>
-								</>
-							) : (
-								children
-							)}
+								{header}
+								{draft && (
+									<div className='repository-code'>
+										<Editor
+											key={active}
+											path={active}
+											content={draft.content}
+											change={(content) =>
+												setDrafts((current) => ({
+													...current,
+													[active]: { ...current[active]!, content },
+												}))
+											}
+										/>
+									</div>
+								)}
+							</section>
 						</div>
 					) : (
 						<>
-							{currentPath && (
-								<div className='parent-row'>
-									<button
-										disabled={disabled}
-										onClick={() =>
-											void run(() => browse(currentPath.split("/").slice(0, -1).join("/")))
-										}
-									>
-										Parent directory
-									</button>
-								</div>
-							)}
-							<table className='repository-files' aria-label='Repository files'>
-								<tbody>
-									{(showAll ? entries : entries.slice(0, 10)).map((entry) => {
-										const commit = "lastCommit" in entry ? entry.lastCommit : undefined;
-										const date = "lastChangedAt" in entry ? entry.lastChangedAt : commit?.date;
-										return (
-											<tr key={entry.path}>
-												<td>
-													<button
-														aria-label={entry.name}
-														disabled={disabled}
-														onClick={() => void run(() => select(entry))}
-													>
-														<FileIcon
-															name={entry.name}
-															directory={entry.kind === "directory"}
-														/>
-														<span>{entry.name}</span>
-													</button>
-												</td>
-												<td className='file-commit'>{commit?.subject ?? "Working tree"}</td>
-												<td>
-													<ChangedAt date={date} />
-												</td>
-											</tr>
-										);
-									})}
-								</tbody>
-							</table>
-							{!entries.length && !treeLoading && (
-								<p className='repository-empty'>This directory is empty.</p>
-							)}
-							{entries.length > 10 && (
-								<button className='show-files' onClick={() => setShowAll(!showAll)}>
-									{showAll ? "Show fewer files" : `Show all ${entries.length} files`}
-								</button>
-							)}
-							{displayedTree?.truncated && (
-								<p className='notice'>
-									Directory exceeds the 1,000-entry limit. Some files are not shown.
-								</p>
+							{header}
+							{history ? (
+								<section className='commit-history' aria-label='Commit history'>
+									<h2>{branch}</h2>
+									{history.commits.map((commit) => (
+										<article key={commit.sha}>
+											<strong>{commit.subject}</strong>
+											<p>
+												{commit.author} · <ChangedAt date={commit.date} />
+											</p>
+											<code>{commit.sha.slice(0, 7)}</code>
+										</article>
+									))}
+									{!history.commits.length && <p>No commits yet.</p>}
+									{history.hasMore && (
+										<button disabled={disabled} onClick={() => void run(() => showHistory(true))}>
+											Load more commits
+										</button>
+									)}
+								</section>
+							) : (
+								<>
+									{path && (
+										<div className='parent-row'>
+											<button
+												disabled={disabled}
+												onClick={() => browse(path.split("/").slice(0, -1).join("/"))}
+											>
+												Parent directory
+											</button>
+										</div>
+									)}
+									<table className='repository-files' aria-label='Repository files'>
+										<tbody>
+											{(showAll ? entries : entries.slice(0, 10)).map((entry) => (
+												<tr key={entry.path}>
+													<td>
+														<button
+															aria-label={entry.name}
+															disabled={disabled}
+															onClick={() =>
+																entry.kind === "directory"
+																	? browse(entry.path)
+																	: void run(() => open(entry.path))
+															}
+														>
+															<FileIcon
+																name={entry.name}
+																directory={entry.kind === "directory"}
+															/>
+															<span>{entry.name}</span>
+														</button>
+													</td>
+													<td className='file-commit'>{entry.lastCommit?.subject ?? "—"}</td>
+													<td>
+														<ChangedAt date={entry.lastCommit?.date} />
+													</td>
+												</tr>
+											))}
+										</tbody>
+									</table>
+									{!entries.length && !loading && (
+										<p className='repository-empty'>This directory is empty.</p>
+									)}
+									{entries.length > 10 && (
+										<button className='show-files' onClick={() => setShowAll(!showAll)}>
+											{showAll ? "Show fewer files" : `Show all ${entries.length} files`}
+										</button>
+									)}
+									{tree?.truncated && (
+										<p className='notice'>
+											Directory exceeds the 1,000-entry limit. Some files are not shown.
+										</p>
+									)}
+								</>
 							)}
 						</>
 					)}
 				</div>
 			</div>
-			{!selectedFile && !history && (readme || readmeError) && (
+			{!active && !history && (readme || readmeError) && (
 				<section className='repository-readme' aria-label='README'>
 					<div className='readme-heading'>
 						<FileIcon name='README.md' />
 						<strong>README</strong>
 					</div>
-					{readme ? <Readme content={readme.content} /> : <p>{readmeError}</p>}
+					{readme ? (
+						<Readme content={drafts[readme.path]?.content ?? readme.content} />
+					) : (
+						<p>{readmeError}</p>
+					)}
 				</section>
 			)}
+			{dirty && (
+				<form
+					className='commit-drafts'
+					onSubmit={(event) => {
+						event.preventDefault();
+						void run(async () => {
+							const files = changed.map(([file, value]) => ({ path: file, content: value.content }));
+							const result = await api.read(`${root}/commit`, repositoryCommitResultSchema, "POST", {
+								branch,
+								expectedHead: baseHead,
+								message,
+								files,
+							});
+							setBaseHead(result.head);
+							setDrafts((current) =>
+								Object.fromEntries(
+									Object.entries(current).map(([file, value]) => {
+										const sent = files.find((entry) => entry.path === file);
+										return [file, sent ? { ...value, original: sent.content } : value];
+									}),
+								),
+							);
+							setMessage("");
+							setNotice(
+								`Committed ${files.length} ${files.length === 1 ? "file" : "files"} to ${branch}.`,
+							);
+							setLoading(true);
+							setRevision((value) => value + 1);
+						});
+					}}
+				>
+					<p>
+						{changed.length} changed {changed.length === 1 ? "file" : "files"} · Drafts stay in this browser
+						until committed to <strong>{branch}</strong>.
+					</p>
+					<label>
+						Commit message
+						<input
+							value={message}
+							maxLength={4096}
+							onChange={(event) => setMessage(event.target.value)}
+							disabled={busy}
+							required
+						/>
+					</label>
+					<div className='toolbar'>
+						<button className='primary' type='submit' disabled={disabled || !message.trim()}>
+							Commit
+						</button>
+						<button
+							type='button'
+							disabled={disabled}
+							onClick={() => {
+								setDrafts({});
+								setActive("");
+								setBaseHead("");
+								setError("");
+								setHistory(undefined);
+								setLoading(true);
+								setTree(undefined);
+								setRevision((value) => value + 1);
+							}}
+						>
+							Discard all drafts
+						</button>
+					</div>
+				</form>
+			)}
+		</div>
+	);
+};
+
+export const RepositoryBrowser = ({
+	projectId,
+	api,
+	dirtyChange,
+}: {
+	projectId: string;
+	api: IWorkspaceApi;
+	dirtyChange: (branch: string, dirty: boolean) => void;
+}) => {
+	const [branches, setBranches] = useState<RepositoryBranch[]>([]);
+	const [branch, setBranch] = useState("");
+	const [visited, setVisited] = useState<string[]>([]);
+	const [error, setError] = useState("");
+	const [revision, setRevision] = useState(0);
+	const root = `projects/${projectId}/repository`;
+	useEffect(() => {
+		let cancelled = false;
+		void api
+			.read(`${root}/branches`, repositoryBranchesSchema)
+			.then((values) => {
+				if (cancelled) return;
+				setBranches(values);
+				setError("");
+				const initial = values.find((value) => value.name === "main")?.name ?? values.at(0)?.name ?? "";
+				setBranch(initial);
+				setVisited(initial ? [initial] : []);
+			})
+			.catch(() => {
+				if (!cancelled) setError("Branch list unavailable.");
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [api, root, revision]);
+	return (
+		<div className='repository-browser'>
+			{error && (
+				<p role='alert'>
+					{error} <button onClick={() => setRevision((value) => value + 1)}>Retry branches</button>
+				</p>
+			)}
+			{!branches.length && !error && <p>No branches yet.</p>}
+			{visited.map((value) => (
+				<div key={value} hidden={branch !== value}>
+					<BranchBrowser
+						root={root}
+						branch={value}
+						api={api}
+						dirtyChange={dirtyChange}
+						branchControl={
+							<label className='branch-picker'>
+								<span aria-hidden='true'>⑂</span>
+								<select
+									aria-label='Branch'
+									value={branch}
+									disabled={!branches.length}
+									onChange={(event) => {
+										const value = event.target.value;
+										setBranch(value);
+										setVisited((current) =>
+											current.includes(value) ? current : [...current, value],
+										);
+									}}
+								>
+									{branches.map((value) => (
+										<option key={value.name} value={value.name}>
+											{value.name}
+										</option>
+									))}
+								</select>
+							</label>
+						}
+					/>
+				</div>
+			))}
 		</div>
 	);
 };

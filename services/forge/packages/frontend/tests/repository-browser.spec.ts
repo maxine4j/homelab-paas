@@ -140,7 +140,7 @@ test("Code overview limits entries, renders README and dates, and opens the edit
 	await expect(list.getByRole("button", { name: "index.ts", exact: true })).toBeVisible();
 });
 
-test("branch dropdown scopes code and history; committed code is read-only", async ({ page }) => {
+test("branch dropdown scopes code and history; committed code can be drafted", async ({ page }) => {
 	await page.getByRole("combobox", { name: "Branch" }).selectOption("feature");
 	await page.getByRole("button", { name: "Commit history" }).click();
 	await expect(page.getByRole("region", { name: "Commit history" })).toContainText("feature commit");
@@ -152,7 +152,7 @@ test("branch dropdown scopes code and history; committed code is read-only", asy
 		.getByRole("table", { name: "Repository files" })
 		.getByRole("button", { name: "file-0.ts", exact: true })
 		.click();
-	await expect(page.getByRole("textbox", { name: "File editor" })).toHaveAttribute("contenteditable", "false");
+	await expect(page.getByRole("textbox", { name: "File editor" })).toHaveAttribute("contenteditable", "true");
 	await expect(page.getByRole("button", { name: "Save file", exact: true })).toHaveCount(0);
 });
 
@@ -188,15 +188,15 @@ test("left file tree expands folders while keeping the open editor and drafts", 
 	await tree.getByRole("button", { name: "Open index.ts", exact: true }).click();
 	await expect(editor).toContainText("export const value = 1;");
 	await page.getByRole("combobox", { name: "Branch" }).selectOption("feature");
-	await page.getByRole("combobox", { name: "Branch" }).selectOption("");
+	await page.getByRole("combobox", { name: "Branch" }).selectOption("main");
 	await page
-		.getByRole("navigation", { name: "Editor tabs" })
-		.getByRole("button", { name: "file-0.ts *", exact: true })
+		.getByRole("tablist", { name: "Editor tabs" })
+		.getByRole("tab", { name: "file-0.ts *", exact: true })
 		.click();
 	await expect(editor).toContainText("const draft = 42;");
 });
 
-test("opening a file from the sidebar prevents changing branch until that read finishes", async ({ page }) => {
+test("a delayed sidebar read stays scoped to its original branch", async ({ page }) => {
 	await page.getByRole("combobox", { name: "Branch" }).selectOption("main");
 	await page
 		.getByRole("table", { name: "Repository files" })
@@ -217,9 +217,10 @@ test("opening a file from the sidebar prevents changing branch until that read f
 		.click();
 	await expect.poll(() => requested).toBe(true);
 	try {
-		await expect(page.getByRole("combobox", { name: "Branch" })).toBeDisabled();
+		await page.getByRole("combobox", { name: "Branch" }).selectOption("feature");
 	} finally {
 		release?.();
 	}
+	await page.getByRole("combobox", { name: "Branch" }).selectOption("main");
 	await expect(page.getByRole("textbox", { name: "File editor" })).toContainText("export const next = true;");
 });

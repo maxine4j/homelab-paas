@@ -251,21 +251,27 @@ export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWor
 						) : (
 							<div className='project-list'>
 								{projects.map((project) => (
-									<article className='project' key={project.id}>
+									<article
+										className='project'
+										key={project.id}
+										role={project.status === "ready" ? "button" : undefined}
+										tabIndex={project.status === "ready" ? 0 : undefined}
+										aria-label={project.status === "ready" ? `Open ${project.name}` : undefined}
+										onClick={() => {
+											if (project.status === "ready") setSelected(project);
+										}}
+										onKeyDown={(event) => {
+											if (project.status === "ready" && ["Enter", " "].includes(event.key)) {
+												event.preventDefault();
+												setSelected(project);
+											}
+										}}
+									>
 										<div className='repo-icon' aria-hidden='true'>
 											⑂
 										</div>
 										<div className='project-info'>
 											<h3>{project.name}</h3>
-											{project.status === "ready" && (
-												<button
-													aria-label={`Open ${project.name}`}
-													disabled={!!selected}
-													onClick={() => setSelected(project)}
-												>
-													Open
-												</button>
-											)}
 											<p>
 												Created{" "}
 												{new Date(project.createdAt).toLocaleDateString(undefined, {

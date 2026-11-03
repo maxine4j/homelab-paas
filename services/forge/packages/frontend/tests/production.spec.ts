@@ -71,19 +71,21 @@ test("integrated production bundle styles editor/terminal on desktop/mobile and 
 							github: { connection: "available", login: { state: "idle" } },
 						},
 					});
+				if (path.endsWith("/branches")) return route.fulfill({ json: [{ name: "main", sha: head }] });
 				if (path.endsWith("/workspaces")) return route.fulfill({ json: [workspace] });
 				if (path.endsWith("/pull-requests")) return route.fulfill({ json: [] });
 				if (path.endsWith("/tree"))
 					return route.fulfill({
 						json: {
 							path: "",
+							head,
 							entries: [{ path: "file.ts", name: "file.ts", kind: "file" }],
 							truncated: false,
 						},
 					});
 				if (path.endsWith("/file"))
 					return route.fulfill({
-						json: { path: "file.ts", content: "export const highlighted = 42;", version: "1".repeat(64) },
+						json: { path: "file.ts", content: "export const highlighted = 42;" },
 					});
 				if (path.endsWith("/diff"))
 					return route.fulfill({

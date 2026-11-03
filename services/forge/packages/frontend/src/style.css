@@ -241,6 +241,48 @@ small {
 	flex: 1;
 	min-width: 0;
 }
+.project[role="button"] {
+	cursor: pointer;
+}
+.project[role="button"]:hover,
+.project[role="button"]:focus-visible {
+	background: #161b22;
+	border-color: #58a6ff;
+}
+.editor-tabs {
+	display: flex;
+	overflow-x: auto;
+	background: #010409;
+	border-bottom: 1px solid #30363d;
+}
+.editor-tabs button {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
+	border: 0;
+	border-right: 1px solid #30363d;
+	border-top: 2px solid transparent;
+	border-radius: 0;
+	padding: 12px 16px;
+	background: transparent;
+	color: #8b949e;
+}
+.editor-tabs button[aria-selected="true"] {
+	border-top-color: #f78166;
+	background: #161b22;
+	color: #f0f6fc;
+}
+.commit-drafts {
+	margin-top: 20px;
+	padding: 16px;
+	border: 1px solid #30363d;
+	border-radius: 6px;
+	background: #161b22;
+}
+.commit-drafts .toolbar {
+	margin-top: 12px;
+}
 .project h3 {
 	color: #58a6ff;
 	overflow-wrap: anywhere;

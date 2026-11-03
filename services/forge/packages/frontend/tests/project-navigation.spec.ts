@@ -31,6 +31,7 @@ test("dark project tabs hide infrastructure and keep account setup in Config", a
 						github: { connection: "available", login: { state: "idle" } },
 					},
 				});
+			if (path.endsWith("/branches")) return route.fulfill({ json: [{ name: "main", sha: head }] });
 			if (path.endsWith("/workspaces")) {
 				if (route.request().method() === "POST") {
 					preparations++;
@@ -43,6 +44,7 @@ test("dark project tabs hide infrastructure and keep account setup in Config", a
 				return route.fulfill({
 					json: {
 						path: "",
+						head,
 						entries: [{ path: "readme.md", name: "readme.md", kind: "file" }],
 						truncated: false,
 					},
@@ -74,8 +76,8 @@ test("dark project tabs hide infrastructure and keep account setup in Config", a
 	await expect(page.getByRole("button", { name: "Sign in", exact: true })).toHaveCount(0);
 	await page.getByRole("button", { name: "Open Forge" }).click();
 	await expect(page.getByRole("button", { name: "readme.md", exact: true })).toBeVisible();
-	expect(prepared).toBe(true);
-	expect(preparations).toBe(1);
+	expect(prepared).toBe(false);
+	expect(preparations).toBe(0);
 	await expect(page.getByText(/workspace/i)).toHaveCount(0);
 	await expect(page.getByText(head, { exact: false })).toHaveCount(0);
 	for (const name of ["Tasks", "Agents", "Pipelines"]) {
@@ -89,7 +91,7 @@ test("dark project tabs hide infrastructure and keep account setup in Config", a
 	await page.getByRole("link", { name: "Config", exact: true }).click();
 	await expect(page).toHaveURL(/#\/config$/);
 	await expect(page.getByRole("region", { name: "ChatGPT" })).toBeVisible();
-	await expect(page.getByRole("tablist")).toBeHidden();
+	await expect(page.getByRole("tablist", { name: "Project sections" })).toBeHidden();
 	await page.getByRole("link", { name: "Projects", exact: true }).click();
 	await page.getByRole("tab", { name: "Code", exact: true }).click();
 	await expect(page.getByRole("button", { name: "readme.md", exact: true })).toBeVisible();

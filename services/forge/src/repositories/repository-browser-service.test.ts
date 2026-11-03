@@ -8,6 +8,10 @@ import { RepositoryBrowserService } from "./repository-browser-service.ts";
 test("browsing rechecks owner authorization and ready project state before Git access", async () => {
 	let reads = 0;
 	const client: IRepositoryBrowserClient = {
+		commit: async () => {
+			reads++;
+			return { head: "a".repeat(40) };
+		},
 		branches: async () => {
 			reads++;
 			return [];

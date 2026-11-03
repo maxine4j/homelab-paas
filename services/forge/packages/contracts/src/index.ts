@@ -3,6 +3,7 @@ import { z } from "zod";
 export * from "./workspace.ts";
 export * from "./repository.ts";
 export type {
+	RepositoryCommitInput,
 	Workspace,
 	CreateWorkspace,
 	WorkspaceFile,

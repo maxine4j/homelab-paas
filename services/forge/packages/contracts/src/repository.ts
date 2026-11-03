@@ -48,6 +48,22 @@ export const repositoryHistorySchema = z.strictObject({
 	hasMore: z.boolean(),
 });
 export const repositoryFileSchema = z.strictObject({ path: filePathSchema, content: z.string().max(262144) });
+export const repositoryCommitInputSchema = z
+	.strictObject({
+		branch: branchNameSchema,
+		expectedHead: gitShaSchema,
+		message: z.string().trim().min(1).max(4096),
+		files: z
+			.array(repositoryFileSchema.refine((file) => new TextEncoder().encode(file.content).length <= 262144))
+			.min(1)
+			.max(100),
+	})
+	.refine(({ files }) => new Set(files.map((file) => file.path)).size === files.length)
+	.refine(
+		({ files }) => files.reduce((size, file) => size + new TextEncoder().encode(file.content).length, 0) <= 1048576,
+	)
+	.refine(({ files }) => files.every((file) => !file.content.includes("\0")));
+export const repositoryCommitResultSchema = z.strictObject({ head: gitShaSchema });
 export type RepositoryCommit = z.infer<typeof repositoryCommitSchema>;
 export type RepositoryBranch = z.infer<typeof repositoryBranchesSchema>[number];
 export type RepositoryTree = z.infer<typeof repositoryTreeSchema>;

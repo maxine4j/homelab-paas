@@ -99,10 +99,13 @@ export class HttpApplication implements IHttpApplication {
 		const ordinaryBody = bodyParser({ enableTypes: ["json"], jsonLimit: "16kb" });
 		// JSON escapes can expand a valid 256 KiB text file by six times.
 		const fileBody = bodyParser({ enableTypes: ["json"], jsonLimit: "2mb" });
+		const commitBody = bodyParser({ enableTypes: ["json"], jsonLimit: "7mb" });
 		app.use((ctx, next) =>
-			/^\/api\/workspaces\/[^/]+\/file$/u.test(ctx.path) && ["POST", "PUT"].includes(ctx.method)
-				? fileBody(ctx, next)
-				: ordinaryBody(ctx, next),
+			/^\/api\/projects\/[^/]+\/repository\/commit$/u.test(ctx.path) && ctx.method === "POST"
+				? commitBody(ctx, next)
+				: /^\/api\/workspaces\/[^/]+\/file$/u.test(ctx.path) && ["POST", "PUT"].includes(ctx.method)
+					? fileBody(ctx, next)
+					: ordinaryBody(ctx, next),
 		);
 		const router = this.projectRouter.create();
 		app.use(router.routes()).use(router.allowedMethods());

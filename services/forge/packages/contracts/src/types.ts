@@ -1,5 +1,9 @@
 import type { z } from "zod";
 
+import type { repositoryCommitInputSchema } from "./repository.ts";
+
+export type RepositoryCommitInput = z.infer<typeof repositoryCommitInputSchema>;
+
 import type {
 	workspaceSchema,
 	createWorkspaceSchema,

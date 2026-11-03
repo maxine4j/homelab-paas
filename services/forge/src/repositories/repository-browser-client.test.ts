@@ -43,7 +43,7 @@ const setup = async () => {
 		"feature/nested",
 	]);
 	const client = new RepositoryBrowserClient(root, git, repositories);
-	return { client, first };
+	return { client, first, checkout };
 };
 
 test("branches, trees, last-change metadata, files and paginated history follow the selected branch", async () => {
@@ -82,4 +82,83 @@ test("empty repositories have no fabricated branches", async () => {
 	const repositories = new RepositoryClient(root, [], files, git);
 	await repositories.prepare(id);
 	expect(await new RepositoryBrowserClient(root, git, repositories).branches(id)).toEqual([]);
+});
+
+test("one branch commit applies all drafts atomically without altering other branches or checkout files", async () => {
+	const { client, checkout } = await setup();
+	const head = (await client.tree(id, "feature/nested", "")).head;
+	const main = await client.tree(id, "main", "");
+	const result = await client.commit(id, {
+		branch: "feature/nested",
+		expectedHead: head,
+		message: "Batch edit",
+		files: [
+			{ path: "README.md", content: "# Updated\n" },
+			{ path: "new/nested.ts", content: "export {};\n" },
+		],
+	});
+	expect(result.head).not.toBe(head);
+	expect((await client.file(id, "feature/nested", "README.md")).content).toBe("# Updated\n");
+	expect((await client.file(id, "feature/nested", "new/nested.ts")).content).toBe("export {};\n");
+	expect(await client.tree(id, "main", "")).toEqual(main);
+	expect(await files.readFile(join(checkout, "README.md"))).toBe("# Feature\n");
+	expect((await client.history(id, "feature/nested", 0, 30)).commits.map((c) => c.subject)).toEqual([
+		"Batch edit",
+		"Feature documentation",
+		"Initial files",
+	]);
+	await expect(
+		client.commit(id, {
+			branch: "feature/nested",
+			expectedHead: head,
+			message: "Stale",
+			files: [{ path: "README.md", content: "overwrite" }],
+		}),
+	).rejects.toMatchObject({ code: "workspace-conflict" });
+	expect((await client.file(id, "feature/nested", "README.md")).content).toBe("# Updated\n");
+});
+
+test("concurrent commits publish exactly one complete batch", async () => {
+	const { client, first } = await setup();
+	const results = await Promise.allSettled(
+		["one", "two"].map((content) =>
+			client.commit(id, {
+				branch: "main",
+				expectedHead: first,
+				message: content,
+				files: [
+					{ path: "README.md", content },
+					{ path: "src/app.ts", content },
+				],
+			}),
+		),
+	);
+	expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+	const failure = results.find((result) => result.status === "rejected");
+	expect(failure?.status === "rejected" && failure.reason.code).toBe("workspace-conflict");
+	expect((await client.file(id, "main", "README.md")).content).toBe(
+		(await client.file(id, "main", "src/app.ts")).content,
+	);
+});
+
+test("owner commits may target main; unsafe paths, duplicate drafts and symlink replacement fail before ref updates", async () => {
+	const { client, first } = await setup();
+	for (const paths of [["../secret"], ["link/child"], ["link"], ["README.md", "README.md"], ["src", "src/app.ts"]]) {
+		await expect(
+			client.commit(id, {
+				branch: "main",
+				expectedHead: first,
+				message: "Invalid",
+				files: paths.map((path) => ({ path, content: "x" })),
+			}),
+		).rejects.toBeDefined();
+		expect((await client.tree(id, "main", "")).head).toBe(first);
+	}
+	await client.commit(id, {
+		branch: "main",
+		expectedHead: first,
+		message: "Owner edit",
+		files: [{ path: "src/app.ts", content: "export const value = 2;\n" }],
+	});
+	expect((await client.file(id, "main", "src/app.ts")).content).toBe("export const value = 2;\n");
 });

@@ -102,6 +102,28 @@ test("repository HTTP serves branch-specific trees, files and history behind own
 		"tree?branch=main&branch=other",
 	])
 		expect((await request(path)).status).toBe(400);
+	const input = {
+		branch: "main",
+		expectedHead: (await client.tree(project.id, "main", "")).head,
+		message: "Owner batch",
+		files: [{ path: "owner.txt", content: "x".repeat(30000) }],
+	};
+	const commit = (user: string, origin?: string, body: unknown = input) =>
+		fetch(url + "commit", {
+			method: "POST",
+			headers: { "x-webauth-user": user, "content-type": "application/json", ...(origin ? { origin } : {}) },
+			body: JSON.stringify(body),
+		});
+	expect((await commit("intruder", "https://forge.example")).status).toBe(403);
+	expect((await commit("owner")).status).toBe(403);
+	expect((await commit("owner", "https://other.example.com")).status).toBe(403);
+	expect(
+		(await commit("owner", "https://forge.example", { ...input, files: [{ path: "../secret", content: "bad" }] }))
+			.status,
+	).toBe(400);
+	expect((await commit("owner", "https://forge.example")).status).toBe(200);
+	expect((await client.file(project.id, "main", "owner.txt")).content).toBe("x".repeat(30000));
+	expect((await commit("owner", "https://forge.example")).status).toBe(409);
 });
 
 test("manual workspace preserves edits, versions, staged and branch diffs, commits and archive across recovery", async () => {

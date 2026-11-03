@@ -13,12 +13,12 @@ export class GitError extends Error {
 	}
 }
 export interface IGitTransport {
-	/** Noninteractive system Git, 120s deadline and 1 MiB output bound; throws GitError. */
-	run(arguments_: string[]): Promise<string>;
+	/** Noninteractive system Git, 120s deadline, optional UTF-8 stdin, 1 MiB input/output bounds; throws GitError. */
+	run(arguments_: string[], input?: string): Promise<string>;
 }
 export interface IGitBinaryTransport extends IGitTransport {
 	/** Same process/time/output bounds; preserves bytes for binary-aware callers. */
-	runBytes(arguments_: string[]): Promise<Buffer>;
+	runBytes(arguments_: string[], input?: string): Promise<Buffer>;
 }
 export interface IGitRuntime extends IGitBinaryTransport {
 	close(): Promise<void>;
@@ -31,16 +31,17 @@ export class GitTransport implements IGitRuntime {
 		private readonly pause: ISleep = sleep,
 		private readonly config: GitTransportConfiguration = {},
 	) {}
-	async run(arguments_: string[]): Promise<string> {
+	async run(arguments_: string[], input?: string): Promise<string> {
 		try {
-			return new TextDecoder("utf-8", { fatal: true }).decode(await this.runBytes(arguments_));
+			return new TextDecoder("utf-8", { fatal: true }).decode(await this.runBytes(arguments_, input));
 		} catch (cause) {
 			if (cause instanceof GitError) throw cause;
 			throw new GitError({ cause });
 		}
 	}
-	async runBytes(arguments_: string[]): Promise<Buffer> {
+	async runBytes(arguments_: string[], input?: string): Promise<Buffer> {
 		if (this.closing) throw new GitError();
+		if (input !== undefined && Buffer.byteLength(input) > 1048576) throw new GitError();
 		let child;
 		try {
 			child = spawn(
@@ -61,7 +62,7 @@ export class GitTransport implements IGitRuntime {
 				],
 				{
 					detached: true,
-					stdio: ["ignore", "pipe", "pipe"],
+					stdio: ["pipe", "pipe", "pipe"],
 					env: {
 						PATH: process.env["PATH"],
 						LANG: "C",
@@ -77,6 +78,10 @@ export class GitTransport implements IGitRuntime {
 			throw new GitError({ cause });
 		}
 		let failure: unknown;
+		child.stdin.on("error", (error) => {
+			failure = error;
+		});
+		child.stdin.end(input);
 		const stdout: Buffer[] = [];
 		let stderr = "";
 		let bytes = 0;

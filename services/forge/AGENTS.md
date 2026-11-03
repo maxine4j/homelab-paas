@@ -335,8 +335,8 @@ and starts Vite in explicit `mock` mode; no backend, database, credentials, or
 container is required. A visible banner identifies the read-only preview.
 Vite serves deterministic HTTP fixtures for projects, accounts, repository
 branches/files/history, project workspaces, changes and pull-request reviews.
-Both sample projects can be opened. File navigation, editor drafts and review
-inspection work; all API mutations return 405 and no terminal session or
+Both sample projects can be opened. File navigation and client-side editor drafts
+work; all API mutations return 405 and no terminal session or
 WebSocket execution is provided. Unknown API paths, identities, branches and
 files return JSON 404 responses. Fixtures are not persisted. Normal Vite mode
 does not install the mock routes, and production builds exclude the mock API
@@ -452,8 +452,9 @@ Workspace values contain ID, project ID, name, deterministic
 status (`creating/ready/failed/archived`), and current `head` when ready. They never
 contain filesystem paths. Creation starts from local `main`; an entirely empty
 repository gets one empty Forge initialization commit on `main`. A nonempty
-repository without `main` requires operator repair and fails closed. No API
-switches branches or writes directly to an existing `main`.
+repository without `main` requires operator repair and fails closed. No API switches
+checkout branches. The owner-only repository editor described below may commit
+directly to any existing branch, including `main`, without changing checkout files.
 
 Workspace routes, all subject to the foundation owner/origin policy:
 
@@ -514,18 +515,21 @@ diffs and account setup. Global navigation separates Projects from Config at
 only on Config. Account errors never clutter project views. Switching to Config
 preserves the open project and its unsaved drafts.
 
-Projects retains creation/import/retry. Opening a ready project shows its identity
+Projects retains creation/import/retry. The entire ready project card opens the
+project using pointer or keyboard activation; there is no dedicated Open button.
+Opening a ready project shows its identity
 and five section tabs, in order: Code, Tasks, Agents, Pipelines, Terminals.
 Code is the default. Tasks, Agents and Pipelines explicitly say they are not
 available yet; no ticket, agent-turn or remote CI functionality is implied.
 Tab navigation stays usable on narrow screens without widening the page.
 
 Workspaces are internal execution resources, not a user-facing concept. Do not
-show workspace creation, selection, archival, names, generated branches or raw
-execution identifiers. The current file/terminal adapters still use the internal
+show workspace creation, selection, archival, names or raw
+execution identifiers. The terminal adapters use the internal
 workspace APIs: reuse the project's retained non-archived checkout (prefer the
 internally named Project files checkout), or prepare one automatically when none
-exists. A failed checkout requires explicit Retry opening files. Preparation
+exists, only after opening Terminals. A failed checkout requires explicit
+Retry opening files. Preparation
 never starts an agent or shell. Preserve existing files and metadata.
 
 Code contains a GitHub-style bordered directory listing followed by a safe README
@@ -535,15 +539,17 @@ types have themed icons. Opening a file replaces the overview with the editor;
 Back to files preserves drafts. The left directory tree appears alongside code on
 tablet and laptop widths (above 600 CSS pixels), and is hidden on slab phones.
 
-The branch dropdown defaults to Working changes, the retained editing checkout.
-Local file dates are filesystem modification timestamps. Other named branches
-show committed files read-only, with each entry's latest commit subject and date.
-Browsing never switches or resets the editing checkout. Internal generated branch
-names stay out of the dropdown. A history icon in the top-right of the file panel
-loads the selected branch's commits, thirty at a time, with explicit pagination.
+The branch dropdown lists all local branches and defaults to `main`, or the first
+branch when `main` is absent. Every branch supports owner editing. There is no
+Working changes option. Listings read committed files and show each entry's latest
+commit subject and date. Browsing and committing never switch or reset a checkout.
+The root breadcrumb is `/`. File tabs appear above and encapsulate the active
+file heading, Back to files, history action and editor. Tabs have a distinct active
+surface and accent border, rather than standalone button styling.
+A history icon loads the selected branch's commits, thirty at a time.
 Pagination rejects a changed branch head rather than mixing histories.
 
-Read-only repository APIs are under `/api/projects/:id/repository`: `branches`,
+Repository read APIs are under `/api/projects/:id/repository`: `branches`,
 `tree?branch=&path=`, `file?branch=&path=`, and `history?branch=&offset=`. They
 validate owner/project readiness, exact branch names and safe paths. Git reads
 resolve the branch to a commit before reading content. They use bounded system
@@ -552,27 +558,38 @@ log reads, and the existing 256 KiB text-file bound. Symlinks, submodules, binar
 content and restricted metadata cannot be opened as code. Errors reuse the safe
 workspace/file error contract. Repository HTML is displayed as text, never executed.
 
-Code includes Changes and Pull requests
-in initially collapsed disclosures. PR review includes closed PRs. Terminals
+Code omits Changes and Pull requests; those interfaces are deferred. Terminals
 contains the shell controls and output. Remove infrastructure notes, raw revision
-summaries and session IDs from the primary UI; retain actionable errors, file
-conflict recovery, terminal connection/loss states and review approval status.
+summaries and session IDs from the primary UI; retain actionable errors,
+terminal connection/loss states and local drafts after commit failures.
 Git HTTPS hosting and merging remain unavailable.
 
-The responsive workspace combines directory navigation, file creation, editor
-tabs, real CodeMirror 6 editing (JavaScript/TypeScript highlighting), four change
-comparisons and a real xterm.js 6 terminal with its fit addon. API responses are
-validated against browser-safe contracts. Tabs retain drafts; project
-navigation and page exit guard unsaved edits. Saves send the observed content
-version. A conflict keeps the local draft and offers an explicit server-content
-comparison followed by an explicit discard/reload action. Typing while a save is
-pending remains dirty after that save completes. External shell edits remain
-subject to the [workspace version-check boundary](#slice-2-manual-workspace-foundation).
+The Code editor reads committed branch content. Edits and new files remain in
+browser memory, scoped by branch and path, until Commit submits all changed drafts
+for that branch in one request. Switching branches, files, project sections or
+Config retains drafts. Project exit and page unload guard uncommitted drafts.
+There is no Save file or server-version comparison action. Commit failures retain
+drafts and the commit message. Discard all drafts explicitly clears that branch's
+drafts and reloads its current head; copy needed edits before discarding. Typing
+during a pending commit remains dirty after the submitted snapshot succeeds.
 
-Changes label branch (merge base to HEAD), staged (HEAD to index), unstaged (index
-to worktree), and untracked comparisons separately. Each section shows its files,
-inline patch, binary markers and truncation. Stage/unstage act on explicit paths;
-commit sends the HEAD observed with that diff and rejects a changed branch.
+`POST /api/projects/:id/repository/commit` accepts
+`{branch, expectedHead, message, files: [{path, content}]}` and returns `{head}`.
+It rechecks owner authorization, matching origin, project readiness and exact
+branch existence. It allows the owner to edit any existing branch, including
+`main`; agent/workspace and future merge operations retain their separate guards.
+Inputs allow 1–100 unique text paths, 256 KiB per file, 1 MiB combined UTF-8
+content and a nonempty message of at most 4,096 characters. JSON is bounded to
+7 MiB for escaping overhead. Unsafe paths, symlinks, submodules, conflicting
+file/directory paths and empty changes fail before updating refs. Git object/tree
+construction preserves untouched entries and executable modes. One atomic
+expected-head ref update publishes the complete commit, with no checkout or index
+writes. A moved branch returns 409 `workspace-conflict`; no automatic rebasing or
+retry occurs. Empty repositories show an explicit no-branches state.
+
+The separate terminal uses xterm.js 6 and its fit addon. API responses are
+validated against browser-safe contracts. External shell edits remain subject to
+the [workspace version-check boundary](#slice-2-manual-workspace-foundation).
 The workspace and PR adapters share `GitDiffClient` for tracked patches.
 
 Terminal creation and closure are explicit. Opening the Terminals tab inspects its
@@ -608,7 +625,7 @@ Browser-safe PR contracts are exported from
 There is no merge endpoint. Review requests and discussion persist in SQLite;
 startup initializes their store and registers the production router. Tests cover
 real Git revision races, persistence and unavailable sources, controlled browser
-editor/terminal/review flows, mobile width and screenshots. A separate production
+editor/terminal/branch-commit flows, mobile width and screenshots. A separate production
 bundle fixture uses the actual `HttpApplication` CSP and `StaticAssets`, without
 Vite's development runtime, to check terminal style compatibility. This check must
 pass before the integrated UI is considered production ready; do not weaken CSP
@@ -664,7 +681,8 @@ draft -> ready -> planning -> plan review -> working -> work review -> merging -
   fetch, and push; file browsing with syntax highlighting; commit and branch
   views; diffs; PR comments, approvals, check status, and merging.
 - Use system Git and its HTTP backend rather than implementing the Git protocol.
-- Protect `main` across browser operations, agent operations, and external pushes.
+- Protect `main` across agent operations and external pushes; explicit owner
+  commits through the repository editor are permitted as described above.
   Receive-side enforcement is required for hosted Git pushes.
 - Start with squash merging and serialized merge operations per repository.
 - Forge is authoritative for Git and PRs. GitHub is the CI execution mirror;

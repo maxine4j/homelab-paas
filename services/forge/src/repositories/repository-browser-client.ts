@@ -8,6 +8,8 @@ import {
 	repositoryBranchesSchema,
 	repositoryCommitSchema,
 	repositoryTreeSchema,
+	repositoryCommitInputSchema,
+	type RepositoryCommitInput,
 	treePathSchema,
 	type RepositoryBranch,
 	type RepositoryTree,
@@ -21,6 +23,8 @@ import type { IGitTransport } from "./git-transport.ts";
 import type { IRepositoryClient } from "./repository-client.ts";
 
 export interface IRepositoryBrowserClient {
+	/** Commits text drafts atomically without checkout writes. Stale heads throw workspace-conflict; invalid/unsupported inputs and infrastructure failures use safe WorkspaceError codes. */
+	commit(id: string, input: RepositoryCommitInput): Promise<{ head: string }>;
 	/** Bounded read operations. Throws WorkspaceError with safe invalid-request, file-not-found, file-unsupported or workspace-unavailable codes. */
 	branches(id: string): Promise<RepositoryBranch[]>;
 	tree(id: string, branch: string, path: string): Promise<RepositoryTree>;
@@ -33,6 +37,41 @@ export class RepositoryBrowserClient implements IRepositoryBrowserClient {
 		private readonly git: IGitTransport,
 		private readonly repositories: IRepositoryClient,
 	) {}
+	async commit(id: string, input: RepositoryCommitInput): Promise<{ head: string }> {
+		return this.boundary(async () => {
+			const parsed = repositoryCommitInputSchema.safeParse(input);
+			if (!parsed.success) throw new WorkspaceError("invalid-request");
+			const { branch, expectedHead, message, files } = parsed.data;
+			if ((await this.head(id, branch)) !== expectedHead) throw new WorkspaceError("workspace-conflict");
+			const original = (await this.run(id, ["rev-parse", `${expectedHead}^{tree}`])).trim();
+			const tree = await this.editTree(id, original, files);
+			if (tree === original) throw new WorkspaceError("invalid-request");
+			const head = gitShaSchema.parse(
+				(
+					await this.run(id, [
+						"-c",
+						"user.name=Forge owner",
+						"-c",
+						"user.email=owner@forge.local",
+						"commit-tree",
+						tree,
+						"-p",
+						expectedHead,
+						"-m",
+						message,
+					])
+				).trim(),
+			);
+			try {
+				await this.run(id, ["update-ref", `refs/heads/${branch}`, head, expectedHead]);
+			} catch (cause) {
+				if ((await this.head(id, branch)) !== expectedHead)
+					throw new WorkspaceError("workspace-conflict", { cause });
+				throw cause;
+			}
+			return { head };
+		});
+	}
 	async branches(id: string): Promise<RepositoryBranch[]> {
 		return this.boundary(async () => {
 			await this.verify(id);
@@ -119,6 +158,55 @@ export class RepositoryBrowserClient implements IRepositoryBrowserClient {
 			return { head, commits: commits.slice(0, limit), hasMore: commits.length > limit };
 		});
 	}
+	private async editTree(
+		id: string,
+		tree: string | undefined,
+		files: { path: string; content: string }[],
+	): Promise<string> {
+		const entries = new Map<string, { mode: string; type: string; sha: string }>();
+		if (tree) {
+			const output = await this.run(id, ["ls-tree", "-z", tree]);
+			for (const entry of output.split("\0").filter(Boolean)) {
+				const match = /^(\d{6}) (blob|tree|commit) ([a-f0-9]{40})\t([\s\S]+)$/u.exec(entry);
+				if (!match) throw new Error("Invalid tree");
+				entries.set(match.at(4)!, { mode: match.at(1)!, type: match.at(2)!, sha: match.at(3)! });
+			}
+		}
+		const groups = new Map<string, { path: string; content: string }[]>();
+		for (const file of files) {
+			const name = file.path.split("/").at(0)!;
+			groups.set(name, [...(groups.get(name) ?? []), file]);
+		}
+		for (const [name, values] of groups) {
+			const existing = entries.get(name);
+			const direct = values.find((file) => file.path === name);
+			if (direct) {
+				if (values.length !== 1 || (existing && !["100644", "100755"].includes(existing.mode)))
+					throw new WorkspaceError("file-unsupported");
+				const sha = gitShaSchema.parse(
+					(await this.run(id, ["hash-object", "-w", "--stdin"], direct.content)).trim(),
+				);
+				entries.set(name, { mode: existing?.mode ?? "100644", type: "blob", sha });
+			} else {
+				if (existing && existing.mode !== "040000") throw new WorkspaceError("file-unsupported");
+				const sha = await this.editTree(
+					id,
+					existing?.sha,
+					values.map((file) => ({ ...file, path: file.path.slice(name.length + 1) })),
+				);
+				entries.set(name, { mode: "040000", type: "tree", sha });
+			}
+		}
+		return gitShaSchema.parse(
+			(
+				await this.run(
+					id,
+					["mktree", "-z"],
+					[...entries].map(([name, entry]) => `${entry.mode} ${entry.type} ${entry.sha}\t${name}\0`).join(""),
+				)
+			).trim(),
+		);
+	}
 	private async verify(id: string): Promise<void> {
 		if (!projectIdSchema.safeParse(id).success) throw new WorkspaceError("invalid-request");
 		await this.repositories.verify(id);
@@ -129,8 +217,11 @@ export class RepositoryBrowserClient implements IRepositoryBrowserClient {
 		if (!value) throw new WorkspaceError("invalid-request");
 		return value;
 	}
-	private run(id: string, args: string[]): Promise<string> {
-		return this.git.run(["--literal-pathspecs", "-C", join(this.root, "repositories", `${id}.git`), ...args]);
+	private run(id: string, args: string[], input?: string): Promise<string> {
+		return this.git.run(
+			["--literal-pathspecs", "-C", join(this.root, "repositories", `${id}.git`), ...args],
+			input,
+		);
 	}
 	private async entries(
 		id: string,

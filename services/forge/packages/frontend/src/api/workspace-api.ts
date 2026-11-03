@@ -23,7 +23,8 @@ export class WorkspaceApi implements IWorkspaceApi {
 				"access-denied": "Sign in through PaaS as the configured owner.",
 				"invalid-request": "Check the supplied values.",
 				"workspace-not-found": "Project files no longer exist. Reopen the project.",
-				"workspace-conflict": "Refresh changes before retrying.",
+				"workspace-conflict":
+					"The branch changed. Your drafts are preserved. Copy them before discarding drafts to reload the branch.",
 				"workspace-unavailable": "Project files unavailable. Retry opening files.",
 				"file-conflict": "Your draft is preserved. Compare the server version before retrying.",
 				"file-not-found": "Refresh the file tree.",
