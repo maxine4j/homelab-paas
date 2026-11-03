@@ -80,7 +80,7 @@ test("dark project tabs hide infrastructure and keep account setup in Config", a
 	expect(preparations).toBe(0);
 	await expect(page.getByText(/workspace/i)).toHaveCount(0);
 	await expect(page.getByText(head, { exact: false })).toHaveCount(0);
-	for (const name of ["Tasks", "Agents", "Pipelines"]) {
+	for (const name of ["Agents", "Pipelines"]) {
 		await page.getByRole("tab", { name, exact: true }).click();
 		await expect(page.getByRole("tab", { name, exact: true })).toHaveAttribute("aria-selected", "true");
 		await expect(page.getByRole("tabpanel", { name, exact: true })).toContainText("not available yet");

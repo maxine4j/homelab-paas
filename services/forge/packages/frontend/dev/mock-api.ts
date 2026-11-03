@@ -62,6 +62,34 @@ class MockApi implements IMockApi {
 				createdAt: date,
 			};
 			const projectRoot = `/api/projects/${project.id}`;
+			const tickets = [
+				{
+					id: `FORGE-${project.id === projects.at(0)!.id ? 1 : 4}`,
+					projectId: project.id,
+					title: "Define the next change",
+					description: "Write a small, clear scope before starting work.",
+					status: "draft",
+					createdAt: date,
+				},
+				{
+					id: `FORGE-${project.id === projects.at(0)!.id ? 2 : 5}`,
+					projectId: project.id,
+					title: "Improve project navigation",
+					description: "Make the project easier to browse on every screen.",
+					status: "working",
+					createdAt: date,
+				},
+				{
+					id: `FORGE-${project.id === projects.at(0)!.id ? 3 : 6}`,
+					projectId: project.id,
+					title: "Set up the project",
+					description: "Create the initial repository.",
+					status: "done",
+					createdAt: date,
+				},
+			];
+			this.routes.set(`${projectRoot}/tickets`, () => tickets);
+			for (const ticket of tickets) this.routes.set(`/api/tickets/${ticket.id}`, () => ticket);
 			const workspaceRoot = `/api/workspaces/${id}`;
 			const repositoryRoot = `${projectRoot}/repository`;
 			this.routes.set(projectRoot, () => project);

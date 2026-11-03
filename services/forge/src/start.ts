@@ -39,6 +39,9 @@ import { TerminalRouter } from "./terminal/terminal-router.ts";
 import { TerminalService } from "./terminal/terminal-service.ts";
 import { TerminalSocket } from "./terminal/terminal-socket.ts";
 import { TerminalStore } from "./terminal/terminal-store.ts";
+import { TicketRouter } from "./tickets/ticket-router.ts";
+import { TicketService } from "./tickets/ticket-service.ts";
+import { TicketStore } from "./tickets/ticket-store.ts";
 import type { StartOptions } from "./types.ts";
 import { WorkspaceClient } from "./workspaces/workspace-client.ts";
 import { WorkspaceDiffClient } from "./workspaces/workspace-diff-client.ts";
@@ -63,6 +66,9 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 	await store.initialize();
 	if (!lifecycle.isOpen()) return;
 	const access = new AccessService(config);
+	const ticketStore = new TicketStore(database);
+	await ticketStore.initialize();
+	const tickets = new TicketService(ticketStore, store, access, () => new Date());
 	const git = options.git ?? new GitTransport(sleep);
 	const differences = new GitDiffClient(git);
 	const repositories = new RepositoryClient(config.dataDirectory, config.importHosts, files, git);
@@ -144,6 +150,7 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 	const app = new HttpApplication(new ProjectRouter(projects), access).create(
 		[
 			new AccountRouter(accounts),
+			new TicketRouter(tickets),
 			new WorkspaceRouter(workspaces),
 			new RepositoryBrowserRouter(
 				new RepositoryBrowserService(

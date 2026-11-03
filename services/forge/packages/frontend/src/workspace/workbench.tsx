@@ -2,6 +2,7 @@ import { workspaceSchema, workspacesSchema, type Project, type Workspace } from 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { IWorkspaceApi } from "../api/workspace-api.ts";
+import { TaskBoard } from "../tasks/task-board.tsx";
 import { RepositoryBrowser } from "./repository-browser.tsx";
 import { WorkspaceTerminal } from "./terminal.tsx";
 
@@ -66,6 +67,7 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 	const [dirtyBranches, setDirtyBranches] = useState<Record<string, boolean>>({});
 	const [error, setError] = useState("");
 	const [terminalOpened, setTerminalOpened] = useState(false);
+	const [tasksOpened, setTasksOpened] = useState(false);
 	const dirty = Object.values(dirtyBranches).some(Boolean);
 	const dirtyChange = useCallback((branch: string, value: boolean) => {
 		setDirtyBranches((current) => (current[branch] === value ? current : { ...current, [branch]: value }));
@@ -102,6 +104,7 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 						onClick={() => {
 							setTab(name);
 							if (name === "Terminals") setTerminalOpened(true);
+							if (name === "Tasks") setTasksOpened(true);
 						}}
 					>
 						{name}
@@ -121,7 +124,10 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 					dirtyChange={dirtyChange}
 				/>
 			</section>
-			{["Tasks", "Agents", "Pipelines"].map((name) => (
+			<section id='panel-Tasks' role='tabpanel' aria-labelledby='tab-Tasks' hidden={tab !== "Tasks"}>
+				{tasksOpened && <TaskBoard projectId={project.id} api={api} />}
+			</section>
+			{["Agents", "Pipelines"].map((name) => (
 				<section
 					key={name}
 					id={`panel-${name}`}

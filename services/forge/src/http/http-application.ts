@@ -7,6 +7,7 @@ import { AccessDeniedError, type IAccessService } from "../auth/access-service.t
 import type { Actor } from "../auth/types.ts";
 import { InvalidProjectError, ProjectNotFoundError, ProjectUnavailableError } from "../projects/errors.ts";
 import type { IProjectRouter } from "../projects/project-router.ts";
+import { TicketError } from "../tickets/errors.ts";
 import { WorkspaceError } from "../workspaces/errors.ts";
 import type { IStaticAssets } from "./static-assets.ts";
 
@@ -34,7 +35,17 @@ export class HttpApplication implements IHttpApplication {
 				failure = err;
 				const badBody = err instanceof Error && "status" in err && err.status === 400;
 				const tooLarge = err instanceof Error && "status" in err && err.status === 413;
-				if (err instanceof WorkspaceError) {
+				if (err instanceof TicketError) {
+					ctx.status =
+						err.code === "invalid-request"
+							? 400
+							: err.code === "ticket-not-found"
+								? 404
+								: err.code === "ticket-conflict"
+									? 409
+									: 503;
+					ctx.body = { error: err.code };
+				} else if (err instanceof WorkspaceError) {
 					ctx.status =
 						err.code === "invalid-request"
 							? 400

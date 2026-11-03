@@ -17,6 +17,7 @@ import {
 	pullRequestPreviewSchema,
 } from "@homelab-paas/forge-contracts/pull-requests";
 import { terminalStatusSchema } from "@homelab-paas/forge-contracts/terminal";
+import { ticketsSchema, ticketSchema } from "@homelab-paas/forge-contracts/tickets";
 import { createServer, resolveConfig } from "vite";
 import type { ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -42,6 +43,17 @@ const read = async (path: string) => {
 	expect(response.headers.get("cache-control")).toBe("no-store");
 	return response.json();
 };
+
+test("mock boards expose project-scoped tickets across the workflow", async () => {
+	const projects = projectsSchema.parse(await read("/api/projects"));
+	for (const project of projects) {
+		const tickets = ticketsSchema.parse(await read(`/api/projects/${project.id}/tickets`));
+		expect(tickets.length).toBeGreaterThan(0);
+		expect(tickets.every((ticket) => ticket.projectId === project.id)).toBe(true);
+		const ticket = tickets.at(0)!;
+		expect(ticketSchema.parse(await read(`/api/tickets/${ticket.id}`))).toEqual(ticket);
+	}
+});
 
 test("mock projects open populated workspaces and schema-valid repository views", async () => {
 	const projects = projectsSchema.parse(await read("/api/projects"));

@@ -21,6 +21,9 @@ export class WorkspaceApi implements IWorkspaceApi {
 			const error = typeof value === "object" && value !== null && "error" in value ? value.error : undefined;
 			const messages: Record<string, string> = {
 				"access-denied": "Sign in through PaaS as the configured owner.",
+				"ticket-not-found": "Ticket no longer exists. Refresh the board.",
+				"ticket-conflict": "The destination changed. Refresh the board and retry.",
+				"ticket-unavailable": "Tickets are unavailable. Retry or check the server logs.",
 				"invalid-request": "Check the supplied values.",
 				"workspace-not-found": "Project files no longer exist. Reopen the project.",
 				"workspace-conflict":

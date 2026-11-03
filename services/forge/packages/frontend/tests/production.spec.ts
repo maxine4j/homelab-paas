@@ -74,6 +74,19 @@ test("integrated production bundle styles editor/terminal on desktop/mobile and 
 				if (path.endsWith("/branches")) return route.fulfill({ json: [{ name: "main", sha: head }] });
 				if (path.endsWith("/workspaces")) return route.fulfill({ json: [workspace] });
 				if (path.endsWith("/pull-requests")) return route.fulfill({ json: [] });
+				if (path.endsWith("/tickets"))
+					return route.fulfill({
+						json: [
+							{
+								id: "FORGE-1",
+								projectId,
+								title: "Production ticket",
+								description: "Scope",
+								status: "draft",
+								createdAt,
+							},
+						],
+					});
 				if (path.endsWith("/tree"))
 					return route.fulfill({
 						json: {
@@ -150,6 +163,16 @@ test("integrated production bundle styles editor/terminal on desktop/mobile and 
 		expect(contrast.length).toBeGreaterThan(0);
 		for (const ratio of contrast) expect(ratio).toBeGreaterThanOrEqual(4.5);
 		await page.screenshot({ path: "../../../../artifacts/forge/files-desktop.png", fullPage: true });
+		await page.getByRole("tab", { name: "Tasks", exact: true }).click();
+		await page.getByRole("button", { name: "Drag FORGE-1", exact: true }).hover();
+		await page.mouse.down();
+		const target = (await page.getByRole("region", { name: "Ready", exact: true }).boundingBox())!;
+		await page.mouse.move(target.x + 80, target.y + 120);
+		await expect(page.locator(".ticket-drop-placeholder")).toBeVisible();
+		await expect(page.locator(".ticket-drag-preview")).toBeVisible();
+		await page.screenshot({ path: "../../../../artifacts/forge/tasks-production-drag.png" });
+		await page.keyboard.press("Escape");
+		await page.mouse.up();
 		await page.getByRole("tab", { name: "Terminals", exact: true }).click();
 		await page.getByRole("button", { name: "Create shell", exact: true }).click();
 		await expect(page.locator(".xterm-rows")).toContainText("Production terminal output");

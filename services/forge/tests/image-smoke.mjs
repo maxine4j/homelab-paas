@@ -66,6 +66,20 @@ try {
 	assert.equal(created.status, 201);
 	const project = JSON.parse(created.body);
 	assert.equal(project.status, "ready");
+	const createdTicket = request(`/api/projects/${project.id}/tickets`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ title: "Persistent ticket", description: "Simple scope" }),
+	});
+	assert.equal(createdTicket.status, 201);
+	const ticket = JSON.parse(createdTicket.body);
+	assert.equal(ticket.id, "FORGE-1");
+	assert.equal(ticket.status, "draft");
+	assert.equal(
+		request(`/api/tickets/${ticket.id}/move`, { method: "POST", headers, body: JSON.stringify({ status: "done" }) })
+			.status,
+		200,
+	);
 	const workspaceResponse = request(`/api/projects/${project.id}/workspaces`, {
 		method: "POST",
 		headers,
@@ -188,6 +202,7 @@ try {
 	await waitFor(() => assert.equal(request("/health").status, 200));
 	assert.equal(JSON.parse(request(`/api/terminals/${terminal.id}`, { headers }).body).status, "closed");
 	assert.equal(JSON.parse(request("/api/projects", { headers }).body)[0].id, project.id);
+	assert.equal(JSON.parse(request(`/api/tickets/${ticket.id}`, { headers }).body).status, "done");
 	const persistedPr = request(`/api/pull-requests/${pr.id}`, { headers });
 	assert.equal(persistedPr.status, 200);
 	assert.equal(JSON.parse(persistedPr.body).approval, "approved");

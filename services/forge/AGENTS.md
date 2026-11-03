@@ -519,8 +519,8 @@ Projects retains creation/import/retry. The entire ready project card opens the
 project using pointer or keyboard activation; there is no dedicated Open button.
 Opening a ready project shows its identity
 and five section tabs, in order: Code, Tasks, Agents, Pipelines, Terminals.
-Code is the default. Tasks, Agents and Pipelines explicitly say they are not
-available yet; no ticket, agent-turn or remote CI functionality is implied.
+Code is the default. Tasks shows the ticket board described below. Agents and
+Pipelines explicitly say they are not available yet.
 Tab navigation stays usable on narrow screens without widening the page.
 
 Workspaces are internal execution resources, not a user-facing concept. Do not
@@ -639,6 +639,9 @@ Run the checks listed [above](#run-package-and-verify-slice-1), plus
 `pnpm test:containers integration` for the supported Linux PTY runtime. The image
 smoke verifies production workspace/PR routing and native terminal packaging.
 Browser artifacts remain under `artifacts/forge*`.
+The browser suite starts its own Vite server on loopback port 5176 in `test`
+mode with a separate dependency cache, so it does not reuse or invalidate the
+owner's mock preview on port 5174.
 
 Production CSP explicitly permits generated style elements through
 `style-src-elem 'self' 'unsafe-inline'`, approved after the production xterm probe
@@ -650,6 +653,52 @@ that remains blocked. It uses controlled API/WebSocket data; native PTY/PR runti
 behavior is verified separately in Linux integration and the real image smoke.
 
 ### Ticket and PR workflow
+
+#### Initial manual ticket board
+
+The Tasks section is a Jira-style board with compact cards, status headings and
+counts, highlighted drop zones, insertion placeholders and a floating drag preview.
+It shows all eight workflow columns below. Pointer drag handles support mouse,
+pen and mobile touch without preventing ordinary scrolling elsewhere on a card.
+Dragging near an edge scrolls the board or column. Escape, pointer cancellation
+and dropping outside the board cancel the move. Ticket details also expose a
+native status dropdown for keyboard and mobile use.
+
+Tickets belong to one ready project. SQLite allocates immutable global increasing
+keys (`FORGE-1`, `FORGE-2`, ...), including across restarts and concurrent creates.
+Creation accepts only a trimmed required title (1–120 characters) and a plain-text
+description (0–4000 characters, default empty); it always starts in Draft.
+Owners can open and edit these fields. No assignees, priorities, labels, subtasks,
+agents, jobs, worktrees or PR linkage are part of this slice. Each project retains
+at most 1000 tickets. Card ordering within each column is persisted; a move
+inserts before a supplied destination ticket or appends to the column.
+
+For this initial trusted manual slice, **all status transitions, including Done,
+are explicitly permitted without plan approval, agent execution or a merged PR**.
+Done records a manual status only. The guarded automated workflow below remains
+the future contract; lock down manual transitions when that integration arrives.
+Existing application owner/origin checks remain; no additional authorization model
+is introduced. Moves and field edits share a serialized service queue, and moves
+update ordering atomically. Failed writes leave the displayed board unchanged and
+retain form fields for retry. Refresh reloads external changes; live updates,
+cross-client edit conflict detection and offline writes are outside this slice.
+
+Browser contracts are exported from `@homelab-paas/forge-contracts/tickets`:
+
+| Route                                       | Contract                                                                      |
+| ------------------------------------------- | ----------------------------------------------------------------------------- |
+| `GET/POST /api/projects/:projectId/tickets` | Ordered list / create `{title,description?}`; creation returns HTTP 201.      |
+| `GET/PATCH /api/tickets/:id`                | Read / replace title and description; identity and status are immutable here. |
+| `POST /api/tickets/:id/move`                | `{status,beforeId?}`; destination must belong to the same project and status. |
+
+Public tickets expose only key `id`, `projectId`, title, description, status and
+creation timestamp. Status values are `draft`, `ready`, `planning`, `plan-review`,
+`working`, `work-review`, `merging`, `done`. Errors use fixed codes:
+`invalid-request` (400), `ticket-not-found` (404), `ticket-conflict` (409),
+`ticket-unavailable` (503), plus existing project errors. Mock preview includes
+read-only ticket fixtures and rejects writes as before.
+
+#### Future guarded workflow
 
 ```text
 draft -> ready -> planning -> plan review -> working -> work review -> merging -> done
