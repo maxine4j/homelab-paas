@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import * as files from "@homelab-paas/backend-infrastructure/file";
 import { sleep } from "@homelab-paas/backend-infrastructure/sleep";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import { AccountProcess } from "../../src/accounts/account-process.ts";
 import { CodexConnection } from "../../src/accounts/codex-connection.ts";
@@ -110,7 +110,7 @@ test("real Git/SQLite and a stdio peer run concurrent agents only in owned workt
 	}
 });
 
-test("pinned Codex creates and reads an isolated sandboxed thread without live credentials", async () => {
+test("pinned Codex starts and resumes a thread without an inner sandbox or live credentials", async () => {
 	const root = await files.mkdtemp(join(tmpdir(), "forge-agent-protocol-"));
 	const path = join(root, "worktrees", "probe");
 	await files.mkdir(path, { recursive: true });
@@ -148,7 +148,12 @@ test("pinned Codex creates and reads an isolated sandboxed thread without live c
 		).trim();
 		await git.run(["-C", join(root, "repository.git"), "worktree", "add", "-b", "probe", path, commit]);
 		const client = new CodexAgentClient(connection, files.realpath, randomUUID);
+		const rpc = vi.spyOn(connection, "request");
 		const id = await client.start(path);
+		await expect(rpc.mock.results.at(-1)!.value).resolves.toMatchObject({
+			sandbox: { type: "dangerFullAccess" },
+			approvalPolicy: "on-request",
+		});
 		expect(client.read(id).status).toBe("idle");
 		const result = await connection.request("thread/read", { threadId: id, includeTurns: false });
 		expect(result).toMatchObject({ thread: { id, cwd: await files.realpath(path) } });
@@ -157,6 +162,11 @@ test("pinned Codex creates and reads an isolated sandboxed thread without live c
 		await client.interrupt(id, client.read(id).turnId!);
 		await expect.poll(() => client.read(id).status).toBe("interrupted");
 		expect(await client.resume(id, path)).toMatchObject({ status: "interrupted" });
+		const resumeIndex = rpc.mock.calls.findIndex(([method]) => method === "thread/resume");
+		await expect(rpc.mock.results.at(resumeIndex)!.value).resolves.toMatchObject({
+			sandbox: { type: "dangerFullAccess" },
+			approvalPolicy: "on-request",
+		});
 	} finally {
 		await connection.close();
 		await git.close();

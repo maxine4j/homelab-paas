@@ -19,11 +19,11 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 		};
 	if (method === "thread/start") {
 		if (
-			params.sandbox !== "workspace-write"
+			params.sandbox !== "danger-full-access"
 			|| params.approvalPolicy !== "on-request"
 			|| !params.cwd.includes("/worktrees/")
 		)
-			throw new Error("Unsafe runtime request");
+			throw new Error("Unexpected runtime policy");
 		const thread = {
 			id: `codex-${++sequence}`,
 			cwd: params.cwd,

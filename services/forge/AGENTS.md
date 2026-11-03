@@ -147,10 +147,16 @@ without submitting a message. An ambiguous thread creation with no known Codex I
 cannot be retried; create a new chat, retaining the old worktree. Untouched empty
 chats remain usable across restarts.
 
-Threads use `workspace-write`, `on-request` approvals, restricted network access
-and disabled Codex subagent spawning. This slice supports one-time command/file
-approval or denial and replies to structured user-input questions. It does not
-grant session-wide permissions or expose unrestricted RPC. Other server requests
+Threads use `danger-full-access`, `on-request` approvals and disabled Codex
+subagent spawning. Apply that policy on both start and explicit resume. The
+nonroot Forge container is the execution boundary; Codex does not create nested
+Bubblewrap namespaces, so execution requires no host user-namespace sysctls,
+privileged mode or relaxed container security profiles. Commands have the
+container's filesystem and network access, including shared project data and
+credential homes. Worktrees do not isolate agents from each other or Forge.
+This slice supports one-time command/file approval or denial and replies to
+structured user-input questions. Approval replies grant no additional session-wide
+permissions, and the backend does not expose unrestricted RPC. Other server requests
 are explicitly rejected. Approval callbacks belong to a particular live connection,
 thread and turn; disconnects invalidate them. Worktrees remain a trusted-owner
 boundary, not process isolation or protection from deliberately modifying shared
@@ -404,6 +410,7 @@ The image smoke uses a disposable Docker volume and internal container HTTP,
 with no host ports. It checks nonroot execution, restricted directories, real
 Git/SQLite recovery, synthetic credential-home file persistence, bundled Codex
 initialization/account-read, shipped gh flags and signed-out verification,
+the exact `nvm use >/dev/null && pwd` command under Codex's shell environment,
 orphan reaping, graceful signals, partial startup and listener failures. A separate
 composition test uses a controlled Git CLI peer for a hanging remote fetch:
 real HTTP/SQLite shutdown cancels its group and preserves a failed project for
@@ -435,7 +442,14 @@ and banner, including builds invoked with `--mode mock`.
 
 The image is one Node 24.22.0 Debian trixie application (glibc, avoiding musl
 compatibility assumptions), UID/GID 1000, with Git 2.47.3, gh 2.46.0, pinned
-Codex 0.164.0 and approved tini 0.19.0 as PID 1. Exact tested Debian package
+Codex 0.164.0, nvm 0.40.8 and approved tini 0.19.0 as PID 1. Nvm lives at
+`/opt/nvm`, writable by the runtime user, with Node 24.22.0 preinstalled and set
+as its default. The global Bash login profile loads it even with Codex's
+`HOME=/data`; `/bin/bash -lc 'nvm use >/dev/null && pwd'` works in a project
+whose `.nvmrc` selects that version. Other Node versions require an explicit
+`nvm install` and network access; the image does not auto-install project versions.
+Additional nvm versions are ephemeral container files; `/data` remains persistent.
+The original system Node still runs Forge itself. Exact tested Debian package
 revisions are in `Dockerfile`; dependency changes require revalidation. Tini
 reaps orphaned descendants. Process-group cleanup covers ordinary descendants;
 deliberately escaped live processes are outside that application-level boundary.

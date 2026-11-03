@@ -43,6 +43,40 @@ try {
 	const inspect = JSON.parse(docker("inspect", name))[0];
 	assert.equal(inspect.Config.User, "node");
 	assert.equal(Object.keys(inspect.HostConfig.PortBindings ?? {}).length, 0);
+	// Match Codex's sanitized HOME/PATH and the reported Bash login-shell command.
+	execute(
+		"import {mkdir,writeFile} from '@homelab-paas/backend-infrastructure/file'; await mkdir('/tmp/forge-nvm-probe'); await writeFile('/tmp/forge-nvm-probe/.nvmrc','24.22.0\\n');",
+	);
+	assert.equal(
+		docker(
+			"exec",
+			"-w",
+			"/tmp/forge-nvm-probe",
+			"-e",
+			"HOME=/data",
+			"-e",
+			"PATH=/usr/local/bin:/usr/bin:/bin",
+			name,
+			"/bin/bash",
+			"-lc",
+			"nvm use >/dev/null && pwd",
+		),
+		"/tmp/forge-nvm-probe",
+	);
+	assert.equal(
+		docker(
+			"exec",
+			"-w",
+			"/tmp/forge-nvm-probe",
+			"-e",
+			"HOME=/data",
+			name,
+			"/bin/bash",
+			"-lc",
+			"nvm use >/dev/null && node --version && nvm --version",
+		),
+		"v24.22.0\n0.40.8",
+	);
 	assert.equal(request("/").status, 403);
 	const html = request("/", { headers });
 	assert.equal(html.type, "text/html; charset=utf-8");
@@ -344,7 +378,7 @@ try {
 		(error) => error.status === 1,
 	);
 	console.log(
-		"Forge image smoke passed: private HTTP boundary, assets, Git/SQLite persistence, restricted nonroot data, real Codex account protocol, gh flags, tini orphan reaping, graceful signal and partial/fatal startup.",
+		"Forge image smoke passed: private HTTP boundary, assets, Git/SQLite persistence, restricted nonroot data, nvm login-shell execution, real Codex account protocol, gh flags, tini orphan reaping, graceful signal and partial/fatal startup.",
 	);
 } catch (error) {
 	console.error(docker("logs", name));

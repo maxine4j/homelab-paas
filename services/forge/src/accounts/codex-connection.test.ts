@@ -161,7 +161,7 @@ describe("CodexConnection", () => {
 										},
 									}) + "\n",
 								);
-							if (message.method === "thread/read")
+							if (["thread/read", "thread/start", "thread/resume"].includes(message.method))
 								output(JSON.stringify({ id: message.id, result: { thread: { id: "thread" } } }) + "\n");
 						},
 					};
@@ -172,6 +172,20 @@ describe("CodexConnection", () => {
 		const request = vi.fn(() => true);
 		connection.subscribeRequests(request);
 		await connection.initialize();
+		const options = {
+			cwd: "/data/worktrees/one",
+			sandbox: "danger-full-access",
+			approvalPolicy: "on-request",
+			config: { features: { multi_agent: false } },
+		};
+		for (const method of ["thread/start", "thread/resume"]) {
+			const params = method === "thread/start" ? options : { ...options, threadId: "thread", excludeTurns: true };
+			expect(await connection.request(method, params)).toEqual({ thread: { id: "thread" } });
+			expect(writes.at(-1)).toMatchObject({ method, params });
+			await expect(connection.request(method, { ...params, sandbox: "workspace-write" })).rejects.toThrow(
+				"Invalid Codex operation input",
+			);
+		}
 		expect(await connection.request("thread/read", { threadId: "thread", includeTurns: true })).toEqual({
 			thread: { id: "thread" },
 		});

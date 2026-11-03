@@ -171,9 +171,9 @@ export class CodexAgentClient implements ICodexAgentClient {
 	private options(path: string) {
 		return {
 			cwd: path,
-			sandbox: "workspace-write",
+			sandbox: "danger-full-access",
 			approvalPolicy: "on-request",
-			config: { features: { multi_agent: false }, sandbox_workspace_write: { network_access: false } },
+			config: { features: { multi_agent: false } },
 		};
 	}
 	private hydrate(thread: z.infer<typeof threadSchema>): AgentRuntimeView {

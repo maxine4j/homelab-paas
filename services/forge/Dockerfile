@@ -26,7 +26,11 @@ RUN --mount=type=cache,id=forge-pnpm,target=/pnpm/store pnpm install --prod --fr
 FROM base AS runner
 ARG BUILD_SHA=unknown
 LABEL homelab-paas.revision=$BUILD_SHA
-RUN apt-get update && apt-get install -y --no-install-recommends git=1:2.47.3-0+deb13u1 gh=2.46.0-3 tini=0.19.0-3+b8 ca-certificates=20250419+deb13u1 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends git=1:2.47.3-0+deb13u1 gh=2.46.0-3 tini=0.19.0-3+b8 ca-certificates=20250419+deb13u1 curl=8.14.1-2+deb13u7 && rm -rf /var/lib/apt/lists/*
+ENV NVM_DIR=/opt/nvm
+RUN git clone --depth 1 --branch v0.40.8 https://github.com/nvm-sh/nvm.git "$NVM_DIR" && rm -rf "$NVM_DIR/.git"
+RUN /bin/bash -c '. "$NVM_DIR/nvm.sh" && nvm install 24.22.0 && nvm alias default 24.22.0' && chown -R node:node "$NVM_DIR"
+COPY services/forge/nvm-profile.sh /etc/profile.d/forge-nvm.sh
 ENV NODE_ENV=production
 COPY --from=installer /app/node_modules ./node_modules
 COPY --from=installer /app/packages/backend-infrastructure/package.json packages/backend-infrastructure/package.json

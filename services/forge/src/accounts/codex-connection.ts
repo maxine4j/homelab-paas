@@ -46,7 +46,7 @@ const methods = new Map<string, z.ZodType>([
 		"thread/start",
 		z.strictObject({
 			cwd: z.string().min(1),
-			sandbox: z.literal("workspace-write"),
+			sandbox: z.literal("danger-full-access"),
 			approvalPolicy: z.literal("on-request"),
 			config: z.record(z.string(), z.unknown()),
 		}),
@@ -56,7 +56,7 @@ const methods = new Map<string, z.ZodType>([
 		z.strictObject({
 			threadId: z.string().min(1),
 			cwd: z.string().min(1),
-			sandbox: z.literal("workspace-write"),
+			sandbox: z.literal("danger-full-access"),
 			approvalPolicy: z.literal("on-request"),
 			config: z.record(z.string(), z.unknown()),
 			excludeTurns: z.literal(true),

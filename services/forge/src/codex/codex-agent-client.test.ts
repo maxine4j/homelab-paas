@@ -75,14 +75,14 @@ const setup = () => {
 		request: (id: string | number, method: string, params: unknown) => request(id, method, params),
 	};
 };
-test("starts sandboxed independent threads, streams items, interrupts, and resumes Codex history", async () => {
+test("starts independent threads without an inner sandbox, streams items, interrupts, and resumes history", async () => {
 	const { client, rpc, notify } = setup();
 	const id = await client.start("/data/worktrees/one");
 	expect(rpc).toHaveBeenCalledWith(
 		"thread/start",
 		expect.objectContaining({
 			cwd: "/data/worktrees/one",
-			sandbox: "workspace-write",
+			sandbox: "danger-full-access",
 			approvalPolicy: "on-request",
 		}),
 	);
@@ -108,6 +108,14 @@ test("starts sandboxed independent threads, streams items, interrupts, and resum
 		status: "completed",
 		items: [{ text: "Previous answer" }],
 	});
+	expect(rpc).toHaveBeenCalledWith(
+		"thread/resume",
+		expect.objectContaining({
+			sandbox: "danger-full-access",
+			approvalPolicy: "on-request",
+			config: { features: { multi_agent: false } },
+		}),
+	);
 });
 test("routes approvals and clarification to the owning thread; stale and cross-thread replies fail", async () => {
 	const { client, request, respond, notify } = setup();
