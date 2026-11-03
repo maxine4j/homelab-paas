@@ -329,6 +329,19 @@ first. This is a private proxy workload: browse through authenticated HTTPS PaaS
 ingress. The standalone Vite server is used for controlled browser tests; it does
 not inject a trusted application identity or provide an alternative login.
 
+For isolated frontend iteration, run `pnpm dev:forge:mock` from the repository
+root and open `http://127.0.0.1:5174`. This builds only Forge's browser contracts
+and starts Vite in explicit `mock` mode; no backend, database, credentials, or
+container is required. A visible banner identifies the read-only preview.
+Vite serves deterministic HTTP fixtures for projects, accounts, repository
+branches/files/history, project workspaces, changes and pull-request reviews.
+Both sample projects can be opened. File navigation, editor drafts and review
+inspection work; all API mutations return 405 and no terminal session or
+WebSocket execution is provided. Unknown API paths, identities, branches and
+files return JSON 404 responses. Fixtures are not persisted. Normal Vite mode
+does not install the mock routes, and production builds exclude the mock API
+and banner, including builds invoked with `--mode mock`.
+
 The image is one Node 24.22.0 Debian trixie application (glibc, avoiding musl
 compatibility assumptions), UID/GID 1000, with Git 2.47.3, gh 2.46.0, pinned
 Codex 0.164.0 and approved tini 0.19.0 as PID 1. Exact tested Debian package

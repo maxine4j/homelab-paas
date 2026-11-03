@@ -1,3 +1,9 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-export default defineConfig({ plugins: [react()], server: { port: 5174, strictPort: true } });
+
+import { mockApi } from "./dev/mock-api.ts";
+
+export default defineConfig(({ mode }) => ({
+	plugins: [react(), ...(mode === "mock" ? [mockApi()] : [])],
+	server: { port: 5174, strictPort: true },
+}));
