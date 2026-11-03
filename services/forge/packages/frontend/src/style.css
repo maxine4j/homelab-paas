@@ -565,15 +565,6 @@ summary {
 	color: #58a6ff;
 	padding: 2px;
 }
-.file-actions {
-	position: relative;
-}
-.file-actions[open] {
-	padding: 12px;
-	border: 1px solid #30363d;
-	border-radius: 6px;
-	background: #161b22;
-}
 .repository-layout {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr);
@@ -626,7 +617,7 @@ summary {
 	font-size: 14px;
 	font-weight: 600;
 }
-.file-list-header > div {
+.file-controls {
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -649,18 +640,29 @@ summary {
 .repository-files tr:hover {
 	background: #161b22;
 }
-.repository-files td {
+.repository-files td,
+.repository-files th {
 	padding: 9px 16px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	color: #8b949e;
 }
-.repository-files td:first-child {
+.repository-files th {
+	background: #161b22;
+	border-bottom: 1px solid #30363d;
+	text-align: left;
+	font-weight: 600;
+	padding-top: 14px;
+	padding-bottom: 14px;
+}
+.repository-files td:first-child,
+.repository-files th:first-child {
 	width: 38%;
 }
-.repository-files td:last-child {
-	width: 150px;
+.repository-files td:last-child,
+.repository-files th:last-child {
+	width: 160px;
 	text-align: right;
 	font-size: 12px;
 }
@@ -718,12 +720,8 @@ summary {
 	color: #58a6ff;
 	background: #161b22;
 }
-.repository-empty,
-.parent-row {
+.repository-empty {
 	padding: 12px 16px;
-}
-.parent-row {
-	border-bottom: 1px solid #30363d;
 }
 .repository-code {
 	padding: 0 12px 12px;
@@ -794,13 +792,16 @@ summary {
 	.repository-files .file-commit {
 		display: none;
 	}
-	.repository-files td:first-child {
+	.repository-files td:first-child,
+	.repository-files th:first-child {
 		width: auto;
 	}
-	.repository-files td:last-child {
-		width: 112px;
+	.repository-files td:last-child,
+	.repository-files th:last-child {
+		width: 132px;
 	}
-	.repository-files td {
+	.repository-files td,
+	.repository-files th {
 		padding: 10px;
 	}
 	.readme-content {

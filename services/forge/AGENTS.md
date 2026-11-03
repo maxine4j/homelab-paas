@@ -543,7 +543,10 @@ The branch dropdown lists all local branches and defaults to `main`, or the firs
 branch when `main` is absent. Every branch supports owner editing. There is no
 Working changes option. Listings read committed files and show each entry's latest
 commit subject and date. Browsing and committing never switch or reset a checkout.
-The root breadcrumb is `/`. File tabs appear above and encapsulate the active
+Directory tables, including the root, use Name, Last commit message and Last commit
+date headers. Nested directories start with a `..` folder entry for navigating up.
+Breadcrumbs start with the repository's project name followed by directory segments.
+File tabs appear above and encapsulate the active
 file heading, Back to files, history action and editor. Tabs have a distinct active
 surface and accent border, rather than standalone button styling.
 A history icon loads the selected branch's commits, thirty at a time.
@@ -564,7 +567,8 @@ summaries and session IDs from the primary UI; retain actionable errors,
 terminal connection/loss states and local drafts after commit failures.
 Git HTTPS hosting and merging remain unavailable.
 
-The Code editor reads committed branch content. Edits and new files remain in
+The Code editor reads committed branch content. New-file creation in the browser
+is deferred; the Code UI only opens existing files. Edits remain in
 browser memory, scoped by branch and path, until Commit submits all changed drafts
 for that branch in one request. Switching branches, files, project sections or
 Config retains drafts. Project exit and page unload guard uncommitted drafts.

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const projectId = "123e4567-e89b-42d3-a456-426614174000";
 const head = "a".repeat(40);
-test("new nested files remain local, navigation guards drafts, and typing during Commit remains dirty", async ({
+test("existing file edits remain local, navigation guards drafts, and typing during Commit remains dirty", async ({
 	page,
 }) => {
 	const mutations: unknown[] = [];
@@ -29,22 +29,31 @@ test("new nested files remain local, navigation guards drafts, and typing during
 			if (url.pathname.endsWith("/tree")) {
 				if (url.searchParams.get("path"))
 					return route.fulfill({ status: 404, json: { error: "file-not-found" } });
-				return route.fulfill({ json: { path: "", head, entries: [], truncated: false } });
+				return route.fulfill({
+					json: {
+						path: "",
+						head,
+						entries: [{ name: "index.ts", path: "index.ts", kind: "file" }],
+						truncated: false,
+					},
+				});
 			}
+			if (url.pathname.endsWith("/file"))
+				return route.fulfill({ json: { path: "index.ts", content: "original" } });
 			return route.fulfill({ status: 404, json: {} });
 		},
 	);
 	await page.goto("/");
 	await page.getByRole("button", { name: "Open Project" }).click();
-	await expect(page.getByText("This directory is empty.")).toBeVisible();
-	await page.getByText("New file", { exact: true }).click();
-	await page.getByLabel("New file path").fill("new/nested.ts");
-	await page.getByRole("button", { name: "Create file", exact: true }).click();
+	await page
+		.getByRole("table", { name: "Repository files" })
+		.getByRole("button", { name: "index.ts", exact: true })
+		.click();
 	const editor = page.getByRole("textbox", { name: "File editor" });
 	await expect(editor).toBeVisible();
 	await editor.fill("first snapshot");
 	await page.getByRole("button", { name: "Back to files", exact: true }).click();
-	await page.getByRole("tab", { name: "new/nested.ts *", exact: true }).click();
+	await page.getByRole("tab", { name: "index.ts *", exact: true }).click();
 	await expect(editor).toContainText("first snapshot");
 	expect(mutations).toEqual([]);
 	await page.getByRole("button", { name: "Projects", exact: true }).click();
@@ -52,7 +61,7 @@ test("new nested files remain local, navigation guards drafts, and typing during
 	await page.getByRole("link", { name: "Config", exact: true }).click();
 	await page.getByRole("link", { name: "Projects", exact: true }).click();
 	await expect(editor).toContainText("first snapshot");
-	await page.getByLabel("Commit message").fill("Add nested file");
+	await page.getByLabel("Commit message").fill("Edit existing file");
 	await page.getByRole("button", { name: "Commit", exact: true }).click();
 	await expect.poll(() => committing).toBe(true);
 	try {
@@ -62,13 +71,13 @@ test("new nested files remain local, navigation guards drafts, and typing during
 	}
 	await expect(page.getByRole("status").filter({ hasText: "Committed 1 file to main." })).toBeVisible();
 	await expect(editor).toContainText("newer draft");
-	await expect(page.getByRole("tab", { name: "new/nested.ts *", exact: true })).toBeVisible();
+	await expect(page.getByRole("tab", { name: "index.ts *", exact: true })).toBeVisible();
 	expect(mutations).toEqual([
 		{
 			branch: "main",
 			expectedHead: head,
-			message: "Add nested file",
-			files: [{ path: "new/nested.ts", content: "first snapshot" }],
+			message: "Edit existing file",
+			files: [{ path: "index.ts", content: "first snapshot" }],
 		},
 	]);
 	await page.getByRole("button", { name: "Discard all drafts" }).click();

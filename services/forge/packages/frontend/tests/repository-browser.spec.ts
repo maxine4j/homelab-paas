@@ -117,7 +117,7 @@ test("Code overview limits entries, renders README and dates, and opens the edit
 }) => {
 	await expect(page.getByRole("tab", { name: "Code", exact: true })).toHaveAttribute("aria-selected", "true");
 	const list = page.getByRole("table", { name: "Repository files" });
-	await expect(list.getByRole("row")).toHaveCount(10);
+	await expect(list.getByRole("row")).toHaveCount(11);
 	await expect(list.locator("time")).toHaveCount(10);
 	await expect(list.locator("svg[data-file-type=typescript]").first()).toBeVisible();
 	await expect(page.getByRole("textbox", { name: "File editor" })).toHaveCount(0);
@@ -129,7 +129,7 @@ test("Code overview limits entries, renders README and dates, and opens the edit
 	}
 	await page.setViewportSize({ width: 1280, height: 900 });
 	await page.getByRole("button", { name: "Show all 14 files" }).click();
-	await expect(list.getByRole("row")).toHaveCount(14);
+	await expect(list.getByRole("row")).toHaveCount(15);
 	await list.getByRole("button", { name: "file-0.ts", exact: true }).click();
 	await expect(page.getByRole("textbox", { name: "File editor" })).toBeVisible();
 	await expect(list).toHaveCount(0);
@@ -138,6 +138,27 @@ test("Code overview limits entries, renders README and dates, and opens the edit
 	await expect(list).toBeVisible();
 	await list.getByRole("button", { name: "src", exact: true }).click();
 	await expect(list.getByRole("button", { name: "index.ts", exact: true })).toBeVisible();
+});
+
+test("directory listings have named columns, repository breadcrumbs and a parent entry without file creation", async ({
+	page,
+}) => {
+	const list = page.getByRole("table", { name: "Repository files" });
+	const breadcrumb = page.getByRole("navigation", { name: "File path" });
+	await expect(list.getByRole("columnheader")).toHaveText(["Name", "Last commit message", "Last commit date"]);
+	await expect(breadcrumb.getByRole("button", { name: "Forge", exact: true })).toBeVisible();
+	await expect(list.getByRole("button", { name: "..", exact: true })).toHaveCount(0);
+	await expect(page.getByText("New file", { exact: true })).toHaveCount(0);
+	await list.getByRole("button", { name: "src", exact: true }).click();
+	await expect(breadcrumb).toHaveText("Forge / src");
+	await expect(list.getByRole("columnheader")).toHaveText(["Name", "Last commit message", "Last commit date"]);
+	const parent = list.getByRole("button", { name: "..", exact: true });
+	await expect(parent.locator("svg[data-file-type=folder]")).toBeVisible();
+	await parent.click();
+	await expect(list.getByRole("button", { name: "src", exact: true })).toBeVisible();
+	await list.getByRole("button", { name: "src", exact: true }).click();
+	await breadcrumb.getByRole("button", { name: "Forge", exact: true }).click();
+	await expect(list.getByRole("button", { name: "src", exact: true })).toBeVisible();
 });
 
 test("branch dropdown scopes code and history; committed code can be drafted", async ({ page }) => {
@@ -187,6 +208,7 @@ test("left file tree expands folders while keeping the open editor and drafts", 
 	await expect(tree.getByRole("button", { name: "Open src", exact: true })).toHaveAttribute("aria-expanded", "true");
 	await tree.getByRole("button", { name: "Open index.ts", exact: true }).click();
 	await expect(editor).toContainText("export const value = 1;");
+	await expect(page.getByRole("navigation", { name: "File path" })).toHaveText("Forge / src / index.ts");
 	await page.getByRole("combobox", { name: "Branch" }).selectOption("feature");
 	await page.getByRole("combobox", { name: "Branch" }).selectOption("main");
 	await page

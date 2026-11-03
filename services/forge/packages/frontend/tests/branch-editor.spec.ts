@@ -54,7 +54,7 @@ test("cards open projects; branch drafts stay local until one atomic commit and 
 	await expect(page.getByText("Changes", { exact: true })).toHaveCount(0);
 	await expect(page.getByText("Pull requests", { exact: true })).toHaveCount(0);
 	await expect(
-		page.getByRole("navigation", { name: "File path" }).getByRole("button", { name: "/", exact: true }),
+		page.getByRole("navigation", { name: "File path" }).getByRole("button", { name: "Forge", exact: true }),
 	).toBeVisible();
 	await page.getByRole("button", { name: "index.ts", exact: true }).click();
 	const editor = page.getByRole("textbox", { name: "File editor" });

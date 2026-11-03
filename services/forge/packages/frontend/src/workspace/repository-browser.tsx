@@ -4,7 +4,6 @@ import {
 	repositoryFileSchema,
 	repositoryHistorySchema,
 	repositoryCommitResultSchema,
-	filePathSchema,
 	type RepositoryBranch,
 	type RepositoryTree,
 	type RepositoryFile,
@@ -50,6 +49,7 @@ interface Draft {
 
 const BranchBrowser = ({
 	root,
+	repositoryName,
 	branch,
 	api,
 	dirtyChange,
@@ -57,6 +57,7 @@ const BranchBrowser = ({
 }: {
 	branchControl: ReactNode;
 	root: string;
+	repositoryName: string;
 	branch: string;
 	api: IWorkspaceApi;
 	dirtyChange: (branch: string, dirty: boolean) => void;
@@ -74,13 +75,13 @@ const BranchBrowser = ({
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 	const [message, setMessage] = useState("");
-	const [newPath, setNewPath] = useState("");
 	const [revision, setRevision] = useState(0);
 	const [notice, setNotice] = useState("");
 	const changed = Object.entries(drafts).filter(([, draft]) => draft.original !== draft.content);
 	const dirty = changed.length > 0;
 	const disabled = busy || loading;
 	const draft = drafts[active];
+	const breadcrumbPath = active && !history ? active.split("/").slice(0, -1).join("/") : path;
 	const entries = [...(tree?.entries ?? [])].sort((a, b) =>
 		a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "directory" ? -1 : 1,
 	);
@@ -183,38 +184,41 @@ const BranchBrowser = ({
 			throw new Error("Branch changed. Reopen commit history to refresh.");
 		setHistory(more && history ? { ...value, commits: [...history.commits, ...value.commits] } : value);
 	};
+	const fileControls = (
+		<div className='file-controls'>
+			{(active || history) && (
+				<button
+					disabled={disabled}
+					onClick={() => {
+						setActive("");
+						setHistory(undefined);
+					}}
+				>
+					Back to files
+				</button>
+			)}
+			<button
+				className='history-button'
+				aria-label='Commit history'
+				title='Commit history'
+				disabled={disabled}
+				onClick={() => void run(() => showHistory())}
+			>
+				<svg width='18' height='18' viewBox='0 0 20 20' aria-hidden='true'>
+					<path
+						d='M3 8a7 7 0 1 1 0 5M3 3v5h5m2-3v5l3 2'
+						fill='none'
+						stroke='currentColor'
+						strokeWidth='1.6'
+					/>
+				</svg>
+			</button>
+		</div>
+	);
 	const header = (
 		<div className='file-list-header'>
-			<span>{history ? "Commits" : active || path || "Files"}</span>
-			<div>
-				{(active || history) && (
-					<button
-						disabled={disabled}
-						onClick={() => {
-							setActive("");
-							setHistory(undefined);
-						}}
-					>
-						Back to files
-					</button>
-				)}
-				<button
-					className='history-button'
-					aria-label='Commit history'
-					title='Commit history'
-					disabled={disabled}
-					onClick={() => void run(() => showHistory())}
-				>
-					<svg width='18' height='18' viewBox='0 0 20 20' aria-hidden='true'>
-						<path
-							d='M3 8a7 7 0 1 1 0 5M3 3v5h5m2-3v5l3 2'
-							fill='none'
-							stroke='currentColor'
-							strokeWidth='1.6'
-						/>
-					</svg>
-				</button>
-			</div>
+			<span>{history ? "Commits" : active}</span>
+			{fileControls}
 		</div>
 	);
 	return (
@@ -223,61 +227,22 @@ const BranchBrowser = ({
 				{branchControl}
 				<nav aria-label='File path'>
 					<button disabled={disabled} onClick={() => browse("")}>
-						/
+						{repositoryName}
 					</button>
-					{path
+					{breadcrumbPath
 						.split("/")
 						.filter(Boolean)
 						.map((part, index, parts) => (
 							<span key={index}>
+								{" / "}
 								<button disabled={disabled} onClick={() => browse(parts.slice(0, index + 1).join("/"))}>
 									{part}
-								</button>{" "}
-								/{" "}
+								</button>
 							</span>
 						))}
-					{active && <span>{active.split("/").at(-1)}</span>}
+					{active && <span> / {active.split("/").at(-1)}</span>}
 				</nav>
-				<details className='file-actions'>
-					<summary>New file</summary>
-					<label>
-						New file path
-						<input
-							value={newPath}
-							onChange={(event) => setNewPath(event.target.value)}
-							disabled={disabled}
-						/>
-					</label>
-					<button
-						disabled={disabled || !baseHead || !newPath}
-						onClick={() =>
-							void run(async () => {
-								if (!filePathSchema.safeParse(newPath).success || Object.hasOwn(drafts, newPath))
-									throw new Error("Choose a new, valid file path.");
-								const parts = newPath.split("/");
-								let directory = "";
-								for (const [index, part] of parts.entries()) {
-									const value = await loadTree(directory);
-									if (value.head !== baseHead)
-										throw new Error("The branch changed. Discard drafts to reload it.");
-									if (value.truncated)
-										throw new Error("Directory is too large to verify a new file path.");
-									const entry = value.entries.find((entry) => entry.name === part);
-									if (!entry) break;
-									if (index === parts.length - 1 || entry.kind !== "directory")
-										throw new Error("That path already exists. Open it from the file list.");
-									directory = entry.path;
-								}
-								setDrafts((current) => ({ ...current, [newPath]: { content: "" } }));
-								setActive(newPath);
-								setHistory(undefined);
-								setNewPath("");
-							})
-						}
-					>
-						Create file
-					</button>
-				</details>
+				{!active && !history && fileControls}
 			</div>
 			{error && (
 				<p className='error' role='alert'>
@@ -360,7 +325,7 @@ const BranchBrowser = ({
 						</div>
 					) : (
 						<>
-							{header}
+							{history && header}
 							{history ? (
 								<section className='commit-history' aria-label='Commit history'>
 									<h2>{branch}</h2>
@@ -382,18 +347,34 @@ const BranchBrowser = ({
 								</section>
 							) : (
 								<>
-									{path && (
-										<div className='parent-row'>
-											<button
-												disabled={disabled}
-												onClick={() => browse(path.split("/").slice(0, -1).join("/"))}
-											>
-												Parent directory
-											</button>
-										</div>
-									)}
 									<table className='repository-files' aria-label='Repository files'>
+										<thead>
+											<tr>
+												<th scope='col'>Name</th>
+												<th scope='col' className='file-commit'>
+													Last commit message
+												</th>
+												<th scope='col'>Last commit date</th>
+											</tr>
+										</thead>
 										<tbody>
+											{path && (
+												<tr>
+													<td>
+														<button
+															disabled={disabled}
+															onClick={() =>
+																browse(path.split("/").slice(0, -1).join("/"))
+															}
+														>
+															<FileIcon name='..' directory />
+															<span>..</span>
+														</button>
+													</td>
+													<td className='file-commit' />
+													<td />
+												</tr>
+											)}
 											{(showAll ? entries : entries.slice(0, 10)).map((entry) => (
 												<tr key={entry.path}>
 													<td>
@@ -527,10 +508,12 @@ const BranchBrowser = ({
 
 export const RepositoryBrowser = ({
 	projectId,
+	repositoryName,
 	api,
 	dirtyChange,
 }: {
 	projectId: string;
+	repositoryName: string;
 	api: IWorkspaceApi;
 	dirtyChange: (branch: string, dirty: boolean) => void;
 }) => {
@@ -571,6 +554,7 @@ export const RepositoryBrowser = ({
 				<div key={value} hidden={branch !== value}>
 					<BranchBrowser
 						root={root}
+						repositoryName={repositoryName}
 						branch={value}
 						api={api}
 						dirtyChange={dirtyChange}

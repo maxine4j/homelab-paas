@@ -114,7 +114,12 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 				</p>
 			)}
 			<section id='panel-Code' role='tabpanel' aria-labelledby='tab-Code' hidden={tab !== "Code"}>
-				<RepositoryBrowser projectId={project.id} api={api} dirtyChange={dirtyChange} />
+				<RepositoryBrowser
+					projectId={project.id}
+					repositoryName={project.name}
+					api={api}
+					dirtyChange={dirtyChange}
+				/>
 			</section>
 			{["Tasks", "Agents", "Pipelines"].map((name) => (
 				<section
