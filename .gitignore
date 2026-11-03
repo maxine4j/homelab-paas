@@ -150,5 +150,6 @@ vite.config.ts.timestamp-*
 
 artifacts
 .dev
+/.codex-attachments/
 
 .DS_Store
