@@ -20,6 +20,11 @@ export class WorkspaceApi implements IWorkspaceApi {
 		if (!response.ok) {
 			const error = typeof value === "object" && value !== null && "error" in value ? value.error : undefined;
 			const messages: Record<string, string> = {
+				"agent-not-found": "Chat no longer exists. Refresh the chat list.",
+				"agent-conflict": "Chat changed. Refresh its status before trying again. Your draft is preserved.",
+				"agent-unavailable":
+					"Chat unavailable. Check the connection and account. Your draft is preserved; load history before sending again.",
+				"mock-read-only": "This preview is read-only. Changes require a running Forge backend.",
 				"access-denied": "Sign in through PaaS as the configured owner.",
 				"ticket-not-found": "Ticket no longer exists. Refresh the board.",
 				"ticket-conflict": "The destination changed. Refresh the board and retry.",

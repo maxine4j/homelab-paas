@@ -66,6 +66,25 @@ try {
 	assert.equal(created.status, 201);
 	const project = JSON.parse(created.body);
 	assert.equal(project.status, "ready");
+	const chatResponse = request(`/api/projects/${project.id}/agents`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ title: "Persistent chat" }),
+	});
+	assert.equal(chatResponse.status, 201);
+	const chat = JSON.parse(chatResponse.body);
+	assert.equal(chat.thread.status, "idle");
+	assert.deepEqual(chat.items, []);
+	assert.equal(request(`/api/workspaces/${chat.thread.workspaceId}`, { headers }).status, 200);
+	assert.equal(
+		request(`/api/agents/${chat.thread.id}/messages`, {
+			method: "POST",
+			headers,
+			body: JSON.stringify({ text: "" }),
+		}).status,
+		400,
+	);
+	assert.equal(JSON.parse(request(`/api/projects/${project.id}/agents`, { headers }).body)[0].id, chat.thread.id);
 	const createdTicket = request(`/api/projects/${project.id}/tickets`, {
 		method: "POST",
 		headers,
@@ -202,6 +221,7 @@ try {
 	await waitFor(() => assert.equal(request("/health").status, 200));
 	assert.equal(JSON.parse(request(`/api/terminals/${terminal.id}`, { headers }).body).status, "closed");
 	assert.equal(JSON.parse(request("/api/projects", { headers }).body)[0].id, project.id);
+	assert.equal(JSON.parse(request(`/api/agents/${chat.thread.id}`, { headers }).body).thread.status, "idle");
 	assert.equal(JSON.parse(request(`/api/tickets/${ticket.id}`, { headers }).body).status, "done");
 	const persistedPr = request(`/api/pull-requests/${pr.id}`, { headers });
 	assert.equal(persistedPr.status, 200);

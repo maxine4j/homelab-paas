@@ -4,6 +4,7 @@ export class ResourcePoller<T> {
 	private timer: ReturnType<typeof setTimeout> | undefined;
 	private queue: Promise<void> = Promise.resolve();
 	private reading = false;
+	private invalidated = false;
 	constructor(
 		private readonly read: (signal: AbortSignal) => Promise<T>,
 		private readonly changed: (value: T) => void,
@@ -11,10 +12,18 @@ export class ResourcePoller<T> {
 		private readonly interval = 4000,
 	) {}
 	refresh(): void {
-		if (this.reading || this.controller.signal.aborted) return;
+		if (this.controller.signal.aborted) return;
+		if (this.reading) {
+			this.invalidated = true;
+			return;
+		}
 		this.reading = true;
 		void this.mutate(this.read).finally(() => {
 			this.reading = false;
+			if (this.invalidated) {
+				this.invalidated = false;
+				this.refresh();
+			}
 		});
 	}
 	mutate(operation: (signal: AbortSignal) => Promise<T>): Promise<void> {

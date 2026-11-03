@@ -101,20 +101,110 @@ reviews; Codex owns model interaction, tools, agent execution, and conversations
   protocol before implementing integrations; do not invent fields or guarantees.
 - Keep app-server private to the backend. Browser clients call Forge APIs rather
   than receiving unrestricted Codex protocol access.
-- Map tickets to worktrees, branches, Codex thread IDs, active turn IDs, and
-  execution status. Resume the ticket conversation through planning,
-  implementation, and requested changes.
+- Map executions to worktrees, branches, Codex thread IDs, active turn IDs, and
+  execution status. Future planning agents retain their conversation through
+  clarification and plan feedback; implementation starts a separate agent with
+  its own conversation and worktree. Keep ticket orchestration outside the Codex
+  execution adapter.
 - Persist important normalized activity and approval state for browser reconnects.
   Reconcile actual Codex state after app-server or application restart before
   dispatching more work. Surface interrupted or uncertain execution explicitly.
-- Start with one active agent turn. Keep scheduling ownership explicit so later
-  concurrency does not require redefining the workflow.
+- Interactive threads can execute concurrently, with no global active-turn limit.
+  Serialize mutations within each thread and reject sending another message while
+  its turn is running or awaiting input. Future asynchronous job scheduling owns
+  its own concurrency policy.
 - Shut down child processes cleanly and reap descendants. Keep the web UI and
   process health available when Codex is unavailable or unauthenticated.
 
 References: [official app-server documentation](https://learn.chatgpt.com/docs/app-server)
 and the local `~/repo/codex-runner` source. Its short-lived setup/proxy connection is
 a reference, not the required transport lifecycle for Forge's continuous agent UI.
+
+#### Interactive agents
+
+The Agents tab and backend reuse the one private, pinned Codex `0.164.0` stdio
+process and existing persistent ChatGPT login.
+`AgentService` owns thread/workspace coordination, authorization and per-thread
+serialization; `CodexAgentClient` owns execution and maps validated harness events
+to browser-safe values. Future ticket workflows can reuse that execution adapter
+without depending on HTTP, browser connections or chat-specific state.
+
+Creating a chat allocates a dedicated managed branch/worktree from local `main`.
+It never uses the project repository or an unrelated manual workspace as its
+execution directory. Codex thread creation is deferred until the first message:
+the pinned runtime does not persist empty threads. Verify workspace ownership
+before starting, resuming or sending a turn, and before answering approvals.
+Canonicalize runtime paths before checking Codex's resumed working directory.
+All working files, branches and thread records are retained.
+
+SQLite stores thread identity/title, project/workspace links, Codex thread/turn
+IDs, execution status and pending normalized requests. Codex's persistent home
+owns conversation history; Forge's bounded in-memory activity view is a cache.
+Persist intent before thread/turn dispatch. On restart, existing execution becomes
+`uncertain` and pending request handles are invalidated. Never replay a turn or
+approval automatically. Explicit resume reloads Codex history and reconciles state
+without submitting a message. An ambiguous thread creation with no known Codex ID
+cannot be retried; create a new chat, retaining the old worktree. Untouched empty
+chats remain usable across restarts.
+
+Threads use `workspace-write`, `on-request` approvals, restricted network access
+and disabled Codex subagent spawning. This slice supports one-time command/file
+approval or denial and replies to structured user-input questions. It does not
+grant session-wide permissions or expose unrestricted RPC. Other server requests
+are explicitly rejected. Approval callbacks belong to a particular live connection,
+thread and turn; disconnects invalidate them. Worktrees remain a trusted-owner
+boundary, not process isolation or protection from deliberately modifying shared
+Git metadata.
+
+Browser-safe schemas are exported from `@homelab-paas/forge-contracts/agents`:
+
+| Route                                      | Contract                                                                                                 |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `GET/POST /api/projects/:projectId/agents` | List summaries / create `{title}`; returns 201 and a view.                                               |
+| `GET /api/agents/:id`                      | `{thread,items,requests,truncated}`; no Codex thread IDs or internal workspace paths in metadata.        |
+| `POST /api/agents/:id/messages`            | `{text}`; starts one turn and returns its current view.                                                  |
+| `POST /api/agents/:id/resume`              | Explicit reconciliation; never sends input.                                                              |
+| `POST /api/agents/:id/interrupt`           | Requests interruption of the known active turn.                                                          |
+| `POST /api/agents/:id/replies`             | `{requestId,decision: "accept"/"decline"}` or `{requestId,answers:{questionId:text}}`.                   |
+| `GET /api/agents/:id/events`               | Authorized SSE invalidations (`data: changed`); read the current view after each notification/reconnect. |
+
+Every operation rechecks owner access; HTTP mutations retain exact-origin checks.
+Errors are `invalid-request` (400), `agent-not-found` (404), `agent-conflict` (409),
+`agent-unavailable` (503), plus existing access/project/workspace failures. Raw
+Codex diagnostics stay in operator logs. Conversation/tool text is owner-visible
+content, not a credential-redaction guarantee.
+
+Messages are limited to 8000 characters. Views retain at most 500 items, 32000
+characters per item and 240000 text characters in total; clipping sets `truncated`.
+Resume loads the latest 20 turns through the pinned paginated history API and
+marks omitted older history explicitly. Pending structured requests are bounded
+per thread. RPC deadlines remain 15 seconds and frames 1 MiB; there is no automatic
+turn timeout or global chat concurrency limit. SSE sends 15-second heartbeats,
+disconnects slow consumers and closes on application shutdown. Reconnection reads
+a current snapshot rather than replaying mutations.
+
+Tests use injected service fakes, real Git/SQLite, controlled stdio peers and a
+temporary credential-free pinned Codex process. The real probe verifies start,
+interruption and history reload, not successful authenticated inference. Resuming
+preserves newer live activity observed during the history read; unloaded or
+system-error runtime states remain uncertain. Externally resolved server requests
+invalidate both the transport reply and browser callback.
+
+The responsive Agents tab lists and creates project chats, shows conversation and
+tool activity, and supports send, interrupt, one-time approval/denial and structured
+clarification replies. Open chats retain their message and answer drafts across
+thread and project-section selection. Failed writes preserve drafts. Drafts are
+browser memory only and are lost when leaving the project or reloading the page.
+Execution continues independently of the selected chat or browser connection.
+Uncertain threads require explicit resume; the same control reloads persisted
+history after reopening. Truncation is visible. SSE reconnects and periodic polling
+read current snapshots through a serialized, coalesced reader; neither replays a
+write. No Markdown or tool HTML is executed from conversation text.
+
+Controlled Chromium tests cover independent threads, activity, interruptions,
+reopening, failed sends/replies, approval/input, reconnects, explicit recovery and
+mobile layout. Screenshots live under `artifacts/forge-browser/`. Authenticated
+live ChatGPT inference remains a separate manual check.
 
 ### Account login and application access
 
@@ -334,7 +424,8 @@ root and open `http://127.0.0.1:5174`. This builds only Forge's browser contract
 and starts Vite in explicit `mock` mode; no backend, database, credentials, or
 container is required. A visible banner identifies the read-only preview.
 Vite serves deterministic HTTP fixtures for projects, accounts, repository
-branches/files/history, project workspaces, changes and pull-request reviews.
+branches/files/history, project workspaces, changes, pull-request reviews and
+project chat history with clarification requests.
 Both sample projects can be opened. File navigation and client-side editor drafts
 work; all API mutations return 405 and no terminal session or
 WebSocket execution is provided. Unknown API paths, identities, branches and

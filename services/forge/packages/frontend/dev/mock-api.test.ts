@@ -10,6 +10,7 @@ import {
 	repositoryFileSchema,
 	repositoryHistorySchema,
 } from "@homelab-paas/forge-contracts";
+import { agentThreadsSchema, agentViewSchema } from "@homelab-paas/forge-contracts/agents";
 import {
 	pullRequestsSchema,
 	pullRequestSchema,
@@ -43,6 +44,30 @@ const read = async (path: string) => {
 	expect(response.headers.get("cache-control")).toBe("no-store");
 	return response.json();
 };
+
+test("mock chats expose isolated project history and requests while every mutation stays read-only", async () => {
+	for (const project of projectsSchema.parse(await read("/api/projects"))) {
+		const threads = agentThreadsSchema.parse(await read(`/api/projects/${project.id}/agents`));
+		expect(threads.length).toBeGreaterThan(0);
+		for (const thread of threads) {
+			expect(thread.projectId).toBe(project.id);
+			const path = `/api/agents/${thread.id}`;
+			const view = agentViewSchema.parse(await read(path));
+			expect(view.items.length).toBeGreaterThan(0);
+			expect(view.requests.length).toBeGreaterThan(0);
+			for (const mutation of [
+				`/api/projects/${project.id}/agents`,
+				`${path}/messages`,
+				`${path}/resume`,
+				`${path}/interrupt`,
+				`${path}/replies`,
+			]) {
+				expect((await fetch(new URL(mutation, origin), { method: "POST" })).status).toBe(405);
+			}
+			expect(await read(path)).toEqual(view);
+		}
+	}
+});
 
 test("mock boards expose project-scoped tickets across the workflow", async () => {
 	const projects = projectsSchema.parse(await read("/api/projects"));

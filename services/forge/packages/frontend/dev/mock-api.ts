@@ -62,6 +62,43 @@ class MockApi implements IMockApi {
 				createdAt: date,
 			};
 			const projectRoot = `/api/projects/${project.id}`;
+			const agent = {
+				id: project.id.replace(/0$/, "5"),
+				projectId: project.id,
+				workspaceId: project.id.replace(/0$/, "6"),
+				title: "Review project navigation",
+				createdAt: date,
+				status: "waiting",
+			};
+			this.routes.set(`${projectRoot}/agents`, () => [agent]);
+			this.routes.set(`/api/agents/${agent.id}`, () => ({
+				thread: agent,
+				items: [
+					{ id: "user", role: "user", text: "Review the navigation and suggest a small improvement." },
+					{ id: "activity", role: "activity", text: "git status --short\nWorking tree clean" },
+					{
+						id: "answer",
+						role: "assistant",
+						text: "The project sections are clear. I can improve the mobile layout and verify it in the browser.",
+					},
+				],
+				requests: [
+					{
+						id: "preview-question",
+						kind: "input",
+						description: "Choose the next step",
+						questions: [
+							{
+								id: "scope",
+								question: "Which scope should I use?",
+								secret: false,
+								options: ["Mobile navigation", "All navigation"],
+							},
+						],
+					},
+				],
+				truncated: false,
+			}));
 			const tickets = [
 				{
 					id: `FORGE-${project.id === projects.at(0)!.id ? 1 : 4}`,

@@ -2,6 +2,29 @@ import { expect, test, vi } from "vitest";
 
 import { ResourcePoller } from "./resource-poller.ts";
 
+test("invalidations during a snapshot read trigger one trailing read", async () => {
+	let resolve: (value: number) => void = () => {};
+	const read = vi.fn(
+		() =>
+			new Promise<number>((done) => {
+				resolve = done;
+			}),
+	);
+	const poller = new ResourcePoller(
+		read,
+		() => {},
+		() => {},
+	);
+	poller.refresh();
+	await Promise.resolve();
+	for (let index = 0; index < 10; index++) poller.refresh();
+	expect(read).toHaveBeenCalledTimes(1);
+	resolve(1);
+	await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+	poller.stop();
+	resolve(2);
+});
+
 test("polls serially, coalesces refresh, serializes actions and aborts/unsubscribes on stop", async () => {
 	vi.useFakeTimers();
 	try {

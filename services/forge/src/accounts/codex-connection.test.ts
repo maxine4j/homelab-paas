@@ -126,13 +126,80 @@ describe("CodexConnection", () => {
 		};
 		const connection = new CodexConnection(processes, sleep, 10);
 		await connection.initialize();
-		await expect(connection.request("turn/start", {})).rejects.toThrow("Unsupported Codex operation");
+		await expect(connection.request("arbitrary/method", {})).rejects.toThrow("Unsupported Codex operation");
 		await expect(connection.request("account/read", {})).rejects.toThrow("Codex connection unavailable");
 		expect(stopped).toBe(true);
 		await connection.initialize();
 		const pending = connection.request("account/read", {});
 		output("x".repeat(1024 * 1024 + 1));
 		await expect(pending).rejects.toThrow("Codex connection unavailable");
+		await connection.close();
+	});
+	it("routes execution requests and correlates one-time server replies", async () => {
+		let output: (chunk: string) => void = () => {};
+		const writes: Record<string, unknown>[] = [];
+		const connection = new CodexConnection(
+			{
+				initialize: async () => {},
+				spawn: (spec) => {
+					output = spec.onOutput;
+					return {
+						done: new Promise(() => {}),
+						stop: async () => {},
+						write: (data) => {
+							const message = JSON.parse(data);
+							writes.push(message);
+							if (message.method === "initialize")
+								output(
+									JSON.stringify({
+										id: message.id,
+										result: {
+											userAgent: "test",
+											codexHome: "/data/codex",
+											platformFamily: "unix",
+											platformOs: "linux",
+										},
+									}) + "\n",
+								);
+							if (message.method === "thread/read")
+								output(JSON.stringify({ id: message.id, result: { thread: { id: "thread" } } }) + "\n");
+						},
+					};
+				},
+			},
+			sleep,
+		);
+		const request = vi.fn(() => true);
+		connection.subscribeRequests(request);
+		await connection.initialize();
+		expect(await connection.request("thread/read", { threadId: "thread", includeTurns: true })).toEqual({
+			thread: { id: "thread" },
+		});
+		output(
+			JSON.stringify({
+				id: "approval",
+				method: "item/commandExecution/requestApproval",
+				params: { threadId: "thread" },
+			}) + "\n",
+		);
+		expect(request).toHaveBeenCalledWith("approval", "item/commandExecution/requestApproval", {
+			threadId: "thread",
+		});
+		connection.respond("approval", { decision: "decline" });
+		expect(writes.at(-1)).toEqual({ id: "approval", result: { decision: "decline" } });
+		expect(() => connection.respond("approval", { decision: "accept" })).toThrow();
+		output(
+			JSON.stringify({
+				id: "cancelled",
+				method: "item/fileChange/requestApproval",
+				params: { threadId: "thread" },
+			}) + "\n",
+		);
+		output(
+			JSON.stringify({ method: "serverRequest/resolved", params: { threadId: "thread", requestId: "cancelled" } })
+				+ "\n",
+		);
+		expect(() => connection.respond("cancelled", { decision: "accept" })).toThrow();
 		await connection.close();
 	});
 });

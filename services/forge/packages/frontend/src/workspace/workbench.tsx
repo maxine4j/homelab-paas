@@ -1,6 +1,7 @@
 import { workspaceSchema, workspacesSchema, type Project, type Workspace } from "@homelab-paas/forge-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AgentChat } from "../agents/agent-chat.tsx";
 import type { IWorkspaceApi } from "../api/workspace-api.ts";
 import { TaskBoard } from "../tasks/task-board.tsx";
 import { RepositoryBrowser } from "./repository-browser.tsx";
@@ -68,6 +69,7 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 	const [error, setError] = useState("");
 	const [terminalOpened, setTerminalOpened] = useState(false);
 	const [tasksOpened, setTasksOpened] = useState(false);
+	const [agentsOpened, setAgentsOpened] = useState(false);
 	const dirty = Object.values(dirtyBranches).some(Boolean);
 	const dirtyChange = useCallback((branch: string, value: boolean) => {
 		setDirtyBranches((current) => (current[branch] === value ? current : { ...current, [branch]: value }));
@@ -105,6 +107,7 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 							setTab(name);
 							if (name === "Terminals") setTerminalOpened(true);
 							if (name === "Tasks") setTasksOpened(true);
+							if (name === "Agents") setAgentsOpened(true);
 						}}
 					>
 						{name}
@@ -127,19 +130,19 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 			<section id='panel-Tasks' role='tabpanel' aria-labelledby='tab-Tasks' hidden={tab !== "Tasks"}>
 				{tasksOpened && <TaskBoard projectId={project.id} api={api} />}
 			</section>
-			{["Agents", "Pipelines"].map((name) => (
-				<section
-					key={name}
-					id={`panel-${name}`}
-					role='tabpanel'
-					aria-labelledby={`tab-${name}`}
-					hidden={tab !== name}
-					className='empty feature-empty'
-				>
-					<h2>{name}</h2>
-					<p>{name} are not available yet.</p>
-				</section>
-			))}
+			<section id='panel-Agents' role='tabpanel' aria-labelledby='tab-Agents' hidden={tab !== "Agents"}>
+				{agentsOpened && <AgentChat projectId={project.id} api={api} />}
+			</section>
+			<section
+				id='panel-Pipelines'
+				role='tabpanel'
+				aria-labelledby='tab-Pipelines'
+				hidden={tab !== "Pipelines"}
+				className='empty feature-empty'
+			>
+				<h2>Pipelines</h2>
+				<p>Pipelines are not available yet.</p>
+			</section>
 			<section id='panel-Terminals' role='tabpanel' aria-labelledby='tab-Terminals' hidden={tab !== "Terminals"}>
 				{terminalOpened && <ProjectTerminal projectId={project.id} api={api} />}
 			</section>

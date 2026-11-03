@@ -14,7 +14,11 @@ import { AccountService } from "./accounts/account-service.ts";
 import { CodexAccountClient } from "./accounts/codex-account-client.ts";
 import { CodexConnection } from "./accounts/codex-connection.ts";
 import { GithubAccountClient } from "./accounts/github-account-client.ts";
+import { AgentRouter } from "./agents/agent-router.ts";
+import { AgentService } from "./agents/agent-service.ts";
+import { AgentThreadStore } from "./agents/agent-thread-store.ts";
 import { AccessService } from "./auth/access-service.ts";
+import { CodexAgentClient } from "./codex/codex-agent-client.ts";
 import { Configuration } from "./config/configuration.ts";
 import { SqliteDatabase } from "./database/sqlite-database.ts";
 import { HttpApplication } from "./http/http-application.ts";
@@ -144,12 +148,28 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 	const github = new GithubAccountClient(processes, sleep, attempts);
 	lifecycle.register(() => github.close());
 	const accounts = new AccountService(access, codex, github);
+	const agentStore = new AgentThreadStore(database);
+	await agentStore.initialize();
+	await agentStore.recover();
+	const agents = new AgentService(
+		agentStore,
+		new CodexAgentClient(connection, files.realpath, randomUUID),
+		workspaces,
+		projects,
+		access,
+		randomUUID,
+		() => new Date(),
+	);
+	lifecycle.register(() => agents.shutdown());
+	const agentRouter = new AgentRouter(agents, sleep);
+	lifecycle.register(() => agentRouter.close());
 	const assets = new StaticAssets(fileURLToPath(new URL("../packages/frontend/dist", import.meta.url)), files);
 	if (!(await assets.read("/"))) throw new Error("Build Forge frontend before starting the application");
 	if (!lifecycle.isOpen()) return;
 	const app = new HttpApplication(new ProjectRouter(projects), access).create(
 		[
 			new AccountRouter(accounts),
+			agentRouter,
 			new TicketRouter(tickets),
 			new WorkspaceRouter(workspaces),
 			new RepositoryBrowserRouter(
@@ -182,6 +202,8 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 						server.close((error) => (error ? reject(error) : resolve())),
 					);
 					server.closeIdleConnections();
+					await agentRouter.close();
+					await agents.shutdown();
 					await terminalSockets.close();
 					await terminals.shutdown();
 					await git.close();

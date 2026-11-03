@@ -16,10 +16,16 @@ export interface ICodexConnection {
 	initialize(): Promise<void>;
 	/** Explicit user retry/cancel can reset an uncertain connection; never replays old work. */
 	restart(): Promise<void>;
-	/** Private allowlisted account operations only. Throws CodexConnectionError. */
+	/** Private allowlisted operations only. Throws CodexConnectionError. */
 	request(method: string, params: unknown): Promise<unknown>;
 	subscribe(listener: AccountNotification): () => void;
 	close(): Promise<void>;
+}
+export interface ICodexAgentConnection extends ICodexConnection {
+	/** A handler returns true only after accepting ownership of the request. */
+	subscribeRequests(listener: (id: string | number, method: string, params: unknown) => boolean): () => void;
+	/** Replies exactly once to a pending server request; reset invalidates outstanding IDs. */
+	respond(id: string | number, result: unknown): void;
 }
 interface PendingRequest {
 	resolve: (value: unknown) => void;
@@ -36,9 +42,56 @@ const methods = new Map<string, z.ZodType>([
 	["account/read", z.strictObject({ refreshToken: z.boolean().optional() })],
 	["account/login/start", z.strictObject({ type: z.literal("chatgptDeviceCode") })],
 	["account/login/cancel", z.strictObject({ loginId: z.string().min(1).max(256) })],
+	[
+		"thread/start",
+		z.strictObject({
+			cwd: z.string().min(1),
+			sandbox: z.literal("workspace-write"),
+			approvalPolicy: z.literal("on-request"),
+			config: z.record(z.string(), z.unknown()),
+		}),
+	],
+	[
+		"thread/resume",
+		z.strictObject({
+			threadId: z.string().min(1),
+			cwd: z.string().min(1),
+			sandbox: z.literal("workspace-write"),
+			approvalPolicy: z.literal("on-request"),
+			config: z.record(z.string(), z.unknown()),
+			excludeTurns: z.literal(true),
+		}),
+	],
+	["thread/read", z.strictObject({ threadId: z.string().min(1), includeTurns: z.boolean() })],
+	[
+		"thread/turns/list",
+		z.strictObject({
+			threadId: z.string().min(1),
+			limit: z.literal(20),
+			sortDirection: z.literal("desc"),
+			itemsView: z.literal("full"),
+		}),
+	],
+	[
+		"turn/start",
+		z.strictObject({
+			threadId: z.string().min(1),
+			cwd: z.string().min(1),
+			input: z
+				.array(
+					z.strictObject({
+						type: z.literal("text"),
+						text: z.string().min(1).max(8000),
+						text_elements: z.array(z.never()),
+					}),
+				)
+				.length(1),
+		}),
+	],
+	["turn/interrupt", z.strictObject({ threadId: z.string().min(1), turnId: z.string().min(1) })],
 ]);
 
-export class CodexConnection implements ICodexConnection {
+export class CodexConnection implements ICodexAgentConnection {
 	private handle: AccountProcessHandle | undefined;
 	private initialization: Promise<void> | undefined;
 	private stopping: Promise<void> = Promise.resolve();
@@ -47,6 +100,8 @@ export class CodexConnection implements ICodexConnection {
 	private sequence = 0;
 	private readonly pending = new Map<number, PendingRequest>();
 	private readonly listeners = new Set<AccountNotification>();
+	private readonly requestListeners = new Set<(id: string | number, method: string, params: unknown) => boolean>();
+	private readonly serverRequests = new Set<string | number>();
 	constructor(
 		private readonly processes: IAccountProcess,
 		private readonly sleep: ISleep,
@@ -70,6 +125,19 @@ export class CodexConnection implements ICodexConnection {
 	subscribe(listener: AccountNotification): () => void {
 		this.listeners.add(listener);
 		return () => this.listeners.delete(listener);
+	}
+	subscribeRequests(listener: (id: string | number, method: string, params: unknown) => boolean): () => void {
+		this.requestListeners.add(listener);
+		return () => this.requestListeners.delete(listener);
+	}
+	respond(id: string | number, result: unknown): void {
+		if (!this.handle || !this.serverRequests.delete(id)) throw new CodexConnectionError();
+		try {
+			this.handle.write(JSON.stringify({ id, result }) + "\n");
+		} catch (cause) {
+			this.disconnect(cause);
+			throw new CodexConnectionError({ cause });
+		}
 	}
 	async restart(): Promise<void> {
 		this.disconnect(new Error("Explicit account connection reset"), true);
@@ -165,11 +233,27 @@ export class CodexConnection implements ICodexConnection {
 			.parse(value);
 		if (message.method) {
 			if (message.id !== undefined) {
-				// No execution/approval requests are supported in slice 1; reject rather than leave a server request hanging.
+				if (this.serverRequests.has(message.id)) throw new Error("Duplicate Codex server request");
+				this.serverRequests.add(message.id);
+				if (
+					[...this.requestListeners].some((listener) =>
+						listener(message.id!, message.method!, message.params),
+					)
+				)
+					return;
+				this.serverRequests.delete(message.id);
 				this.handle?.write(
 					JSON.stringify({ id: message.id, error: { code: -32601, message: "Method not supported" } }) + "\n",
 				);
-			} else for (const listener of this.listeners) listener(message.method, message.params);
+			} else {
+				if (message.method === "serverRequest/resolved") {
+					const resolved = z
+						.object({ threadId: z.string(), requestId: z.union([z.string(), z.number()]) })
+						.parse(message.params);
+					this.serverRequests.delete(resolved.requestId);
+				}
+				for (const listener of this.listeners) listener(message.method, message.params);
+			}
 			return;
 		}
 		if (typeof message.id !== "number") throw new Error("Invalid Codex response envelope");
@@ -194,6 +278,7 @@ export class CodexConnection implements ICodexConnection {
 			pending.reject(new CodexConnectionError({ cause }));
 		}
 		this.pending.clear();
+		this.serverRequests.clear();
 		if (handle) {
 			if (!expected) this.log.warn({ err: cause }, "Codex disconnected; pending work will not be replayed");
 			if (!this.closed) for (const listener of this.listeners) listener("connection/lost", {});

@@ -1,0 +1,289 @@
+import { expect, test, vi } from "vitest";
+
+import type { ICodexAgentConnection } from "../accounts/codex-connection.ts";
+import { CodexAgentClient } from "./codex-agent-client.ts";
+
+const setup = () => {
+	let notify: (method: string, params: unknown) => void = () => {};
+	let request: (id: string | number, method: string, params: unknown) => boolean = () => false;
+	let sequence = 0;
+	let requestSequence = 0;
+	const rpc = vi.fn(async (method: string, params: unknown): Promise<unknown> => {
+		if (method === "thread/start")
+			return {
+				thread: {
+					id: `codex-${++sequence}`,
+					historyMode: "paginated",
+					turns: [],
+					status: { type: "idle" },
+					cwd: (params as { cwd: string }).cwd,
+				},
+			};
+		if (method === "thread/resume")
+			return {
+				thread: {
+					id: "codex-1",
+					cwd: "/data/worktrees/one",
+					historyMode: "paginated",
+					status: { type: "idle" },
+					turns: [],
+				},
+			};
+		if (method === "thread/turns/list")
+			return {
+				data: [
+					{
+						id: "old",
+						status: "completed",
+						items: [{ id: "a", type: "agentMessage", text: "Previous answer" }],
+					},
+				],
+				nextCursor: null,
+			};
+		if (method === "turn/start") {
+			const { threadId } = params as { threadId: string };
+			notify("turn/started", { threadId, turn: { id: "turn-1", status: "inProgress", items: [] } });
+			return { turn: { id: "turn-1", status: "inProgress", items: [] } };
+		}
+		return {};
+	});
+	const respond = vi.fn();
+	const connection: ICodexAgentConnection = {
+		initialize: async () => {},
+		restart: async () => {},
+		close: async () => {},
+		request: rpc,
+		respond,
+		subscribe: (listener) => {
+			notify = listener;
+			return () => {};
+		},
+		subscribeRequests: (listener) => {
+			request = listener;
+			return () => {};
+		},
+	};
+	return {
+		client: new CodexAgentClient(
+			connection,
+			async (path) => path,
+			() => `request-${++requestSequence}`,
+		),
+		rpc,
+		respond,
+		notify: (method: string, params: unknown) => notify(method, params),
+		request: (id: string | number, method: string, params: unknown) => request(id, method, params),
+	};
+};
+test("starts sandboxed independent threads, streams items, interrupts, and resumes Codex history", async () => {
+	const { client, rpc, notify } = setup();
+	const id = await client.start("/data/worktrees/one");
+	expect(rpc).toHaveBeenCalledWith(
+		"thread/start",
+		expect.objectContaining({
+			cwd: "/data/worktrees/one",
+			sandbox: "workspace-write",
+			approvalPolicy: "on-request",
+		}),
+	);
+	const other = await client.start("/data/worktrees/two");
+	await Promise.all([
+		client.send(id, "/data/worktrees/one", "Hello"),
+		client.send(other, "/data/worktrees/two", "Other"),
+	]);
+	notify("item/agentMessage/delta", { threadId: id, turnId: "turn-1", itemId: "answer", delta: "Hello back" });
+	expect(client.read(id)).toMatchObject({
+		status: "running",
+		turnId: "turn-1",
+		items: [{ id: "answer", text: "Hello back", role: "assistant" }],
+	});
+	expect(client.read(other).items).toEqual([]);
+	await client.interrupt(id, "turn-1");
+	expect(rpc).toHaveBeenLastCalledWith("turn/interrupt", { threadId: id, turnId: "turn-1" });
+	notify("turn/completed", { threadId: id, turn: { id: "turn-1", status: "interrupted", items: [] } });
+	expect(client.read(id).status).toBe("interrupted");
+	notify("connection/lost", {});
+	expect(client.read(other).status).toBe("uncertain");
+	expect(await client.resume(id, "/data/worktrees/one")).toMatchObject({
+		status: "completed",
+		items: [{ text: "Previous answer" }],
+	});
+});
+test("routes approvals and clarification to the owning thread; stale and cross-thread replies fail", async () => {
+	const { client, request, respond, notify } = setup();
+	const id = await client.start("/data/worktrees/one");
+	const other = await client.start("/data/worktrees/two");
+	await client.send(id, "/data/worktrees/one", "Work");
+	expect(
+		request(42, "item/commandExecution/requestApproval", {
+			threadId: id,
+			turnId: "turn-1",
+			itemId: "cmd",
+			command: "pnpm test",
+			reason: "Network",
+		}),
+	).toBe(true);
+	expect(client.read(id)).toMatchObject({
+		status: "waiting",
+		requests: [{ kind: "command", description: "Network\npnpm test" }],
+	});
+	const requestId = client.read(id).requests[0]!.id;
+	expect(() => client.reply(other, { requestId, decision: "accept" })).toThrow();
+	client.reply(id, { requestId, decision: "decline" });
+	expect(respond).toHaveBeenLastCalledWith(42, { decision: "decline" });
+	expect(() => client.reply(id, { requestId, decision: "accept" })).toThrow();
+	request("question", "item/tool/requestUserInput", {
+		threadId: id,
+		turnId: "turn-1",
+		itemId: "q",
+		questions: [
+			{ id: "scope", question: "Which scope?", isSecret: false, options: [{ label: "Small", description: "" }] },
+		],
+	});
+	client.reply(id, { requestId: client.read(id).requests[0]!.id, answers: { scope: "Small" } });
+	expect(respond).toHaveBeenLastCalledWith("question", { answers: { scope: { answers: ["Small"] } } });
+	request("old", "item/fileChange/requestApproval", {
+		threadId: id,
+		turnId: "turn-1",
+		itemId: "patch",
+		reason: "Edit",
+	});
+	notify("connection/lost", {});
+	expect(client.read(id).requests).toEqual([]);
+	expect(() => client.reply(id, { requestId: "old", decision: "accept" })).toThrow();
+});
+test("rejects invalid external responses and bounds live output with a visible truncation flag", async () => {
+	const { client, notify, rpc } = setup();
+	const id = await client.start("/data/worktrees/one");
+	notify("item/agentMessage/delta", { threadId: id, itemId: "big", delta: "x".repeat(40000) });
+	expect(client.read(id).items[0]?.text).toHaveLength(32000);
+	expect(client.read(id).truncated).toBe(true);
+	rpc.mockResolvedValueOnce({ thread: { id: 42 } });
+	await expect(client.start("/data/worktrees/two")).rejects.toThrow("agent-unavailable");
+});
+test("hydrates paginated history and records a second turn even without a started notification", async () => {
+	const { client, rpc, notify } = setup();
+	const id = await client.start("/data/worktrees/one");
+	rpc.mockResolvedValueOnce({
+		thread: { id, cwd: "/data/worktrees/one", historyMode: "paginated", turns: [], status: { type: "idle" } },
+	});
+	rpc.mockResolvedValueOnce({
+		data: [
+			{ id: "old", status: "completed", items: [{ id: "history", type: "agentMessage", text: "Saved history" }] },
+		],
+		nextCursor: "older",
+	});
+	expect(await client.resume(id, "/data/worktrees/one")).toMatchObject({
+		status: "completed",
+		truncated: true,
+		items: [{ text: "Saved history" }],
+	});
+	rpc.mockResolvedValueOnce({ turn: { id: "next", status: "inProgress", items: [] } });
+	await client.send(id, "/data/worktrees/one", "Next");
+	expect(client.read(id)).toMatchObject({ turnId: "next", status: "running" });
+	notify("turn/completed", { threadId: id, turn: { id: "next", status: "completed", items: [] } });
+	rpc.mockResolvedValueOnce({ turn: { id: "third", status: "inProgress", items: [] } });
+	await client.send(id, "/data/worktrees/one", "Third");
+	expect(client.read(id).turnId).toBe("third");
+});
+test("terminal Codex errors stop the turn while retryable errors keep it active", async () => {
+	const { client, notify } = setup();
+	const id = await client.start("/data/worktrees/one");
+	await client.send(id, "/data/worktrees/one", "Hello");
+	notify("error", { threadId: id, turnId: "turn-1", willRetry: true, error: { message: "Retry" } });
+	expect(client.read(id).status).toBe("running");
+	notify("error", { threadId: id, turnId: "turn-1", willRetry: false, error: { message: "Signed out" } });
+	expect(client.read(id).status).toBe("failed");
+});
+test("reused Codex callback IDs cannot authorize a replacement request after reconnect", async () => {
+	const { client, request, notify } = setup();
+	const id = await client.start("/data/worktrees/one");
+	await client.send(id, "/data/worktrees/one", "Work");
+	request(1, "item/commandExecution/requestApproval", { threadId: id, turnId: "turn-1", command: "First" });
+	const oldId = client.read(id).requests[0]!.id;
+	notify("connection/lost", {});
+	await client.resume(id, "/data/worktrees/one");
+	await client.send(id, "/data/worktrees/one", "Continue");
+	request(1, "item/commandExecution/requestApproval", { threadId: id, turnId: "turn-1", command: "Replacement" });
+	expect(client.read(id).requests[0]!.id).not.toBe(oldId);
+	expect(() => client.reply(id, { requestId: oldId, decision: "accept" })).toThrow("agent-conflict");
+});
+test("externally resolved approval requests disappear and cannot be answered", async () => {
+	const { client, request, notify } = setup();
+	const id = await client.start("/data/worktrees/one");
+	await client.send(id, "/data/worktrees/one", "Work");
+	request(10, "item/fileChange/requestApproval", { threadId: id, turnId: "turn-1", reason: "Patch" });
+	const requestId = client.read(id).requests[0]!.id;
+	notify("serverRequest/resolved", { threadId: id, requestId: 10 });
+	expect(client.read(id).requests).toEqual([]);
+	expect(() => client.reply(id, { requestId, decision: "accept" })).toThrow("agent-conflict");
+});
+
+test.each(["systemError", "notLoaded"])("resume treats %s as uncertain", async (type) => {
+	const { client, rpc } = setup();
+	const id = await client.start("/data/worktrees/one");
+	rpc.mockResolvedValueOnce({
+		thread: { id, cwd: "/data/worktrees/one", historyMode: "paginated", status: { type }, turns: [] },
+	});
+	expect((await client.resume(id, "/data/worktrees/one")).status).toBe("uncertain");
+	await expect(client.send(id, "/data/worktrees/one", "Work")).rejects.toThrow("agent-conflict");
+});
+
+test.each(["systemError", "notLoaded"])("live %s invalidates approvals until explicit recovery", async (type) => {
+	const { client, request, notify } = setup();
+	const id = await client.start("/data/worktrees/one");
+	await client.send(id, "/data/worktrees/one", "Work");
+	request(10, "item/commandExecution/requestApproval", { threadId: id, turnId: "turn-1", command: "pnpm test" });
+	const requestId = client.read(id).requests[0]!.id;
+	notify("thread/status/changed", { threadId: id, status: { type } });
+	notify("thread/status/changed", { threadId: id, status: { type: "idle" } });
+	expect(client.read(id)).toMatchObject({ status: "uncertain", requests: [] });
+	expect(() => client.reply(id, { requestId, decision: "accept" })).toThrow("agent-conflict");
+	await expect(client.send(id, "/data/worktrees/one", "Retry")).rejects.toThrow("agent-conflict");
+});
+
+test("an uncertain resume response invalidates already pending approval callbacks", async () => {
+	const { client, request, rpc } = setup();
+	const id = await client.start("/data/worktrees/one");
+	await client.send(id, "/data/worktrees/one", "Work");
+	request(10, "item/commandExecution/requestApproval", { threadId: id, turnId: "turn-1", command: "pnpm test" });
+	const requestId = client.read(id).requests[0]!.id;
+	rpc.mockResolvedValueOnce({
+		thread: {
+			id,
+			cwd: "/data/worktrees/one",
+			historyMode: "paginated",
+			status: { type: "systemError" },
+			turns: [],
+		},
+	});
+	expect(await client.resume(id, "/data/worktrees/one")).toMatchObject({ status: "uncertain", requests: [] });
+	expect(() => client.reply(id, { requestId, decision: "accept" })).toThrow("agent-conflict");
+});
+
+test("resume retains newer live completion and connection-loss notifications", async () => {
+	const { client, rpc, notify } = setup();
+	const id = await client.start("/data/worktrees/one");
+	const resumeResponse = {
+		thread: { id, cwd: "/data/worktrees/one", historyMode: "paginated", status: { type: "active" }, turns: [] },
+	};
+	rpc.mockResolvedValueOnce(resumeResponse);
+	rpc.mockImplementationOnce(async () => {
+		notify("turn/completed", {
+			threadId: id,
+			turn: { id: "new", status: "completed", items: [{ id: "live", type: "agentMessage", text: "New answer" }] },
+		});
+		return { data: [], nextCursor: null };
+	});
+	expect(await client.resume(id, "/data/worktrees/one")).toMatchObject({
+		status: "completed",
+		turnId: "new",
+		items: [{ text: "New answer" }],
+	});
+	rpc.mockResolvedValueOnce(resumeResponse);
+	rpc.mockImplementationOnce(async () => {
+		notify("connection/lost", {});
+		return { data: [], nextCursor: null };
+	});
+	expect((await client.resume(id, "/data/worktrees/one")).status).toBe("uncertain");
+});

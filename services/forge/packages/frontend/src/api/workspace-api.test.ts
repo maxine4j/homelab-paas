@@ -37,3 +37,12 @@ test.each([
 	const api = new WorkspaceApi(async () => Response.json({ error }, { status: 503 }));
 	await expect(api.read("projects/id/workspaces", workspacesSchema)).rejects.not.toThrow(/workspace/i);
 });
+
+test.each([
+	["agent-not-found", "Chat no longer exists"],
+	["agent-conflict", "Chat changed"],
+	["agent-unavailable", "Chat unavailable"],
+])("presents %s with safe chat recovery guidance", async (error, message) => {
+	const api = new WorkspaceApi(async () => Response.json({ error }, { status: 503 }));
+	await expect(api.read("agents/id", workspacesSchema)).rejects.toThrow(message);
+});

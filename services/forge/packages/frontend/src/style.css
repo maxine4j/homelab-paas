@@ -6,6 +6,223 @@
 	font-synthesis: none;
 	line-height: 1.5;
 }
+.agent-panel {
+	display: grid;
+	grid-template-columns: 250px minmax(0, 1fr);
+	border: 1px solid #30363d;
+	border-radius: 8px;
+	min-height: 560px;
+	overflow: clip;
+}
+.agent-sidebar {
+	min-width: 0;
+	padding: 20px 16px;
+	background: #161b22;
+	border-right: 1px solid #30363d;
+}
+.agent-sidebar h2,
+.agent-chat-heading h3,
+.agent-message h4,
+.agent-request h4 {
+	margin: 0 0 6px;
+}
+.agent-sidebar > p,
+.agent-notice,
+.agent-empty,
+.agent-composer-footer span {
+	color: #8b949e;
+	font-size: 12px;
+}
+.agent-sidebar form,
+.agent-composer label,
+.agent-question label {
+	display: grid;
+	gap: 8px;
+}
+.agent-sidebar label {
+	font-size: 12px;
+}
+.agent-panel input,
+.agent-panel textarea {
+	width: 100%;
+	min-width: 0;
+}
+.agent-sidebar nav {
+	display: grid;
+	gap: 6px;
+	margin-top: 20px;
+	max-height: 50vh;
+	overflow-y: auto;
+}
+.agent-sidebar nav button {
+	display: grid;
+	gap: 4px;
+	text-align: left;
+	background: transparent;
+	border-color: transparent;
+	overflow-wrap: anywhere;
+}
+.agent-sidebar nav button[aria-current="true"] {
+	background: #1c2d41;
+	border-color: #388bfd;
+}
+.agent-status {
+	color: #8b949e;
+	font-size: 11px;
+	font-weight: 400;
+}
+.agent-status-running {
+	color: #79c0ff;
+}
+.agent-status-waiting,
+.agent-status-uncertain {
+	color: #e3b341;
+}
+.agent-status-failed {
+	color: #ff7b72;
+}
+.agent-status-completed {
+	color: #7ee787;
+}
+.agent-main {
+	min-width: 0;
+}
+.agent-conversation {
+	padding: 20px;
+}
+.agent-chat-heading,
+.agent-composer-footer,
+.agent-actions {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+.agent-chat-heading h3 {
+	font-size: 17px;
+}
+.agent-actions {
+	justify-content: flex-start;
+}
+.agent-messages {
+	max-height: 50vh;
+	min-height: 220px;
+	overflow-y: auto;
+	overscroll-behavior-y: contain;
+	margin: 16px 0;
+	padding: 4px;
+}
+.agent-message {
+	padding: 14px 16px;
+	margin-bottom: 12px;
+	border-radius: 8px;
+	background: #161b22;
+}
+.agent-message-user {
+	margin-left: 24px;
+	background: #17263b;
+}
+.agent-message h4 {
+	font-size: 11px;
+	color: #8b949e;
+}
+.agent-message > div {
+	white-space: pre-wrap;
+	font-size: 14px;
+}
+.agent-activity {
+	margin: 12px 0;
+	padding: 12px;
+	border: 1px solid #30363d;
+	border-radius: 6px;
+}
+.agent-activity summary {
+	color: #8b949e;
+	font-size: 12px;
+}
+.agent-activity pre,
+.agent-request pre {
+	font-size: 12px;
+	max-height: 200px;
+	overflow: auto;
+}
+.agent-request {
+	padding: 16px;
+	margin-bottom: 16px;
+	border: 1px solid #9e6a03;
+	border-radius: 6px;
+	background: #201b12;
+}
+.agent-request h4 {
+	font-size: 13px;
+}
+.agent-request pre {
+	white-space: pre-wrap;
+}
+.agent-question {
+	margin: 12px 0;
+}
+.agent-question .agent-actions {
+	margin-top: 8px;
+}
+.agent-composer {
+	border-top: 1px solid #30363d;
+	padding-top: 16px;
+}
+.agent-composer label {
+	font-size: 12px;
+}
+.agent-composer textarea {
+	resize: vertical;
+}
+.agent-composer-footer {
+	margin-top: 10px;
+}
+.agent-welcome {
+	padding: 80px 24px;
+	text-align: center;
+	color: #8b949e;
+}
+.agent-welcome h3 {
+	color: #e6edf3;
+}
+@media (max-width: 700px) {
+	.agent-panel {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.agent-sidebar {
+		border-right: 0;
+		border-bottom: 1px solid #30363d;
+		padding: 12px;
+	}
+	.agent-sidebar h2 {
+		font-size: 16px;
+	}
+	.agent-sidebar > p {
+		margin: 4px 0 12px;
+	}
+	.agent-sidebar nav {
+		max-height: 140px;
+		margin-top: 12px;
+	}
+	.agent-conversation {
+		padding: 12px;
+	}
+	.agent-chat-heading {
+		align-items: flex-start;
+	}
+	.agent-messages {
+		max-height: 45vh;
+		min-height: 160px;
+	}
+	.agent-message-user {
+		margin-left: 12px;
+	}
+	.agent-composer-footer span {
+		font-size: 10px;
+	}
+}
 .task-board {
 	min-width: 0;
 }
