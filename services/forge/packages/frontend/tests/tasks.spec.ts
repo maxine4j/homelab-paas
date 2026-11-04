@@ -3,12 +3,21 @@ import type { Page } from "@playwright/test";
 
 const projectId = "123e4567-e89b-42d3-a456-426614174000";
 const createdAt = "2026-11-03T00:00:00.000Z";
-const setup = async (page: Page) => {
+const setup = async (page: Page, crowded = false) => {
 	let tickets = [
 		{ id: "FORGE-1", projectId, title: "First task", description: "Scope", status: "draft", createdAt },
 		{ id: "FORGE-2", projectId, title: "Second task", description: "", status: "draft", createdAt },
 	];
 	let failMove = false;
+	if (crowded)
+		tickets = Array.from({ length: 60 }, (_, i) => ({
+			id: `FORGE-${i + 1}`,
+			projectId,
+			title: `Task ${i + 1}`,
+			description: "Scope",
+			status: i < 30 ? "draft" : "ready",
+			createdAt,
+		}));
 	await page.route(
 		(url) => url.pathname.startsWith("/api/"),
 		async (route) => {
@@ -64,6 +73,57 @@ const setup = async (page: Page) => {
 		},
 	};
 };
+
+for (const size of [
+	{ width: 1280, height: 900 },
+	{ width: 448, height: 960 },
+	{ width: 820, height: 820 },
+]) {
+	test(`task columns scroll independently with fixed headings at ${size.width}px`, async ({ page }) => {
+		await page.setViewportSize(size);
+		await setup(page, true);
+		await expect(page.getByRole("button", { name: "FORGE-30 Task 30", exact: true })).toHaveCount(1);
+		const check = async (height: number) => {
+			const board = page.locator(".kanban-columns");
+			await expect
+				.poll(() => board.evaluate((el) => el.getBoundingClientRect().bottom))
+				.toBeLessThanOrEqual(height);
+			const rect = (await board.boundingBox())!;
+			expect(rect.y + rect.height).toBeGreaterThan(height - 40);
+			const draft = page.locator('[data-drop-status="draft"]');
+			const heading = draft.locator(".kanban-column-heading");
+			const top = (await heading.boundingBox())!.y;
+			await draft.evaluate((el) => {
+				el.scrollTop = el.scrollHeight;
+			});
+			expect((await heading.boundingBox())!.y).toBeCloseTo(top, 0);
+			await expect(draft.getByRole("button", { name: "FORGE-30 Task 30", exact: true })).toBeInViewport();
+			expect(await page.locator('[data-drop-status="ready"]').evaluate((el) => el.scrollTop)).toBe(0);
+			expect(
+				await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0),
+			).toBe(true);
+		};
+		await check(size.height);
+		if (size.width < 1000) {
+			await page.evaluate(() => {
+				Object.defineProperty(window.visualViewport!, "height", { configurable: true, value: 480 });
+				window.visualViewport!.dispatchEvent(new Event("resize"));
+			});
+			await check(480);
+			await page.getByRole("button", { name: "Create ticket", exact: true }).click();
+			const dialog = page.getByRole("dialog");
+			await dialog.getByLabel("Title", { exact: true }).fill("Keyboard draft");
+			const bounds = (await dialog.boundingBox())!;
+			expect(bounds.y).toBeGreaterThanOrEqual(0);
+			expect(bounds.y + bounds.height).toBeLessThanOrEqual(480);
+			await dialog.evaluate((el) => {
+				el.scrollTop = el.scrollHeight;
+			});
+			const create = (await dialog.getByRole("button", { name: "Create", exact: true }).boundingBox())!;
+			expect(create.y + create.height).toBeLessThanOrEqual(480);
+		}
+	});
+}
 
 test("create and edit tickets; status menu moves a ticket to Done and survives reopening", async ({ page }) => {
 	await setup(page);

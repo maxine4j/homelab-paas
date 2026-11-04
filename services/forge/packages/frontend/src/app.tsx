@@ -2,7 +2,7 @@ import type { AccountProvider, AccountStatus, AccountsStatus, Project } from "@h
 import { createProjectSchema } from "@homelab-paas/forge-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, Navigate, useBlocker, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, useBlocker, useLocation } from "react-router";
 
 import type { IApiClient } from "./api/api-client.ts";
 import { ResourcePoller } from "./api/resource-poller.ts";
@@ -102,8 +102,26 @@ const AccountCard = ({
 
 export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWorkspaceApi }) => {
 	const location = useLocation();
-	const navigate = useNavigate();
 	const route = resolveRoute(location.pathname);
+	const constrained = route.page === "project" && (route.section === "agents" || route.section === "tasks");
+	const [viewport, setViewport] = useState({ height: window.visualViewport?.height ?? window.innerHeight, top: 0 });
+	useEffect(() => {
+		if (!constrained) return;
+		const update = () =>
+			setViewport({
+				height: window.visualViewport?.height ?? window.innerHeight,
+				top: window.visualViewport?.offsetTop ?? 0,
+			});
+		update();
+		window.visualViewport?.addEventListener("resize", update);
+		window.visualViewport?.addEventListener("scroll", update);
+		window.addEventListener("resize", update);
+		return () => {
+			window.visualViewport?.removeEventListener("resize", update);
+			window.visualViewport?.removeEventListener("scroll", update);
+			window.removeEventListener("resize", update);
+		};
+	}, [constrained]);
 	const config = route.page === "config";
 	const [retained, setRetained] = useState<Project>();
 	const [projects, setProjects] = useState<Project[]>();
@@ -205,12 +223,27 @@ export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWor
 		setAccountBusy(false);
 	};
 	return (
-		<div className='shell'>
+		<div className={`shell${constrained ? " shell-constrained" : ""}`}>
+			{constrained && (
+				<style>{`.shell-constrained { height: ${viewport.height}px; top: ${viewport.top}px; --forge-viewport-height: ${viewport.height}px; --forge-viewport-top: ${viewport.top}px; }`}</style>
+			)}
 			{location.pathname === "/" && <Navigate to='/projects' replace />}
 			<header>
-				<Link className='brand' to='/projects' aria-label='Forge home'>
-					<span aria-hidden='true'>F</span>forge
-				</Link>
+				<div className='header-identity'>
+					<Link className='brand' to='/projects' aria-label='Forge home'>
+						<span aria-hidden='true'>F</span>forge
+					</Link>
+					{selected && !config && (
+						<>
+							<span className='header-separator' aria-hidden='true'>
+								/
+							</span>
+							<h1 className='header-project' title={selected.name}>
+								{selected.name}
+							</h1>
+						</>
+					)}
+				</div>
 				<nav className='global-nav' aria-label='Forge'>
 					<Link to='/projects' aria-current={!config ? "page" : undefined}>
 						Projects
@@ -246,14 +279,8 @@ export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWor
 					</div>
 				</div>
 				{selected && (
-					<div hidden={config}>
-						<Workbench
-							key={selected.id}
-							project={selected}
-							api={workspaceApi}
-							leave={() => void navigate("/projects")}
-							dirtyChange={dirtyChange}
-						/>
+					<div className='project-view' hidden={config}>
+						<Workbench key={selected.id} project={selected} api={workspaceApi} dirtyChange={dirtyChange} />
 					</div>
 				)}
 				<div className='workspace-grid' hidden={route.page !== "projects"}>

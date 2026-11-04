@@ -196,6 +196,10 @@ preserves newer live activity observed during the history read; unloaded or
 system-error runtime states remain uncertain. Externally resolved server requests
 invalidate both the transport reply and browser callback.
 
+The Agents sidebar has a single-row Create chat button without a title input;
+new chats receive a default numbered name. The tab has no additional Agents
+heading, and the selected conversation does not repeat its title. Thread names
+remain in the thread list; execution status and interruption remain available.
 The responsive Agents tab lists and creates project chats, shows conversation and
 tool activity, and supports send, interrupt, one-time approval/denial and structured
 clarification replies. Open chats retain their message and answer drafts across
@@ -637,9 +641,20 @@ Projects retains creation/import/retry. The entire ready project card opens the
 project as a normal link using pointer or keyboard activation; there is no dedicated Open button.
 Opening a ready project shows its identity
 and five section tabs, in order: Code, Tasks, Agents, Pipelines, Terminals.
+The global header shows `forge / projectName` at every screen size; there is no
+separate project heading. The Forge home link returns to Projects.
 Code is the default. Tasks shows the ticket board described below. Agents shows
 the interactive chats described above; Pipelines is not available yet.
 Tab navigation stays usable on narrow screens without widening the page.
+Agents and Tasks fill the remaining visible viewport on laptop, slab-phone and
+square folding-phone layouts without vertical page scrolling. Opening a virtual
+keyboard shrinks the entire layout, including secondary chat columns. Only the
+chat thread list and conversation log scroll vertically in Agents; requests are
+part of the conversation log and the composer remains visible. Task columns
+scroll vertically independently with their headings fixed at the top; the board
+scrolls horizontally to reach other statuses.
+Ticket dialogs also fit the visible viewport and scroll internally while the
+virtual keyboard is open.
 
 React Router uses the browser History API for `/projects/:projectId/code`,
 `/tasks`, `/agents`, `/pipelines` and `/terminals` under the same project prefix.
@@ -675,8 +690,8 @@ Retry opening files. Preparation
 never starts an agent or shell. Preserve existing files and metadata.
 
 Code contains a GitHub-style bordered directory listing followed by a safe README
-preview. Each directory initially shows ten entries, with Show all/Show fewer
-controls; the 1,000-entry server bound remains explicit. Folder and common file
+preview. Directory listings and the editor's file tree show every returned entry
+without Show all/Show fewer controls; the 1,000-entry server bound remains explicit. Folder and common file
 types have themed icons. Opening a file replaces the overview with the editor;
 Back to files preserves drafts. The left directory tree appears alongside code on
 tablet and laptop widths (above 600 CSS pixels), and is hidden on slab phones.

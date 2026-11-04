@@ -118,7 +118,7 @@ test("terminal automatically creates, fits, reconnects, replaces lost shells and
 	await expect.poll(() => attaches).toBe(3);
 	await expect(page.getByText("Output gap through 10. Some terminal output is unavailable.")).toHaveCount(0);
 	const beforeLeaving = disconnected;
-	await page.getByRole("button", { name: "Projects", exact: true }).click();
+	await page.getByRole("link", { name: "Forge home", exact: true }).click();
 	await expect.poll(() => disconnected).toBeGreaterThan(beforeLeaving);
 	const detached = attaches;
 	await page.waitForTimeout(1500);

@@ -12,20 +12,14 @@ interface TreeActions {
 }
 
 const DirectoryEntries = ({ tree, ...actions }: TreeActions & { tree: Tree }) => {
-	const [all, setAll] = useState(false);
 	const entries = [...tree.entries].sort((a, b) =>
 		a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "directory" ? -1 : 1,
 	);
 	return (
 		<ul className='file-tree-list'>
-			{(all ? entries : entries.slice(0, 10)).map((entry) => (
+			{entries.map((entry) => (
 				<TreeEntry key={entry.path} entry={entry} {...actions} />
 			))}
-			{entries.length > 10 && (
-				<li>
-					<button onClick={() => setAll(!all)}>{all ? "Show fewer" : "Show all files"}</button>
-				</li>
-			)}
 			{tree.truncated && (
 				<li>
 					<p>File tree truncated at 1,000 entries.</p>

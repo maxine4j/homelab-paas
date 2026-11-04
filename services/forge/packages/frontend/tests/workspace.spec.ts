@@ -65,7 +65,7 @@ test("existing file edits remain local, navigation guards drafts, and typing dur
 	await page.getByRole("tab", { name: "index.ts *", exact: true }).click();
 	await expect(editor).toContainText("first snapshot");
 	expect(mutations).toEqual([]);
-	await page.getByRole("button", { name: "Projects", exact: true }).click();
+	await page.getByRole("link", { name: "Forge home", exact: true }).click();
 	await expect(page.getByRole("alert")).toContainText("Uncommitted drafts remain");
 	await page.getByRole("link", { name: "Config", exact: true }).click();
 	await page.getByRole("link", { name: "Projects", exact: true }).click();
@@ -94,7 +94,7 @@ test("existing file edits remain local, navigation guards drafts, and typing dur
 	]);
 	await page.getByRole("button", { name: "Discard all drafts" }).click();
 	await expect(editor).toHaveCount(0);
-	await page.getByRole("button", { name: "Projects", exact: true }).click();
+	await page.getByRole("link", { name: "Forge home", exact: true }).click();
 	await expect(page.getByRole("heading", { name: "Your projects" })).toBeVisible();
 });
 

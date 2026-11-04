@@ -86,7 +86,6 @@ const BranchBrowser = ({
 	const [drafts, setDrafts] = useState<Record<string, Draft>>({});
 	const [readmeResult, setReadmeResult] = useState<{ key: string; file?: RepositoryFile; error?: string }>();
 	const [history, setHistory] = useState<RepositoryHistory>();
-	const [showAll, setShowAll] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
@@ -221,7 +220,6 @@ const BranchBrowser = ({
 			setTree(undefined);
 		}
 		navigateCode(directory);
-		setShowAll(false);
 	};
 	const showHistory = async (more = false) => {
 		const value = await api.read(
@@ -419,7 +417,7 @@ const BranchBrowser = ({
 													<td />
 												</tr>
 											)}
-											{(showAll ? entries : entries.slice(0, 10)).map((entry) => (
+											{entries.map((entry) => (
 												<tr key={entry.path}>
 													<td>
 														<button
@@ -448,11 +446,6 @@ const BranchBrowser = ({
 									</table>
 									{!entries.length && !loading && (
 										<p className='repository-empty'>This directory is empty.</p>
-									)}
-									{entries.length > 10 && (
-										<button className='show-files' onClick={() => setShowAll(!showAll)}>
-											{showAll ? "Show fewer files" : `Show all ${entries.length} files`}
-										</button>
 									)}
 									{tree?.truncated && (
 										<p className='notice'>

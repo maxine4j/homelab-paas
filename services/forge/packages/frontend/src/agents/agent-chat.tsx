@@ -232,7 +232,6 @@ const Conversation = ({
 		<section className='agent-conversation' aria-label='Chat conversation'>
 			<div className='agent-chat-heading'>
 				<div>
-					<h3>{view?.thread.title ?? "Loading chat…"}</h3>
 					<span className={`agent-status agent-status-${displayStatus}`}>{displayStatus ?? "loading"}</span>
 				</div>
 				<div className='agent-actions'>
@@ -297,10 +296,15 @@ const Conversation = ({
 						{status === "waiting" ? "Waiting for your response" : "Codex is working…"}
 					</p>
 				)}
+				{view?.requests.map((request) => (
+					<RequestCard
+						key={request.id}
+						request={request}
+						busy={busy}
+						reply={(input) => act("replies", input)}
+					/>
+				))}
 			</div>
-			{view?.requests.map((request) => (
-				<RequestCard key={request.id} request={request} busy={busy} reply={(input) => act("replies", input)} />
-			))}
 			<form
 				className='agent-composer'
 				onSubmit={(event) => {
@@ -339,7 +343,6 @@ export const AgentChat = ({ projectId, api }: { projectId: string; api: IWorkspa
 	const selected = route.page === "project" && route.section === "agents" ? (route.threadId ?? "") : retained;
 	if (retained !== selected) setRetained(selected);
 	if (selected && !opened.includes(selected)) setOpened([...opened, selected]);
-	const [title, setTitle] = useState("");
 	const [error, setError] = useState("");
 	const [creating, setCreating] = useState(false);
 	const acting = useRef(false);
@@ -374,21 +377,20 @@ export const AgentChat = ({ projectId, api }: { projectId: string; api: IWorkspa
 	return (
 		<div className='agent-panel'>
 			<aside className='agent-sidebar' aria-label='Chats'>
-				<h2>Agents</h2>
-				<p>Independent chats for this project</p>
-				<form
-					onSubmit={(event) => {
-						event.preventDefault();
-						if (acting.current || !title.trim()) return;
+				<button
+					disabled={creating}
+					onClick={() => {
+						if (acting.current) return;
 						acting.current = true;
 						setCreating(true);
 						setError("");
 						void api
-							.read(`projects/${projectId}/agents`, agentViewSchema, "POST", { title })
+							.read(`projects/${projectId}/agents`, agentViewSchema, "POST", {
+								title: `Chat ${threads.length + 1}`,
+							})
 							.then((view) => {
 								setThreads((values) => [...values, view.thread]);
 								open(view.thread.id);
-								setTitle("");
 								refresh();
 							})
 							.catch((cause: unknown) =>
@@ -400,19 +402,8 @@ export const AgentChat = ({ projectId, api }: { projectId: string; api: IWorkspa
 							});
 					}}
 				>
-					<label>
-						Chat title
-						<input
-							maxLength={120}
-							required
-							value={title}
-							disabled={creating}
-							placeholder='A new conversation'
-							onChange={(event) => setTitle(event.target.value)}
-						/>
-					</label>
-					<button disabled={creating || !title.trim()}>{creating ? "Creating…" : "Create chat"}</button>
-				</form>
+					{creating ? "Creating…" : "Create chat"}
+				</button>
 				{error && (
 					<p className='error' role='alert'>
 						{error}

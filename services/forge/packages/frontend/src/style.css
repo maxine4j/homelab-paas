@@ -11,17 +11,19 @@
 	grid-template-columns: 250px minmax(0, 1fr);
 	border: 1px solid #30363d;
 	border-radius: 8px;
-	min-height: 560px;
+	min-height: 0;
+	flex: 1;
 	overflow: clip;
 }
 .agent-sidebar {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
 	min-width: 0;
 	padding: 20px 16px;
 	background: #161b22;
 	border-right: 1px solid #30363d;
 }
-.agent-sidebar h2,
-.agent-chat-heading h3,
 .agent-message h4,
 .agent-request h4 {
 	margin: 0 0 6px;
@@ -33,14 +35,10 @@
 	color: #8b949e;
 	font-size: 12px;
 }
-.agent-sidebar form,
 .agent-composer label,
 .agent-question label {
 	display: grid;
 	gap: 8px;
-}
-.agent-sidebar label {
-	font-size: 12px;
 }
 .agent-panel input,
 .agent-panel textarea {
@@ -51,8 +49,11 @@
 	display: grid;
 	gap: 6px;
 	margin-top: 20px;
-	max-height: 50vh;
+	min-height: 0;
+	flex: 1;
+	align-content: start;
 	overflow-y: auto;
+	overscroll-behavior-y: contain;
 }
 .agent-sidebar nav button {
 	display: grid;
@@ -86,9 +87,26 @@
 }
 .agent-main {
 	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.agent-main > div:not([hidden]) {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	flex: 1;
 }
 .agent-conversation {
-	padding: 20px;
+	padding: 12px;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	flex: 1;
+}
+.agent-conversation > :not(.agent-messages),
+.agent-sidebar > :not(nav) {
+	flex-shrink: 0;
 }
 .agent-chat-heading,
 .agent-composer-footer,
@@ -99,18 +117,15 @@
 	gap: 8px;
 	flex-wrap: wrap;
 }
-.agent-chat-heading h3 {
-	font-size: 17px;
-}
 .agent-actions {
 	justify-content: flex-start;
 }
 .agent-messages {
-	max-height: 50vh;
-	min-height: 220px;
+	min-height: 0;
+	flex: 1;
 	overflow-y: auto;
 	overscroll-behavior-y: contain;
-	margin: 16px 0;
+	margin: 8px 0;
 	padding: 4px;
 }
 .agent-message {
@@ -144,8 +159,8 @@
 .agent-activity pre,
 .agent-request pre {
 	font-size: 12px;
-	max-height: 200px;
-	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 }
 .agent-request {
 	padding: 16px;
@@ -172,9 +187,12 @@
 }
 .agent-composer label {
 	font-size: 12px;
+	margin: 0 0 4px;
 }
 .agent-composer textarea {
-	resize: vertical;
+	resize: none;
+	min-height: 0;
+	height: 72px;
 }
 .agent-composer-footer {
 	margin-top: 10px;
@@ -190,31 +208,44 @@
 @media (max-width: 700px) {
 	.agent-panel {
 		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: minmax(104px, 1fr) minmax(0, 3fr);
 	}
 	.agent-sidebar {
 		border-right: 0;
 		border-bottom: 1px solid #30363d;
-		padding: 12px;
-	}
-	.agent-sidebar h2 {
-		font-size: 16px;
-	}
-	.agent-sidebar > p {
-		margin: 4px 0 12px;
+		padding: 8px;
 	}
 	.agent-sidebar nav {
-		max-height: 140px;
-		margin-top: 12px;
+		margin-top: 6px;
+	}
+	.agent-sidebar nav button {
+		gap: 0;
+		padding: 4px 8px;
+	}
+	.agent-sidebar nav small {
+		margin-top: 0;
 	}
 	.agent-conversation {
-		padding: 12px;
+		padding: 8px;
 	}
 	.agent-chat-heading {
 		align-items: flex-start;
 	}
 	.agent-messages {
-		max-height: 45vh;
-		min-height: 160px;
+		margin: 6px 0;
+	}
+	.agent-composer {
+		padding-top: 6px;
+	}
+	.agent-composer textarea {
+		height: 48px;
+	}
+	.agent-composer-footer {
+		margin-top: 4px;
+	}
+	.agent-panel input,
+	.agent-panel textarea {
+		font-size: 16px;
 	}
 	.agent-message-user {
 		margin-left: 12px;
@@ -225,6 +256,13 @@
 }
 .task-board {
 	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+}
+.task-board > :not(.kanban-columns) {
+	flex-shrink: 0;
 }
 .task-board-heading,
 .task-board-actions,
@@ -254,6 +292,8 @@
 }
 .kanban-columns {
 	display: flex;
+	min-height: 0;
+	flex: 1;
 	gap: 12px;
 	overflow-x: auto;
 	overscroll-behavior-x: contain;
@@ -263,8 +303,7 @@
 }
 .kanban-column {
 	flex: 0 0 248px;
-	min-height: 420px;
-	max-height: 65vh;
+	min-height: 0;
 	overflow-y: auto;
 	background: #161b22;
 	border: 1px solid transparent;
@@ -414,7 +453,11 @@
 }
 .ticket-dialog {
 	width: min(600px, calc(100vw - 24px));
-	max-height: calc(100dvh - 32px);
+	max-height: calc(var(--forge-viewport-height, 100dvh) - 32px);
+	top: calc(var(--forge-viewport-top, 0px) + var(--forge-viewport-height, 100dvh) / 2);
+	bottom: auto;
+	margin: 0 auto;
+	transform: translateY(-50%);
 	padding: 24px;
 	color: #e6edf3;
 	background: #161b22;
@@ -473,7 +516,6 @@
 	}
 	.kanban-column {
 		flex-basis: 240px;
-		max-height: 60dvh;
 	}
 	.ticket-dialog {
 		padding: 16px;
@@ -492,6 +534,70 @@
 }
 body {
 	margin: 0;
+}
+body:has(.shell-constrained) {
+	overflow: hidden;
+}
+.shell-constrained {
+	container-type: size;
+	position: fixed;
+	left: 0;
+	right: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.shell-constrained > header {
+	flex-shrink: 0;
+}
+.shell-constrained main {
+	width: 100%;
+	margin: 0 auto;
+	padding: 16px 32px;
+}
+.shell-constrained main,
+.shell-constrained .project-view,
+.shell-constrained .workbench,
+.shell-constrained [role="tabpanel"]:not([hidden]) {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+}
+.shell-constrained .project-tabs {
+	flex-shrink: 0;
+	margin-bottom: 12px;
+}
+@media (max-width: 700px) {
+	.shell-constrained main {
+		padding: 8px;
+	}
+	.shell-constrained .project-tabs {
+		margin-bottom: 6px;
+	}
+	.shell-constrained .project-tabs a {
+		padding: 8px 12px;
+	}
+}
+@container (max-height: 600px) {
+	.agent-composer {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 4px 8px;
+	}
+	.agent-composer label {
+		grid-column: 1 / -1;
+		margin: 0;
+	}
+	.agent-composer textarea {
+		height: 48px;
+	}
+	.agent-composer-footer {
+		margin: 0;
+	}
+	.agent-composer-footer span {
+		display: none;
+	}
 }
 button,
 input,
@@ -544,6 +650,25 @@ header {
 	font-size: 24px;
 	font-weight: 650;
 	text-decoration: none;
+	flex-shrink: 0;
+}
+.header-identity {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+.header-project {
+	margin: 0;
+	min-width: 0;
+	font-size: 18px;
+	color: #58a6ff;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.header-separator {
+	color: #6e7681;
 }
 .brand > span {
 	display: grid;
@@ -558,6 +683,7 @@ header {
 .global-nav {
 	display: flex;
 	gap: 8px;
+	flex-shrink: 0;
 }
 .global-nav a {
 	padding: 6px 10px;
@@ -861,26 +987,6 @@ small {
 }
 .workbench {
 	min-width: 0;
-}
-.project-heading {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	margin-bottom: 24px;
-}
-.project-heading h1 {
-	margin: 0;
-	color: #58a6ff;
-	font-size: 22px;
-}
-.project-heading > button {
-	background: transparent;
-	border: none;
-	color: #58a6ff;
-	padding: 0;
-}
-.project-heading > span {
-	color: #6e7681;
 }
 .project-tabs {
 	display: flex;
@@ -1191,15 +1297,6 @@ summary {
 .file-icon-html,
 .file-icon-image {
 	color: #f78166;
-}
-.show-files {
-	width: 100%;
-	border: 0;
-	border-top: 1px solid #30363d;
-	border-radius: 0;
-	padding: 10px;
-	color: #58a6ff;
-	background: #161b22;
 }
 .repository-empty {
 	padding: 12px 16px;

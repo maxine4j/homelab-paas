@@ -106,10 +106,13 @@ const setup = async (page: Page) => {
 	await page.goto("/");
 	await page.getByRole("link", { name: "Open Forge", exact: true }).click();
 	await page.getByRole("tab", { name: "Agents", exact: true }).click();
-	const create = async (title: string) => {
-		await page.getByLabel("Chat title", { exact: true }).fill(title);
+	const create = async () => {
+		const title = `Chat ${views.length + 1}`;
 		await page.getByRole("button", { name: "Create chat", exact: true }).click();
-		await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
+		await expect(page.getByRole("button", { name: `Open chat ${title}`, exact: true })).toHaveAttribute(
+			"aria-current",
+			"true",
+		);
 	};
 	const event = async (type = "changed") =>
 		page.evaluate((detail) => window.dispatchEvent(new CustomEvent("agent-event", { detail })), type);
@@ -126,18 +129,30 @@ const setup = async (page: Page) => {
 	};
 };
 
+test("Agents has one compact creation button and no redundant headings or title field", async ({ page }) => {
+	const fixture = await test.step("Open Agents", () => setup(page));
+	await expect(page.getByRole("button", { name: "Create chat", exact: true })).toBeVisible();
+	await test.step("No redundant heading", async () => {
+		await expect(page.getByRole("heading", { name: "Agents", exact: true })).toHaveCount(0);
+	});
+	await expect(page.getByLabel("Chat title", { exact: true })).toHaveCount(0);
+	await fixture.create();
+	await expect(page.getByRole("region", { name: "Chat conversation" }).getByRole("heading")).toHaveCount(0);
+	expect(fixture.views[0]!.thread.title).toBe("Chat 1");
+});
+
 test("independent chats retain drafts and running activity across tabs and reopening", async ({ page }) => {
 	const fixture = await setup(page);
-	await fixture.create("First chat");
+	await fixture.create();
 	await page.getByRole("textbox", { name: "Message", exact: true }).fill("Inspect this project");
 	await page.getByRole("button", { name: "Send message", exact: true }).click();
 	await expect(page.getByText("Inspect this project", { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Interrupt", exact: true })).toBeEnabled();
-	await fixture.create("Second chat");
+	await fixture.create();
 	const secondUrl = page.url();
 	expect(new URL(secondUrl).pathname).toBe(`/projects/${projectId}/agents/${fixture.views[1]!.thread.id}`);
 	await page.getByRole("textbox", { name: "Message", exact: true }).fill("Second draft");
-	await page.getByRole("button", { name: "Open chat First chat", exact: true }).click();
+	await page.getByRole("button", { name: "Open chat Chat 1", exact: true }).click();
 	fixture.views[0]!.items.push(
 		{ id: "answer", role: "assistant", text: "I found the entry point." },
 		{ id: "tool", role: "activity", text: "git status\nClean" },
@@ -149,23 +164,32 @@ test("independent chats retain drafts and running activity across tabs and reope
 	await expect(page.getByText("interrupted", { exact: true }).last()).toBeVisible();
 	await page.getByRole("tab", { name: "Code", exact: true }).click();
 	await page.getByRole("tab", { name: "Agents", exact: true }).click();
-	await page.getByRole("button", { name: "Open chat Second chat", exact: true }).click();
+	await page.getByRole("button", { name: "Open chat Chat 2", exact: true }).click();
 	await expect(page.getByRole("textbox", { name: "Message", exact: true })).toHaveValue("Second draft");
 	await page.reload();
 	await expect(page).toHaveURL(secondUrl);
-	await expect(page.getByRole("heading", { name: "Second chat", exact: true })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Open chat Chat 2", exact: true })).toHaveAttribute(
+		"aria-current",
+		"true",
+	);
 	await expect(page.getByRole("textbox", { name: "Message", exact: true })).toHaveValue("");
-	await page.getByRole("button", { name: "Open chat First chat", exact: true }).click();
+	await page.getByRole("button", { name: "Open chat Chat 1", exact: true }).click();
 	await expect(page.getByText("I found the entry point.", { exact: true })).toBeVisible();
 	await page.goBack();
-	await expect(page.getByRole("heading", { name: "Second chat", exact: true })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Open chat Chat 2", exact: true })).toHaveAttribute(
+		"aria-current",
+		"true",
+	);
 	await page.goForward();
-	await expect(page.getByRole("heading", { name: "First chat", exact: true })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Open chat Chat 1", exact: true })).toHaveAttribute(
+		"aria-current",
+		"true",
+	);
 });
 
 test("unknown chat deep links stay in their project and never create or resume a chat", async ({ page }) => {
 	const fixture = await setup(page);
-	await fixture.create("Existing chat");
+	await fixture.create();
 	const writes = fixture.writes.length;
 	await page.goto(`/projects/${projectId}/agents/123e4567-e89b-42d3-a456-426614174099`);
 	await expect(page.getByRole("heading", { name: "Chat unavailable", exact: true })).toBeVisible();
@@ -175,7 +199,7 @@ test("unknown chat deep links stay in their project and never create or resume a
 
 test("failed sends keep drafts; reconnect recovers history without replaying input", async ({ page }) => {
 	const fixture = await setup(page);
-	await fixture.create("Recovery");
+	await fixture.create();
 	fixture.fail(true);
 	await page.getByLabel("Message", { exact: true }).fill("Keep this draft");
 	await page.getByRole("button", { name: "Send message", exact: true }).click();
@@ -197,18 +221,24 @@ test("failed sends keep drafts; reconnect recovers history without replaying inp
 
 test("Agents opens the first chat and loads only selected histories without uncertain labels", async ({ page }) => {
 	const fixture = await setup(page);
-	await fixture.create("First chat");
-	await fixture.create("Second chat");
+	await fixture.create();
+	await fixture.create();
 	for (const view of fixture.views) view.thread.status = "uncertain";
 	const writes = fixture.writes.length;
 	await page.goto(`/projects/${projectId}/agents`);
-	await expect(page.getByRole("heading", { name: "First chat", exact: true })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Open chat Chat 1", exact: true })).toHaveAttribute(
+		"aria-current",
+		"true",
+	);
 	await expect(page.getByText("Recovered history", { exact: true })).toBeVisible();
 	await expect(page.getByText("uncertain", { exact: true })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Resume and load history", exact: true })).toHaveCount(0);
 	expect(fixture.writes.slice(writes)).toEqual([`/api/agents/${fixture.views[0]!.thread.id}/resume`]);
-	await page.getByRole("button", { name: "Open chat Second chat", exact: true }).click();
-	await expect(page.getByRole("heading", { name: "Second chat", exact: true })).toBeVisible();
+	await page.getByRole("button", { name: "Open chat Chat 2", exact: true }).click();
+	await expect(page.getByRole("button", { name: "Open chat Chat 2", exact: true })).toHaveAttribute(
+		"aria-current",
+		"true",
+	);
 	await expect(
 		page.getByRole("region", { name: "Chat conversation" }).getByText("Recovered history", { exact: true }),
 	).toBeVisible();
@@ -220,7 +250,7 @@ test("Agents opens the first chat and loads only selected histories without unce
 
 test("history loading blocks sending and coalesces refreshes; failures allow an explicit retry", async ({ page }) => {
 	const fixture = await setup(page);
-	await fixture.create("Recovery");
+	await fixture.create();
 	const view = fixture.views[0]!;
 	view.thread.status = "uncertain";
 	let release = () => {};
@@ -256,7 +286,7 @@ test("history loading blocks sending and coalesces refreshes; failures allow an 
 
 test("one-time command and file approvals, clarification and truncation are visible", async ({ page }) => {
 	const fixture = await setup(page);
-	await fixture.create("Approvals");
+	await fixture.create();
 	const view = fixture.views[0]!;
 	view.thread.status = "waiting";
 	view.truncated = true;
@@ -295,10 +325,84 @@ test("one-time command and file approvals, clarification and truncation are visi
 	]);
 });
 
+for (const size of [
+	{ width: 1280, height: 900 },
+	{ width: 448, height: 960 },
+	{ width: 820, height: 820 },
+]) {
+	test(`chat scroll regions fill the visible viewport at ${size.width}px, including keyboard resize`, async ({
+		page,
+	}) => {
+		await page.setViewportSize(size);
+		const fixture = await setup(page);
+		await fixture.create();
+		const first = fixture.views[0]!;
+		for (let i = 1; i < 40; i++)
+			fixture.views.push({
+				...first,
+				thread: {
+					...first.thread,
+					id: `123e4567-e89b-42d3-a456-${String(426614174001 + i)}`,
+					title: `Chat ${i}`,
+				},
+			});
+		first.items = Array.from({ length: 50 }, (_, i) => ({
+			id: `message-${i}`,
+			role: "assistant",
+			text: `Message ${i}\n${"Long output ".repeat(30)}`,
+		}));
+		await page.getByRole("tab", { name: "Code", exact: true }).click();
+		await page.getByRole("tab", { name: "Agents", exact: true }).click();
+		await fixture.event();
+		await expect(page.getByRole("button", { name: "Open chat Chat 39", exact: true })).toHaveCount(1);
+		const check = async (height: number) => {
+			await expect
+				.poll(() => page.locator(".agent-panel").evaluate((el) => el.getBoundingClientRect().bottom))
+				.toBeLessThanOrEqual(height);
+			const panel = (await page.locator(".agent-panel").boundingBox())!;
+			expect(panel.y + panel.height).toBeGreaterThan(height - 40);
+			await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeInViewport();
+			const send = (await page.getByRole("button", { name: "Send message", exact: true }).boundingBox())!;
+			expect(send.y + send.height).toBeLessThanOrEqual(height);
+			for (const selector of [".agent-sidebar nav", ".agent-messages"]) {
+				const region = page.locator(selector);
+				expect(await region.evaluate((el) => el.scrollHeight > el.clientHeight && el.clientHeight > 0)).toBe(
+					true,
+				);
+				await region.evaluate((el) => {
+					el.scrollTop = el.scrollHeight;
+				});
+				await expect(region.locator(selector.includes("nav") ? "button" : "article").last()).toBeInViewport();
+				const rect = (await region.boundingBox())!;
+				expect(rect.height).toBeGreaterThanOrEqual(40);
+				expect(rect.y + rect.height).toBeLessThanOrEqual(height);
+			}
+			expect(
+				await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0),
+			).toBe(true);
+		};
+		await check(size.height);
+		if (size.width < 1000) {
+			await page.getByLabel("Message", { exact: true }).focus();
+			await page.evaluate(() => {
+				Object.defineProperty(window.visualViewport!, "height", { configurable: true, value: 480 });
+				window.visualViewport!.dispatchEvent(new Event("resize"));
+			});
+			await check(480);
+			await page.screenshot({ path: `../../../../artifacts/forge-browser/agents-keyboard-${size.width}.png` });
+			await page.evaluate(() => {
+				Reflect.deleteProperty(window.visualViewport!, "height");
+				window.visualViewport!.dispatchEvent(new Event("resize"));
+			});
+			await check(size.height);
+		}
+	});
+}
+
 test("mobile chat keeps composer and long tool output within the viewport", async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	const fixture = await setup(page);
-	await fixture.create("Mobile chat");
+	await fixture.create();
 	fixture.views[0]!.items = [
 		{ id: "long", role: "activity", text: "command-output-".repeat(80) },
 		{ id: "reply", role: "assistant", text: "Ready for your next message." },

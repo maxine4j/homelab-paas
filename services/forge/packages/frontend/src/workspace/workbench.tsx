@@ -68,12 +68,10 @@ const ProjectTerminal = ({ projectId, api }: { projectId: string; api: IWorkspac
 export const Workbench = ({
 	project,
 	api,
-	leave,
 	dirtyChange: reportDirty,
 }: {
 	project: Project;
 	api: IWorkspaceApi;
-	leave: () => void;
 	dirtyChange: (dirty: boolean) => void;
 }) => {
 	const location = useLocation();
@@ -110,11 +108,6 @@ export const Workbench = ({
 	}, [dirty]);
 	return (
 		<section className='workbench' aria-label='Project'>
-			<div className='project-heading'>
-				<button onClick={leave}>Projects</button>
-				<span aria-hidden='true'>/</span>
-				<h1>{project.name}</h1>
-			</div>
 			<div className='project-tabs' role='tablist' aria-label='Project sections'>
 				{["Code", "Tasks", "Agents", "Pipelines", "Terminals"].map((name) => (
 					<Link

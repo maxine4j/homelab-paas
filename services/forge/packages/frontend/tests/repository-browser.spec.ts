@@ -124,6 +124,12 @@ test.beforeEach(async ({ page }) => {
 	await page.getByRole("link", { name: "Open Forge" }).click();
 });
 
+test("editor sidebar shows every root file without expansion controls", async ({ page }) => {
+	await page.getByRole("button", { name: "file-0.ts", exact: true }).click();
+	await expect(page.locator(".repository-sidebar .tree-entry")).toHaveCount(14);
+	await expect(page.getByRole("button", { name: /Show all|Show fewer/ })).toHaveCount(0);
+});
+
 test("code URLs restore branches, directories, files and history through reload and Back/Forward", async ({ page }) => {
 	await selectBranch(page, "feature/navigation");
 	await page.getByRole("button", { name: "src", exact: true }).click();
@@ -150,13 +156,14 @@ test("code URLs restore branches, directories, files and history through reload 
 	await expect(page.getByRole("textbox", { name: "File editor" })).toBeVisible();
 });
 
-test("Code overview limits entries, renders README and dates, and opens the editor only on file selection", async ({
+test("Code overview shows all entries, renders README and dates, and opens the editor only on file selection", async ({
 	page,
 }) => {
 	await expect(page.getByRole("tab", { name: "Code", exact: true })).toHaveAttribute("aria-selected", "true");
 	const list = page.getByRole("table", { name: "Repository files" });
-	await expect(list.getByRole("row")).toHaveCount(11);
-	await expect(list.locator("time")).toHaveCount(10);
+	await expect(list.getByRole("row")).toHaveCount(15);
+	await expect(list.locator("time")).toHaveCount(14);
+	await expect(page.getByRole("button", { name: /Show all|Show fewer/ })).toHaveCount(0);
 	await expect(list.locator("svg[data-file-type=typescript]").first()).toBeVisible();
 	await expect(page.getByRole("textbox", { name: "File editor" })).toHaveCount(0);
 	await expect(page.getByRole("region", { name: "README" })).toContainText("Forge documentation");
@@ -166,11 +173,12 @@ test("Code overview limits entries, renders README and dates, and opens the edit
 		await page.screenshot({ path: `../../../../artifacts/forge/code-overview-${width}.png`, fullPage: true });
 	}
 	await page.setViewportSize({ width: 1280, height: 900 });
-	await page.getByRole("button", { name: "Show all 14 files" }).click();
 	await expect(list.getByRole("row")).toHaveCount(15);
 	await list.getByRole("button", { name: "file-0.ts", exact: true }).click();
 	await expect(page.getByRole("textbox", { name: "File editor" })).toBeVisible();
 	await expect(list).toHaveCount(0);
+	await expect(page.locator(".repository-sidebar .tree-entry")).toHaveCount(14);
+	await expect(page.getByRole("button", { name: /Show all|Show fewer/ })).toHaveCount(0);
 	await page.getByRole("button", { name: "Back to files", exact: true }).click();
 	await expect(page.getByRole("textbox", { name: "File editor" })).toHaveCount(0);
 	await expect(list).toBeVisible();

@@ -91,6 +91,21 @@ test("dark project tabs hide infrastructure and keep account setup in Config", a
 	await expect(page.getByRole("button", { name: "Sign in", exact: true })).toHaveCount(0);
 	await page.getByRole("link", { name: "Open Forge" }).click();
 	await expect(page).toHaveURL(`/projects/${projectId}/code`);
+	for (const size of [
+		{ width: 1280, height: 900 },
+		{ width: 448, height: 960 },
+		{ width: 820, height: 820 },
+	]) {
+		await page.setViewportSize(size);
+		await expect(page.getByRole("banner").getByRole("heading", { name: "Forge", exact: true })).toBeVisible();
+		await expect(
+			page
+				.getByRole("region", { name: "Project", exact: true })
+				.getByRole("heading", { name: "Forge", exact: true }),
+		).toHaveCount(0);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+	}
+	await page.setViewportSize({ width: 1280, height: 900 });
 	await expect(page.getByRole("button", { name: "readme.md", exact: true })).toBeVisible();
 	expect(prepared).toBe(false);
 	expect(preparations).toBe(0);
@@ -131,7 +146,7 @@ test("dark project tabs hide infrastructure and keep account setup in Config", a
 	await page.goBack();
 	await page.getByRole("tab", { name: "Code", exact: true }).click();
 	await expect(page.getByRole("button", { name: "readme.md", exact: true })).toBeVisible();
-	await page.getByRole("button", { name: "Projects", exact: true }).click();
+	await page.getByRole("link", { name: "Forge home", exact: true }).click();
 	await page.getByRole("link", { name: "Open Forge" }).click();
 	await expect(page.getByRole("button", { name: "readme.md", exact: true })).toBeVisible();
 	expect(preparations).toBe(1);
