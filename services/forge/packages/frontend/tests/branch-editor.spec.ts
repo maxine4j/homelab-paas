@@ -46,7 +46,7 @@ test("cards open projects; branch drafts stay local until one atomic commit and 
 		},
 	);
 	await page.goto("/");
-	const card = page.getByRole("button", { name: "Open Forge", exact: true });
+	const card = page.getByRole("link", { name: "Open Forge", exact: true });
 	await expect(card).toContainText("Created");
 	await card.press("Enter");
 	await expect(page.getByRole("combobox", { name: "Branch" })).toHaveValue("main");

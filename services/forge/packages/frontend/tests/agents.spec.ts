@@ -102,7 +102,7 @@ const setup = async (page: Page) => {
 		},
 	);
 	await page.goto("/");
-	await page.getByRole("button", { name: "Open Forge", exact: true }).click();
+	await page.getByRole("link", { name: "Open Forge", exact: true }).click();
 	await page.getByRole("tab", { name: "Agents", exact: true }).click();
 	const create = async (title: string) => {
 		await page.getByLabel("Chat title", { exact: true }).fill(title);
@@ -132,6 +132,8 @@ test("independent chats retain drafts and running activity across tabs and reope
 	await expect(page.getByText("Inspect this project", { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Interrupt", exact: true })).toBeEnabled();
 	await fixture.create("Second chat");
+	const secondUrl = page.url();
+	expect(new URL(secondUrl).pathname).toBe(`/projects/${projectId}/agents/${fixture.views[1]!.thread.id}`);
 	await page.getByRole("textbox", { name: "Message", exact: true }).fill("Second draft");
 	await page.getByRole("button", { name: "Open chat First chat", exact: true }).click();
 	fixture.views[0]!.items.push(
@@ -148,10 +150,25 @@ test("independent chats retain drafts and running activity across tabs and reope
 	await page.getByRole("button", { name: "Open chat Second chat", exact: true }).click();
 	await expect(page.getByRole("textbox", { name: "Message", exact: true })).toHaveValue("Second draft");
 	await page.reload();
-	await page.getByRole("button", { name: "Open Forge", exact: true }).click();
-	await page.getByRole("tab", { name: "Agents", exact: true }).click();
+	await expect(page).toHaveURL(secondUrl);
+	await expect(page.getByRole("heading", { name: "Second chat", exact: true })).toBeVisible();
+	await expect(page.getByRole("textbox", { name: "Message", exact: true })).toHaveValue("");
 	await page.getByRole("button", { name: "Open chat First chat", exact: true }).click();
 	await expect(page.getByText("I found the entry point.", { exact: true })).toBeVisible();
+	await page.goBack();
+	await expect(page.getByRole("heading", { name: "Second chat", exact: true })).toBeVisible();
+	await page.goForward();
+	await expect(page.getByRole("heading", { name: "First chat", exact: true })).toBeVisible();
+});
+
+test("unknown chat deep links stay in their project and never create or resume a chat", async ({ page }) => {
+	const fixture = await setup(page);
+	await fixture.create("Existing chat");
+	const writes = fixture.writes.length;
+	await page.goto(`/projects/${projectId}/agents/123e4567-e89b-42d3-a456-426614174099`);
+	await expect(page.getByRole("heading", { name: "Chat unavailable", exact: true })).toBeVisible();
+	await expect(page.getByRole("textbox", { name: "Message", exact: true })).toHaveCount(0);
+	expect(fixture.writes).toHaveLength(writes);
 });
 
 test("failed sends keep drafts; reconnect only reads; uncertain execution requires explicit recovery", async ({

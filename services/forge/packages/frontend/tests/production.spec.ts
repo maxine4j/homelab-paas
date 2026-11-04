@@ -133,11 +133,13 @@ test("integrated production bundle styles editor/terminal on desktop/mobile and 
 				(window as unknown as { cspViolations: string[] }).cspViolations.push(event.effectiveDirective);
 			});
 		});
-		const response = await page.goto(`http://127.0.0.1:${address.port}/`);
+		const response = await page.goto(
+			`http://127.0.0.1:${address.port}/projects/${projectId}/code?branch=main&file=file.ts`,
+		);
 		expect(response?.headers()["cache-control"]).toBe("no-store");
 		expect(response?.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
-		await page.getByRole("button", { name: "Open Production project" }).click();
-		await page.getByRole("button", { name: "file.ts", exact: true }).click();
+		await expect(page.getByRole("textbox", { name: "File editor" })).toBeVisible();
+		await page.reload();
 		await expect(page.getByRole("textbox", { name: "File editor" })).toContainText(
 			"export const highlighted = 42;",
 		);

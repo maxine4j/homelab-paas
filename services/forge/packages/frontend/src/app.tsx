@@ -1,11 +1,13 @@
 import type { AccountProvider, AccountStatus, AccountsStatus, Project } from "@homelab-paas/forge-contracts";
 import { createProjectSchema } from "@homelab-paas/forge-contracts";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { Link, Navigate, useBlocker, useLocation, useNavigate } from "react-router";
 
 import type { IApiClient } from "./api/api-client.ts";
 import { ResourcePoller } from "./api/resource-poller.ts";
 import type { IWorkspaceApi } from "./api/workspace-api.ts";
+import { resolveRoute } from "./navigation/routes.ts";
 import { Workbench } from "./workspace/workbench.tsx";
 
 const failureMessages = {
@@ -99,14 +101,33 @@ const AccountCard = ({
 };
 
 export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWorkspaceApi }) => {
-	const [config, setConfig] = useState(window.location.hash === "#/config");
-	useEffect(() => {
-		const navigate = () => setConfig(window.location.hash === "#/config");
-		window.addEventListener("hashchange", navigate);
-		return () => window.removeEventListener("hashchange", navigate);
-	}, []);
-	const [selected, setSelected] = useState<Project>();
+	const location = useLocation();
+	const navigate = useNavigate();
+	const route = resolveRoute(location.pathname);
+	const config = route.page === "config";
+	const [retained, setRetained] = useState<Project>();
 	const [projects, setProjects] = useState<Project[]>();
+	const selected = config
+		? retained
+		: route.page === "project"
+			? projects?.find((project) => project.id === route.projectId && project.status === "ready")
+			: undefined;
+	if (!config && retained !== selected) setRetained(selected);
+	const [dirty, setDirty] = useState(false);
+	const dirtyChange = useCallback((value: boolean) => setDirty(value), []);
+	const [navigationError, setNavigationError] = useState("");
+	const blocker = useBlocker(({ nextLocation }) => {
+		const next = resolveRoute(nextLocation.pathname);
+		const blocked =
+			dirty && next.page !== "config" && !(next.page === "project" && next.projectId === selected?.id);
+		if (blocked) setNavigationError("Uncommitted drafts remain. Commit or discard them before leaving.");
+		return blocked;
+	});
+	useEffect(() => {
+		if (blocker.state === "blocked") {
+			blocker.reset();
+		}
+	}, [blocker]);
 	const [accounts, setAccounts] = useState<AccountsStatus>();
 	const [projectError, setProjectError] = useState("");
 	const [accountError, setAccountError] = useState("");
@@ -185,21 +206,40 @@ export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWor
 	};
 	return (
 		<div className='shell'>
+			{location.pathname === "/" && <Navigate to='/projects' replace />}
 			<header>
-				<a className='brand' href='/' aria-label='Forge home'>
+				<Link className='brand' to='/projects' aria-label='Forge home'>
 					<span aria-hidden='true'>F</span>forge
-				</a>
+				</Link>
 				<nav className='global-nav' aria-label='Forge'>
-					<a href='#/projects' aria-current={!config ? "page" : undefined}>
+					<Link to='/projects' aria-current={!config ? "page" : undefined}>
 						Projects
-					</a>
-					<a href='#/config' aria-current={config ? "page" : undefined}>
+					</Link>
+					<Link to='/config' aria-current={config ? "page" : undefined}>
 						Config
-					</a>
+					</Link>
 				</nav>
 			</header>
 			<main>
-				<div className='intro' hidden={!!selected || config}>
+				{navigationError && dirty && (
+					<p role='alert' className='error'>
+						{navigationError}
+					</p>
+				)}
+				{route.page === "not-found" && (
+					<section>
+						<h1>Page not found</h1>
+						<Link to='/projects'>View projects</Link>
+					</section>
+				)}
+				{route.page === "project" && !selected && (
+					<section>
+						<h1>{!projects && !projectError ? "Loading project…" : "Project unavailable"}</h1>
+						{projectError && <p role='alert'>{projectError}</p>}
+						<Link to='/projects'>View projects</Link>
+					</section>
+				)}
+				<div className='intro' hidden={route.page !== "projects"}>
 					<div>
 						<h1>Your projects</h1>
 						<p>Build, review, and ship from one place.</p>
@@ -211,11 +251,12 @@ export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWor
 							key={selected.id}
 							project={selected}
 							api={workspaceApi}
-							leave={() => setSelected(undefined)}
+							leave={() => void navigate("/projects")}
+							dirtyChange={dirtyChange}
 						/>
 					</div>
 				)}
-				<div className='workspace-grid' hidden={!!selected || config}>
+				<div className='workspace-grid' hidden={route.page !== "projects"}>
 					<section aria-labelledby='projects-heading' className='projects-section'>
 						<div className='section-heading'>
 							<div>
@@ -250,55 +291,54 @@ export const App = ({ api, workspaceApi }: { api: IApiClient; workspaceApi: IWor
 							</div>
 						) : (
 							<div className='project-list'>
-								{projects.map((project) => (
-									<article
-										className='project'
-										key={project.id}
-										role={project.status === "ready" ? "button" : undefined}
-										tabIndex={project.status === "ready" ? 0 : undefined}
-										aria-label={project.status === "ready" ? `Open ${project.name}` : undefined}
-										onClick={() => {
-											if (project.status === "ready") setSelected(project);
-										}}
-										onKeyDown={(event) => {
-											if (project.status === "ready" && ["Enter", " "].includes(event.key)) {
-												event.preventDefault();
-												setSelected(project);
-											}
-										}}
-									>
-										<div className='repo-icon' aria-hidden='true'>
-											⑂
-										</div>
-										<div className='project-info'>
-											<h3>{project.name}</h3>
-											<p>
-												Created{" "}
-												{new Date(project.createdAt).toLocaleDateString(undefined, {
-													month: "short",
-													day: "numeric",
-													year: "numeric",
-												})}
-											</p>
-										</div>
-										<span className={`status ${project.status}`}>
-											{project.status === "ready"
-												? "Ready"
-												: project.status === "creating"
-													? "Creating"
-													: "Failed"}
-										</span>
-										{project.status === "failed" && (
-											<button
-												disabled={projectBusy}
-												aria-label={`Retry ${project.name}`}
-												onClick={() => void retry(project.id)}
-											>
-												Retry
-											</button>
-										)}
-									</article>
-								))}
+								{projects.map((project) => {
+									const card = (
+										<article className='project' key={project.id}>
+											<div className='repo-icon' aria-hidden='true'>
+												⑂
+											</div>
+											<div className='project-info'>
+												<h3>{project.name}</h3>
+												<p>
+													Created{" "}
+													{new Date(project.createdAt).toLocaleDateString(undefined, {
+														month: "short",
+														day: "numeric",
+														year: "numeric",
+													})}
+												</p>
+											</div>
+											<span className={`status ${project.status}`}>
+												{project.status === "ready"
+													? "Ready"
+													: project.status === "creating"
+														? "Creating"
+														: "Failed"}
+											</span>
+											{project.status === "failed" && (
+												<button
+													disabled={projectBusy}
+													aria-label={`Retry ${project.name}`}
+													onClick={() => void retry(project.id)}
+												>
+													Retry
+												</button>
+											)}
+										</article>
+									);
+									return project.status === "ready" ? (
+										<Link
+											key={project.id}
+											className='project-link'
+											to={`/projects/${project.id}/code`}
+											aria-label={`Open ${project.name}`}
+										>
+											{card}
+										</Link>
+									) : (
+										card
+									);
+								})}
 							</div>
 						)}
 					</section>

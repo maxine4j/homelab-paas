@@ -9,9 +9,11 @@ import {
 	type RepositoryFile,
 	type RepositoryHistory,
 } from "@homelab-paas/forge-contracts";
-import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router";
 
 import type { IWorkspaceApi } from "../api/workspace-api.ts";
+import { resolveRoute } from "../navigation/routes.ts";
 import { Editor } from "./editor.tsx";
 import { FileIcon } from "./file-icon.tsx";
 import { RepositoryFileTree } from "./repository-file-tree.tsx";
@@ -54,6 +56,7 @@ const BranchBrowser = ({
 	api,
 	dirtyChange,
 	branchControl,
+	search,
 }: {
 	branchControl: ReactNode;
 	root: string;
@@ -61,13 +64,26 @@ const BranchBrowser = ({
 	branch: string;
 	api: IWorkspaceApi;
 	dirtyChange: (branch: string, dirty: boolean) => void;
+	search?: string;
 }) => {
+	const navigate = useNavigate();
+	const [retainedSearch, setRetainedSearch] = useState("");
+	const selection = new URLSearchParams(search ?? retainedSearch);
+	const path = selection.get("path") ?? "";
+	const active = selection.get("file") ?? "";
+	const showingHistory = selection.get("view") === "history";
+	if (search !== undefined && retainedSearch !== search) setRetainedSearch(search);
+	const navigateCode = (directory: string, file = "", history = false) => {
+		const query = new URLSearchParams({ branch });
+		if (directory) query.set("path", directory);
+		if (file) query.set("file", file);
+		if (history) query.set("view", "history");
+		void navigate(`/${root.replace(/\/repository$/u, "/code")}?${query}`);
+	};
 	const editorId = useId();
 	const [tree, setTree] = useState<RepositoryTree>();
 	const [baseHead, setBaseHead] = useState("");
-	const [path, setPath] = useState("");
 	const [drafts, setDrafts] = useState<Record<string, Draft>>({});
-	const [active, setActive] = useState("");
 	const [readmeResult, setReadmeResult] = useState<{ key: string; file?: RepositoryFile; error?: string }>();
 	const [history, setHistory] = useState<RepositoryHistory>();
 	const [showAll, setShowAll] = useState(false);
@@ -81,7 +97,7 @@ const BranchBrowser = ({
 	const dirty = changed.length > 0;
 	const disabled = busy || loading;
 	const draft = drafts[active];
-	const breadcrumbPath = active && !history ? active.split("/").slice(0, -1).join("/") : path;
+	const breadcrumbPath = active && !showingHistory ? active.split("/").slice(0, -1).join("/") : path;
 	const entries = [...(tree?.entries ?? [])].sort((a, b) =>
 		a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "directory" ? -1 : 1,
 	);
@@ -154,25 +170,57 @@ const BranchBrowser = ({
 			setBusy(false);
 		}
 	};
-	const open = async (file: string) => {
-		if (!Object.hasOwn(drafts, file)) {
-			const value = await api.read(
-				`${root}/file?branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(file)}`,
+	useEffect(() => {
+		if (!active || Object.hasOwn(drafts, active) || showingHistory) return;
+		let cancelled = false;
+		void api
+			.read(
+				`${root}/file?branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(active)}`,
 				repositoryFileSchema,
-			);
-			setDrafts((current) => ({ ...current, [file]: { original: value.content, content: value.content } }));
-		}
-		setActive(file);
-		setHistory(undefined);
+			)
+			.then((value) => {
+				if (!cancelled) {
+					setError("");
+					setDrafts((current) => ({
+						...current,
+						[active]: { original: value.content, content: value.content },
+					}));
+				}
+			})
+			.catch(() => {
+				if (!cancelled) setError("File unavailable. Select another file or return to files.");
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [api, root, branch, active, drafts, showingHistory]);
+	useEffect(() => {
+		if (!showingHistory) return;
+		let cancelled = false;
+		void api
+			.read(`${root}/history?branch=${encodeURIComponent(branch)}&offset=0`, repositoryHistorySchema)
+			.then((value) => {
+				if (!cancelled) {
+					setHistory(value);
+					setError("");
+				}
+			})
+			.catch(() => {
+				if (!cancelled) setError("Commit history unavailable. Reopen history to retry.");
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [api, root, branch, showingHistory, revision]);
+	const open = async (file: string) => {
+		navigateCode(file.split("/").slice(0, -1).join("/"), file);
 	};
 	const browse = (directory: string) => {
 		if (path !== directory) {
 			setLoading(true);
 			setTree(undefined);
 		}
-		setPath(directory);
-		setActive("");
-		setHistory(undefined);
+		navigateCode(directory);
 		setShowAll(false);
 	};
 	const showHistory = async (more = false) => {
@@ -186,14 +234,8 @@ const BranchBrowser = ({
 	};
 	const fileControls = (
 		<div className='file-controls'>
-			{(active || history) && (
-				<button
-					disabled={disabled}
-					onClick={() => {
-						setActive("");
-						setHistory(undefined);
-					}}
-				>
+			{(active || showingHistory) && (
+				<button disabled={disabled} onClick={() => navigateCode(path)}>
 					Back to files
 				</button>
 			)}
@@ -202,7 +244,7 @@ const BranchBrowser = ({
 				aria-label='Commit history'
 				title='Commit history'
 				disabled={disabled}
-				onClick={() => void run(() => showHistory())}
+				onClick={() => navigateCode(path, active, true)}
 			>
 				<svg width='18' height='18' viewBox='0 0 20 20' aria-hidden='true'>
 					<path
@@ -217,7 +259,7 @@ const BranchBrowser = ({
 	);
 	const header = (
 		<div className='file-list-header'>
-			<span>{history ? "Commits" : active}</span>
+			<span>{showingHistory ? "Commits" : active}</span>
 			{fileControls}
 		</div>
 	);
@@ -242,7 +284,7 @@ const BranchBrowser = ({
 						))}
 					{active && <span> / {active.split("/").at(-1)}</span>}
 				</nav>
-				{!active && !history && fileControls}
+				{!active && !showingHistory && fileControls}
 			</div>
 			{error && (
 				<p className='error' role='alert'>
@@ -262,8 +304,8 @@ const BranchBrowser = ({
 					Retry loading files
 				</button>
 			)}
-			<div className={active && !history ? "repository-layout has-file" : "repository-layout"}>
-				{active && !history && (
+			<div className={active && !showingHistory ? "repository-layout has-file" : "repository-layout"}>
+				{active && !showingHistory && (
 					<aside className='repository-sidebar' aria-label='File tree'>
 						<h3>Files</h3>
 						<RepositoryFileTree
@@ -277,7 +319,7 @@ const BranchBrowser = ({
 					</aside>
 				)}
 				<div className='repository-main'>
-					{!history && Object.keys(drafts).length > 0 && (
+					{!showingHistory && Object.keys(drafts).length > 0 && (
 						<>
 							<div className='editor-tabs' role='tablist' aria-label='Editor tabs'>
 								{Object.entries(drafts).map(([file, value], index) => (
@@ -288,7 +330,7 @@ const BranchBrowser = ({
 										aria-selected={active === file}
 										aria-controls={`${editorId}-panel`}
 										disabled={disabled}
-										onClick={() => setActive(file)}
+										onClick={() => void open(file)}
 									>
 										<FileIcon name={file} />
 										{file}
@@ -298,7 +340,7 @@ const BranchBrowser = ({
 							</div>
 						</>
 					)}
-					{active && !history ? (
+					{active && !showingHistory ? (
 						<div className='editor-pane'>
 							<section
 								id={`${editorId}-panel`}
@@ -306,6 +348,7 @@ const BranchBrowser = ({
 								aria-labelledby={`${editorId}-tab-${Object.keys(drafts).indexOf(active)}`}
 							>
 								{header}
+								{!draft && !error && <p role='status'>Loading file…</p>}
 								{draft && (
 									<div className='repository-code'>
 										<Editor
@@ -325,11 +368,12 @@ const BranchBrowser = ({
 						</div>
 					) : (
 						<>
-							{history && header}
-							{history ? (
+							{showingHistory && header}
+							{showingHistory ? (
 								<section className='commit-history' aria-label='Commit history'>
 									<h2>{branch}</h2>
-									{history.commits.map((commit) => (
+									{!history && !error && <p role='status'>Loading commits…</p>}
+									{history?.commits.map((commit) => (
 										<article key={commit.sha}>
 											<strong>{commit.subject}</strong>
 											<p>
@@ -338,8 +382,8 @@ const BranchBrowser = ({
 											<code>{commit.sha.slice(0, 7)}</code>
 										</article>
 									))}
-									{!history.commits.length && <p>No commits yet.</p>}
-									{history.hasMore && (
+									{history?.commits.length === 0 && <p>No commits yet.</p>}
+									{history?.hasMore && (
 										<button disabled={disabled} onClick={() => void run(() => showHistory(true))}>
 											Load more commits
 										</button>
@@ -421,7 +465,7 @@ const BranchBrowser = ({
 					)}
 				</div>
 			</div>
-			{!active && !history && (readme || readmeError) && (
+			{!active && !showingHistory && (readme || readmeError) && (
 				<section className='repository-readme' aria-label='README'>
 					<div className='readme-heading'>
 						<FileIcon name='README.md' />
@@ -488,7 +532,7 @@ const BranchBrowser = ({
 							disabled={disabled}
 							onClick={() => {
 								setDrafts({});
-								setActive("");
+								navigateCode(path);
 								setBaseHead("");
 								setError("");
 								setHistory(undefined);
@@ -517,12 +561,28 @@ export const RepositoryBrowser = ({
 	api: IWorkspaceApi;
 	dirtyChange: (branch: string, dirty: boolean) => void;
 }) => {
+	const location = useLocation();
+	const navigate = useNavigate();
+	const route = resolveRoute(location.pathname);
+	const inCode = route.page === "project" && route.section === "code";
 	const [branches, setBranches] = useState<RepositoryBranch[]>([]);
-	const [branch, setBranch] = useState("");
+	const [retainedBranch, setRetainedBranch] = useState("");
+	const defaultBranch = branches.find((value) => value.name === "main")?.name ?? branches.at(0)?.name ?? "";
+	const branch = inCode ? (new URLSearchParams(location.search).get("branch") ?? defaultBranch) : retainedBranch;
+	const branchExists = branches.some((value) => value.name === branch);
+	const branchLocations = useRef(new Map<string, string>());
 	const [visited, setVisited] = useState<string[]>([]);
 	const [error, setError] = useState("");
 	const [revision, setRevision] = useState(0);
 	const root = `projects/${projectId}/repository`;
+	if (inCode && branchExists) {
+		if (retainedBranch !== branch) setRetainedBranch(branch);
+		if (!visited.includes(branch)) setVisited([...visited, branch]);
+	}
+	useEffect(() => {
+		if (!inCode || !branchExists) return;
+		branchLocations.current.set(branch, location.pathname + location.search);
+	}, [inCode, branchExists, branch, location.pathname, location.search]);
 	useEffect(() => {
 		let cancelled = false;
 		void api
@@ -531,9 +591,6 @@ export const RepositoryBrowser = ({
 				if (cancelled) return;
 				setBranches(values);
 				setError("");
-				const initial = values.find((value) => value.name === "main")?.name ?? values.at(0)?.name ?? "";
-				setBranch(initial);
-				setVisited(initial ? [initial] : []);
 			})
 			.catch(() => {
 				if (!cancelled) setError("Branch list unavailable.");
@@ -544,6 +601,12 @@ export const RepositoryBrowser = ({
 	}, [api, root, revision]);
 	return (
 		<div className='repository-browser'>
+			{branches.length > 0 && !branchExists && (
+				<p role='alert'>
+					Branch unavailable.{" "}
+					<button onClick={() => void navigate(`/projects/${projectId}/code`)}>Open default branch</button>
+				</p>
+			)}
 			{error && (
 				<p role='alert'>
 					{error} <button onClick={() => setRevision((value) => value + 1)}>Retry branches</button>
@@ -556,6 +619,7 @@ export const RepositoryBrowser = ({
 						root={root}
 						repositoryName={repositoryName}
 						branch={value}
+						search={inCode && branch === value ? location.search : undefined}
 						api={api}
 						dirtyChange={dirtyChange}
 						branchControl={
@@ -567,9 +631,9 @@ export const RepositoryBrowser = ({
 									disabled={!branches.length}
 									onChange={(event) => {
 										const value = event.target.value;
-										setBranch(value);
-										setVisited((current) =>
-											current.includes(value) ? current : [...current, value],
+										void navigate(
+											branchLocations.current.get(value)
+												?? `/projects/${projectId}/code?${new URLSearchParams({ branch: value })}`,
 										);
 									}}
 								>

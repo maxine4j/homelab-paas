@@ -90,7 +90,7 @@ test("terminal automatically creates, fits, reconnects, replaces lost shells and
 		}
 	});
 	await page.goto("/");
-	await page.getByRole("button", { name: "Open Project" }).click();
+	await page.getByRole("link", { name: "Open Project" }).click();
 	await page.getByRole("tab", { name: "Terminals", exact: true }).click();
 	await expect.poll(() => creates).toBe(1);
 	await expect(page.getByRole("region", { name: "Terminal", exact: true }).getByRole("button")).toHaveCount(0);
@@ -125,7 +125,7 @@ test("terminal automatically creates, fits, reconnects, replaces lost shells and
 	expect(attaches).toBe(detached);
 	status = "lost";
 	session = current();
-	await page.getByRole("button", { name: "Open Project" }).click();
+	await page.getByRole("link", { name: "Open Project" }).click();
 	await page.getByRole("tab", { name: "Terminals", exact: true }).click();
 	await expect.poll(() => creates).toBe(3);
 	await expect.poll(() => attaches).toBe(4);

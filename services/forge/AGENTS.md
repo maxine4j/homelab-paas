@@ -621,18 +621,41 @@ the workspace store and completes recovery before listening.
 #### Slice 2 integrated manual workspace and PR review
 
 Forge uses a dark GitHub-style layout throughout, including the editor, forms,
-diffs and account setup. Global navigation separates Projects from Config at
-`#/config`; ChatGPT/GitHub status, device-code login, cancellation and retry live
+diffs and account setup. Global navigation separates Projects at `/projects` from Config at
+`/config`; ChatGPT/GitHub status, device-code login, cancellation and retry live
 only on Config. Account errors never clutter project views. Switching to Config
 preserves the open project and its unsaved drafts.
 
 Projects retains creation/import/retry. The entire ready project card opens the
-project using pointer or keyboard activation; there is no dedicated Open button.
+project as a normal link using pointer or keyboard activation; there is no dedicated Open button.
 Opening a ready project shows its identity
 and five section tabs, in order: Code, Tasks, Agents, Pipelines, Terminals.
-Code is the default. Tasks shows the ticket board described below. Agents and
-Pipelines explicitly say they are not available yet.
+Code is the default. Tasks shows the ticket board described below. Agents shows
+the interactive chats described above; Pipelines is not available yet.
 Tab navigation stays usable on narrow screens without widening the page.
+
+React Router uses the browser History API for `/projects/:projectId/code`,
+`/tasks`, `/agents`, `/pipelines` and `/terminals` under the same project prefix.
+An individual chat uses `/projects/:projectId/agents/:threadId`. Code selection
+uses URL query parameters: `branch` is the exact Git branch name, `path` is the
+directory, `file` is the repository-relative active file, and `view=history` opens
+branch commit history. Query values are URL encoded, including slashes in branch
+names. `/` replaces its history entry with `/projects`. Unknown routes and
+unavailable projects/branches show explicit states rather than a different view.
+Project cards and section tabs expose real links, supporting new tabs and copied
+URLs. Direct links, reloads and browser Back/Forward restore the URL's view;
+Android Back uses the same browser history. Navigation does not replay writes,
+except the documented automatic terminal inspection/create flow when opening
+Terminals. Reload reattaches its retained live shell without creating a duplicate.
+
+Returning to a visited project section restores its last code/chat URL. URL
+navigation within a project and to Config retains local editor/chat drafts and
+visited terminals. Project exit, including browser history and global navigation,
+blocks while code drafts remain uncommitted; commit or discard them first.
+Reload/unload retains the native unsaved-code warning. Draft contents are not
+stored in URLs or persisted across reloads. Ticket forms remain native modal
+`<dialog>` overlays with Escape dismissal and no history entries; Popover API is
+not used for modal forms.
 
 Workspaces are internal execution resources, not a user-facing concept. Do not
 show workspace creation, selection, archival, names or raw

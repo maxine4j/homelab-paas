@@ -1,8 +1,10 @@
 import { workspaceSchema, workspacesSchema, type Project, type Workspace } from "@homelab-paas/forge-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router";
 
 import { AgentChat } from "../agents/agent-chat.tsx";
 import type { IWorkspaceApi } from "../api/workspace-api.ts";
+import { resolveRoute } from "../navigation/routes.ts";
 import { TaskBoard } from "../tasks/task-board.tsx";
 import { RepositoryBrowser } from "./repository-browser.tsx";
 import { WorkspaceTerminal } from "./terminal.tsx";
@@ -63,14 +65,39 @@ const ProjectTerminal = ({ projectId, api }: { projectId: string; api: IWorkspac
 	);
 };
 
-export const Workbench = ({ project, api, leave }: { project: Project; api: IWorkspaceApi; leave: () => void }) => {
-	const [tab, setTab] = useState("Code");
+export const Workbench = ({
+	project,
+	api,
+	leave,
+	dirtyChange: reportDirty,
+}: {
+	project: Project;
+	api: IWorkspaceApi;
+	leave: () => void;
+	dirtyChange: (dirty: boolean) => void;
+}) => {
+	const location = useLocation();
+	const route = resolveRoute(location.pathname);
+	const [navigation, setNavigation] = useState<{
+		section: string;
+		locations: Record<string, string>;
+		opened: string[];
+	}>({ section: "code", locations: {}, opened: [] });
+	const section = route.page === "project" ? route.section : navigation.section;
+	const url = location.pathname + location.search;
+	if (route.page === "project" && navigation.locations[section] !== url) {
+		setNavigation({
+			section,
+			locations: { ...navigation.locations, [section]: url },
+			opened: navigation.opened.includes(section) ? navigation.opened : [...navigation.opened, section],
+		});
+	}
+	const tab = section.charAt(0).toUpperCase() + section.slice(1);
 	const [dirtyBranches, setDirtyBranches] = useState<Record<string, boolean>>({});
-	const [error, setError] = useState("");
-	const [terminalOpened, setTerminalOpened] = useState(false);
-	const [tasksOpened, setTasksOpened] = useState(false);
-	const [agentsOpened, setAgentsOpened] = useState(false);
 	const dirty = Object.values(dirtyBranches).some(Boolean);
+	useEffect(() => {
+		reportDirty(dirty);
+	}, [dirty, reportDirty]);
 	const dirtyChange = useCallback((branch: string, value: boolean) => {
 		setDirtyBranches((current) => (current[branch] === value ? current : { ...current, [branch]: value }));
 	}, []);
@@ -84,41 +111,24 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 	return (
 		<section className='workbench' aria-label='Project'>
 			<div className='project-heading'>
-				<button
-					onClick={() => {
-						if (dirty) setError("Uncommitted drafts remain. Commit or discard them before leaving.");
-						else leave();
-					}}
-				>
-					Projects
-				</button>
+				<button onClick={leave}>Projects</button>
 				<span aria-hidden='true'>/</span>
 				<h1>{project.name}</h1>
 			</div>
 			<div className='project-tabs' role='tablist' aria-label='Project sections'>
 				{["Code", "Tasks", "Agents", "Pipelines", "Terminals"].map((name) => (
-					<button
+					<Link
 						key={name}
 						id={`tab-${name}`}
 						role='tab'
 						aria-selected={tab === name}
 						aria-controls={`panel-${name}`}
-						onClick={() => {
-							setTab(name);
-							if (name === "Terminals") setTerminalOpened(true);
-							if (name === "Tasks") setTasksOpened(true);
-							if (name === "Agents") setAgentsOpened(true);
-						}}
+						to={navigation.locations[name.toLowerCase()] ?? `/projects/${project.id}/${name.toLowerCase()}`}
 					>
 						{name}
-					</button>
+					</Link>
 				))}
 			</div>
-			{error && dirty && (
-				<p role='alert' className='error'>
-					{error}
-				</p>
-			)}
 			<section id='panel-Code' role='tabpanel' aria-labelledby='tab-Code' hidden={tab !== "Code"}>
 				<RepositoryBrowser
 					projectId={project.id}
@@ -128,10 +138,10 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 				/>
 			</section>
 			<section id='panel-Tasks' role='tabpanel' aria-labelledby='tab-Tasks' hidden={tab !== "Tasks"}>
-				{tasksOpened && <TaskBoard projectId={project.id} api={api} />}
+				{navigation.opened.includes("tasks") && <TaskBoard projectId={project.id} api={api} />}
 			</section>
 			<section id='panel-Agents' role='tabpanel' aria-labelledby='tab-Agents' hidden={tab !== "Agents"}>
-				{agentsOpened && <AgentChat projectId={project.id} api={api} />}
+				{navigation.opened.includes("agents") && <AgentChat projectId={project.id} api={api} />}
 			</section>
 			<section
 				id='panel-Pipelines'
@@ -144,7 +154,7 @@ export const Workbench = ({ project, api, leave }: { project: Project; api: IWor
 				<p>Pipelines are not available yet.</p>
 			</section>
 			<section id='panel-Terminals' role='tabpanel' aria-labelledby='tab-Terminals' hidden={tab !== "Terminals"}>
-				{terminalOpened && <ProjectTerminal projectId={project.id} api={api} />}
+				{navigation.opened.includes("terminals") && <ProjectTerminal projectId={project.id} api={api} />}
 			</section>
 		</section>
 	);

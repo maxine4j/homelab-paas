@@ -7,9 +7,11 @@ import {
 	type AgentView,
 } from "@homelab-paas/forge-contracts/agents";
 import { useEffect, useId, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 
 import { ResourcePoller } from "../api/resource-poller.ts";
 import type { IWorkspaceApi } from "../api/workspace-api.ts";
+import { resolveRoute } from "../navigation/routes.ts";
 
 const RequestCard = ({
 	request,
@@ -256,9 +258,16 @@ const Conversation = ({ id, api, changed }: { id: string; api: IWorkspaceApi; ch
 };
 
 export const AgentChat = ({ projectId, api }: { projectId: string; api: IWorkspaceApi }) => {
+	const location = useLocation();
+	const navigate = useNavigate();
+	const route = resolveRoute(location.pathname);
 	const [threads, setThreads] = useState<AgentThread[]>([]);
+	const [loaded, setLoaded] = useState(false);
 	const [opened, setOpened] = useState<string[]>([]);
-	const [selected, setSelected] = useState("");
+	const [retained, setRetained] = useState("");
+	const selected = route.page === "project" && route.section === "agents" ? (route.threadId ?? "") : retained;
+	if (retained !== selected) setRetained(selected);
+	if (selected && !opened.includes(selected)) setOpened([...opened, selected]);
 	const [title, setTitle] = useState("");
 	const [error, setError] = useState("");
 	const [creating, setCreating] = useState(false);
@@ -268,7 +277,11 @@ export const AgentChat = ({ projectId, api }: { projectId: string; api: IWorkspa
 	useEffect(() => {
 		const resource = new ResourcePoller(
 			() => api.read(`projects/${projectId}/agents`, agentThreadsSchema),
-			setThreads,
+			(values) => {
+				setThreads(values);
+				setLoaded(true);
+				setError("");
+			},
 			setError,
 		);
 		poller.current = resource;
@@ -279,8 +292,7 @@ export const AgentChat = ({ projectId, api }: { projectId: string; api: IWorkspa
 		};
 	}, [api, projectId]);
 	const open = (id: string) => {
-		setSelected(id);
-		setOpened((values) => (values.includes(id) ? values : [...values, id]));
+		void navigate(`/projects/${projectId}/agents/${id}`);
 	};
 	return (
 		<div className='agent-panel'>
@@ -345,6 +357,12 @@ export const AgentChat = ({ projectId, api }: { projectId: string; api: IWorkspa
 				{!threads.length && <p className='agent-notice'>No chats yet.</p>}
 			</aside>
 			<div className='agent-main'>
+				{selected && !threads.some((thread) => thread.id === selected) && (
+					<div className='agent-welcome'>
+						<h3>{loaded || error ? "Chat unavailable" : "Loading chat…"}</h3>
+						<p>Select another chat or create a new one.</p>
+					</div>
+				)}
 				{!selected && (
 					<div className='agent-welcome'>
 						<h3>Work with Codex</h3>
@@ -352,11 +370,13 @@ export const AgentChat = ({ projectId, api }: { projectId: string; api: IWorkspa
 						<p>Chats keep working while you browse other project sections.</p>
 					</div>
 				)}
-				{opened.map((id) => (
-					<div key={id} hidden={selected !== id}>
-						<Conversation id={id} api={api} changed={refresh} />
-					</div>
-				))}
+				{opened
+					.filter((id) => threads.some((thread) => thread.id === id))
+					.map((id) => (
+						<div key={id} hidden={selected !== id}>
+							<Conversation id={id} api={api} changed={refresh} />
+						</div>
+					))}
 			</div>
 		</div>
 	);

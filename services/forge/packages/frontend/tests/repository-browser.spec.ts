@@ -37,6 +37,7 @@ test.beforeEach(async ({ page }) => {
 				return json([
 					{ name: "main", sha: head },
 					{ name: "feature", sha: "b".repeat(40) },
+					{ name: "feature/navigation", sha: "b".repeat(40) },
 				]);
 			if (path.endsWith("/history"))
 				return json({
@@ -109,7 +110,33 @@ test.beforeEach(async ({ page }) => {
 		},
 	);
 	await page.goto("/");
-	await page.getByRole("button", { name: "Open Forge" }).click();
+	await page.getByRole("link", { name: "Open Forge" }).click();
+});
+
+test("code URLs restore branches, directories, files and history through reload and Back/Forward", async ({ page }) => {
+	await page.getByRole("combobox", { name: "Branch" }).selectOption("feature/navigation");
+	await page.getByRole("button", { name: "src", exact: true }).click();
+	const directoryUrl = page.url();
+	expect(new URL(directoryUrl).searchParams.get("branch")).toBe("feature/navigation");
+	expect(new URL(directoryUrl).searchParams.get("path")).toBe("src");
+	await page.getByRole("button", { name: "index.ts", exact: true }).click();
+	const fileUrl = page.url();
+	expect(new URL(fileUrl).searchParams.get("file")).toBe("src/index.ts");
+	await page.reload();
+	await expect(page.getByRole("textbox", { name: "File editor" })).toContainText("export const value = 1;");
+	await expect(page.getByRole("combobox", { name: "Branch" })).toHaveValue("feature/navigation");
+	await page.goBack();
+	await expect(page).toHaveURL(directoryUrl);
+	await expect(page.getByRole("table", { name: "Repository files" })).toBeVisible();
+	await page.goForward();
+	await expect(page.getByRole("textbox", { name: "File editor" })).toBeVisible();
+	await page.getByRole("button", { name: "Commit history" }).click();
+	expect(new URL(page.url()).searchParams.get("view")).toBe("history");
+	await page.reload();
+	await expect(page.getByRole("region", { name: "Commit history" })).toContainText("feature/navigation commit");
+	await page.goBack();
+	await expect(page).toHaveURL(fileUrl);
+	await expect(page.getByRole("textbox", { name: "File editor" })).toBeVisible();
 });
 
 test("Code overview limits entries, renders README and dates, and opens the editor only on file selection", async ({

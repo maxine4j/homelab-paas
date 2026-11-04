@@ -44,7 +44,7 @@ test("existing file edits remain local, navigation guards drafts, and typing dur
 		},
 	);
 	await page.goto("/");
-	await page.getByRole("button", { name: "Open Project" }).click();
+	await page.getByRole("link", { name: "Open Project" }).click();
 	await page
 		.getByRole("table", { name: "Repository files" })
 		.getByRole("button", { name: "index.ts", exact: true })
@@ -52,6 +52,15 @@ test("existing file edits remain local, navigation guards drafts, and typing dur
 	const editor = page.getByRole("textbox", { name: "File editor" });
 	await expect(editor).toBeVisible();
 	await editor.fill("first snapshot");
+	const fileUrl = page.url();
+	await page.goBack();
+	await expect(page).toHaveURL(`/projects/${projectId}/code`);
+	await page.goBack();
+	await expect(page.getByRole("alert")).toContainText("Uncommitted drafts remain");
+	await expect(page).toHaveURL(`/projects/${projectId}/code`);
+	await page.goForward();
+	await expect(page).toHaveURL(fileUrl);
+	await expect(editor).toContainText("first snapshot");
 	await page.getByRole("button", { name: "Back to files", exact: true }).click();
 	await page.getByRole("tab", { name: "index.ts *", exact: true }).click();
 	await expect(editor).toContainText("first snapshot");
@@ -60,6 +69,9 @@ test("existing file edits remain local, navigation guards drafts, and typing dur
 	await expect(page.getByRole("alert")).toContainText("Uncommitted drafts remain");
 	await page.getByRole("link", { name: "Config", exact: true }).click();
 	await page.getByRole("link", { name: "Projects", exact: true }).click();
+	await expect(page).toHaveURL("/config");
+	await expect(page.getByRole("alert").filter({ hasText: "Uncommitted drafts remain" })).toBeVisible();
+	await page.goBack();
 	await expect(editor).toContainText("first snapshot");
 	await page.getByLabel("Commit message").fill("Edit existing file");
 	await page.getByRole("button", { name: "Commit", exact: true }).click();
@@ -100,7 +112,7 @@ test("an empty repository has no fabricated branch or checkout creation", async 
 		},
 	);
 	await page.goto("/");
-	await page.getByRole("button", { name: "Open Empty" }).click();
+	await page.getByRole("link", { name: "Open Empty" }).click();
 	await expect(page.getByText("No branches yet.")).toBeVisible();
 	await expect(page.getByRole("button", { name: "Commit", exact: true })).toHaveCount(0);
 	expect(mutations).toEqual([]);

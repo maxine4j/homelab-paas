@@ -56,7 +56,7 @@ const setup = async (page: Page) => {
 		},
 	);
 	await page.goto("/");
-	await page.getByRole("button", { name: "Open Forge", exact: true }).click();
+	await page.getByRole("link", { name: "Open Forge", exact: true }).click();
 	await page.getByRole("tab", { name: "Tasks", exact: true }).click();
 	return {
 		failMoves: () => {
@@ -67,8 +67,12 @@ const setup = async (page: Page) => {
 
 test("create and edit tickets; status menu moves a ticket to Done and survives reopening", async ({ page }) => {
 	await setup(page);
+	const boardUrl = page.url();
+	const historyLength = await page.evaluate(() => history.length);
 	await page.getByRole("button", { name: "Create ticket", exact: true }).click();
 	const dialog = page.getByRole("dialog");
+	await expect(page).toHaveURL(boardUrl);
+	expect(await page.evaluate(() => history.length)).toBe(historyLength);
 	await dialog.getByLabel("Title", { exact: true }).fill("New task");
 	await dialog.getByLabel("Description", { exact: true }).fill("Simple scope");
 	await dialog.getByRole("button", { name: "Create", exact: true }).click();
@@ -82,8 +86,7 @@ test("create and edit tickets; status menu moves a ticket to Done and survives r
 	await dialog.getByRole("button", { name: "Close ticket", exact: true }).click();
 	await expect(page.getByRole("region", { name: "Done", exact: true }).getByText("Updated task")).toBeAttached();
 	await page.reload();
-	await page.getByRole("button", { name: "Open Forge", exact: true }).click();
-	await page.getByRole("tab", { name: "Tasks", exact: true }).click();
+	await expect(page).toHaveURL(`/projects/${projectId}/tasks`);
 	await expect(page.getByRole("region", { name: "Done", exact: true }).getByText("Updated task")).toBeAttached();
 });
 
