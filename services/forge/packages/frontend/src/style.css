@@ -550,7 +550,7 @@ body:has(.shell-constrained) {
 .shell-constrained > header {
 	flex-shrink: 0;
 }
-.shell-constrained main {
+main:has(> .project-view:not([hidden])) {
 	width: 100%;
 	margin: 0 auto;
 	padding: 16px 32px;
@@ -566,16 +566,15 @@ body:has(.shell-constrained) {
 }
 .shell-constrained .project-tabs {
 	flex-shrink: 0;
-	margin-bottom: 12px;
 }
 @media (max-width: 700px) {
-	.shell-constrained main {
+	main:has(> .project-view:not([hidden])) {
 		padding: 8px;
 	}
-	.shell-constrained .project-tabs {
+	.project-view .project-tabs {
 		margin-bottom: 6px;
 	}
-	.shell-constrained .project-tabs a {
+	.project-view .project-tabs a {
 		padding: 8px 12px;
 	}
 }
@@ -993,7 +992,7 @@ small {
 	gap: 8px;
 	border-bottom: 1px solid #30363d;
 	overflow-x: auto;
-	margin-bottom: 24px;
+	margin-bottom: 12px;
 }
 .project-tabs a {
 	color: inherit;

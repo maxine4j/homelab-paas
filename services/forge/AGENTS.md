@@ -646,6 +646,9 @@ separate project heading. The Forge home link returns to Projects.
 Code is the default. Tasks shows the ticket board described below. Agents shows
 the interactive chats described above; Pipelines is not available yet.
 Tab navigation stays usable on narrow screens without widening the page.
+All project tabs share the Tasks and Agents spacing below the global header:
+16px on desktop and 8px at widths up to 700px, with matching tab padding and
+spacing below the tab bar.
 Agents and Tasks fill the remaining visible viewport on laptop, slab-phone and
 square folding-phone layouts without vertical page scrolling. Opening a virtual
 keyboard shrinks the entire layout, including secondary chat columns. Only the

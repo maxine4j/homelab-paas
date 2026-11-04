@@ -153,6 +153,31 @@ test("dark project tabs hide infrastructure and keep account setup in Config", a
 	await page.setViewportSize({ width: 390, height: 844 });
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 	expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe("dark");
+	for (const size of [
+		{ width: 1280, height: 900 },
+		{ width: 448, height: 960 },
+		{ width: 820, height: 820 },
+	]) {
+		await page.setViewportSize(size);
+		await page.getByRole("tab", { name: "Agents", exact: true }).click();
+		await expect(page.getByRole("tab", { name: "Agents", exact: true })).toHaveAttribute("aria-selected", "true");
+		const spacing = () =>
+			page.getByRole("tablist", { name: "Project sections" }).evaluate((tabs) => {
+				const bounds = tabs.getBoundingClientRect();
+				return {
+					top: bounds.top - document.querySelector("header")!.getBoundingClientRect().bottom,
+					left: bounds.left,
+					height: bounds.height,
+					bottom: getComputedStyle(tabs).marginBottom,
+				};
+			});
+		const expected = await spacing();
+		for (const name of ["Tasks", "Code", "Pipelines", "Terminals"]) {
+			await page.getByRole("tab", { name, exact: true }).click();
+			await expect(page.getByRole("tab", { name, exact: true })).toHaveAttribute("aria-selected", "true");
+			await expect.poll(spacing, `${name} spacing at ${size.width}px`).toEqual(expected);
+		}
+	}
 	await page.goto("/missing");
 	await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
 	await page.goto(`/projects/missing/code`);
