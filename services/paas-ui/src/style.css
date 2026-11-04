@@ -47,6 +47,43 @@
 	background: var(--health-colour);
 	outline-offset: 4px;
 }
+.health-periods,
+.health-markers {
+	position: absolute;
+	inset: 0;
+}
+.health-periods {
+	z-index: 0;
+}
+.health-markers {
+	z-index: 1;
+	pointer-events: none;
+}
+.health-single,
+.health-cluster {
+	position: absolute;
+	top: -4px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0;
+	pointer-events: auto;
+}
+.health-cluster {
+	top: -10px;
+	padding: 6px;
+	border-radius: 999px;
+	background: #28303a;
+	box-shadow: 0 0 0 1px #465363;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.health-single:hover,
+.health-single:focus-within,
+.health-cluster:hover,
+.health-cluster:focus-within {
+	z-index: 2;
+}
 .health-marker[data-count]::before {
 	content: attr(data-count);
 	position: absolute;
@@ -76,13 +113,65 @@
 	--health-colour: #ccd6dd;
 }
 .health-marker {
-	top: -3px;
+	position: relative;
+	top: auto;
+	flex: 0 0 16px;
 	width: 16px;
 	height: 16px;
-	transform: translateX(-50%);
+	margin: 1px;
 	border-radius: 50%;
 	border: 2px solid #131820;
 	box-shadow: 0 0 0 1px var(--health-colour);
+}
+.health-tooltip {
+	display: none;
+	position: absolute;
+	bottom: 26px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: max-content;
+	max-width: min(420px, calc(100vw - 64px));
+	max-height: min(360px, 50vh);
+	overflow-y: auto;
+	padding: 0.25rem 0.85rem;
+	border: 1px solid #465363;
+	border-radius: 6px;
+	background: #1c232e;
+	color: #e3e8ee;
+	font-size: 0.75rem;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+	font-weight: normal;
+}
+.health-marker:hover .health-tooltip,
+.health-marker:focus .health-tooltip {
+	display: block;
+}
+.health-marker[data-align="start"] .health-tooltip {
+	left: -8px;
+	transform: none;
+}
+.health-marker[data-align="end"] .health-tooltip {
+	left: auto;
+	right: -8px;
+	transform: none;
+}
+.health-tooltip-entry {
+	display: block;
+	padding: 0.6rem 0;
+}
+.health-tooltip-entry + .health-tooltip-entry {
+	border-top: 1px solid #465363;
+}
+.health-tooltip-times {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem 0.75rem;
+	margin-top: 0.25rem;
+	color: #9ba9b8;
+}
+.health-tooltip time {
+	white-space: nowrap;
 }
 .health-period:focus-visible,
 .health-marker:focus-visible {

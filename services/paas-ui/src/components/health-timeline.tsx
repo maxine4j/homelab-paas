@@ -1,8 +1,195 @@
-import type { HealthStatus, UiHealthTimeline, UiServiceEvent } from "@homelab-paas/shared-contracts";
-import { useEffect, useState } from "react";
+import type { HealthStatus, UiHealthPeriod, UiHealthTimeline, UiServiceEvent } from "@homelab-paas/shared-contracts";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
+
+import type { HealthTimelineMarker } from "../types.ts";
+import { layoutHealthMarkers } from "./health-timeline-layout.ts";
 
 const day = 86_400_000;
 const statuses: HealthStatus[] = ["Healthy", "Progressing", "Degraded", "Missing", "Unknown", "Paused"];
+const formatTime = (at: number) =>
+	new Date(at)
+		.toLocaleTimeString("en-US", {
+			hour: "numeric",
+			minute: "2-digit",
+			hour12: true,
+		})
+		.toLowerCase();
+const periodDescription = (period: UiHealthPeriod) =>
+	`${period.health}: ${formatTime(period.start)} – ${formatTime(period.end)}`;
+
+const MarkerTooltip = ({ markers, style }: { markers: HealthTimelineMarker[]; style?: CSSProperties }) => {
+	const entries: HealthTimelineMarker[][] = [];
+	for (const marker of markers) {
+		const last = entries.at(-1);
+		const event = marker.event;
+		const previous = last?.at(-1)?.event;
+		if (
+			event?.level === "error"
+			&& previous?.level === "error"
+			&& event.event === previous.event
+			&& event.message === previous.message
+			&& event.resourceId === previous.resourceId
+		)
+			last!.push(marker);
+		else entries.push([marker]);
+	}
+	return (
+		<span className='health-tooltip' role='tooltip' style={style}>
+			{entries.map((entry, index) => {
+				const marker = entry.at(0)!;
+				const event = marker.event;
+				return (
+					<span className='health-tooltip-entry' key={index}>
+						<span>
+							{event
+								? `${entry.length > 1 ? `${entry.length}× ` : ""}${event.event}${event.resourceId ? ` · ${event.resourceId}` : ""}: ${event.message}`
+								: periodDescription(marker.period!)}
+						</span>
+						{event && (
+							<span className='health-tooltip-times'>
+								{entry.map(({ timestamp }, timeIndex) => (
+									<time key={timeIndex} dateTime={new Date(timestamp).toISOString()}>
+										{formatTime(timestamp)}
+									</time>
+								))}
+							</span>
+						)}
+					</span>
+				);
+			})}
+		</span>
+	);
+};
+
+const HealthMarker = ({ run, alignment }: { run: HealthTimelineMarker[]; alignment?: string }) => {
+	const element = useRef<HTMLSpanElement>(null);
+	const [anchor, setAnchor] = useState<CSSProperties>();
+	const updateAnchor = () => {
+		const rect = element.current?.getBoundingClientRect();
+		if (!rect) return;
+		const width = Math.min(420, window.innerWidth - 32);
+		setAnchor({
+			position: "fixed",
+			left: Math.max(16, Math.min(window.innerWidth - width - 16, rect.left + rect.width / 2 - width / 2)),
+			right: "auto",
+			bottom: window.innerHeight - rect.top + 12,
+			width,
+			transform: "none",
+		});
+	};
+	const active = anchor !== undefined;
+	useEffect(() => {
+		if (!active) return;
+		window.addEventListener("scroll", updateAnchor, true);
+		window.addEventListener("resize", updateAnchor);
+		return () => {
+			window.removeEventListener("scroll", updateAnchor, true);
+			window.removeEventListener("resize", updateAnchor);
+		};
+	}, [active]);
+	const count = run.filter(({ event }) => event).length || run.length;
+	const description = run
+		.map((marker) =>
+			marker.event
+				? `${formatTime(marker.timestamp)} · ${marker.event.event}${marker.event.resourceId ? ` · ${marker.event.resourceId}` : ""}: ${marker.event.message}`
+				: periodDescription(marker.period!),
+		)
+		.join("\n");
+	return (
+		<span
+			ref={element}
+			className={`health-marker health-${run.at(0)!.health.toLowerCase()}`}
+			tabIndex={0}
+			role='img'
+			aria-label={description}
+			data-count={count > 1 ? count : undefined}
+			data-align={alignment}
+			onMouseEnter={updateAnchor}
+			onFocus={updateAnchor}
+			onMouseLeave={() => {
+				if (document.activeElement !== element.current) setAnchor(undefined);
+			}}
+			onBlur={() => setAnchor(undefined)}
+		>
+			<MarkerTooltip markers={run} style={anchor} />
+		</span>
+	);
+};
+
+const HealthTrack = ({
+	periods,
+	events,
+	start,
+	duration,
+}: {
+	periods: UiHealthPeriod[];
+	events: UiServiceEvent[];
+	start: number;
+	duration: number;
+}) => {
+	const track = useRef<HTMLDivElement>(null);
+	const [width, setWidth] = useState(640);
+	useEffect(() => {
+		const element = track.current;
+		if (!element) return;
+		const observer = new ResizeObserver(([entry]) => {
+			if (entry && entry.contentRect.width > 0) setWidth(entry.contentRect.width);
+		});
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, []);
+	const position = (at: number) => `${Math.max(0, Math.min(100, ((at - start) / duration) * 100))}%`;
+	const alignment = (fraction: number) => (fraction < 0.25 ? "start" : fraction > 0.75 ? "end" : undefined);
+	const markers: HealthTimelineMarker[] = [
+		...periods
+			.filter((period) => (period.end - period.start) / duration < 0.005)
+			.map((period) => ({ timestamp: period.start, health: period.health, period })),
+		...events.map((event): HealthTimelineMarker => ({
+			timestamp: event.timestamp,
+			health:
+				event.level === "error" ? "Degraded" : event.event === "deployment.started" ? "Progressing" : "Healthy",
+			event,
+		})),
+	];
+	return (
+		<div className='health-track' ref={track} aria-label='Unobserved time is Unknown'>
+			<div className='health-periods'>
+				{periods.map((period, index) => (
+					<span
+						key={`${period.start}-${index}`}
+						className={`health-period health-${period.health.toLowerCase()}`}
+						style={{
+							left: position(period.start),
+							width: `${((period.end - period.start) / duration) * 100}%`,
+						}}
+						tabIndex={0}
+						role='img'
+						aria-label={periodDescription(period)}
+						data-tooltip={periodDescription(period)}
+						data-align={alignment(((period.start + period.end) / 2 - start) / duration)}
+					/>
+				))}
+			</div>
+			<div className='health-markers'>
+				{layoutHealthMarkers(markers, start, duration, width).map((cluster, index) => (
+					<div
+						key={index}
+						className={cluster.markers.length > 1 ? "health-cluster" : "health-single"}
+						style={{ left: `${(cluster.left / width) * 100}%`, width: cluster.width }}
+					>
+						{cluster.runs.map((run, runIndex) => (
+							<HealthMarker
+								key={runIndex}
+								run={run}
+								alignment={alignment((cluster.left + cluster.width / 2) / width)}
+							/>
+						))}
+					</div>
+				))}
+			</div>
+		</div>
+	);
+};
 
 interface HealthTimelineProps {
 	label: string;
@@ -46,9 +233,6 @@ export const HealthTimelineView = ({
 }) => {
 	const duration = range === "day" ? day : 3_600_000;
 	const start = end - duration;
-	const position = (at: number) => `${Math.max(0, Math.min(100, ((at - start) / duration) * 100))}%`;
-	const alignment = (at: number) =>
-		at < start + duration * 0.25 ? "start" : at > start + duration * 0.75 ? "end" : undefined;
 	const periods =
 		timeline?.periods.flatMap((period, index) => {
 			const until =
@@ -64,12 +248,6 @@ export const HealthTimelineView = ({
 			&& event.timestamp <= end
 			&& (resourceId === undefined || event.resourceId === resourceId),
 	);
-	const groups: UiServiceEvent[][] = [];
-	for (const event of markers.sort((a, b) => a.timestamp - b.timestamp)) {
-		const last = groups.at(-1);
-		if (last && event.timestamp - last[0]!.timestamp < duration * 0.02) last.push(event);
-		else groups.push([event]);
-	}
 	return (
 		<figure className='health-timeline' aria-label={label}>
 			{(showLabel || onRangeChange) && (
@@ -86,68 +264,7 @@ export const HealthTimelineView = ({
 					)}
 				</figcaption>
 			)}
-			<div className='health-track' aria-label='Unobserved time is Unknown'>
-				{periods.map((period, index) => {
-					const description = `${period.health}: ${new Date(period.start).toLocaleString()} – ${new Date(period.end).toLocaleString()}`;
-					const width = ((period.end - period.start) / duration) * 100;
-					return (
-						<span
-							key={`${period.start}-${index}`}
-							className={`health-period health-${period.health.toLowerCase()}`}
-							style={{ left: position(period.start), width: `${width}%` }}
-							tabIndex={0}
-							role='img'
-							aria-label={description}
-							data-tooltip={description}
-							data-align={alignment((period.start + period.end) / 2)}
-						/>
-					);
-				})}
-				{periods
-					.filter((period) => (period.end - period.start) / duration < 0.005)
-					.map((period, index) => {
-						const description = `${period.health}: ${new Date(period.start).toLocaleString()} – ${new Date(period.end).toLocaleString()}`;
-						return (
-							<span
-								key={`short-${period.start}-${index}`}
-								className={`health-marker health-${period.health.toLowerCase()}`}
-								style={{ left: position(period.start) }}
-								tabIndex={0}
-								role='img'
-								aria-label={description}
-								data-tooltip={description}
-								data-align={alignment(period.start)}
-							/>
-						);
-					})}
-				{groups.map((group, index) => {
-					const event = group[0]!;
-					const health: HealthStatus = group.some((entry) => entry.level === "error")
-						? "Degraded"
-						: group.some((entry) => entry.event === "deployment.started")
-							? "Progressing"
-							: "Healthy";
-					const description = group
-						.map(
-							(entry) =>
-								`${new Date(entry.timestamp).toLocaleString()} · ${entry.event}${entry.resourceId ? ` · ${entry.resourceId}` : ""}: ${entry.message}`,
-						)
-						.join("\n");
-					return (
-						<span
-							key={`event-${event.timestamp}-${index}`}
-							className={`health-marker health-${health.toLowerCase()}`}
-							style={{ left: position(event.timestamp) }}
-							tabIndex={0}
-							role='img'
-							aria-label={description}
-							data-count={group.length > 1 ? group.length : undefined}
-							data-align={alignment(event.timestamp)}
-							data-tooltip={description}
-						/>
-					);
-				})}
-			</div>
+			<HealthTrack periods={periods} events={markers} start={start} duration={duration} />
 			<div className='health-axis'>
 				<span>
 					{new Date(start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{" "}

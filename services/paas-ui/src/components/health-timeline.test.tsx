@@ -75,7 +75,7 @@ test("range button switches the plotted window, markers and axis to the last hou
 	expect(dayHtml).toContain("Last 24 hours");
 	expect(dayHtml).toContain("yesterday");
 	expect(dayHtml).toContain("Older rollout");
-	expect(dayHtml).toContain('data-count="2"');
+	expect(dayHtml).toContain('class="health-cluster"');
 	expect(dayHtml).toContain('class="health-marker health-progressing"');
 	click(day);
 	expect(selection.range).toBe("hour");
@@ -181,23 +181,84 @@ test("overlays event circles within the window and filters resource events by ex
 	expect(service).toContain('class="health-marker health-degraded"');
 });
 
-test("nearby events share a counted marker retaining the worst colour and all event details", () => {
+test("nearby events share a padded pill preserving consecutive colour runs and their counts", () => {
 	const html = renderToStaticMarkup(
 		<HealthTimeline
 			label='Health'
 			now={now}
 			events={[
 				{ timestamp: 1000, level: "error", event: "reconciliation.failed", message: "Readiness failed" },
-				{ timestamp: 2000, level: "info", event: "deployment.started", message: "Retry started" },
-				{ timestamp: 3000, level: "info", event: "deployment.succeeded", message: "Retry succeeded" },
+				{ timestamp: 2000, level: "error", event: "reconciliation.failed", message: "Readiness failed" },
+				{ timestamp: 3000, level: "info", event: "deployment.started", message: "Retry started" },
+				{ timestamp: 4000, level: "error", event: "reconciliation.failed", message: "Readiness failed" },
+				{ timestamp: 5000, level: "error", event: "reconciliation.failed", message: "Readiness failed" },
+				{ timestamp: 6000, level: "error", event: "reconciliation.failed", message: "Readiness failed" },
+				{ timestamp: 7000, level: "info", event: "deployment.started", message: "Retry started again" },
 			]}
 		/>,
 	);
-	expect(html.match(/class="health-marker /g)).toHaveLength(1);
-	expect(html).toContain('class="health-marker health-degraded"');
+	expect(html).toContain('class="health-cluster"');
+	expect(html.match(/class="health-marker health-(degraded|progressing)"/g)).toEqual([
+		'class="health-marker health-degraded"',
+		'class="health-marker health-progressing"',
+		'class="health-marker health-degraded"',
+		'class="health-marker health-progressing"',
+	]);
+	expect(html).toContain('data-count="2"');
 	expect(html).toContain('data-count="3"');
 	expect(html).toContain("Readiness failed");
-	expect(html).toContain("Retry succeeded");
+	expect(html).toContain("Retry started again");
+});
+
+test("clusters dots with less than a diameter of clear space, including brief health periods", () => {
+	const html = renderToStaticMarkup(
+		<HealthTimeline
+			label='Health'
+			now={now}
+			timeline={timeline}
+			events={[
+				{
+					timestamp: 43_200_000 + now * 0.03,
+					level: "error",
+					event: "reconciliation.failed",
+					message: "Nearby",
+				},
+			]}
+		/>,
+	);
+	expect(html).toContain('class="health-cluster"');
+});
+
+test("tooltips collapse identical consecutive errors and show separate non-wrapping 12-hour times", () => {
+	const timestamp = new Date(2026, 10, 4, 16, 6, 7).getTime();
+	const html = renderToStaticMarkup(
+		<HealthTimeline
+			label='Health'
+			now={timestamp + 60_000}
+			events={[
+				{ timestamp, level: "error", event: "reconciliation.failed", message: "Readiness failed" },
+				{
+					timestamp: timestamp + 1000,
+					level: "error",
+					event: "reconciliation.failed",
+					message: "Readiness failed",
+				},
+				{
+					timestamp: timestamp + 2000,
+					level: "error",
+					event: "reconciliation.failed",
+					message: "Different error",
+				},
+			]}
+		/>,
+	);
+	expect(html).toContain("2× reconciliation.failed: Readiness failed");
+	expect(html).toContain('class="health-tooltip-entry"');
+	expect(html).toContain('<time dateTime="2026-');
+	expect(html).toContain(">4:06 pm</time>");
+	expect(html).not.toContain("4:06:07");
+	expect(html).not.toContain("04/11/2026");
+	expect(html).toContain("Different error");
 });
 
 test("anchors details inside the track at both edges so phone tooltips remain readable", () => {

@@ -1,3 +1,19 @@
+import type { HealthStatus, UiHealthPeriod, UiServiceEvent } from "@homelab-paas/shared-contracts";
+
+export interface HealthTimelineMarker {
+	timestamp: number;
+	health: HealthStatus;
+	event?: UiServiceEvent;
+	period?: UiHealthPeriod;
+}
+
+export interface HealthTimelineCluster {
+	left: number;
+	width: number;
+	markers: HealthTimelineMarker[];
+	runs: HealthTimelineMarker[][];
+}
+
 export type ResourceTab = "config" | "descriptor" | "logs";
 export type ServiceTab = "overview" | "resources" | "descriptor";
 export type Route =
