@@ -11,7 +11,7 @@ import { TerminalProcess } from "../../src/terminal/terminal-process.ts";
 
 // The supported PTY runtime is Linux; run these via pnpm test:containers integration on macOS.
 describe.skipIf(process.platform !== "linux")("real PTY", () => {
-	it("runs a curated shell in the verified directory, resizes and awaits exit", async () => {
+	it("runs curated Bash in the verified directory, resizes and awaits exit", async () => {
 		const path = await mkdtemp(join(tmpdir(), "forge-pty-"));
 		const adapter = new TerminalProcess(
 			process.env["PATH"] ?? "",
@@ -29,6 +29,8 @@ describe.skipIf(process.platform !== "linux")("real PTY", () => {
 			},
 		});
 		try {
+			child.write("printf 'BASH:%s\\n' \"${BASH_VERSION:-missing}\"\r");
+			await vi.waitFor(() => expect(output).toMatch(/BASH:\d+\.\d+/));
 			child.write('printf \'DIR:%s HIST:%s KEY:%s\\n\' "$PWD" "$HISTFILE" "$OPENAI_API_KEY"\r');
 			await vi.waitFor(() => expect(output).toContain(`DIR:${path} HIST:/dev/null KEY:`));
 			child.resize(101, 37);

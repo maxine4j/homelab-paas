@@ -20,7 +20,7 @@ export class TerminalProcess implements ITerminalProcess {
 		if (this.platform !== "linux") throw new TerminalError("terminal-unavailable");
 		try {
 			const pty = await import("node-pty");
-			const child = pty.spawn("/bin/sh", ["-i"], {
+			const child = pty.spawn("/bin/bash", ["--noprofile", "--norc", "-i"], {
 				cwd: spec.path,
 				cols: spec.cols,
 				rows: spec.rows,

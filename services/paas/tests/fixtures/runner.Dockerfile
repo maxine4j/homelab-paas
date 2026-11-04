@@ -2,7 +2,7 @@ FROM node:24-alpine AS node
 FROM docker:28.0.1-dind
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
-RUN apk add --no-cache git openssl libstdc++ python3 make g++ \
+RUN apk add --no-cache bash git openssl libstdc++ python3 make g++ \
     && ln -s /usr/local/lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
     && corepack enable
 WORKDIR /workspace

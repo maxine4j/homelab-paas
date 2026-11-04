@@ -23,13 +23,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3=3.13.5-
 ENV npm_config_build_from_source=true
 RUN --mount=type=cache,id=forge-pnpm,target=/pnpm/store pnpm install --prod --frozen-lockfile --filter @homelab-paas/forge... --store-dir /pnpm/store
 
-FROM base AS runner
+FROM docker/sandbox-templates:codex@sha256:a68b972a59148c6359ade441387159033f6d196d48aef9dda06d2d4bb26eb41e AS runner
+USER root
+WORKDIR /app
 ARG BUILD_SHA=unknown
 LABEL homelab-paas.revision=$BUILD_SHA
-RUN apt-get update && apt-get install -y --no-install-recommends git=1:2.47.3-0+deb13u1 gh=2.46.0-3 tini=0.19.0-3+b8 ca-certificates=20250419+deb13u1 curl=8.14.1-2+deb13u7 && rm -rf /var/lib/apt/lists/*
+# Preserve the template's development tools while using Forge's tested Node runtime.
+COPY --from=base /usr/local/bin/node /usr/local/bin/node
+COPY --from=base /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack && corepack enable
 ENV NVM_DIR=/opt/nvm
+ENV NPM_CONFIG_PREFIX=""
 RUN git clone --depth 1 --branch v0.40.8 https://github.com/nvm-sh/nvm.git "$NVM_DIR" && rm -rf "$NVM_DIR/.git"
-RUN /bin/bash -c '. "$NVM_DIR/nvm.sh" && nvm install 24.22.0 && nvm alias default 24.22.0' && chown -R node:node "$NVM_DIR"
+RUN /bin/bash -c '. "$NVM_DIR/nvm.sh" && nvm install 24.22.0 && nvm alias default 24.22.0' && chown -R agent:agent "$NVM_DIR"
 COPY services/forge/nvm-profile.sh /etc/profile.d/forge-nvm.sh
 ENV NODE_ENV=production
 COPY --from=installer /app/node_modules ./node_modules
@@ -43,9 +49,10 @@ COPY --from=installer /app/services/forge/packages/contracts/node_modules servic
 COPY --from=builder /app/services/forge/packages/contracts/dist services/forge/packages/contracts/dist
 COPY --from=builder /app/services/forge/packages/frontend/dist services/forge/packages/frontend/dist
 COPY --from=builder /app/services/forge/dist services/forge/dist
-RUN mkdir /data && chown node:node /data && chmod 0700 /data
+RUN mkdir -p /data && chown agent:agent /data && chmod 0700 /data
 WORKDIR /app/services/forge
-USER node
+ENV PATH="/app/services/forge/node_modules/.bin:/usr/local/bin:${PATH}"
+USER agent
 EXPOSE 8080
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "dist/main.js"]

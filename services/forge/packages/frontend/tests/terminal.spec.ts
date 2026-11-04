@@ -1,9 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-test("terminal explicitly creates, fits, reattaches same session, shows gaps/loss and closes", async ({ page }) => {
+test("terminal automatically creates, fits, reconnects, replaces lost shells and detaches on navigation", async ({
+	page,
+}) => {
 	const projectId = "123e4567-e89b-42d3-a456-426614174000";
 	const id = "123e4567-e89b-42d3-a456-426614174001";
-	const terminalId = "123e4567-e89b-42d3-a456-426614174002";
+	let terminalId = "123e4567-e89b-42d3-a456-426614174002";
 	const head = "a".repeat(40);
 	const createdAt = "2026-11-02T00:00:00.000Z";
 	const workspace = {
@@ -21,6 +23,9 @@ test("terminal explicitly creates, fits, reattaches same session, shows gaps/los
 	const current = () => ({ id: terminalId, workspaceId: id, status, cols: 80, rows: 24, createdAt });
 	let creates = 0;
 	let attaches = 0;
+	let reads = 0;
+	let disconnected = 0;
+	let endShell = () => {};
 	const inputs: unknown[] = [];
 	await page.route("**/api/accounts", (route) => route.fulfill({ status: 503, json: {} }));
 	await page.route("**/api/projects", (route) =>
@@ -48,26 +53,37 @@ test("terminal explicitly creates, fits, reattaches same session, shows gaps/los
 	await page.route(`**/api/workspaces/${id}/terminal`, (route) => {
 		if (route.request().method() === "POST") {
 			creates++;
+			terminalId = `123e4567-e89b-42d3-a456-${String(creates + 1).padStart(12, "0")}`;
+			status = "running";
 			session = current();
+			// Creation succeeded but its response was lost: inspect and attach, never repeat the POST.
+			if (creates === 1) return route.fulfill({ status: 503, json: { error: "terminal-unavailable" } });
 			return route.fulfill({ status: 201, json: session });
 		}
+		// A failed inspection must retry without creating a duplicate shell.
+		if (++reads === 1) return route.fulfill({ status: 503, json: { error: "terminal-unavailable" } });
 		return route.fulfill({ json: session ? { session } : {} });
 	});
-	await page.route(`**/api/terminals/${terminalId}`, (route) => {
-		status = "closed";
-		return route.fulfill({ json: current() });
-	});
-	await page.routeWebSocket(`**/api/terminals/${terminalId}/socket?after=*`, (socket) => {
+	await page.routeWebSocket("**/api/terminals/*/socket?after=*", (socket) => {
 		attaches++;
 		if (attaches === 1) expect(socket.url()).toContain("after=0");
-		else expect(socket.url()).toContain(attaches === 2 ? "after=1" : "after=10");
+		else expect(socket.url()).toContain(attaches === 2 ? "after=1" : "after=0");
+		endShell = () => {
+			status = "exited";
+			session = current();
+			socket.send(JSON.stringify({ type: "status", session }));
+		};
+		socket.onClose(() => {
+			disconnected++;
+			void socket.close();
+		});
 		socket.onMessage((message) => inputs.push(JSON.parse(String(message))));
 		socket.send(JSON.stringify({ type: "output", sequence: 1, data: "real terminal bytes\r\n" }));
 		socket.send(JSON.stringify({ type: "status", session: current() }));
 		if (attaches === 1) setTimeout(() => socket.close(), 250);
 		else if (attaches === 2) {
 			socket.send(JSON.stringify({ type: "gap", through: 10 }));
-			socket.send(JSON.stringify({ type: "status", session: { ...current(), status: "lost" } }));
+			// Ignore a status frame for another workspace.
 			socket.send(
 				JSON.stringify({ type: "status", session: { ...current(), workspaceId: projectId, status: "closed" } }),
 			);
@@ -76,10 +92,8 @@ test("terminal explicitly creates, fits, reattaches same session, shows gaps/los
 	await page.goto("/");
 	await page.getByRole("button", { name: "Open Project" }).click();
 	await page.getByRole("tab", { name: "Terminals", exact: true }).click();
-	await expect(page.getByRole("button", { name: "Create shell", exact: true })).toBeVisible({ timeout: 1000 });
-	expect(creates).toBe(0);
-	expect(attaches).toBe(0);
-	await page.getByRole("button", { name: "Create shell", exact: true }).click();
+	await expect.poll(() => creates).toBe(1);
+	await expect(page.getByRole("region", { name: "Terminal", exact: true }).getByRole("button")).toHaveCount(0);
 	await expect(page.locator(".xterm")).toBeVisible();
 	await expect
 		.poll(() =>
@@ -88,6 +102,8 @@ test("terminal explicitly creates, fits, reattaches same session, shows gaps/los
 			),
 		)
 		.toBe(true);
+	await expect.poll(() => attaches).toBe(2);
+	await expect(page.getByText("Output gap through 10. Some terminal output is unavailable.")).toBeVisible();
 	await page.locator(".xterm-helper-textarea").fill("echo hello\n");
 	await expect
 		.poll(() =>
@@ -96,16 +112,23 @@ test("terminal explicitly creates, fits, reattaches same session, shows gaps/los
 			),
 		)
 		.toBe(true);
-	await expect(page.getByText("Disconnected. Reconnect to the same shell.")).toBeVisible();
 	expect(creates).toBe(1);
-	await page.getByRole("button", { name: "Reconnect", exact: true }).click();
-	await expect(page.getByText("Output gap through 10. Some terminal output is unavailable.")).toBeVisible();
-	await expect(page.getByText("Shell: lost", { exact: true })).toBeVisible();
-	await page.getByRole("button", { name: "Reconnect", exact: true }).click();
+	endShell();
+	await expect.poll(() => creates).toBe(2);
 	await expect.poll(() => attaches).toBe(3);
-	await expect(page.getByText("Output gap through 10. Some terminal output is unavailable.")).toBeVisible();
-	expect(creates).toBe(1);
-	await page.screenshot({ path: "../../../../artifacts/forge/terminal-lost.png", fullPage: true });
-	await page.getByRole("button", { name: "Close shell", exact: true }).click();
-	await expect(page.getByText("Shell: closed", { exact: true })).toBeVisible();
+	await expect(page.getByText("Output gap through 10. Some terminal output is unavailable.")).toHaveCount(0);
+	const beforeLeaving = disconnected;
+	await page.getByRole("button", { name: "Projects", exact: true }).click();
+	await expect.poll(() => disconnected).toBeGreaterThan(beforeLeaving);
+	const detached = attaches;
+	await page.waitForTimeout(1500);
+	expect(attaches).toBe(detached);
+	status = "lost";
+	session = current();
+	await page.getByRole("button", { name: "Open Project" }).click();
+	await page.getByRole("tab", { name: "Terminals", exact: true }).click();
+	await expect.poll(() => creates).toBe(3);
+	await expect.poll(() => attaches).toBe(4);
+	await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+	await page.screenshot({ path: "../../../../artifacts/forge/terminal-automatic.png", fullPage: true });
 });

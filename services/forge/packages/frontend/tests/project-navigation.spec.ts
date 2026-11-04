@@ -18,6 +18,14 @@ test("dark project tabs hide infrastructure and keep account setup in Config", a
 	let prepared = false;
 	let preparations = 0;
 	let shells = 0;
+	const session = {
+		id: "123e4567-e89b-42d3-a456-426614174002",
+		workspaceId: id,
+		status: "running",
+		cols: 80,
+		rows: 24,
+		createdAt,
+	};
 	await page.route(
 		(url) => url.pathname.startsWith("/api/"),
 		(route) => {
@@ -64,14 +72,20 @@ test("dark project tabs hide infrastructure and keep account setup in Config", a
 				});
 			}
 			if (path.endsWith("/terminal")) {
-				if (route.request().method() === "POST") shells++;
-				return route.fulfill({ json: {} });
+				if (route.request().method() === "POST") {
+					shells++;
+					return route.fulfill({ status: 201, json: session });
+				}
+				return route.fulfill({ json: shells ? { session } : {} });
 			}
 			if (path.endsWith("/pull-requests")) return route.fulfill({ json: [] });
 			if (path.endsWith("/agents")) return route.fulfill({ json: [] });
 			return route.fulfill({ status: 404, json: {} });
 		},
 	);
+	await page.routeWebSocket("**/api/terminals/*/socket?after=*", (socket) => {
+		socket.send(JSON.stringify({ type: "status", session }));
+	});
 	await page.goto("/");
 	await expect(page.getByRole("button", { name: "Open Forge" })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Sign in", exact: true })).toHaveCount(0);
@@ -91,8 +105,9 @@ test("dark project tabs hide infrastructure and keep account setup in Config", a
 		await expect(page.getByRole("tabpanel", { name, exact: true })).toContainText("not available yet");
 	}
 	await page.getByRole("tab", { name: "Terminals", exact: true }).click();
-	await expect(page.getByRole("button", { name: "Create shell", exact: true })).toBeVisible();
-	expect(shells).toBe(0);
+	await expect(page.getByRole("region", { name: "Terminal", exact: true })).toContainText("Connected");
+	await expect(page.getByRole("button", { name: "Create shell", exact: true })).toHaveCount(0);
+	expect(shells).toBe(1);
 	await page.getByRole("link", { name: "Config", exact: true }).click();
 	await expect(page).toHaveURL(/#\/config$/);
 	await expect(page.getByRole("region", { name: "ChatGPT" })).toBeVisible();

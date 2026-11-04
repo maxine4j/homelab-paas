@@ -440,17 +440,20 @@ files return JSON 404 responses. Fixtures are not persisted. Normal Vite mode
 does not install the mock routes, and production builds exclude the mock API
 and banner, including builds invoked with `--mode mock`.
 
-The image is one Node 24.22.0 Debian trixie application (glibc, avoiding musl
-compatibility assumptions), UID/GID 1000, with Git 2.47.3, gh 2.46.0, pinned
-Codex 0.164.0, nvm 0.40.8 and approved tini 0.19.0 as PID 1. Nvm lives at
+The runtime uses the same digest-pinned `docker/sandbox-templates:codex` base as
+`~/repo/codex-runner` (the digest is recorded in `Dockerfile`). It retains the
+template's preinstalled development tooling, including Git, gh, Python, Go and uv,
+and runs as `agent`, UID/GID 1000. Forge supplies its tested Node 24.22.0 runtime,
+lockfile-pinned Codex 0.164.0 (first on PATH), nvm 0.40.8 and the template's tini
+as PID 1. Nvm lives at
 `/opt/nvm`, writable by the runtime user, with Node 24.22.0 preinstalled and set
 as its default. The global Bash login profile loads it even with Codex's
 `HOME=/data`; `/bin/bash -lc 'nvm use >/dev/null && pwd'` works in a project
 whose `.nvmrc` selects that version. Other Node versions require an explicit
 `nvm install` and network access; the image does not auto-install project versions.
 Additional nvm versions are ephemeral container files; `/data` remains persistent.
-The original system Node still runs Forge itself. Exact tested Debian package
-revisions are in `Dockerfile`; dependency changes require revalidation. Tini
+The supplied system Node still runs Forge itself. Template digest or dependency
+changes require revalidation. Tini
 reaps orphaned descendants. Process-group cleanup covers ordinary descendants;
 deliberately escaped live processes are outside that application-level boundary.
 
@@ -475,14 +478,15 @@ when ready, retaining the [private ingress trust boundary](../../docs/networking
 
 #### Slice 2 terminal contract
 
-The supported terminal runtime is the Node 24 Debian Linux container. Native
+The supported terminal runtime is the Node 24 Linux container. Native
 macOS/Windows terminal requests return `terminal-unavailable`; health, accounts,
 and workspace APIs remain available. `node-pty` 1.1.0 and `ws` 8.22.1 are pinned;
-native build prerequisites live only in image build stages and the integration
-runner. Native-module loading is deferred until explicit terminal creation.
+native build prerequisites live in image build stages and the integration
+runner. Native-module loading is deferred until terminal creation.
 
 Browser contracts are exported from `@homelab-paas/forge-contracts/terminal`.
-Owner services verify workspace ownership and readiness before starting `/bin/sh -i`
+Owner services verify workspace ownership and readiness before starting
+`/bin/bash --noprofile --norc -i`
 at its verified path. Shell environment contains only PATH, workspace HOME,
 LANG, TERM, `HISTFILE=/dev/null`, and `ENV=/dev/null`; ambient credentials and shell
 startup configuration are excluded. The shell shares the application's mounted
@@ -490,19 +494,21 @@ storage and UID. Workspace API branch protection is not hostile shell containmen
 arbitrary shell commands can change shared files and Git metadata. No pause or
 foreground-job suspension guarantee is offered.
 
-| Route                                  | Contract                                                                                     |
-| -------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `POST /api/workspaces/:id/terminal`    | Explicit create `{cols,rows}`; returns session, HTTP 201. Never implicit on attach.          |
-| `GET /api/workspaces/:id/terminal`     | Latest retained `{session?}`; absence is `{}`.                                               |
-| `GET /api/terminals/:id`               | Inspect one session.                                                                         |
-| `DELETE /api/terminals/:id`            | Close live shell, await cleanup, retain metadata/files.                                      |
-| `WS /api/terminals/:id/socket?after=N` | Attach an existing session; exact configured HTTPS Origin and owner required before upgrade. |
+| Route                                  | Contract                                                                                                                   |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/workspaces/:id/terminal`    | Create `{cols,rows}`; returns session, HTTP 201. Browser calls automatically when needed; never implicit on socket attach. |
+| `GET /api/workspaces/:id/terminal`     | Latest retained `{session?}`; absence is `{}`.                                                                             |
+| `GET /api/terminals/:id`               | Inspect one session.                                                                                                       |
+| `DELETE /api/terminals/:id`            | Close live shell, await cleanup, retain metadata/files.                                                                    |
+| `WS /api/terminals/:id/socket?after=N` | Attach an existing session; exact configured HTTPS Origin and owner required before upgrade.                               |
 
 Sessions expose UUIDs, workspace ID, dimensions, timestamps, normalized
 `starting/running/exited/closed/lost` status, and optional exit code; never paths,
 PIDs, raw diagnostics or environment. SQLite intent precedes spawn. Startup marks
-interrupted active records `lost`; it never silently replaces a shell. Disconnect
-only detaches the browser. A fresh shell always requires explicit create.
+interrupted active records `lost`. Disconnect only detaches the browser. Opening
+the Terminals tab automatically inspects the latest session, attaches a live
+session, or creates one when absent or ended/lost. While mounted, the browser
+automatically replaces ended/lost shells and reconnects disconnected sockets.
 
 WebSockets accept JSON `{type:"input",data}` or `{type:"resize",cols,rows}`.
 Server frames are `{type:"output",sequence,data}`, `{type:"gap",through}`, and
@@ -522,8 +528,8 @@ frames and input chunks are at most 16 KiB; accepted input is at most 1 MiB per
 session. Replay holds at most 256 KiB/1024 frames; output chunks split at Unicode
 code points. A slow socket is disconnected above 256 KiB queued output. A shell
 closes after eight hours or 16 MiB output. Socket ping/pong detects abandoned
-connections. Limits fail explicitly with fixed terminal error codes; a new shell
-requires explicit owner action.
+connections. Limits fail explicitly with fixed terminal error codes; automatic
+browser retries respect the same limits.
 
 Shutdown terminates sockets and owned PTY sessions before SQLite closure. Linux
 `/proc` inventory uses the canonical filesystem boundary, captures session leader
@@ -667,7 +673,8 @@ content and restricted metadata cannot be opened as code. Errors reuse the safe
 workspace/file error contract. Repository HTML is displayed as text, never executed.
 
 Code omits Changes and Pull requests; those interfaces are deferred. Terminals
-contains the shell controls and output. Remove infrastructure notes, raw revision
+contains a single automatically managed terminal and output, without create,
+refresh, reconnect or close buttons. Remove infrastructure notes, raw revision
 summaries and session IDs from the primary UI; retain actionable errors,
 terminal connection/loss states and local drafts after commit failures.
 Git HTTPS hosting and merging remain unavailable.
@@ -701,10 +708,14 @@ validated against browser-safe contracts. External shell edits remain subject to
 the [workspace version-check boundary](#slice-2-manual-workspace-foundation).
 The workspace and PR adapters share `GitDiffClient` for tracked patches.
 
-Terminal creation and closure are explicit. Opening the Terminals tab inspects its
-retained session and may attach that session, never creates a shell. Disconnects
-offer reconnect to the same session; replay gaps remain visible for that session.
-Lost/exited states remain explicit. Reconnect drains xterm's public write queue
+Opening the Terminals tab automatically creates or attaches its single workspace
+shell. Disconnects retry with bounded backoff (500 ms to eight seconds), first
+inspecting status so a failed creation response or another browser cannot cause
+duplicate live shells. A live shell is reattached; exited, closed or lost shells
+are replaced automatically with a brief recovery notice. Replay gaps remain
+visible for the same session. Leaving the project cancels retries and detaches
+the socket while the shell remains running; switching project tabs retains it.
+Reconnect drains xterm's public write queue
 before choosing the rendered cursor, and new sessions reset the display only
 after old writes drain. Input chunks include JSON escaping in the 16 KiB wire
 bound. Fit observes container resize and sends bounded PTY dimensions.

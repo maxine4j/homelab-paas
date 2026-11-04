@@ -174,7 +174,7 @@ test("integrated production bundle styles editor/terminal on desktop/mobile and 
 		await page.keyboard.press("Escape");
 		await page.mouse.up();
 		await page.getByRole("tab", { name: "Terminals", exact: true }).click();
-		await page.getByRole("button", { name: "Create shell", exact: true }).click();
+		await expect(page.getByRole("region", { name: "Terminal", exact: true }).getByRole("button")).toHaveCount(0);
 		await expect(page.locator(".xterm-rows")).toContainText("Production terminal output");
 		await expect.poll(() => sizes.length).toBeGreaterThan(0);
 		await page.screenshot({ path: "../../../../artifacts/forge/production-desktop.png", fullPage: true });

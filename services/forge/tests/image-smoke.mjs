@@ -41,7 +41,11 @@ try {
 	docker("run", "-d", "--name", name, "--mount", `type=volume,source=${volume},target=/data`, ...env, image);
 	await waitFor(() => assert.equal(request("/health").status, 200));
 	const inspect = JSON.parse(docker("inspect", name))[0];
-	assert.equal(inspect.Config.User, "node");
+	assert.equal(inspect.Config.User, "agent");
+	assert.equal(docker("exec", name, "id", "-un"), "agent");
+	for (const command of ["git", "gh", "python3", "go", "uv", "tini", "bash"])
+		assert.ok(docker("exec", name, "/bin/bash", "-c", `command -v ${command}`));
+	assert.match(docker("exec", name, "codex", "--version"), /0\.164\.0/);
 	assert.equal(Object.keys(inspect.HostConfig.PortBindings ?? {}).length, 0);
 	// Match Codex's sanitized HOME/PATH and the reported Bash login-shell command.
 	execute(
@@ -218,9 +222,9 @@ try {
 			client.on('error',reject);
 			client.on('message',bytes=>{
 				const frame=JSON.parse(bytes.toString());
-				if(frame.type==='status' && frame.session.status==='running') client.send(JSON.stringify({type:'input',data:"printf 'PTY:%s' ok\\r"}));
+				if(frame.type==='status' && frame.session.status==='running') client.send(JSON.stringify({type:'input',data:${JSON.stringify('printf \'PTY:%s USER:%s BASH:%s\' ok "$(id -un)" "$BASH_VERSION"\r')}}));
 				if(frame.type==='output') output+=frame.data;
-				if(output.includes('PTY:ok')) { clearTimeout(timeout); client.terminate(); resolve(); }
+				if(/PTY:ok USER:agent BASH:\\d+\\.\\d+/.test(output)) { clearTimeout(timeout); client.terminate(); resolve(); }
 			});
 		});
 		console.log('pty-ok');
