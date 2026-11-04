@@ -26,6 +26,31 @@ test.each([404, 409, 500])("reports image removal status %i", async (status) => 
 	});
 });
 
+test.each([
+	{ error: "no space left on device" },
+	{ errorDetail: { message: "no space left on device" } },
+	{ error: "no space left on device", errorDetail: { message: "no space left on device" } },
+])("pull failures expose readable provider messages instead of JSON: %j", async (event) => {
+	await expect(fixture(200, event).client.pullImage("app:1")).rejects.toMatchObject({
+		kind: "unavailable",
+		cause: { message: "Docker image pull failed: no space left on device", cause: undefined },
+	});
+});
+
+test("pull failures retain distinct provider detail as a nested cause", async () => {
+	await expect(
+		fixture(200, {
+			error: "failed to extract layer",
+			errorDetail: { message: "write /node: no space left on device\n    at extract" },
+		}).client.pullImage("app:1"),
+	).rejects.toMatchObject({
+		cause: {
+			message: "Docker image pull failed: failed to extract layer",
+			cause: { message: "write /node: no space left on device\n    at extract" },
+		},
+	});
+});
+
 test("returns live HostConfig CPU and memory settings independently of specification labels", async () => {
 	const f = fixture(200, {
 		Id: "id",

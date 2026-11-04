@@ -362,8 +362,20 @@ export class DockerClient implements IDockerClient, IDockerPruneClient {
 		);
 		for (const line of response.body.split("\n").filter((value) => value.trim())) {
 			const event = decode(pullEvent, line);
-			if (event.error !== undefined || event.errorDetail !== undefined)
-				throw new DockerClientError("unavailable", { cause: new Error(`Docker image pull failed: ${line}`) });
+			if (event.error !== undefined || event.errorDetail !== undefined) {
+				const detail = event.errorDetail?.message;
+				throw new DockerClientError("unavailable", {
+					cause: new Error(
+						`Docker image pull failed: ${event.error ?? detail ?? "unspecified Docker error"}`,
+						{
+							cause:
+								event.error !== undefined && detail !== undefined && detail !== event.error
+									? new Error(detail)
+									: undefined,
+						},
+					),
+				});
+			}
 		}
 	}
 
@@ -430,7 +442,10 @@ const container = z.object({
 		),
 	}),
 });
-const pullEvent = z.object({ error: z.string().optional(), errorDetail: z.object({}).optional() });
+const pullEvent = z.object({
+	error: z.string().optional(),
+	errorDetail: z.object({ message: z.string().optional() }).optional(),
+});
 
 function decode<T>(schema: z.ZodType<T>, body: string): T {
 	try {

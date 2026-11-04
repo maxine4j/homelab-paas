@@ -67,6 +67,20 @@ test("captures error chains, stacks and provider properties with redacted deploy
 		expect(text).not.toContain(value);
 });
 
+test("retains deep mixed cause and provider error chains with redacted stacks", () => {
+	let failure: unknown = Object.assign(new Error("root private-value"), {
+		stack: "Error: root private-value\n    at root",
+	});
+	for (let index = 0; index < 20; index++) {
+		failure = index % 2 === 0 ? { error: failure } : new Error(`wrapper ${index}`, { cause: failure });
+	}
+	const text = new EventDiagnostics(testConfig()).describe(failure, {}, ["private-value"]);
+	expect(text).toContain("root [redacted]");
+	expect(text).toContain("at root");
+	expect(text).not.toContain("private-value");
+	expect(text).not.toContain("[truncated]");
+});
+
 test("bounds cyclic, large and non-Error failures with explicit omission markers", () => {
 	const diagnostics = new EventDiagnostics(testConfig());
 	const cyclic: Record<string, unknown> = { code: "BROKEN" };
@@ -76,6 +90,20 @@ test("bounds cyclic, large and non-Error failures with explicit omission markers
 	const text = diagnostics.describe(new Error("x".repeat(100000)), {}, []);
 	expect(Buffer.byteLength(JSON.stringify(text))).toBeLessThanOrEqual(32768);
 	expect(text).toContain("[truncated]");
+});
+
+test("retains deep aggregate chains while still bounding provider data and excessive chains", () => {
+	let failure: unknown = { message: "aggregate root" };
+	for (let index = 0; index < 12; index++) failure = { errors: [failure] };
+	const diagnostics = new EventDiagnostics(testConfig());
+	expect(diagnostics.describe(failure, {}, [])).toContain("aggregate root");
+	for (let index = 0; index < 150; index++) failure = { cause: failure };
+	expect(diagnostics.describe(failure, {}, [])).toContain("[truncated]");
+	let context: unknown = { message: "too deeply nested provider data" };
+	for (let index = 0; index < 12; index++) context = { body: context };
+	const text = diagnostics.describe(new Error("failed"), { provider: context }, []);
+	expect(text).toContain("[truncated]");
+	expect(text).not.toContain("too deeply nested provider data");
 });
 
 test("retains aggregate failures, typed provider data and redacts secret values in keys", () => {

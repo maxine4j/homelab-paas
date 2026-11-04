@@ -76,6 +76,7 @@ export class EventDiagnostics implements IEventDiagnostics {
 							"name",
 							"message",
 							"cause",
+							"error",
 							"errors",
 							...Object.keys(properties).filter((key) => key !== "stack"),
 							"stack",
@@ -99,7 +100,12 @@ export class EventDiagnostics implements IEventDiagnostics {
 			}
 			const property = properties[key];
 			if (property && "value" in property)
-				result[safeKey] = this.visit(property.value, secrets, budget, depth + 1);
+				result[safeKey] = this.visit(
+					property.value,
+					secrets,
+					budget,
+					key === "cause" || key === "error" || key === "errors" ? 0 : depth + 1,
+				);
 			else if (key === "name" && value instanceof Error)
 				result[safeKey] = this.visit(value.name, secrets, budget, depth + 1);
 			else if (key === "stack" && value instanceof Error)
