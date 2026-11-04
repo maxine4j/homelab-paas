@@ -3,6 +3,7 @@ import { expect, test, vi } from "vitest";
 import { AccessService } from "../auth/access-service.ts";
 import type { AgentRuntimeView } from "../codex/types.ts";
 import type { IProjectService } from "../projects/project-service.ts";
+import { AgentExecutionPool } from "./agent-execution-pool.ts";
 import { AgentService, type IAgentWorkspaces } from "./agent-service.ts";
 import type { AgentThreadRecord } from "./types.ts";
 
@@ -91,6 +92,7 @@ const setup = () => {
 		new AccessService({ owner: "owner", origin: "https://forge.example" }),
 		id,
 		() => new Date(createdAt),
+		new AgentExecutionPool(),
 	);
 	return { service, client, workspaces, records, views, changed: (key: string) => changed(key) };
 };
@@ -114,6 +116,36 @@ test("empty chats survive restart without depending on an unpersisted Codex thre
 	expect(records.get(thread.id)?.codexId).toBeUndefined();
 	expect((await service.resume(owner, thread.id)).thread.status).toBe("idle");
 	expect(client.resume).not.toHaveBeenCalled();
+	await service.shutdown();
+});
+
+test("a fourth chat cannot start until a running chat completes", async () => {
+	const { service, records, views, changed } = setup();
+	const threads = await Promise.all([1, 2, 3, 4].map((n) => service.create(owner, projectId, `Chat ${n}`)));
+	for (const thread of threads.slice(0, 3)) await service.send(owner, thread.thread.id, "Work");
+	await expect(service.send(owner, threads[3]!.thread.id, "Work")).rejects.toThrow("agent-capacity");
+	const codexId = records.get(threads[0]!.thread.id)!.codexId!;
+	views.get(codexId)!.status = "completed";
+	changed(codexId);
+	await service.get(owner, threads[0]!.thread.id);
+	await service.send(owner, threads[3]!.thread.id, "Work");
+	await service.shutdown();
+});
+
+test("ticket phases retain one worktree, use separate Codex contexts and reject unmanaged dispatch", async () => {
+	const { service, workspaces } = setup();
+	const planning = await service.createTicketThread(owner, projectId, "Ticket planning");
+	const implementing = await service.createTicketThread(
+		owner,
+		projectId,
+		"Ticket implementation",
+		planning.thread.workspaceId,
+	);
+	expect(workspaces.create).toHaveBeenCalledOnce();
+	expect(implementing.thread.workspaceId).toBe(planning.thread.workspaceId);
+	await expect(service.send(owner, planning.thread.id, "Bypass queue")).rejects.toThrow("agent-conflict");
+	await service.dispatch(owner, planning.thread.id, "Plan");
+	expect((await service.list(owner, projectId)).map((thread) => thread.id)).not.toContain(planning.thread.id);
 	await service.shutdown();
 });
 test("shutdown drains an accepted chat creation before storage may close", async () => {

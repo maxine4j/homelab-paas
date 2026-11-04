@@ -6,6 +6,7 @@ import {
 	type AgentThread,
 	type AgentView,
 } from "@homelab-paas/forge-contracts/agents";
+import { ticketWorkflowSchema } from "@homelab-paas/forge-contracts/tickets";
 import { useEffect, useId, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -108,16 +109,20 @@ const RequestCard = ({
 	);
 };
 
-const Conversation = ({
+export const Conversation = ({
 	id,
 	api,
 	changed,
 	selected,
+	messagePath,
+	blocked = false,
 }: {
 	id: string;
 	api: IWorkspaceApi;
 	changed: () => void;
 	selected: boolean;
+	messagePath?: string;
+	blocked?: boolean;
 }) => {
 	const [view, setView] = useState<AgentView>();
 	const [draft, setDraft] = useState("");
@@ -207,7 +212,11 @@ const Conversation = ({
 		void poller.current
 			.mutate(async () => {
 				try {
-					const value = await api.read(`agents/${id}/${suffix}`, agentViewSchema, "POST", body);
+					let value: AgentView;
+					if (suffix === "messages" && messagePath) {
+						await api.read(messagePath, ticketWorkflowSchema, "POST", body);
+						value = await api.read(`agents/${id}`, agentViewSchema);
+					} else value = await api.read(`agents/${id}/${suffix}`, agentViewSchema, "POST", body);
 					if (sent) setDraft("");
 					return value;
 				} finally {
@@ -224,6 +233,7 @@ const Conversation = ({
 	const active = status === "running" || status === "waiting";
 	const sendable =
 		status
+		&& !blocked
 		&& !loadingHistory
 		&& !historyFailed
 		&& !["creating", "running", "waiting", "uncertain"].includes(status);

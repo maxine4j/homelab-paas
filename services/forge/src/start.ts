@@ -14,6 +14,7 @@ import { AccountService } from "./accounts/account-service.ts";
 import { CodexAccountClient } from "./accounts/codex-account-client.ts";
 import { CodexConnection } from "./accounts/codex-connection.ts";
 import { GithubAccountClient } from "./accounts/github-account-client.ts";
+import { AgentExecutionPool } from "./agents/agent-execution-pool.ts";
 import { AgentRouter } from "./agents/agent-router.ts";
 import { AgentService } from "./agents/agent-service.ts";
 import { AgentThreadStore } from "./agents/agent-thread-store.ts";
@@ -43,12 +44,16 @@ import { TerminalRouter } from "./terminal/terminal-router.ts";
 import { TerminalService } from "./terminal/terminal-service.ts";
 import { TerminalSocket } from "./terminal/terminal-socket.ts";
 import { TerminalStore } from "./terminal/terminal-store.ts";
+import { TicketPrompts } from "./tickets/ticket-prompts.ts";
 import { TicketRouter } from "./tickets/ticket-router.ts";
 import { TicketService } from "./tickets/ticket-service.ts";
 import { TicketStore } from "./tickets/ticket-store.ts";
+import { TicketWorkflowService } from "./tickets/ticket-workflow-service.ts";
+import { TicketWorkflowStore } from "./tickets/ticket-workflow-store.ts";
 import type { StartOptions } from "./types.ts";
 import { WorkspaceClient } from "./workspaces/workspace-client.ts";
 import { WorkspaceDiffClient } from "./workspaces/workspace-diff-client.ts";
+import { WorkspaceMergeClient } from "./workspaces/workspace-merge-client.ts";
 import { WorkspaceRouter } from "./workspaces/workspace-router.ts";
 import { WorkspaceService } from "./workspaces/workspace-service.ts";
 import { WorkspaceStore } from "./workspaces/workspace-store.ts";
@@ -72,7 +77,6 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 	const access = new AccessService(config);
 	const ticketStore = new TicketStore(database);
 	await ticketStore.initialize();
-	const tickets = new TicketService(ticketStore, store, access, () => new Date());
 	const git = options.git ?? new GitTransport(sleep);
 	const differences = new GitDiffClient(git);
 	const repositories = new RepositoryClient(config.dataDirectory, config.importHosts, files, git);
@@ -151,6 +155,7 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 	const agentStore = new AgentThreadStore(database);
 	await agentStore.initialize();
 	await agentStore.recover();
+	const pool = new AgentExecutionPool();
 	const agents = new AgentService(
 		agentStore,
 		new CodexAgentClient(connection, files.realpath, randomUUID),
@@ -159,8 +164,42 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 		access,
 		randomUUID,
 		() => new Date(),
+		pool,
 	);
 	lifecycle.register(() => agents.shutdown());
+	const workflowStore = new TicketWorkflowStore(database);
+	await workflowStore.initialize();
+	const workflow = new TicketWorkflowService(
+		workflowStore,
+		ticketStore,
+		agents,
+		pool,
+		new WorkspaceMergeClient(workspaces, git),
+		new TicketPrompts(),
+	);
+	const tickets = new TicketService(ticketStore, store, access, () => new Date(), workflow);
+	const actor = { username: config.owner };
+	await agents.recover(actor);
+	await workflow.recover(actor);
+	const workflowAbort = new AbortController();
+	const workflowLoop = (async () => {
+		while (!workflowAbort.signal.aborted) {
+			try {
+				await workflow.tick(actor);
+			} catch (err) {
+				log.error({ err }, "Ticket scheduler failed");
+			}
+			try {
+				await sleep(500, workflowAbort.signal);
+			} catch {
+				break;
+			}
+		}
+	})();
+	lifecycle.register(async () => {
+		workflowAbort.abort();
+		await workflowLoop;
+	});
 	const agentRouter = new AgentRouter(agents, sleep);
 	lifecycle.register(() => agentRouter.close());
 	const assets = new StaticAssets(fileURLToPath(new URL("../packages/frontend/dist", import.meta.url)), files);
@@ -170,7 +209,7 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 		[
 			new AccountRouter(accounts),
 			agentRouter,
-			new TicketRouter(tickets),
+			new TicketRouter(tickets, workflow),
 			new WorkspaceRouter(workspaces),
 			new RepositoryBrowserRouter(
 				new RepositoryBrowserService(

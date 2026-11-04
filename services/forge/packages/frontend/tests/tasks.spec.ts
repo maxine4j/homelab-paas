@@ -3,19 +3,22 @@ import type { Page } from "@playwright/test";
 
 const projectId = "123e4567-e89b-42d3-a456-426614174000";
 const createdAt = "2026-11-03T00:00:00.000Z";
-const setup = async (page: Page, crowded = false) => {
+const setup = async (page: Page, crowded = false, agentic = false) => {
+	const threadId = "123e4567-e89b-42d3-a456-426614174010";
+	let messages = 0;
 	let tickets = [
-		{ id: "FORGE-1", projectId, title: "First task", description: "Scope", status: "draft", createdAt },
-		{ id: "FORGE-2", projectId, title: "Second task", description: "", status: "draft", createdAt },
+		{ id: "FORGE-1", projectId, title: "First task", description: "Scope", status: "backlog", createdAt },
+		{ id: "FORGE-2", projectId, title: "Second task", description: "", status: "backlog", createdAt },
 	];
 	let failMove = false;
+	if (agentic) tickets[0]!.status = "todo";
 	if (crowded)
 		tickets = Array.from({ length: 60 }, (_, i) => ({
 			id: `FORGE-${i + 1}`,
 			projectId,
 			title: `Task ${i + 1}`,
 			description: "Scope",
-			status: i < 30 ? "draft" : "ready",
+			status: i < 30 ? "backlog" : "todo",
 			createdAt,
 		}));
 	await page.route(
@@ -23,6 +26,43 @@ const setup = async (page: Page, crowded = false) => {
 		async (route) => {
 			const path = new URL(route.request().url()).pathname;
 			const method = route.request().method();
+			if (path.endsWith("/workflow") || path.endsWith("/messages")) {
+				if (method === "POST") messages++;
+				return route.fulfill({
+					json: {
+						ticketId: path.split("/")[3],
+						phase: "planning",
+						state: "idle",
+						mergeAttempts: 0,
+						...(agentic
+							? { plannerId: threadId, plan: { revision: 1, text: "Implement search with tests" } }
+							: {}),
+					},
+				});
+			}
+			if (path.startsWith("/api/agents/")) {
+				if (path.endsWith("/events"))
+					return route.fulfill({ status: 200, contentType: "text/event-stream", body: "data: changed\n\n" });
+				return route.fulfill({
+					json: {
+						thread: {
+							id: threadId,
+							projectId,
+							workspaceId: threadId,
+							title: "Planning",
+							createdAt,
+							status: "completed",
+						},
+						items: Array.from({ length: 30 }, (_, i) => ({
+							id: `item-${i}`,
+							role: i % 2 ? "user" : "assistant",
+							text: `Planning message ${i}: implement search with tests.`,
+						})),
+						requests: [],
+						truncated: false,
+					},
+				});
+			}
 			if (path === "/api/projects")
 				return route.fulfill({ json: [{ id: projectId, name: "Forge", status: "ready", createdAt }] });
 			if (path === "/api/accounts")
@@ -38,7 +78,7 @@ const setup = async (page: Page, crowded = false) => {
 						...route.request().postDataJSON(),
 						id: `FORGE-${tickets.length + 1}`,
 						projectId,
-						status: "draft",
+						status: "backlog",
 						createdAt,
 					};
 					tickets.push(ticket);
@@ -68,11 +108,51 @@ const setup = async (page: Page, crowded = false) => {
 	await page.getByRole("link", { name: "Open Forge", exact: true }).click();
 	await page.getByRole("tab", { name: "Tasks", exact: true }).click();
 	return {
+		messages: () => messages,
 		failMoves: () => {
 			failMove = true;
 		},
 	};
 };
+
+for (const size of [
+	{ width: 1280, height: 900 },
+	{ width: 820, height: 820 },
+	{ width: 390, height: 844 },
+]) {
+	test(`ticket chat is separate from scope and fits the keyboard viewport at ${size.width}px`, async ({ page }) => {
+		await page.setViewportSize(size);
+		const fixture = await setup(page, false, true);
+		await page.getByRole("button", { name: "FORGE-1 First task", exact: true }).click();
+		const panel = page.getByRole("dialog");
+		await expect(panel.getByLabel("Message", { exact: true })).toBeVisible();
+		await expect(
+			panel.getByText("Planning message 0: implement search with tests.", { exact: true }),
+		).toBeAttached();
+		await panel.getByLabel("Message", { exact: true }).fill("Include filtering");
+		await panel.getByRole("button", { name: "Send message", exact: true }).click();
+		await expect.poll(fixture.messages).toBe(1);
+		await panel.getByRole("button", { name: "Details", exact: true }).click();
+		await expect(panel.getByLabel("Description", { exact: true })).toHaveValue("Scope");
+		await panel.getByRole("button", { name: "Chat", exact: true }).click();
+		await page.evaluate(() => {
+			Object.defineProperty(window.visualViewport!, "height", { configurable: true, value: 440 });
+			window.visualViewport!.dispatchEvent(new Event("resize"));
+		});
+		await expect
+			.poll(async () => (await panel.boundingBox())!.y + (await panel.boundingBox())!.height)
+			.toBeLessThanOrEqual(441);
+		const composer = panel.getByRole("button", { name: "Send message", exact: true });
+		expect((await composer.boundingBox())!.y + (await composer.boundingBox())!.height).toBeLessThanOrEqual(440);
+		const bounds = (await panel.boundingBox())!;
+		if (size.width > 600) expect(bounds.x).toBeGreaterThan(0);
+		else expect(bounds.width).toBe(size.width);
+		expect(await page.evaluate(() => scrollY === 0 && document.documentElement.scrollHeight <= innerHeight)).toBe(
+			true,
+		);
+		await page.screenshot({ path: `../../../../artifacts/forge-browser/ticket-chat-${size.width}.png` });
+	});
+}
 
 for (const size of [
 	{ width: 1280, height: 900 },
@@ -90,7 +170,7 @@ for (const size of [
 				.toBeLessThanOrEqual(height);
 			const rect = (await board.boundingBox())!;
 			expect(rect.y + rect.height).toBeGreaterThan(height - 40);
-			const draft = page.locator('[data-drop-status="draft"]');
+			const draft = page.locator('[data-drop-status="backlog"]');
 			const heading = draft.locator(".kanban-column-heading");
 			const top = (await heading.boundingBox())!.y;
 			await draft.evaluate((el) => {
@@ -98,7 +178,7 @@ for (const size of [
 			});
 			expect((await heading.boundingBox())!.y).toBeCloseTo(top, 0);
 			await expect(draft.getByRole("button", { name: "FORGE-30 Task 30", exact: true })).toBeInViewport();
-			expect(await page.locator('[data-drop-status="ready"]').evaluate((el) => el.scrollTop)).toBe(0);
+			expect(await page.locator('[data-drop-status="todo"]').evaluate((el) => el.scrollTop)).toBe(0);
 			expect(
 				await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0),
 			).toBe(true);
@@ -125,7 +205,7 @@ for (const size of [
 	});
 }
 
-test("create and edit tickets; status menu moves a ticket to Done and survives reopening", async ({ page }) => {
+test("create and edit tickets; status menu queues planning and survives reopening", async ({ page }) => {
 	await setup(page);
 	const boardUrl = page.url();
 	const historyLength = await page.evaluate(() => history.length);
@@ -141,13 +221,13 @@ test("create and edit tickets; status menu moves a ticket to Done and survives r
 	await dialog.getByLabel("Title", { exact: true }).fill("Updated task");
 	await dialog.getByRole("button", { name: "Save", exact: true }).click();
 	await page.getByRole("button", { name: "FORGE-3 Updated task", exact: true }).click();
-	await dialog.getByLabel("Status", { exact: true }).selectOption("done");
-	await expect(dialog.getByLabel("Status", { exact: true })).toHaveValue("done");
+	await dialog.getByLabel("Status", { exact: true }).selectOption("todo");
+	await expect(dialog.getByLabel("Status", { exact: true })).toHaveValue("todo");
 	await dialog.getByRole("button", { name: "Close ticket", exact: true }).click();
-	await expect(page.getByRole("region", { name: "Done", exact: true }).getByText("Updated task")).toBeAttached();
+	await expect(page.getByRole("region", { name: "To do", exact: true }).getByText("Updated task")).toBeAttached();
 	await page.reload();
 	await expect(page).toHaveURL(`/projects/${projectId}/tasks`);
-	await expect(page.getByRole("region", { name: "Done", exact: true }).getByText("Updated task")).toBeAttached();
+	await expect(page.getByRole("region", { name: "To do", exact: true }).getByText("Updated task")).toBeAttached();
 });
 
 test("desktop drop zones reorder cards and move to an empty column; failures preserve the board", async ({ page }) => {
@@ -163,9 +243,9 @@ test("desktop drop zones reorder cards and move to an empty column; failures pre
 	await expect(page.locator(".ticket-drop-placeholder")).toBeVisible();
 	await page.mouse.up();
 	await expect(
-		page.getByRole("region", { name: "Draft", exact: true }).locator(".ticket-card").first(),
+		page.getByRole("region", { name: "Backlog", exact: true }).locator(".ticket-card").first(),
 	).toContainText("FORGE-2");
-	const ready = page.getByRole("region", { name: "Ready", exact: true });
+	const ready = page.getByRole("region", { name: "To do", exact: true });
 	await handle.hover();
 	await page.mouse.down();
 	const target = (await ready.boundingBox())!;
@@ -174,9 +254,9 @@ test("desktop drop zones reorder cards and move to an empty column; failures pre
 	await expect(ready.getByText("Second task")).toBeVisible();
 	fixture.failMoves();
 	await page.getByRole("button", { name: "FORGE-2 Second task", exact: true }).click();
-	await page.getByLabel("Status", { exact: true }).selectOption("done");
+	await page.getByLabel("Status", { exact: true }).selectOption("in-progress");
 	await expect(page.getByRole("dialog").getByRole("alert")).toBeVisible();
-	await expect(page.getByLabel("Status", { exact: true })).toHaveValue("ready");
+	await expect(page.getByLabel("Status", { exact: true })).toHaveValue("todo");
 });
 
 test("drag edge scrolling and cancellation preserve ticket state", async ({ page }) => {
@@ -193,13 +273,13 @@ test("drag edge scrolling and cancellation preserve ticket state", async ({ page
 	await page.mouse.up();
 	await expect(page.locator(".ticket-drag-preview")).toHaveCount(0);
 	await expect(page.locator(".ticket-drop-placeholder")).toHaveCount(0);
-	await expect(page.getByRole("region", { name: "Draft", exact: true }).getByText("First task")).toBeAttached();
+	await expect(page.getByRole("region", { name: "Backlog", exact: true }).getByText("First task")).toBeAttached();
 	await handle.scrollIntoViewIfNeeded();
 	await handle.hover();
 	await page.mouse.down();
 	await page.mouse.move(5, 5);
 	await page.mouse.up();
-	await expect(page.getByRole("region", { name: "Draft", exact: true }).getByText("First task")).toBeAttached();
+	await expect(page.getByRole("region", { name: "Backlog", exact: true }).getByText("First task")).toBeAttached();
 });
 
 test("mobile touch drag and status dropdown work without widening the page", async ({ browser }) => {
@@ -207,7 +287,7 @@ test("mobile touch drag and status dropdown work without widening the page", asy
 	const page = await context.newPage();
 	await setup(page);
 	const handle = (await page.getByRole("button", { name: "Drag FORGE-1", exact: true }).boundingBox())!;
-	const ready = (await page.getByRole("region", { name: "Ready", exact: true }).boundingBox())!;
+	const ready = (await page.getByRole("region", { name: "To do", exact: true }).boundingBox())!;
 	const client = await context.newCDPSession(page);
 	const x = handle.x + handle.width / 2;
 	const y = handle.y + handle.height / 2;
@@ -218,10 +298,10 @@ test("mobile touch drag and status dropdown work without widening the page", asy
 	});
 	await expect(page.locator(".ticket-drop-placeholder")).toBeVisible();
 	await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-	await expect(page.getByRole("region", { name: "Ready", exact: true }).getByText("First task")).toBeAttached();
+	await expect(page.getByRole("region", { name: "To do", exact: true }).getByText("First task")).toBeAttached();
 	await page.getByRole("button", { name: "FORGE-1 First task", exact: true }).click();
-	await page.getByLabel("Status", { exact: true }).selectOption("done");
-	await expect(page.getByLabel("Status", { exact: true })).toHaveValue("done");
+	await page.getByLabel("Status", { exact: true }).selectOption("in-progress");
+	await expect(page.getByLabel("Status", { exact: true })).toHaveValue("in-progress");
 	await page.screenshot({ path: "../../../../artifacts/forge-browser/tasks-mobile.png" });
 	await page.getByRole("button", { name: "Close ticket", exact: true }).click();
 	await page.screenshot({ path: "../../../../artifacts/forge-browser/tasks-mobile-board.png" });

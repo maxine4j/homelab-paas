@@ -35,8 +35,8 @@ test("SQLite allocates global sequential ticket keys, preserves project order an
 		store.insert(otherId, input, createdAt),
 	]);
 	expect([a.id, b.id, c.id]).toEqual(["FORGE-1", "FORGE-2", "FORGE-3"]);
-	expect(a.status).toBe("draft");
-	await store.move(b.id, { status: "draft", beforeId: a.id });
+	expect(a.status).toBe("backlog");
+	await store.move(b.id, { status: "backlog", beforeId: a.id });
 	expect((await store.list(projectId)).map((ticket) => ticket.id)).toEqual([b.id, a.id]);
 	await store.move(b.id, { status: "done" });
 	await store.update(a.id, { title: "Edited", description: "Updated" });
@@ -47,7 +47,7 @@ test("SQLite allocates global sequential ticket keys, preserves project order an
 	const persisted = new TicketStore(reopened);
 	await persisted.initialize();
 	expect(await persisted.get(b.id)).toMatchObject({ status: "done", projectId });
-	expect(await persisted.get(a.id)).toMatchObject({ title: "Edited", description: "Updated", status: "draft" });
+	expect(await persisted.get(a.id)).toMatchObject({ title: "Edited", description: "Updated", status: "backlog" });
 	expect(await persisted.list(otherId)).toEqual([c]);
 	expect(await persisted.get("FORGE-999")).toBeUndefined();
 	expect((await persisted.insert(projectId, input, createdAt)).id).toBe("FORGE-4");

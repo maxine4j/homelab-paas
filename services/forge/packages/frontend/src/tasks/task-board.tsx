@@ -11,18 +11,11 @@ import {
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent, PointerEvent } from "react";
 
+import { ResourcePoller } from "../api/resource-poller.ts";
 import type { IWorkspaceApi } from "../api/workspace-api.ts";
+import { TicketDetails, ticketLabels } from "./ticket-details.tsx";
 
-const labels: Record<TicketStatus, string> = {
-	draft: "Draft",
-	ready: "Ready",
-	planning: "Planning",
-	"plan-review": "Plan review",
-	working: "Working",
-	"work-review": "Work review",
-	merging: "Merging",
-	done: "Done",
-};
+const labels = ticketLabels;
 type Drop = { status: TicketStatus; beforeId?: string };
 type Drag = { ticket: Ticket; x: number; y: number; drop?: Drop };
 
@@ -42,7 +35,7 @@ const TicketEditor = ({
 	const dialog = useRef<HTMLDialogElement>(null);
 	const [title, setTitle] = useState(ticket?.title ?? "");
 	const [description, setDescription] = useState(ticket?.description ?? "");
-	const [status, setStatus] = useState(ticket?.status ?? "draft");
+	const [status, setStatus] = useState(ticket?.status ?? "backlog");
 	const [error, setError] = useState("");
 	useEffect(() => {
 		dialog.current?.showModal();
@@ -176,7 +169,18 @@ export const TaskBoard = ({ projectId, api }: { projectId: string; api: IWorkspa
 	useEffect(() => {
 		active.current = true;
 		void load();
+		const polling = new ResourcePoller(
+			async () => {
+				await load();
+				return undefined;
+			},
+			() => {},
+			() => {},
+			1000,
+		);
+		polling.refresh();
 		return () => {
+			polling.stop();
 			active.current = false;
 		};
 	}, [load]);
@@ -401,25 +405,40 @@ export const TaskBoard = ({ projectId, api }: { projectId: string; api: IWorkspa
 					</div>
 				</>
 			)}
-			{editing && (
-				<TicketEditor
-					key={editing === "new" ? "new" : editing.id}
-					ticket={editing === "new" ? undefined : editing}
+			{editing && editing !== "new" && (
+				<TicketDetails
+					ticket={tickets.find((ticket) => ticket.id === editing.id) ?? editing}
+					api={api}
 					busy={busy}
 					close={() => setEditing(undefined)}
 					move={move}
 					save={(input) =>
 						mutate(async () => {
-							const updated =
-								editing === "new"
-									? await api.read(`projects/${projectId}/tickets`, ticketSchema, "POST", input)
-									: await api.read(`tickets/${editing.id}`, ticketSchema, "PATCH", input);
+							const updated = await api.read(`tickets/${editing.id}`, ticketSchema, "PATCH", input);
+							setTickets((current) =>
+								current.map((ticket) => (ticket.id === updated.id ? updated : ticket)),
+							);
+							setEditing(undefined);
+						})
+					}
+				/>
+			)}
+			{editing === "new" && (
+				<TicketEditor
+					key='new'
+					busy={busy}
+					close={() => setEditing(undefined)}
+					move={move}
+					save={(input) =>
+						mutate(async () => {
+							const updated = await api.read(
+								`projects/${projectId}/tickets`,
+								ticketSchema,
+								"POST",
+								input,
+							);
 							if (active.current) {
-								setTickets((current) =>
-									editing === "new"
-										? [...current, updated]
-										: current.map((ticket) => (ticket.id === updated.id ? updated : ticket)),
-								);
+								setTickets((current) => [...current, updated]);
 								setNotice(`${updated.id} saved.`);
 							}
 						})

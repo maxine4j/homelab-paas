@@ -223,6 +223,9 @@ test("Agents opens the first chat and loads only selected histories without unce
 	const fixture = await setup(page);
 	await fixture.create();
 	await fixture.create();
+	// Unmount the old selected chat before changing runtime state, so its pending
+	// recovery cannot race the new page's first-chat selection.
+	await page.goto("/projects");
 	for (const view of fixture.views) view.thread.status = "uncertain";
 	const writes = fixture.writes.length;
 	await page.goto(`/projects/${projectId}/agents`);

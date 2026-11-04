@@ -13,7 +13,7 @@ const fixture = () => {
 	const tickets = new Map<string, Ticket>();
 	const store = {
 		insert: vi.fn(async (projectId, input, createdAt) => {
-			const value: Ticket = { ...input, projectId, createdAt, id: "FORGE-1", status: "draft" };
+			const value: Ticket = { ...input, projectId, createdAt, id: "FORGE-1", status: "backlog" };
 			tickets.set(value.id, value);
 			return value;
 		}),
@@ -42,27 +42,25 @@ const fixture = () => {
 		projects,
 		new AccessService({ owner: "owner", origin: "https://forge.example.com" }),
 		() => now,
+		{
+			move: async (_actor, ticket, input) => store.move(ticket.id, input),
+			get: vi.fn(),
+			message: vi.fn(),
+			tick: vi.fn(),
+			recover: vi.fn(),
+		},
 	);
 	return { service, tickets, store, projects };
 };
 
-test("create draft tickets, edit plain fields and manually move through every workflow stage", async () => {
+test("create backlog tickets, edit scope and delegate moves to the workflow", async () => {
 	const { service } = fixture();
 	const value = await service.create(actor, projectId, { title: " Task ", description: "Scope" });
-	expect(value).toMatchObject({ id: "FORGE-1", title: "Task", status: "draft" });
+	expect(value).toMatchObject({ id: "FORGE-1", title: "Task", status: "backlog" });
 	expect(await service.update(actor, value.id, { title: "Edited", description: "New scope" })).toMatchObject({
 		title: "Edited",
 	});
-	for (const status of [
-		"ready",
-		"planning",
-		"plan-review",
-		"working",
-		"work-review",
-		"merging",
-		"done",
-		"draft",
-	] as const) {
+	for (const status of ["todo", "in-progress", "in-review", "merging", "done", "backlog"] as const) {
 		expect((await service.move(actor, value.id, { status })).status).toBe(status);
 	}
 	expect(await service.list(actor, projectId)).toHaveLength(1);
@@ -74,7 +72,7 @@ test("reject invalid input, missing tickets and invalid drop targets before muta
 	await expect(service.get(actor, "FORGE-999")).rejects.toThrow("ticket-not-found");
 	const ticket = await service.create(actor, projectId, { title: "Task", description: "" });
 	tickets.set("FORGE-2", { ...ticket, id: "FORGE-2", projectId: "123e4567-e89b-42d3-a456-426614174001" });
-	await expect(service.move(actor, ticket.id, { status: "draft", beforeId: "FORGE-2" })).rejects.toThrow(
+	await expect(service.move(actor, ticket.id, { status: "backlog", beforeId: "FORGE-2" })).rejects.toThrow(
 		"ticket-conflict",
 	);
 	await expect(service.move(actor, ticket.id, { status: "done", beforeId: ticket.id })).rejects.toThrow(

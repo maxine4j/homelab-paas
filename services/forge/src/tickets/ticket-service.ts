@@ -14,6 +14,7 @@ import { ProjectNotFoundError, ProjectUnavailableError } from "../projects/error
 import type { IProjectStore } from "../projects/project-store.ts";
 import { TicketError } from "./errors.ts";
 import type { ITicketStore } from "./ticket-store.ts";
+import type { ITicketWorkflowService } from "./ticket-workflow-service.ts";
 
 export interface ITicketService {
 	/** Existing owner access applies. Invalid input, missing tickets and invalid destinations throw TicketError. */
@@ -21,7 +22,7 @@ export interface ITicketService {
 	create(actor: Actor, projectId: string, input: CreateTicket): Promise<Ticket>;
 	get(actor: Actor, id: string): Promise<Ticket>;
 	update(actor: Actor, id: string, input: CreateTicket): Promise<Ticket>;
-	/** Manual transitions are unrestricted in this slice. Moves and ordering updates are serialized. */
+	/** Workflow guards apply to every move; done is scheduler-owned. */
 	move(actor: Actor, id: string, input: MoveTicket): Promise<Ticket>;
 }
 export class TicketService implements ITicketService {
@@ -31,6 +32,7 @@ export class TicketService implements ITicketService {
 		private readonly projects: IProjectStore,
 		private readonly access: IAccessService,
 		private readonly now: () => Date,
+		private readonly workflow: ITicketWorkflowService,
 	) {}
 	async list(actor: Actor, projectId: string): Promise<Ticket[]> {
 		this.access.assertOwner(actor);
@@ -59,7 +61,8 @@ export class TicketService implements ITicketService {
 		const parsed = createTicketSchema.safeParse(input);
 		if (!parsed.success) throw new TicketError("invalid-request");
 		return this.serialize(async () => {
-			await this.get(actor, id);
+			const ticket = await this.get(actor, id);
+			if (ticket.status !== "backlog") throw new TicketError("ticket-conflict");
 			await this.store.update(id, parsed.data);
 			return this.get(actor, id);
 		});
@@ -80,7 +83,7 @@ export class TicketService implements ITicketService {
 				)
 					throw new TicketError("ticket-conflict");
 			}
-			await this.store.move(id, parsed.data);
+			await this.workflow.move(actor, ticket, parsed.data);
 			return this.get(actor, id);
 		});
 	}

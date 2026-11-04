@@ -25,7 +25,7 @@ export class TicketStore implements ITicketStore {
 	async initialize(): Promise<void> {
 		await this.guard(async () => {
 			await this.database.run(
-				"CREATE TABLE IF NOT EXISTS tickets (number INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT GENERATED ALWAYS AS ('FORGE-' || number) STORED UNIQUE, projectId TEXT NOT NULL REFERENCES projects(id), title TEXT NOT NULL, description TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','ready','planning','plan-review','working','work-review','merging','done')), position INTEGER NOT NULL, createdAt TEXT NOT NULL)",
+				"CREATE TABLE IF NOT EXISTS tickets (number INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT GENERATED ALWAYS AS ('FORGE-' || number) STORED UNIQUE, projectId TEXT NOT NULL REFERENCES projects(id), title TEXT NOT NULL, description TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'backlog' CHECK(status IN ('backlog','todo','in-progress','in-review','merging','done')), position INTEGER NOT NULL, createdAt TEXT NOT NULL)",
 			);
 			await this.database.run("CREATE INDEX IF NOT EXISTS tickets_board ON tickets(projectId, status, position)");
 		});
@@ -35,7 +35,7 @@ export class TicketStore implements ITicketStore {
 			const fields = createTicketSchema.parse(input);
 			ticketSchema.pick({ projectId: true, createdAt: true }).parse({ projectId, createdAt });
 			const rows = await this.database.all(
-				`INSERT INTO tickets(projectId,title,description,createdAt,position) SELECT ?,?,?,?,COALESCE((SELECT MAX(position)+1 FROM tickets WHERE projectId=? AND status='draft'),1) WHERE (SELECT COUNT(*) FROM tickets WHERE projectId=?) < 1000 RETURNING ${columns}`,
+				`INSERT INTO tickets(projectId,title,description,createdAt,position) SELECT ?,?,?,?,COALESCE((SELECT MAX(position)+1 FROM tickets WHERE projectId=? AND status='backlog'),1) WHERE (SELECT COUNT(*) FROM tickets WHERE projectId=?) < 1000 RETURNING ${columns}`,
 				[projectId, fields.title, fields.description, createdAt, projectId, projectId],
 			);
 			return ticketSchema.parse(rows.at(0));

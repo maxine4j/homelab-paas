@@ -102,17 +102,17 @@ reviews; Codex owns model interaction, tools, agent execution, and conversations
 - Keep app-server private to the backend. Browser clients call Forge APIs rather
   than receiving unrestricted Codex protocol access.
 - Map executions to worktrees, branches, Codex thread IDs, active turn IDs, and
-  execution status. Future planning agents retain their conversation through
-  clarification and plan feedback; implementation starts a separate agent with
-  its own conversation and worktree. Keep ticket orchestration outside the Codex
+  execution status. Ticket planning agents retain their conversation through
+  clarification and plan feedback; implementation starts a fresh conversation in
+  the same ticket worktree, carrying only the approved plan and execution skill. Keep ticket orchestration outside the Codex
   execution adapter.
 - Persist important normalized activity and approval state for browser reconnects.
   Reconcile actual Codex state after app-server or application restart before
   dispatching more work. Surface interrupted execution and recovery failures explicitly.
-- Interactive threads can execute concurrently, with no global active-turn limit.
-  Serialize mutations within each thread and reject sending another message while
-  its turn is running or awaiting input. Future asynchronous job scheduling owns
-  its own concurrency policy.
+- A shared execution pool limits Forge to three active agents across projects,
+  standalone chats and all ticket phases, including review followups and rebases.
+  Running, waiting and uncertain executions retain slots. Completed, failed and
+  interrupted turns release slots. Serialize mutations within each thread.
 - Shut down child processes cleanly and reap descendants. Keep the web UI and
   process health available when Codex is unavailable or unauthenticated.
 
@@ -185,7 +185,8 @@ characters per item and 240000 text characters in total; clipping sets `truncate
 Resume loads the latest 20 turns through the pinned paginated history API and
 marks omitted older history explicitly. Pending structured requests are bounded
 per thread. RPC deadlines remain 15 seconds and frames 1 MiB; there is no automatic
-turn timeout or global chat concurrency limit. SSE sends 15-second heartbeats,
+turn timeout. The shared three-agent execution limit also applies to these chats;
+capacity failures preserve browser drafts for retry. SSE sends 15-second heartbeats,
 disconnects slow consumers and closes on application shutdown. Reconnection reads
 a current snapshot rather than replaying mutations.
 
@@ -656,8 +657,13 @@ chat thread list and conversation log scroll vertically in Agents; requests are
 part of the conversation log and the composer remains visible. Task columns
 scroll vertically independently with their headings fixed at the top; the board
 scrolls horizontally to reach other statuses.
-Ticket dialogs also fit the visible viewport and scroll internally while the
-virtual keyboard is open.
+Ticket creation dialogs fit the visible viewport and scroll internally while the
+virtual keyboard is open. Ticket details open in a right sidebar on laptop and
+square folding-phone screens, and occupy the full viewport below 601px. Title and
+description are separate from the conversation. Details and Chat views retain
+independent content, the chat composer stays visible, and only the conversation
+log scrolls within the chat view. Planning history remains readable after starting
+the fresh implementation conversation.
 
 React Router uses the browser History API for `/projects/:projectId/code`,
 `/tasks`, `/agents`, `/pipelines` and `/terminals` under the same project prefix.
@@ -819,79 +825,71 @@ behavior is verified separately in Linux integration and the real image smoke.
 
 ### Ticket and PR workflow
 
-#### Initial manual ticket board
+#### Agentic ticket board
 
-The Tasks section is a Jira-style board with compact cards, status headings and
-counts, highlighted drop zones, insertion placeholders and a floating drag preview.
-It shows all eight workflow columns below. Pointer drag handles support mouse,
-pen and mobile touch without preventing ordinary scrolling elsewhere on a card.
-Dragging near an edge scrolls the board or column. Escape, pointer cancellation
-and dropping outside the board cancel the move. Ticket details also expose a
-native status dropdown for keyboard and mobile use.
+The board has exactly six columns: Backlog, To do, In progress, In review,
+Merging and Done. API status values are `backlog`, `todo`, `in-progress`,
+`in-review`, `merging` and `done`. Do not retain separate planning or plan-review
+columns. Cards retain pointer/touch dragging, insertion ordering, edge scrolling
+and cancellation; a native status menu provides the same owner transitions.
 
-Tickets belong to one ready project. SQLite allocates immutable global increasing
-keys (`FORGE-1`, `FORGE-2`, ...), including across restarts and concurrent creates.
-Creation accepts only a trimmed required title (1–120 characters) and a plain-text
-description (0–4000 characters, default empty); it always starts in Draft.
-Owners can open and edit these fields. No assignees, priorities, labels, subtasks,
-agents, jobs, worktrees or PR linkage are part of this slice. Each project retains
-at most 1000 tickets. Card ordering within each column is persisted; a move
-inserts before a supplied destination ticket or appends to the column.
+Tickets belong to ready projects. SQLite allocates immutable global increasing
+keys (`FORGE-1`, ...) across restarts and concurrent creation. Creation accepts a
+trimmed title (1–120 characters) and plain-text description (0–4000 characters,
+default empty), always starting in Backlog. Scope edits are permitted in Backlog;
+subsequent changes are discussed in the agent conversation. Each project retains
+at most 1000 tickets.
 
-For this initial trusted manual slice, **all status transitions, including Done,
-are explicitly permitted without plan approval, agent execution or a merged PR**.
-Done records a manual status only. The guarded automated workflow below remains
-the future contract; lock down manual transitions when that integration arrives.
-Existing application owner/origin checks remain; no additional authorization model
-is introduced. Moves and field edits share a serialized service queue, and moves
-update ordering atomically. Failed writes leave the displayed board unchanged and
-retain form fields for retry. Refresh reloads external changes; live updates,
-cross-client edit conflict detection and offline writes are outside this slice.
+| Stage       | Behavior                                                                                                                                                                                                 |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backlog     | The owner writes ticket title and description.                                                                                                                                                           |
+| To do       | Queues planning. Allocate the ticket branch/worktree from latest local main when planning starts. Retain its planning conversation and persist versioned full plans. Owner replies queue plan revisions. |
+| In progress | Moving from To do approves the completed current plan revision. Queue implementation in a fresh Codex conversation using the same worktree, approved plan and dev-local-derived TDD skill.               |
+| In review   | Successful implementation moves here automatically. Owner chat replies queue review followups on the implementation conversation. Diff display and CI integration are deferred.                          |
+| Merging     | Owner movement from idle In review authorizes a fast-forward-only update of main. If divergent, queue the implementation agent to rebase, resolve conflicts and validate before another merge attempt.   |
+| Done        | Only the scheduler moves here after the branch is merged into local main.                                                                                                                                |
+
+All execution shares the global three-agent limit, including standalone Agents
+chats. Idle conversations consume no slot; opening or switching chats does not
+start a turn. Planning, implementation, review replies and conflict resolution
+are durable jobs independent of browser selection. User approvals/input retain
+the active slot. Pending jobs wait for capacity. Standalone message submissions
+at capacity return `agent-capacity` and retain the draft.
+
+Planning instructions derive from dev-local: inspect requirements and repository,
+produce an implementation plan and estimated file tree, identify validation and
+risks, discuss revisions, and perform no edits. Implementation instructions carry
+the approved plan and strict observed Red → Green → Refactor, repository checks,
+review of task-owned changes and a local commit. Agents must not push, update
+main, create additional worktrees or spawn subagents. Merge repair instructions
+request rebase and conflict resolution with validation. Codex remains the
+conversation authority; SQLite stores plan artifacts and workflow metadata, not a
+second chat log. Planning and implementation histories remain separate.
+
+Workflow intent and board moves are persisted atomically in SQLite. Dispatch
+intent precedes Codex calls. After a restart, reconcile known conversations before
+new dispatch; never blindly replay an ambiguous turn. Surface failed/uncertain
+work separately from board status. Uncertain execution requires reconciliation;
+failed execution accepts explicit owner followup. Automatic rebase attempts are
+bounded to three and then require attention. Preserve all worktrees and history.
 
 Browser contracts are exported from `@homelab-paas/forge-contracts/tickets`:
 
-| Route                                       | Contract                                                                      |
-| ------------------------------------------- | ----------------------------------------------------------------------------- |
-| `GET/POST /api/projects/:projectId/tickets` | Ordered list / create `{title,description?}`; creation returns HTTP 201.      |
-| `GET/PATCH /api/tickets/:id`                | Read / replace title and description; identity and status are immutable here. |
-| `POST /api/tickets/:id/move`                | `{status,beforeId?}`; destination must belong to the same project and status. |
+| Route                                       | Contract                                                                                                          |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `GET/POST /api/projects/:projectId/tickets` | Ordered list / create title and description.                                                                      |
+| `GET/PATCH /api/tickets/:id`                | Read / edit scope in Backlog.                                                                                     |
+| `POST /api/tickets/:id/move`                | Guarded owner transition with optional beforeId.                                                                  |
+| `GET /api/tickets/:id/workflow`             | Plan revision, phase, execution state and Forge conversation/workspace IDs. No raw Codex IDs or filesystem paths. |
+| `POST /api/tickets/:id/messages`            | Queue planning/review feedback as bounded text.                                                                   |
+| `POST /api/tickets/:id/reconcile`           | Reconcile uncertain execution without replaying messages.                                                         |
 
-Public tickets expose only key `id`, `projectId`, title, description, status and
-creation timestamp. Status values are `draft`, `ready`, `planning`, `plan-review`,
-`working`, `work-review`, `merging`, `done`. Errors use fixed codes:
-`invalid-request` (400), `ticket-not-found` (404), `ticket-conflict` (409),
-`ticket-unavailable` (503), plus existing project errors. Mock preview includes
-read-only ticket fixtures and rejects writes as before.
-
-#### Future guarded workflow
-
-```text
-draft -> ready -> planning -> plan review -> working -> work review -> merging -> done
-```
-
-| Stage       | Required behaviour                                                                                                        |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Draft       | Human defines scope and acceptance criteria.                                                                              |
-| Ready       | Explicit authorization for the scheduler to claim the ticket.                                                             |
-| Planning    | Create a branch and worktree from the latest local `main` SHA; Codex produces a versioned plan.                           |
-| Plan review | Human approves that plan revision or requests changes, returning to planning.                                             |
-| Working     | Codex implements the approved plan and opens the ticket's PR.                                                             |
-| Work review | The PR itself: diff, discussion, checks, approval, and requested changes. Requested changes return the ticket to working. |
-| Merging     | Prepare and validate the merge candidate, then update protected `main`.                                                   |
-| Done        | The PR has merged.                                                                                                        |
-
-- Work review is the PR. Do not introduce a separate ticket-outcome model where
-  raising a PR completes the ticket or independently authorizes merging.
-- PRs are repository entities linked directly to tickets; synchronize their
-  lifecycle with ticket transitions through application services.
-- Track blocked, failed, and cancelled execution separately from board stages.
-- Record the planning base SHA. If `main` changes before implementation, assess
-  plan validity; material scope changes require another plan review.
-- Approvals identify the plan revision or code revision being approved. Code
-  changes invalidate affected work approval; enforce transition guards regardless
-  of whether the caller is a browser, scheduler, or agent integration.
-- Use SQLite-backed jobs with atomic claims, leases, heartbeats, bounded retries,
-  and cancellation. Reconcile existing execution before retrying expired work.
+Ticket conversations reuse the private agent read/resume/interrupt/reply/SSE APIs.
+Their message dispatch is scheduler-only; direct standalone sends cannot bypass
+ticket guards. Ticket threads are not duplicated in the standalone Agents list.
+Exact-origin and owner checks apply to every API operation. Existing fixed ticket
+errors remain; transition conflicts return 409. The board and ticket view refresh
+while execution continues. Preview fixtures remain read-only.
 
 ### Git hosting and remote CI
 
@@ -902,7 +900,9 @@ draft -> ready -> planning -> plan review -> working -> work review -> merging -
 - Protect `main` across agent operations and external pushes; explicit owner
   commits through the repository editor are permitted as described above.
   Receive-side enforcement is required for hosted Git pushes.
-- Start with squash merging and serialized merge operations per repository.
+- The current ticket workflow uses fast-forward-only merging with expected-main
+  compare-and-swap. Future remote-CI candidate workflows below require a separate
+  explicit contract change before implementation.
 - Forge is authoritative for Git and PRs. GitHub is the CI execution mirror;
   initially do not create a second set of GitHub PRs or synchronize their reviews.
 - Push an immutable candidate commit to a dedicated GitHub branch with a configured

@@ -14,6 +14,7 @@ import type { Actor } from "../auth/types.ts";
 import type { ICodexAgentClient } from "../codex/codex-agent-client.ts";
 import type { IProjectService } from "../projects/project-service.ts";
 import type { WorkspaceLocation } from "../workspaces/types.ts";
+import type { IAgentExecutionPool } from "./agent-execution-pool.ts";
 import type { IAgentThreadStore } from "./agent-thread-store.ts";
 import { AgentError } from "./errors.ts";
 import type { AgentThreadRecord } from "./types.ts";
@@ -48,6 +49,7 @@ export class AgentService implements IAgentService {
 		private readonly access: IAccessService,
 		private readonly generateId: () => string,
 		private readonly now: () => Date,
+		private readonly pool: IAgentExecutionPool,
 	) {
 		this.unsubscribe = client.subscribe((codexId) => {
 			const id = this.identities.get(codexId);
@@ -59,12 +61,27 @@ export class AgentService implements IAgentService {
 		});
 	}
 	async create(actor: Actor, projectId: string, title: string): Promise<AgentView> {
+		return this.createThread(actor, projectId, title, false);
+	}
+	async createTicketThread(actor: Actor, projectId: string, title: string, workspaceId?: string): Promise<AgentView> {
+		return this.createThread(actor, projectId, title, true, workspaceId);
+	}
+	private async createThread(
+		actor: Actor,
+		projectId: string,
+		title: string,
+		managed: boolean,
+		workspaceId?: string,
+	): Promise<AgentView> {
 		this.authorize(actor);
 		const input = createAgentSchema.safeParse({ title });
 		if (!input.success) throw new AgentError("invalid-request");
 		const id = this.generateId();
 		return this.serialize(id, async () => {
-			const workspace = await this.workspaces.create(actor, projectId, { name: input.data.title });
+			const workspace = workspaceId
+				? (await this.workspaces.resolve(actor, workspaceId)).workspace
+				: await this.workspaces.create(actor, projectId, { name: input.data.title });
+			if (workspace.projectId !== projectId) throw new AgentError("agent-conflict");
 			const record: AgentThreadRecord = {
 				id,
 				projectId,
@@ -73,6 +90,7 @@ export class AgentService implements IAgentService {
 				createdAt: this.now().toISOString(),
 				status: "idle",
 				requests: [],
+				managed,
 			};
 			await this.store.insert(record);
 			return this.view(record);
@@ -81,7 +99,9 @@ export class AgentService implements IAgentService {
 	async list(actor: Actor, projectId: string): Promise<AgentThread[]> {
 		this.authorize(actor);
 		await this.projects.get(actor, projectId);
-		return (await this.store.list(projectId)).map((record) => agentThreadSchema.parse(this.view(record).thread));
+		return (await this.store.list(projectId))
+			.filter((record) => !record.managed)
+			.map((record) => agentThreadSchema.parse(this.view(record).thread));
 	}
 	async get(actor: Actor, id: string): Promise<AgentView> {
 		this.authorize(actor);
@@ -89,13 +109,20 @@ export class AgentService implements IAgentService {
 	}
 	async send(actor: Actor, id: string, text: string): Promise<AgentView> {
 		this.authorize(actor);
-		const input = agentMessageSchema.safeParse({ text });
+		if ((await this.require(id)).managed) throw new AgentError("agent-conflict");
+		return this.dispatch(actor, id, text);
+	}
+	/** Ticket scheduler dispatch; the prompt is internal and can include a complete approved plan. */
+	async dispatch(actor: Actor, id: string, text: string): Promise<AgentView> {
+		this.authorize(actor);
+		const input = agentMessageSchema.extend({ text: agentMessageSchema.shape.text.max(64000) }).safeParse({ text });
 		if (!input.success) throw new AgentError("invalid-request");
 		return this.serialize(id, async () => {
 			const record = await this.require(id);
 			if (["creating", "running", "waiting", "uncertain"].includes(record.status))
 				throw new AgentError("agent-conflict");
 			const location = await this.workspaces.resolve(actor, record.workspaceId);
+			this.pool.claim(id);
 			try {
 				if (!record.codexId) {
 					record.status = "creating";
@@ -109,6 +136,7 @@ export class AgentService implements IAgentService {
 				return await this.sync(record);
 			} catch (cause) {
 				record.status = "uncertain";
+				this.pool.observe(id, "uncertain");
 				await this.store.update(record);
 				throw cause;
 			}
@@ -165,6 +193,22 @@ export class AgentService implements IAgentService {
 		await Promise.allSettled([...this.queues.values()]);
 		this.listeners.clear();
 	}
+	/** Reconcile every known execution before dispatching new work, without replaying turns. */
+	async recover(actor: Actor): Promise<void> {
+		this.authorize(actor);
+		const records = (
+			await Promise.all((await this.projects.list(actor)).map((project) => this.store.list(project.id)))
+		).flat();
+		for (const record of records) if (record.codexId) this.pool.observe(record.id, "uncertain");
+		for (const record of records) {
+			if (!record.codexId) continue;
+			try {
+				await this.resume(actor, record.id);
+			} catch (err) {
+				this.log.error({ err, threadId: record.id }, "Agent reconciliation failed; retaining execution slot");
+			}
+		}
+	}
 	private authorize(actor: Actor): void {
 		this.access.assertOwner(actor);
 		if (this.closed) throw new AgentError("agent-unavailable");
@@ -179,7 +223,7 @@ export class AgentService implements IAgentService {
 		try {
 			if (record.codexId && this.identities.has(record.codexId)) runtime = this.client.read(record.codexId);
 		} catch {}
-		const { codexId: _codexId, requests, ...thread } = record;
+		const { codexId: _codexId, managed: _managed, requests, ...thread } = record;
 		return {
 			thread,
 			items: runtime?.items ?? [],
@@ -190,6 +234,7 @@ export class AgentService implements IAgentService {
 	private async sync(record: AgentThreadRecord): Promise<AgentView> {
 		if (record.codexId) {
 			const runtime = this.client.read(record.codexId);
+			this.pool.observe(record.id, runtime.status);
 			const updated = { ...record, status: runtime.status, turnId: runtime.turnId, requests: runtime.requests };
 			if (JSON.stringify(updated) !== JSON.stringify(record)) await this.store.update(updated);
 			return this.view(updated);

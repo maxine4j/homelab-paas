@@ -1,12 +1,4 @@
-export type TicketStatus =
-	| "draft"
-	| "ready"
-	| "planning"
-	| "plan-review"
-	| "working"
-	| "work-review"
-	| "merging"
-	| "done";
+export type TicketStatus = "backlog" | "todo" | "in-progress" | "in-review" | "merging" | "done";
 export interface CreateTicket {
 	title: string;
 	description: string;

@@ -468,6 +468,123 @@
 .ticket-dialog::backdrop {
 	background: #010409b3;
 }
+.ticket-dialog.ticket-details {
+	position: fixed;
+	top: var(--forge-viewport-top, 0px);
+	right: 0;
+	left: auto;
+	bottom: auto;
+	transform: none;
+	margin: 0;
+	width: min(580px, calc(100vw - 80px));
+	height: var(--forge-viewport-height, 100dvh);
+	max-height: var(--forge-viewport-height, 100dvh);
+	max-width: 100vw;
+	border-radius: 0;
+	padding: 12px;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.ticket-details-heading,
+.ticket-details-toolbar,
+.ticket-details-tabs {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-shrink: 0;
+}
+.ticket-details-heading > div {
+	min-width: 0;
+}
+.ticket-details-heading h2,
+.ticket-details-heading p {
+	margin: 0;
+}
+.ticket-details-heading p {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ticket-details-toolbar {
+	font-size: 12px;
+}
+.ticket-details-toolbar label {
+	margin: 0;
+	display: flex;
+	align-items: center;
+}
+.ticket-details-toolbar select {
+	width: auto;
+	padding: 5px;
+}
+.ticket-details-tabs {
+	justify-content: flex-start;
+}
+.ticket-fields,
+.ticket-chat {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.ticket-fields form {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.ticket-fields label {
+	margin: 0 0 8px;
+	gap: 4px;
+}
+.ticket-fields .ticket-description {
+	flex: 1;
+	min-height: 0;
+}
+.ticket-fields textarea {
+	min-height: 0;
+	resize: none;
+	height: 100%;
+}
+.ticket-details .agent-conversation {
+	padding: 0;
+	overflow: hidden;
+}
+.ticket-details .agent-composer textarea {
+	height: 64px;
+	min-height: 40px;
+	resize: none;
+}
+.ticket-details .agent-composer label {
+	margin: 0 0 4px;
+}
+.ticket-details .agent-composer-footer span {
+	display: none;
+}
+.ticket-details .error {
+	margin: 0;
+	flex-shrink: 0;
+}
+.ticket-recovery {
+	font-size: 12px;
+	flex-shrink: 0;
+}
+@media (max-width: 600px) {
+	.ticket-dialog.ticket-details {
+		width: 100vw;
+		border: 0;
+		padding: 8px;
+	}
+	.ticket-details .agent-composer textarea {
+		height: 48px;
+	}
+	.ticket-details .agent-composer {
+		gap: 4px;
+	}
+}
 .ticket-dialog-heading {
 	margin-bottom: 20px;
 }

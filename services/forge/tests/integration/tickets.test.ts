@@ -4,17 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { mkdtemp, rm } from "@homelab-paas/backend-infrastructure/file";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 
+import { AgentExecutionPool } from "../../src/agents/agent-execution-pool.ts";
 import { AccessService } from "../../src/auth/access-service.ts";
 import { SqliteDatabase } from "../../src/database/sqlite-database.ts";
 import { HttpApplication } from "../../src/http/http-application.ts";
 import { ProjectRouter } from "../../src/projects/project-router.ts";
 import { ProjectService } from "../../src/projects/project-service.ts";
 import { ProjectStore } from "../../src/projects/project-store.ts";
+import { TicketPrompts } from "../../src/tickets/ticket-prompts.ts";
 import { TicketRouter } from "../../src/tickets/ticket-router.ts";
 import { TicketService } from "../../src/tickets/ticket-service.ts";
 import { TicketStore } from "../../src/tickets/ticket-store.ts";
+import { TicketWorkflowService } from "../../src/tickets/ticket-workflow-service.ts";
+import { TicketWorkflowStore } from "../../src/tickets/ticket-workflow-store.ts";
 
 const projectId = "123e4567-e89b-42d3-a456-426614174000";
 const cleanups: (() => Promise<void>)[] = [];
@@ -34,7 +38,17 @@ test("ticket HTTP create/read/edit/move persists and rejects invalid requests wi
 	const store = new TicketStore(db);
 	await store.initialize();
 	const access = new AccessService({ owner: "owner", origin: "https://forge.example.com" });
-	const service = new TicketService(store, projects, access, () => new Date("2026-11-03T00:00:00.000Z"));
+	const workflowStore = new TicketWorkflowStore(db);
+	await workflowStore.initialize();
+	const workflow = new TicketWorkflowService(
+		workflowStore,
+		store,
+		{ createTicketThread: vi.fn(), dispatch: vi.fn(), get: vi.fn(), resume: vi.fn() },
+		new AgentExecutionPool(),
+		{ merge: vi.fn(), base: vi.fn() },
+		new TicketPrompts(),
+	);
+	const service = new TicketService(store, projects, access, () => new Date("2026-11-03T00:00:00.000Z"), workflow);
 	const projectService = new ProjectService(
 		projects,
 		{ prepare: async () => {}, verify: async () => {} },
@@ -43,7 +57,9 @@ test("ticket HTTP create/read/edit/move persists and rejects invalid requests wi
 		() => new Date(),
 	);
 	const server = createServer(
-		new HttpApplication(new ProjectRouter(projectService), access).create([new TicketRouter(service)]).callback(),
+		new HttpApplication(new ProjectRouter(projectService), access)
+			.create([new TicketRouter(service, workflow)])
+			.callback(),
 	);
 	cleanups.push(
 		() => new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
@@ -66,13 +82,17 @@ test("ticket HTTP create/read/edit/move persists and rejects invalid requests wi
 	const created = await request(listPath, "POST", { title: "First", description: "Scope" });
 	expect(created.status).toBe(201);
 	const ticket = await created.json();
-	expect(ticket).toMatchObject({ id: "FORGE-1", status: "draft" });
+	expect(ticket).toMatchObject({ id: "FORGE-1", status: "backlog" });
 	expect(await (await request(`tickets/${ticket.id}`)).json()).toEqual(ticket);
 	expect((await request(`tickets/${ticket.id}`, "PATCH", { title: "Edited", description: "New scope" })).status).toBe(
 		200,
 	);
-	const moved = await request(`tickets/${ticket.id}/move`, "POST", { status: "done" });
-	expect(await moved.json()).toMatchObject({ title: "Edited", status: "done" });
+	const moved = await request(`tickets/${ticket.id}/move`, "POST", { status: "todo" });
+	expect(await moved.json()).toMatchObject({ title: "Edited", status: "todo" });
+	expect(await (await request(`tickets/${ticket.id}/workflow`)).json()).toMatchObject({
+		state: "queued",
+		phase: "planning",
+	});
 	expect(await (await request(listPath)).json()).toEqual([await store.get(ticket.id)]);
 	for (const [path, method, body, status] of [
 		[listPath, "POST", { title: " " }, 400],

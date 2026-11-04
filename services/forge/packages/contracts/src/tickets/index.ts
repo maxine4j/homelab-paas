@@ -1,15 +1,6 @@
 import { z } from "zod";
 
-export const ticketStatuses = [
-	"draft",
-	"ready",
-	"planning",
-	"plan-review",
-	"working",
-	"work-review",
-	"merging",
-	"done",
-] as const;
+export const ticketStatuses = ["backlog", "todo", "in-progress", "in-review", "merging", "done"] as const;
 export const ticketStatusSchema = z.enum(ticketStatuses);
 export const ticketIdSchema = z.string().regex(/^FORGE-[1-9]\d{0,14}$/u);
 export const createTicketSchema = z.strictObject({
@@ -27,4 +18,21 @@ export const ticketSchema = z.strictObject({
 	createdAt: z.iso.datetime(),
 });
 export const ticketsSchema = z.array(ticketSchema).max(1000);
+export const ticketWorkflowSchema = z.strictObject({
+	ticketId: ticketIdSchema,
+	workspaceId: z.uuid().optional(),
+	plannerId: z.uuid().optional(),
+	implementerId: z.uuid().optional(),
+	phase: z.enum(["planning", "implementation", "review", "rebase"]),
+	state: z.enum(["idle", "queued", "dispatching", "running", "failed", "uncertain"]),
+	plan: z.strictObject({ revision: z.number().int().positive(), text: z.string().min(1).max(32000) }).optional(),
+	approvedRevision: z.number().int().positive().optional(),
+	message: z.string().max(8000).optional(),
+	baseSha: z
+		.string()
+		.regex(/^[a-f0-9]{40}$/u)
+		.optional(),
+	mergeAttempts: z.number().int().min(0).max(3),
+});
+export type TicketWorkflow = z.infer<typeof ticketWorkflowSchema>;
 export type { Ticket, TicketStatus, CreateTicket, MoveTicket } from "./types.ts";

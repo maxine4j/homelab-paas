@@ -19,7 +19,7 @@ export class AgentThreadStore implements IAgentThreadStore {
 		await this.guard(() =>
 			this.database
 				.run(
-					"CREATE TABLE IF NOT EXISTS agent_threads (id TEXT PRIMARY KEY, projectId TEXT NOT NULL REFERENCES projects(id), workspaceId TEXT NOT NULL UNIQUE REFERENCES workspaces(id), record TEXT NOT NULL)",
+					"CREATE TABLE IF NOT EXISTS agent_threads (id TEXT PRIMARY KEY, projectId TEXT NOT NULL REFERENCES projects(id), workspaceId TEXT NOT NULL REFERENCES workspaces(id), record TEXT NOT NULL)",
 				)
 				.then(() => {}),
 		);
@@ -82,6 +82,7 @@ export class AgentThreadStore implements IAgentThreadStore {
 	}
 }
 const recordSchema = agentThreadSchema.extend({
+	managed: z.boolean().optional(),
 	codexId: z.string().min(1).max(256).optional(),
 	requests: z.array(agentRequestSchema).max(32),
 });

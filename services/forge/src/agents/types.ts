@@ -2,4 +2,5 @@ import type { AgentThread, AgentRequest } from "@homelab-paas/forge-contracts/ag
 export interface AgentThreadRecord extends AgentThread {
 	codexId?: string;
 	requests: AgentRequest[];
+	managed?: boolean;
 }

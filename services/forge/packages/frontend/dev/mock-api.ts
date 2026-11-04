@@ -105,7 +105,7 @@ class MockApi implements IMockApi {
 					projectId: project.id,
 					title: "Define the next change",
 					description: "Write a small, clear scope before starting work.",
-					status: "draft",
+					status: "backlog",
 					createdAt: date,
 				},
 				{
@@ -113,7 +113,7 @@ class MockApi implements IMockApi {
 					projectId: project.id,
 					title: "Improve project navigation",
 					description: "Make the project easier to browse on every screen.",
-					status: "working",
+					status: "in-progress",
 					createdAt: date,
 				},
 				{
