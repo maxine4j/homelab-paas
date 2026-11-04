@@ -126,7 +126,16 @@ class MockApi implements IMockApi {
 				},
 			];
 			this.routes.set(`${projectRoot}/tickets`, () => tickets);
-			for (const ticket of tickets) this.routes.set(`/api/tickets/${ticket.id}`, () => ticket);
+			for (const ticket of tickets) {
+				this.routes.set(`/api/tickets/${ticket.id}`, () => ticket);
+				this.routes.set(`/api/tickets/${ticket.id}/workflow`, () => ({
+					ticketId: ticket.id,
+					phase: ticket.status === "backlog" ? "planning" : "implementation",
+					state: "idle",
+					mergeAttempts: 0,
+					run: 0,
+				}));
+			}
 			const workspaceRoot = `/api/workspaces/${id}`;
 			const repositoryRoot = `${projectRoot}/repository`;
 			this.routes.set(projectRoot, () => project);

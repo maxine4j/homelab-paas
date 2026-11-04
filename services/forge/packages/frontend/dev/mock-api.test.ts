@@ -18,7 +18,7 @@ import {
 	pullRequestPreviewSchema,
 } from "@homelab-paas/forge-contracts/pull-requests";
 import { terminalStatusSchema } from "@homelab-paas/forge-contracts/terminal";
-import { ticketsSchema, ticketSchema } from "@homelab-paas/forge-contracts/tickets";
+import { ticketsSchema, ticketSchema, ticketWorkflowSchema } from "@homelab-paas/forge-contracts/tickets";
 import { createServer, resolveConfig } from "vite";
 import type { ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -77,6 +77,12 @@ test("mock boards expose project-scoped tickets across the workflow", async () =
 		expect(tickets.every((ticket) => ticket.projectId === project.id)).toBe(true);
 		const ticket = tickets.at(0)!;
 		expect(ticketSchema.parse(await read(`/api/tickets/${ticket.id}`))).toEqual(ticket);
+		for (const value of tickets) {
+			expect(ticketWorkflowSchema.parse(await read(`/api/tickets/${value.id}/workflow`)).ticketId).toBe(value.id);
+			expect((await fetch(new URL(`/api/tickets/${value.id}/messages`, origin), { method: "POST" })).status).toBe(
+				405,
+			);
+		}
 	}
 });
 

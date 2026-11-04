@@ -20,22 +20,17 @@ type Drop = { status: TicketStatus; beforeId?: string };
 type Drag = { ticket: Ticket; x: number; y: number; drop?: Drop };
 
 const TicketEditor = ({
-	ticket,
 	busy,
 	close,
 	save,
-	move,
 }: {
-	ticket?: Ticket;
 	busy: boolean;
 	close: () => void;
 	save: (input: CreateTicket) => Promise<void>;
-	move: (id: string, input: MoveTicket) => Promise<void>;
 }) => {
 	const dialog = useRef<HTMLDialogElement>(null);
-	const [title, setTitle] = useState(ticket?.title ?? "");
-	const [description, setDescription] = useState(ticket?.description ?? "");
-	const [status, setStatus] = useState(ticket?.status ?? "backlog");
+	const [title, setTitle] = useState("");
+	const [description, setDescription] = useState("");
 	const [error, setError] = useState("");
 	useEffect(() => {
 		dialog.current?.showModal();
@@ -66,36 +61,11 @@ const TicketEditor = ({
 			}}
 		>
 			<div className='ticket-dialog-heading'>
-				<h2 id='ticket-dialog-title'>{ticket?.id ?? "Create ticket"}</h2>
+				<h2 id='ticket-dialog-title'>Create ticket</h2>
 				<button type='button' aria-label='Close ticket' disabled={busy} onClick={close}>
 					✕
 				</button>
 			</div>
-			{ticket && (
-				<label className='ticket-status-label'>
-					Status
-					<select
-						aria-label='Status'
-						value={status}
-						disabled={busy}
-						onChange={(event) => {
-							const next = event.target.value as TicketStatus;
-							setError("");
-							void move(ticket.id, { status: next })
-								.then(() => setStatus(next))
-								.catch((failure: unknown) =>
-									setError(failure instanceof Error ? failure.message : "Cannot move ticket. Retry."),
-								);
-						}}
-					>
-						{ticketStatuses.map((value) => (
-							<option key={value} value={value}>
-								{labels[value]}
-							</option>
-						))}
-					</select>
-				</label>
-			)}
 			<form onSubmit={(event) => void submit(event)}>
 				<label>
 					Title
@@ -128,7 +98,7 @@ const TicketEditor = ({
 						Cancel
 					</button>
 					<button className='primary' disabled={busy} type='submit'>
-						{busy ? "Saving…" : ticket ? "Save" : "Create"}
+						{busy ? "Saving…" : "Create"}
 					</button>
 				</div>
 			</form>
@@ -148,42 +118,32 @@ export const TaskBoard = ({ projectId, api }: { projectId: string; api: IWorkspa
 	const board = useRef<HTMLDivElement>(null);
 	const active = useRef(true);
 	const locked = useRef(false);
-	const load = useCallback(
-		() =>
-			api
-				.read(`projects/${projectId}/tickets`, ticketsSchema)
-				.then((values) => {
-					if (active.current) {
-						setTickets(values);
-						setError("");
-					}
-				})
-				.catch((failure: unknown) => {
-					if (active.current) setError(failure instanceof Error ? failure.message : "Cannot load tickets.");
-				})
-				.finally(() => {
-					if (active.current) setLoading(false);
-				}),
-		[api, projectId],
-	);
+	const [drafts] = useState(() => new Map<string, string>());
+	const poller = useRef<ResourcePoller<Ticket[]> | undefined>(undefined);
+	const load = () => poller.current?.refresh();
 	useEffect(() => {
 		active.current = true;
-		void load();
 		const polling = new ResourcePoller(
-			async () => {
-				await load();
-				return undefined;
+			() => api.read(`projects/${projectId}/tickets`, ticketsSchema),
+			(values) => {
+				setTickets(values);
+				setError("");
+				setLoading(false);
 			},
-			() => {},
-			() => {},
+			(message) => {
+				setError(message);
+				setLoading(false);
+			},
 			1000,
 		);
+		poller.current = polling;
 		polling.refresh();
 		return () => {
 			polling.stop();
+			poller.current = undefined;
 			active.current = false;
 		};
-	}, [load]);
+	}, [api, projectId]);
 	const mutate = async (operation: () => Promise<void>) => {
 		if (locked.current) throw new Error("A ticket change is still saving.");
 		locked.current = true;
@@ -191,7 +151,17 @@ export const TaskBoard = ({ projectId, api }: { projectId: string; api: IWorkspa
 		setError("");
 		setNotice("");
 		try {
-			await operation();
+			let failure: unknown;
+			await poller.current?.mutate(async () => {
+				try {
+					await operation();
+					return await api.read(`projects/${projectId}/tickets`, ticketsSchema);
+				} catch (error) {
+					failure = error;
+					throw error;
+				}
+			});
+			if (failure) throw failure;
 		} finally {
 			locked.current = false;
 			if (active.current) setBusy(false);
@@ -410,6 +380,7 @@ export const TaskBoard = ({ projectId, api }: { projectId: string; api: IWorkspa
 					ticket={tickets.find((ticket) => ticket.id === editing.id) ?? editing}
 					api={api}
 					busy={busy}
+					drafts={drafts}
 					close={() => setEditing(undefined)}
 					move={move}
 					save={(input) =>
@@ -428,7 +399,6 @@ export const TaskBoard = ({ projectId, api }: { projectId: string; api: IWorkspa
 					key='new'
 					busy={busy}
 					close={() => setEditing(undefined)}
-					move={move}
 					save={(input) =>
 						mutate(async () => {
 							const updated = await api.read(

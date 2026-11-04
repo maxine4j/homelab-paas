@@ -8,6 +8,7 @@ import {
 	type AgentView,
 	type AgentReply,
 } from "@homelab-paas/forge-contracts/agents";
+import { z } from "zod";
 
 import type { IAccessService } from "../auth/access-service.ts";
 import type { Actor } from "../auth/types.ts";
@@ -34,7 +35,13 @@ export interface IAgentService {
 	subscribe(actor: Actor, id: string, listener: () => void): Promise<() => void>;
 	shutdown(): Promise<void>;
 }
-export class AgentService implements IAgentService {
+export interface ITicketAgents {
+	createTicketThread(actor: Actor, projectId: string, title: string, workspaceId?: string): Promise<AgentView>;
+	dispatch(actor: Actor, id: string, text: string): Promise<AgentView>;
+	get(actor: Actor, id: string): Promise<AgentView>;
+	resume(actor: Actor, id: string): Promise<AgentView>;
+}
+export class AgentService implements IAgentService, ITicketAgents {
 	private readonly log = createLogger(AgentService.name);
 	private readonly queues = new Map<string, Promise<unknown>>();
 	private readonly identities = new Map<string, string>();
@@ -66,36 +73,6 @@ export class AgentService implements IAgentService {
 	async createTicketThread(actor: Actor, projectId: string, title: string, workspaceId?: string): Promise<AgentView> {
 		return this.createThread(actor, projectId, title, true, workspaceId);
 	}
-	private async createThread(
-		actor: Actor,
-		projectId: string,
-		title: string,
-		managed: boolean,
-		workspaceId?: string,
-	): Promise<AgentView> {
-		this.authorize(actor);
-		const input = createAgentSchema.safeParse({ title });
-		if (!input.success) throw new AgentError("invalid-request");
-		const id = this.generateId();
-		return this.serialize(id, async () => {
-			const workspace = workspaceId
-				? (await this.workspaces.resolve(actor, workspaceId)).workspace
-				: await this.workspaces.create(actor, projectId, { name: input.data.title });
-			if (workspace.projectId !== projectId) throw new AgentError("agent-conflict");
-			const record: AgentThreadRecord = {
-				id,
-				projectId,
-				workspaceId: workspace.id,
-				title: input.data.title,
-				createdAt: this.now().toISOString(),
-				status: "idle",
-				requests: [],
-				managed,
-			};
-			await this.store.insert(record);
-			return this.view(record);
-		});
-	}
 	async list(actor: Actor, projectId: string): Promise<AgentThread[]> {
 		this.authorize(actor);
 		await this.projects.get(actor, projectId);
@@ -109,13 +86,14 @@ export class AgentService implements IAgentService {
 	}
 	async send(actor: Actor, id: string, text: string): Promise<AgentView> {
 		this.authorize(actor);
+		if (!agentMessageSchema.safeParse({ text }).success) throw new AgentError("invalid-request");
 		if ((await this.require(id)).managed) throw new AgentError("agent-conflict");
 		return this.dispatch(actor, id, text);
 	}
 	/** Ticket scheduler dispatch; the prompt is internal and can include a complete approved plan. */
 	async dispatch(actor: Actor, id: string, text: string): Promise<AgentView> {
 		this.authorize(actor);
-		const input = agentMessageSchema.extend({ text: agentMessageSchema.shape.text.max(64000) }).safeParse({ text });
+		const input = z.object({ text: z.string().trim().min(1).max(64000) }).safeParse({ text });
 		if (!input.success) throw new AgentError("invalid-request");
 		return this.serialize(id, async () => {
 			const record = await this.require(id);
@@ -124,6 +102,12 @@ export class AgentService implements IAgentService {
 			const location = await this.workspaces.resolve(actor, record.workspaceId);
 			this.pool.claim(id);
 			try {
+				if (record.codexId) {
+					const runtime = await this.client.resume(record.codexId, location.path);
+					this.identities.set(record.codexId, id);
+					if (["creating", "running", "waiting", "uncertain"].includes(runtime.status))
+						throw new AgentError("agent-conflict");
+				}
 				if (!record.codexId) {
 					record.status = "creating";
 					await this.store.update(record);
@@ -193,21 +177,58 @@ export class AgentService implements IAgentService {
 		await Promise.allSettled([...this.queues.values()]);
 		this.listeners.clear();
 	}
-	/** Reconcile every known execution before dispatching new work, without replaying turns. */
+	/** Reserve persisted active executions before HTTP accepts messages; no runtime RPCs. */
+	async seed(actor: Actor): Promise<void> {
+		this.authorize(actor);
+		const records = (
+			await Promise.all((await this.projects.list(actor)).map((project) => this.store.list(project.id)))
+		).flat();
+		for (const record of records) this.pool.observe(record.id, record.status);
+	}
+	/** Background reconciliation never replays a turn; unavailable runtimes retain slots. */
 	async recover(actor: Actor): Promise<void> {
 		this.authorize(actor);
 		const records = (
 			await Promise.all((await this.projects.list(actor)).map((project) => this.store.list(project.id)))
 		).flat();
-		for (const record of records) if (record.codexId) this.pool.observe(record.id, "uncertain");
 		for (const record of records) {
-			if (!record.codexId) continue;
+			if (!record.codexId || record.status !== "uncertain") continue;
 			try {
 				await this.resume(actor, record.id);
 			} catch (err) {
 				this.log.error({ err, threadId: record.id }, "Agent reconciliation failed; retaining execution slot");
 			}
 		}
+	}
+	private async createThread(
+		actor: Actor,
+		projectId: string,
+		title: string,
+		managed: boolean,
+		workspaceId?: string,
+	): Promise<AgentView> {
+		this.authorize(actor);
+		const input = createAgentSchema.safeParse({ title });
+		if (!input.success) throw new AgentError("invalid-request");
+		const id = this.generateId();
+		return this.serialize(id, async () => {
+			const workspace = workspaceId
+				? (await this.workspaces.resolve(actor, workspaceId)).workspace
+				: await this.workspaces.create(actor, projectId, { name: input.data.title });
+			if (workspace.projectId !== projectId) throw new AgentError("agent-conflict");
+			const record: AgentThreadRecord = {
+				id,
+				projectId,
+				workspaceId: workspace.id,
+				title: input.data.title,
+				createdAt: this.now().toISOString(),
+				status: "idle",
+				requests: [],
+				managed,
+			};
+			await this.store.insert(record);
+			return this.view(record);
+		});
 	}
 	private authorize(actor: Actor): void {
 		this.access.assertOwner(actor);

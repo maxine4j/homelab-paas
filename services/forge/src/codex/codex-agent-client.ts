@@ -26,6 +26,7 @@ export class CodexAgentClient implements ICodexAgentClient {
 	private readonly pending = new Map<string, { threadId: string; turnId: string; rpcId: string | number }>();
 	private readonly listeners = new Set<(id: string) => void>();
 	private readonly revisions = new Map<string, number>();
+	private readonly resuming = new Set<string>();
 	constructor(
 		private readonly connection: ICodexAgentConnection,
 		private readonly realpath: (path: string) => Promise<string>,
@@ -45,6 +46,7 @@ export class CodexAgentClient implements ICodexAgentClient {
 		});
 	}
 	async resume(id: string, path: string): Promise<AgentRuntimeView> {
+		this.resuming.add(id);
 		return this.guard(async () => {
 			const revision = this.revisions.get(id);
 			const before = new Map(this.views.get(id)?.items.map((item) => [item.id, item.text]));
@@ -87,7 +89,7 @@ export class CodexAgentClient implements ICodexAgentClient {
 			} else if (view.requests.length) view.status = "waiting";
 			this.views.set(id, view);
 			return this.read(id);
-		});
+		}).finally(() => this.resuming.delete(id));
 	}
 	read(id: string): AgentRuntimeView {
 		const view = this.views.get(id);
@@ -244,6 +246,8 @@ export class CodexAgentClient implements ICodexAgentClient {
 		if (method === "connection/lost") {
 			this.pending.clear();
 			for (const [id, view] of this.views) {
+				if (!this.resuming.has(id) && ["idle", "completed", "failed", "interrupted"].includes(view.status))
+					continue;
 				view.status = "uncertain";
 				view.requests = [];
 				this.emit(id);

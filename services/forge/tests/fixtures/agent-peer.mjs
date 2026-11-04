@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createInterface } from "node:readline";
 
 const threads = new Map();
@@ -53,6 +54,50 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 			delta: "Working",
 		});
 		result = { turn };
+		const prompt = params.input.map((part) => part.text ?? "").join("\n");
+		if (prompt.includes("FORGE_RESULT")) {
+			const run = Number(/"run":(\d+)/u.exec(prompt)?.[1]);
+			let artifact;
+			if (prompt.includes("Planning skill"))
+				artifact = {
+					kind: "plan",
+					run,
+					text:
+						"Plan: implement search with filtering and behavioral tests. Files: search.ts, search.test.ts. Validate with repository checks.\n"
+						+ "Acceptance detail. ".repeat(500),
+				};
+			else {
+				const git = (...args) =>
+					execFileSync(
+						"git",
+						[
+							"-C",
+							thread.cwd,
+							"-c",
+							"user.name=Controlled Agent",
+							"-c",
+							"user.email=agent@example.com",
+							...args,
+						],
+						{ encoding: "utf8" },
+					).trim();
+				if (prompt.includes("Rebase the ticket branch")) git("rebase", "--keep-empty", "main");
+				else git("commit", "--allow-empty", "-m", `Controlled implementation ${sequence}`);
+				artifact = {
+					kind: "complete",
+					run,
+					commit: git("rev-parse", "HEAD"),
+					validation: "Controlled fixture: Git committed state verified; no authenticated inference",
+				};
+			}
+			turn.items.push({
+				id: `answer-${sequence}`,
+				type: "agentMessage",
+				text: "FORGE_RESULT\n" + JSON.stringify(artifact),
+			});
+			turn.status = "completed";
+			notify("turn/completed", { threadId: thread.id, turn });
+		}
 	}
 	if (method === "turn/interrupt") {
 		const thread = threads.get(params.threadId);

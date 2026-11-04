@@ -6,7 +6,7 @@ import {
 	type AgentThread,
 	type AgentView,
 } from "@homelab-paas/forge-contracts/agents";
-import { ticketWorkflowSchema } from "@homelab-paas/forge-contracts/tickets";
+import { ticketWorkflowSchema, type TicketWorkflow } from "@homelab-paas/forge-contracts/tickets";
 import { useEffect, useId, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -18,12 +18,25 @@ const RequestCard = ({
 	request,
 	busy,
 	reply,
+	drafts,
 }: {
 	request: AgentRequest;
 	busy: boolean;
 	reply: (input: AgentReply) => void;
+	drafts?: Map<string, string>;
 }) => {
-	const [answers, setAnswers] = useState<Record<string, string>>({});
+	const [answers, setAnswers] = useState<Record<string, string>>(() =>
+		Object.fromEntries(
+			request.questions.map((question) => [
+				question.id,
+				drafts?.get(`request:${request.id}:${question.id}`) ?? "",
+			]),
+		),
+	);
+	const answer = (id: string, value: string) => {
+		setAnswers((current) => ({ ...current, [id]: value }));
+		drafts?.set(`request:${request.id}:${id}`, value);
+	};
 	const formId = useId();
 	return (
 		<form
@@ -51,7 +64,7 @@ const RequestCard = ({
 							required
 							maxLength={4000}
 							value={answers[question.id] ?? ""}
-							onChange={(event) => setAnswers({ ...answers, [question.id]: event.target.value })}
+							onChange={(event) => answer(question.id, event.target.value)}
 							disabled={busy}
 						/>
 					) : (
@@ -60,7 +73,7 @@ const RequestCard = ({
 							required
 							maxLength={4000}
 							value={answers[question.id] ?? ""}
-							onChange={(event) => setAnswers({ ...answers, [question.id]: event.target.value })}
+							onChange={(event) => answer(question.id, event.target.value)}
 							disabled={busy}
 							rows={2}
 						/>
@@ -72,7 +85,7 @@ const RequestCard = ({
 									key={option}
 									type='button'
 									disabled={busy}
-									onClick={() => setAnswers({ ...answers, [question.id]: option })}
+									onClick={() => answer(question.id, option)}
 								>
 									{option}
 								</button>
@@ -116,6 +129,9 @@ export const Conversation = ({
 	selected,
 	messagePath,
 	blocked = false,
+	readOnly = false,
+	drafts,
+	workflowChanged,
 }: {
 	id: string;
 	api: IWorkspaceApi;
@@ -123,9 +139,12 @@ export const Conversation = ({
 	selected: boolean;
 	messagePath?: string;
 	blocked?: boolean;
+	readOnly?: boolean;
+	drafts?: Map<string, string>;
+	workflowChanged?: (job: TicketWorkflow) => void;
 }) => {
 	const [view, setView] = useState<AgentView>();
-	const [draft, setDraft] = useState("");
+	const [draft, setDraft] = useState(() => drafts?.get(id) ?? "");
 	const [error, setError] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [connected, setConnected] = useState(false);
@@ -205,7 +224,7 @@ export const Conversation = ({
 		poller.current?.refresh();
 	}, [selected]);
 	const act = (suffix: string, body: unknown, sent = false) => {
-		if (acting.current || !poller.current) return;
+		if (acting.current || !poller.current || readOnly) return;
 		acting.current = true;
 		setBusy(true);
 		setError("");
@@ -214,10 +233,14 @@ export const Conversation = ({
 				try {
 					let value: AgentView;
 					if (suffix === "messages" && messagePath) {
-						await api.read(messagePath, ticketWorkflowSchema, "POST", body);
+						const job = await api.read(messagePath, ticketWorkflowSchema, "POST", body);
+						workflowChanged?.(job);
 						value = await api.read(`agents/${id}`, agentViewSchema);
 					} else value = await api.read(`agents/${id}/${suffix}`, agentViewSchema, "POST", body);
-					if (sent) setDraft("");
+					if (sent) {
+						setDraft("");
+						drafts?.delete(id);
+					}
 					return value;
 				} finally {
 					// Refresh may reload history, but never replays messages or approval replies.
@@ -234,6 +257,7 @@ export const Conversation = ({
 	const sendable =
 		status
 		&& !blocked
+		&& !readOnly
 		&& !loadingHistory
 		&& !historyFailed
 		&& !["creating", "running", "waiting", "uncertain"].includes(status);
@@ -259,7 +283,7 @@ export const Conversation = ({
 							Retry loading history
 						</button>
 					)}
-					{active && (
+					{active && !readOnly && (
 						<button disabled={busy || !view?.thread.turnId} onClick={() => act("interrupt", {})}>
 							Interrupt
 						</button>
@@ -310,7 +334,8 @@ export const Conversation = ({
 					<RequestCard
 						key={request.id}
 						request={request}
-						busy={busy}
+						drafts={drafts}
+						busy={busy || readOnly}
 						reply={(input) => act("replies", input)}
 					/>
 				))}
@@ -329,8 +354,11 @@ export const Conversation = ({
 					maxLength={8000}
 					placeholder='Ask Codex to work on this project…'
 					value={draft}
-					disabled={busy}
-					onChange={(event) => setDraft(event.target.value)}
+					disabled={busy || readOnly}
+					onChange={(event) => {
+						setDraft(event.target.value);
+						drafts?.set(id, event.target.value);
+					}}
 				/>
 				<div className='agent-composer-footer'>
 					<span>{draft.length}/8000 · Draft kept in this open chat</span>

@@ -3,8 +3,10 @@ import type { Ticket, TicketWorkflow } from "@homelab-paas/forge-contracts/ticke
 import { expect, test, vi } from "vitest";
 
 import { AgentExecutionPool } from "../agents/agent-execution-pool.ts";
+import type { ITicketAgents } from "../agents/agent-service.ts";
+import { AccessService } from "../auth/access-service.ts";
 import { TicketPrompts } from "./ticket-prompts.ts";
-import { TicketWorkflowService, type ITicketAgents } from "./ticket-workflow-service.ts";
+import { TicketWorkflowService } from "./ticket-workflow-service.ts";
 
 const actor = { username: "owner" };
 const projectId = "123e4567-e89b-42d3-a456-426614174000";
@@ -59,10 +61,19 @@ const fixture = () => {
 		move: vi.fn(),
 	};
 	const merges = {
+		verify: vi.fn(async () => {}),
 		merge: vi.fn(async (): Promise<"merged" | "rebase"> => "merged"),
 		base: vi.fn(async () => "a".repeat(40)),
 	};
-	const service = new TicketWorkflowService(store, ticketStore, agents, pool, merges, new TicketPrompts());
+	const service = new TicketWorkflowService(
+		store,
+		ticketStore,
+		agents,
+		pool,
+		merges,
+		new TicketPrompts(),
+		new AccessService({ owner: "owner", origin: "https://forge.example" }),
+	);
 	const create = (id = "FORGE-1") => {
 		const ticket: Ticket = {
 			id,
@@ -78,7 +89,19 @@ const fixture = () => {
 	const complete = (id: string, text = "Plan: add search with tests") => {
 		const view = views.get(id)!;
 		view.thread.status = "completed";
-		view.items.push({ id: `answer-${view.items.length}`, role: "assistant", text });
+		const job = [...jobs.values()].find((job) => job.plannerId === id || job.implementerId === id)!;
+		view.items.push({
+			id: `answer-${view.items.length}`,
+			role: "assistant",
+			text: text.startsWith("Blocked")
+				? text
+				: "FORGE_RESULT\n"
+					+ JSON.stringify(
+						job.phase === "planning"
+							? { kind: "plan", run: job.run, text }
+							: { kind: "complete", run: job.run, commit: "b".repeat(40), validation: text },
+					),
+		});
 		pool.observe(id, "completed");
 	};
 	return { service, jobs, tickets, views, pool, agents, merges, create, complete };
@@ -169,4 +192,84 @@ test("queued work survives restart; ambiguous dispatch never replays and failed 
 	await f.service.recover(actor);
 	expect(f.jobs.get(ticket.id)?.state).toBe("failed");
 	expect(ticket.status).toBe("todo");
+});
+
+test("a completed turn reporting a blocker cannot approve a plan or advance implementation", async () => {
+	const f = fixture();
+	const ticket = f.create();
+	await f.service.move(actor, ticket, { status: "todo" });
+	await f.service.tick(actor);
+	f.complete(f.jobs.get(ticket.id)!.plannerId!, "Blocked: requirements are unclear");
+	await f.service.tick(actor);
+	expect(f.jobs.get(ticket.id)?.state).toBe("failed");
+	expect(f.jobs.get(ticket.id)?.plan).toBeUndefined();
+	await expect(f.service.move(actor, ticket, { status: "in-progress" })).rejects.toThrow("ticket-conflict");
+});
+
+test("workflow mutations reject nonowners before touching the board", async () => {
+	const f = fixture();
+	const ticket = f.create();
+	await expect(f.service.move({ username: "outsider" }, ticket, { status: "todo" })).rejects.toThrow("Access denied");
+	expect(ticket.status).toBe("backlog");
+});
+
+test("three automatic rebase turns are allowed before requiring owner followup", async () => {
+	const f = fixture();
+	const ticket = f.create();
+	await f.service.move(actor, ticket, { status: "todo" });
+	await f.service.tick(actor);
+	f.complete(f.jobs.get(ticket.id)!.plannerId!);
+	await f.service.tick(actor);
+	await f.service.move(actor, ticket, { status: "in-progress" });
+	await f.service.tick(actor);
+	const id = f.jobs.get(ticket.id)!.implementerId!;
+	f.complete(id);
+	await f.service.tick(actor);
+	f.merges.merge.mockResolvedValue("rebase");
+	await f.service.move(actor, ticket, { status: "merging" });
+	await f.service.tick(actor);
+	for (let attempt = 1; attempt <= 3; attempt++) {
+		expect(f.jobs.get(ticket.id)).toMatchObject({ state: "queued", mergeAttempts: attempt });
+		await f.service.tick(actor);
+		f.complete(id);
+		await f.service.tick(actor);
+	}
+	expect(f.jobs.get(ticket.id)).toMatchObject({ state: "failed", mergeAttempts: 3 });
+	await f.service.message(actor, ticket, "Resolve the remaining conflict");
+	expect(f.jobs.get(ticket.id)?.mergeAttempts).toBe(0);
+	await f.service.tick(actor);
+	expect(f.agents.dispatch.mock.calls.at(-1)?.[2]).toContain("Resolve the remaining conflict");
+});
+
+test("blocked or uncommitted implementation stays In progress and stale artifacts cannot approve revisions", async () => {
+	const f = fixture();
+	const ticket = f.create();
+	await f.service.move(actor, ticket, { status: "todo" });
+	await f.service.tick(actor);
+	const planner = f.jobs.get(ticket.id)!.plannerId!;
+	f.complete(planner);
+	await f.service.tick(actor);
+	await f.service.message(actor, ticket, "Revise");
+	await f.service.tick(actor);
+	f.views.get(planner)!.thread.status = "completed";
+	await f.service.tick(actor);
+	expect(f.jobs.get(ticket.id)?.state).toBe("failed");
+	await f.service.message(actor, ticket, "Complete the revised plan");
+	await f.service.tick(actor);
+	f.complete(planner);
+	await f.service.tick(actor);
+	await f.service.move(actor, ticket, { status: "in-progress" });
+	await f.service.tick(actor);
+	const implementer = f.jobs.get(ticket.id)!.implementerId!;
+	f.complete(implementer, "Blocked: tests fail");
+	await f.service.tick(actor);
+	expect(ticket.status).toBe("in-progress");
+	expect(f.jobs.get(ticket.id)?.state).toBe("failed");
+	await f.service.message(actor, ticket, "Fix failing checks");
+	await f.service.tick(actor);
+	f.merges.verify.mockRejectedValueOnce(new Error("Dirty files"));
+	f.complete(implementer);
+	await f.service.tick(actor);
+	expect(ticket.status).toBe("in-progress");
+	expect(f.jobs.get(ticket.id)?.state).toBe("failed");
 });

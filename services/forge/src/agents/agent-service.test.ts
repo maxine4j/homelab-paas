@@ -5,6 +5,7 @@ import type { AgentRuntimeView } from "../codex/types.ts";
 import type { IProjectService } from "../projects/project-service.ts";
 import { AgentExecutionPool } from "./agent-execution-pool.ts";
 import { AgentService, type IAgentWorkspaces } from "./agent-service.ts";
+import { AgentError } from "./errors.ts";
 import type { AgentThreadRecord } from "./types.ts";
 
 const owner = { username: "owner" };
@@ -63,6 +64,7 @@ const setup = () => {
 		}),
 		send: vi.fn(async (key: string) => {
 			const view = views.get(key)!;
+			if (!view) throw new AgentError("agent-unavailable");
 			view.status = "running";
 			view.turnId = "turn";
 		}),
@@ -116,6 +118,45 @@ test("empty chats survive restart without depending on an unpersisted Codex thre
 	expect(records.get(thread.id)?.codexId).toBeUndefined();
 	expect((await service.resume(owner, thread.id)).thread.status).toBe("idle");
 	expect(client.resume).not.toHaveBeenCalled();
+	await service.shutdown();
+});
+
+test("ordinary service sends enforce the public message bound", async () => {
+	const { service, client } = setup();
+	const { thread } = await service.create(owner, projectId, "Chat");
+	await expect(service.send(owner, thread.id, "x".repeat(8001))).rejects.toThrow("invalid-request");
+	expect(client.start).not.toHaveBeenCalled();
+	await service.shutdown();
+});
+
+test("scheduler prompts can carry a full approved plan beyond the public message bound", async () => {
+	const { service, client } = setup();
+	const { thread } = await service.createTicketThread(owner, projectId, "Ticket");
+	await service.dispatch(owner, thread.id, "x".repeat(28000));
+	expect(client.send).toHaveBeenCalledOnce();
+	await service.shutdown();
+});
+
+test("queued ticket followups resume persisted completed conversations without a browser visit", async () => {
+	const { service, client, records, views } = setup();
+	const { thread } = await service.createTicketThread(owner, projectId, "Persisted ticket");
+	Object.assign(records.get(thread.id)!, { status: "completed", codexId: "persisted" });
+	client.resume.mockImplementation(async (key) => {
+		const view: AgentRuntimeView = { status: "completed", items: [], requests: [], truncated: false };
+		views.set(key, view);
+		return view;
+	});
+	await expect(service.dispatch(owner, thread.id, "Queued feedback")).resolves.toMatchObject({
+		thread: { status: "running" },
+	});
+	expect(client.resume).toHaveBeenCalledOnce();
+	expect(client.send).toHaveBeenCalledOnce();
+	Object.assign(records.get(thread.id)!, { status: "completed" });
+	views.delete("persisted");
+	await expect(service.dispatch(owner, thread.id, "Followup after runtime reset")).resolves.toMatchObject({
+		thread: { status: "running" },
+	});
+	expect(client.resume).toHaveBeenCalledTimes(2);
 	await service.shutdown();
 });
 

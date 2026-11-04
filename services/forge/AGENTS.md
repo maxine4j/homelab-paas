@@ -866,12 +866,39 @@ request rebase and conflict resolution with validation. Codex remains the
 conversation authority; SQLite stores plan artifacts and workflow metadata, not a
 second chat log. Planning and implementation histories remain separate.
 
+Transport completion alone is not phase success. Each dispatch carries a persisted
+run number. The final assistant item must end with `FORGE_RESULT` and a JSON
+artifact tied to that run: `kind: plan` with the complete bounded plan, or
+`kind: complete` with the full commit SHA and passing validation evidence. Questions,
+blockers, missing/truncated artifacts and stale run numbers require attention.
+Validation evidence is the agent's report; Forge independently verifies a clean
+worktree on the owned branch at the reported commit, outside an unfinished rebase.
+The validated SHA is persisted before merging. Owner merge authorization applies
+to that candidate; a changed branch conflicts. Git verifies the branch and updates
+main in one ref transaction. Recovery recognizes an already merged candidate,
+including after subsequent main advances, without repeating an agent turn.
+An owned worktree remains available for agent conflict repair while Git's rebase
+metadata identifies that same branch. Unrelated detached HEADs remain invalid;
+completion and merging still require a finished rebase and attached branch.
+
 Workflow intent and board moves are persisted atomically in SQLite. Dispatch
 intent precedes Codex calls. After a restart, reconcile known conversations before
 new dispatch; never blindly replay an ambiguous turn. Surface failed/uncertain
 work separately from board status. Uncertain execution requires reconciliation;
 failed execution accepts explicit owner followup. Automatic rebase attempts are
 bounded to three and then require attention. Preserve all worktrees and history.
+Reserve persisted active executions before accepting HTTP messages; reconcile
+Codex in the background so runtime outages cannot block health/UI startup.
+Resume existing conversations before dispatch, including queued followups after
+restart; loading a conversation never replays input. Internal scheduler prompts
+allow 64000 characters through the private transport; ordinary messages retain
+the 8000-character service and API limit.
+Completed and idle conversations consume no slot after restart or connection loss.
+Scheduler reads paginate active jobs across projects in board position order.
+Board refreshes and writes share one serialized reader. Ticket message and input drafts
+survive closing/reopening and switching conversations within the board; they are
+browser memory only. Planning history and Done conversations have read-only
+execution controls. Preview workflow reads use fixtures; mutations remain disabled.
 
 Browser contracts are exported from `@homelab-paas/forge-contracts/tickets`:
 

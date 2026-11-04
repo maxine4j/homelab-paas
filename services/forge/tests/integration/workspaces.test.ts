@@ -59,6 +59,51 @@ const setup = async () => {
 	return { root, db, git, store, client, service, project, projects, access };
 };
 
+test("owned worktrees remain resolvable during a conflicted rebase, but unrelated detached HEADs are rejected", async () => {
+	const { service, project, git } = await setup();
+	const seed = await service.create(owner, project.id, { name: "Seed" });
+	await service.createFile(owner, seed.id, { path: "shared.txt", content: "base\n" });
+	await service.stage(owner, seed.id, { paths: ["shared.txt"] });
+	const initial = await service.commit(owner, seed.id, { message: "Base", expectedHead: seed.head! });
+	const { path } = await service.resolve(owner, seed.id);
+	await git.run(["-C", path, "update-ref", "refs/heads/main", initial.head!]);
+	const branch = await service.create(owner, project.id, { name: "Ticket" });
+	const ticket = await service.resolve(owner, branch.id);
+	await files.writeFile(join(ticket.path, "shared.txt"), "ticket\n");
+	await git.run(["-C", ticket.path, "add", "shared.txt"]);
+	await git.run([
+		"-C",
+		ticket.path,
+		"-c",
+		"user.name=Test",
+		"-c",
+		"user.email=test@example.com",
+		"commit",
+		"-m",
+		"Ticket change",
+	]);
+	await files.writeFile(join(path, "shared.txt"), "main\n");
+	await git.run(["-C", path, "add", "shared.txt"]);
+	await git.run([
+		"-C",
+		path,
+		"-c",
+		"user.name=Test",
+		"-c",
+		"user.email=test@example.com",
+		"commit",
+		"-m",
+		"Main change",
+	]);
+	const main = (await git.run(["-C", path, "rev-parse", "HEAD"])).trim();
+	await git.run(["-C", path, "update-ref", "refs/heads/main", main]);
+	await expect(git.run(["-C", ticket.path, "rebase", "main"])).rejects.toThrow();
+	expect((await service.resolve(owner, branch.id)).path).toBe(ticket.path);
+	await git.run(["-C", ticket.path, "rebase", "--abort"]);
+	await git.run(["-C", ticket.path, "checkout", "--detach"]);
+	await expect(service.resolve(owner, branch.id)).rejects.toThrow("workspace-unavailable");
+});
+
 test("repository HTTP serves branch-specific trees, files and history behind owner authorization", async () => {
 	const { service, project, projects, access, root, git } = await setup();
 	const workspace = await service.create(owner, project.id, { name: "Browser" });

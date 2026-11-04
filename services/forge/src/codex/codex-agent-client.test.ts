@@ -75,6 +75,16 @@ const setup = () => {
 		request: (id: string | number, method: string, params: unknown) => request(id, method, params),
 	};
 };
+
+test("connection loss preserves idle and completed chats without inventing active execution", async () => {
+	const { client, notify } = setup();
+	const idle = await client.start("/data/worktrees/one");
+	const completed = await client.start("/data/worktrees/two");
+	notify("turn/completed", { threadId: completed, turn: { id: "done", status: "completed", items: [] } });
+	notify("connection/lost", {});
+	expect(client.read(idle).status).toBe("idle");
+	expect(client.read(completed).status).toBe("completed");
+});
 test("starts independent threads without an inner sandbox, streams items, interrupts, and resumes history", async () => {
 	const { client, rpc, notify } = setup();
 	const id = await client.start("/data/worktrees/one");

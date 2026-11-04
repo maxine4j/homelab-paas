@@ -1,32 +1,24 @@
 import { createLogger } from "@homelab-paas/backend-infrastructure/logger";
-import type { AgentView } from "@homelab-paas/forge-contracts/agents";
 import type { Ticket, MoveTicket, TicketWorkflow } from "@homelab-paas/forge-contracts/tickets";
+import { z } from "zod";
 
 import type { IAgentExecutionPool } from "../agents/agent-execution-pool.ts";
+import type { ITicketAgents } from "../agents/agent-service.ts";
 import { AgentError } from "../agents/errors.ts";
+import type { IAccessService } from "../auth/access-service.ts";
 import type { Actor } from "../auth/types.ts";
+import type { ITicketMergeClient } from "../workspaces/workspace-merge-client.ts";
 import { TicketError } from "./errors.ts";
 import type { ITicketPrompts } from "./ticket-prompts.ts";
 import type { ITicketStore } from "./ticket-store.ts";
 import type { ITicketWorkflowStore } from "./ticket-workflow-store.ts";
 
-export interface ITicketAgents {
-	createTicketThread(actor: Actor, projectId: string, title: string, workspaceId?: string): Promise<AgentView>;
-	dispatch(actor: Actor, id: string, text: string): Promise<AgentView>;
-	get(actor: Actor, id: string): Promise<AgentView>;
-	resume(actor: Actor, id: string): Promise<AgentView>;
-}
-export interface ITicketMergeClient {
-	/** Advances main only when the verified branch is a clean fast-forward; concurrent ref changes conflict. */
-	merge(actor: Actor, workspaceId: string): Promise<"merged" | "rebase">;
-	base(actor: Actor, workspaceId: string): Promise<string>;
-}
 export interface ITicketWorkflowService {
 	move(actor: Actor, ticket: Ticket, input: MoveTicket): Promise<void>;
-	get(id: string): Promise<TicketWorkflow>;
+	get(actor: Actor, id: string): Promise<TicketWorkflow>;
 	message(actor: Actor, ticket: Ticket, text: string): Promise<TicketWorkflow>;
 	tick(actor: Actor): Promise<void>;
-	recover(actor: Actor): Promise<void>;
+	recover(actor: Actor, id?: string): Promise<void>;
 }
 
 export class TicketWorkflowService implements ITicketWorkflowService {
@@ -39,12 +31,14 @@ export class TicketWorkflowService implements ITicketWorkflowService {
 		private readonly pool: IAgentExecutionPool,
 		private readonly merges: ITicketMergeClient,
 		private readonly prompts: ITicketPrompts,
+		private readonly access: IAccessService,
 	) {}
-	async move(_actor: Actor, ticket: Ticket, input: MoveTicket): Promise<void> {
+	async move(actor: Actor, ticket: Ticket, input: MoveTicket): Promise<void> {
+		this.access.assertOwner(actor);
 		return this.serialize(async () => {
 			const current = await this.tickets.get(ticket.id);
 			if (!current || current.status !== ticket.status) throw new TicketError("ticket-conflict");
-			const job = await this.get(ticket.id);
+			const job = await this.get(actor, ticket.id);
 			if (input.status === ticket.status) {
 				await this.store.save(job, input);
 				return;
@@ -77,13 +71,18 @@ export class TicketWorkflowService implements ITicketWorkflowService {
 			throw new TicketError("ticket-conflict");
 		});
 	}
-	async get(id: string): Promise<TicketWorkflow> {
-		return (await this.store.get(id)) ?? { ticketId: id, phase: "planning", state: "idle", mergeAttempts: 0 };
+	async get(actor: Actor, id: string): Promise<TicketWorkflow> {
+		this.access.assertOwner(actor);
+		if (!(await this.tickets.get(id))) throw new TicketError("ticket-not-found");
+		return (
+			(await this.store.get(id)) ?? { ticketId: id, phase: "planning", state: "idle", mergeAttempts: 0, run: 0 }
+		);
 	}
-	async message(_actor: Actor, ticket: Ticket, text: string): Promise<TicketWorkflow> {
+	async message(actor: Actor, ticket: Ticket, text: string): Promise<TicketWorkflow> {
+		this.access.assertOwner(actor);
 		return this.serialize(async () => {
 			const current = await this.tickets.get(ticket.id);
-			const job = await this.get(ticket.id);
+			const job = await this.get(actor, ticket.id);
 			if (
 				!current
 				|| !["todo", "in-review", "in-progress", "merging"].includes(current.status)
@@ -97,12 +96,14 @@ export class TicketWorkflowService implements ITicketWorkflowService {
 				state: "queued",
 				message: text.trim(),
 				phase: current.status === "todo" ? "planning" : current.status === "merging" ? "rebase" : "review",
+				mergeAttempts: current.status === "merging" ? 0 : job.mergeAttempts,
 			};
 			await this.store.save(next);
 			return next;
 		});
 	}
 	async tick(actor: Actor): Promise<void> {
+		this.access.assertOwner(actor);
 		return this.serialize(async () => {
 			for (const job of await this.store.list()) {
 				const ticket = await this.tickets.get(job.ticketId);
@@ -123,9 +124,11 @@ export class TicketWorkflowService implements ITicketWorkflowService {
 			}
 		});
 	}
-	async recover(actor: Actor): Promise<void> {
+	async recover(actor: Actor, ticketId?: string): Promise<void> {
+		this.access.assertOwner(actor);
 		return this.serialize(async () => {
-			for (const job of await this.store.list()) {
+			const selected = ticketId ? [await this.get(actor, ticketId)] : await this.store.list();
+			for (const job of selected) {
 				if (!["running", "dispatching", "uncertain"].includes(job.state)) continue;
 				const ticket = await this.tickets.get(job.ticketId);
 				if (!ticket) continue;
@@ -144,6 +147,7 @@ export class TicketWorkflowService implements ITicketWorkflowService {
 	}
 	private async dispatch(actor: Actor, ticket: Ticket, job: TicketWorkflow): Promise<void> {
 		job.state = "dispatching";
+		job.run = (job.run ?? 0) + 1;
 		await this.store.save(job);
 		if (!job.plannerId) {
 			const view = await this.agents.createTicketThread(actor, ticket.projectId, `${ticket.id} planning`);
@@ -179,29 +183,57 @@ export class TicketWorkflowService implements ITicketWorkflowService {
 			await this.store.save({ ...job, state: view.thread.status === "uncertain" ? "uncertain" : "failed" });
 			return;
 		}
+		const answer = view.items.findLast((item) => item.role === "assistant")?.text.trim();
+		let artifact;
+		try {
+			artifact = z
+				.discriminatedUnion("kind", [
+					z.strictObject({ kind: z.literal("plan"), run: z.number(), text: z.string().min(1).max(28000) }),
+					z.strictObject({
+						kind: z.literal("complete"),
+						run: z.number(),
+						commit: z.string().regex(/^[a-f0-9]{40}$/u),
+						validation: z.string().min(1),
+					}),
+				])
+				.parse(JSON.parse(answer?.split("FORGE_RESULT\n").at(-1) ?? ""));
+		} catch {
+			await this.store.save({ ...job, state: "failed" });
+			return;
+		}
+		if (artifact.run !== job.run || (job.phase === "planning") !== (artifact.kind === "plan")) {
+			await this.store.save({ ...job, state: "failed" });
+			return;
+		}
 		job.state = "idle";
 		job.message = undefined;
 		if (job.phase === "planning") {
-			const answer = view.items.findLast((item) => item.role === "assistant")?.text.trim();
-			if (!answer || view.truncated) {
-				await this.store.save({ ...job, state: "failed" });
-				return;
-			}
-			job.plan = { revision: (job.plan?.revision ?? 0) + 1, text: answer };
+			if (artifact.kind !== "plan") return;
+			job.plan = { revision: (job.plan?.revision ?? 0) + 1, text: artifact.text };
 			await this.store.save(job);
-		} else if (ticket.status === "merging") await this.merge(actor, job);
-		else await this.store.save(job, ticket.status === "in-progress" ? { status: "in-review" } : undefined);
+		} else {
+			if (artifact.kind !== "complete" || !job.workspaceId) throw new TicketError("ticket-conflict");
+			await this.merges.verify(actor, job.workspaceId, artifact.commit);
+			job.resultSha = artifact.commit;
+			// Persist the validated candidate before the nontransactional Git update.
+			if (ticket.status === "merging") job.state = "queued";
+			await this.store.save(job, ticket.status === "in-progress" ? { status: "in-review" } : undefined);
+			if (ticket.status === "merging") {
+				await this.merge(actor, job);
+			}
+		}
 	}
 	private async merge(actor: Actor, job: TicketWorkflow): Promise<void> {
-		if (!job.workspaceId) throw new TicketError("ticket-conflict");
-		if ((await this.merges.merge(actor, job.workspaceId)) === "merged") {
+		if (!job.workspaceId || !job.resultSha) throw new TicketError("ticket-conflict");
+		if ((await this.merges.merge(actor, job.workspaceId, job.resultSha)) === "merged") {
 			await this.store.save({ ...job, state: "idle", message: undefined }, { status: "done" });
 		} else {
-			job.mergeAttempts += 1;
+			const exhausted = job.mergeAttempts >= 3;
+			job.mergeAttempts = Math.min(3, job.mergeAttempts + 1);
 			await this.store.save({
 				...job,
 				phase: "rebase",
-				state: job.mergeAttempts >= 3 ? "failed" : "queued",
+				state: exhausted ? "failed" : "queued",
 				message: "Rebase onto latest main and validate.",
 			});
 		}

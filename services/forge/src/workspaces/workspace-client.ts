@@ -155,7 +155,7 @@ export class WorkspaceClient implements IWorkspaceClient {
 			const common = (
 				await this.git.run(["-C", this.path(record), "rev-parse", "--path-format=absolute", "--git-common-dir"])
 			).trim();
-			const branch = (await this.git.run(["-C", this.path(record), "symbolic-ref", "HEAD"])).trim();
+			const branch = await this.currentBranch(record);
 			if (
 				resolve(common) !== (await this.files.realpath(this.repository(record)))
 				|| branch !== `refs/heads/${record.branch}`
@@ -320,6 +320,30 @@ export class WorkspaceClient implements IWorkspaceClient {
 	}
 	private identity(record: WorkspaceRecord): string {
 		return JSON.stringify({ id: record.id, projectId: record.projectId, branch: record.branch });
+	}
+	private async currentBranch(record: WorkspaceRecord): Promise<string> {
+		const branch = (
+			await this.git.run(["-C", this.path(record), "rev-parse", "--symbolic-full-name", "HEAD"])
+		).trim();
+		if (branch !== "HEAD") return branch;
+		for (const rebase of ["rebase-merge", "rebase-apply"]) {
+			const path = (
+				await this.git.run([
+					"-C",
+					this.path(record),
+					"rev-parse",
+					"--path-format=absolute",
+					"--git-path",
+					`${rebase}/head-name`,
+				])
+			).trim();
+			if (!(await this.exists(path))) continue;
+			await this.requireDirectory(dirname(path));
+			const meta = await this.files.lstat(path);
+			if (!meta.isFile() || meta.isSymbolicLink()) throw new Error("Invalid rebase identity");
+			return (await this.files.readFile(path))?.trim() ?? "HEAD";
+		}
+		return branch;
 	}
 	private validateRecord(record: WorkspaceRecord): void {
 		workspaceSchema.parse(record);

@@ -53,6 +53,9 @@ test("persists thread identities and approvals; startup makes execution uncertai
 		expect(await store.get(id)).toEqual(record);
 		await store.recover();
 		expect(await store.get(id)).toEqual({ ...record, status: "uncertain", requests: [] });
+		await store.update({ ...record, status: "completed", requests: [] });
+		await store.recover();
+		expect((await store.get(id))?.status).toBe("completed");
 		expect(await store.get("missing")).toBeUndefined();
 		await expect(store.update({ ...record, id: "123e4567-e89b-42d3-a456-426614174001" })).rejects.toThrow(
 			"agent-not-found",

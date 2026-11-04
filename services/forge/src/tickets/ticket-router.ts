@@ -23,7 +23,7 @@ export class TicketRouter implements IHttpRouter {
 		const router = new Router<{ actor: Actor }>();
 		router.get("/api/tickets/:id/workflow", async (ctx) => {
 			const ticket = await this.service.get(ctx.state.actor, ctx.params["id"]!);
-			ctx.body = ticketWorkflowSchema.parse(await this.workflow.get(ticket.id));
+			ctx.body = ticketWorkflowSchema.parse(await this.workflow.get(ctx.state.actor, ticket.id));
 		});
 		router.post("/api/tickets/:id/messages", async (ctx) => {
 			const input = agentMessageSchema.safeParse(ctx.request.body);
@@ -35,8 +35,8 @@ export class TicketRouter implements IHttpRouter {
 		});
 		router.post("/api/tickets/:id/reconcile", async (ctx) => {
 			const ticket = await this.service.get(ctx.state.actor, ctx.params["id"]!);
-			await this.workflow.recover(ctx.state.actor);
-			ctx.body = ticketWorkflowSchema.parse(await this.workflow.get(ticket.id));
+			await this.workflow.recover(ctx.state.actor, ticket.id);
+			ctx.body = ticketWorkflowSchema.parse(await this.workflow.get(ctx.state.actor, ticket.id));
 		});
 		router.get("/api/projects/:projectId/tickets", async (ctx) => {
 			ctx.body = ticketsSchema.parse(await this.service.list(ctx.state.actor, ctx.params["projectId"]!));

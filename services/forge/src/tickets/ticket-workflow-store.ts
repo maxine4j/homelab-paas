@@ -6,6 +6,7 @@ import { TicketError } from "./errors.ts";
 
 export interface ITicketWorkflowStore {
 	get(id: string): Promise<TicketWorkflow | undefined>;
+	/** Active jobs in board position order, globally paginated across projects. Idle/failed jobs are read by ID. */
 	list(): Promise<TicketWorkflow[]>;
 	/** Persists job intent and any board move in one transaction. */
 	save(record: TicketWorkflow, move?: MoveTicket): Promise<void>;
@@ -22,7 +23,15 @@ export class TicketWorkflowStore implements ITicketWorkflowStore {
 		return records.at(0);
 	}
 	async list(): Promise<TicketWorkflow[]> {
-		return this.read("SELECT record FROM ticket_workflows ORDER BY rowid", []);
+		const jobs: TicketWorkflow[] = [];
+		for (let offset = 0; ; offset += 500) {
+			const page = await this.read(
+				"SELECT w.record FROM ticket_workflows w JOIN tickets t ON t.id=w.ticketId WHERE t.status NOT IN ('backlog','done') AND json_extract(w.record,'$.state') IN ('queued','running','dispatching','uncertain') ORDER BY t.position,t.number LIMIT 500 OFFSET ?",
+				[String(offset)],
+			);
+			jobs.push(...page);
+			if (page.length < 500) return jobs;
+		}
 	}
 	async save(record: TicketWorkflow, move?: MoveTicket): Promise<void> {
 		try {

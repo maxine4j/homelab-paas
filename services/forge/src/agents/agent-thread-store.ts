@@ -65,7 +65,7 @@ export class AgentThreadStore implements IAgentThreadStore {
 	async recover(): Promise<void> {
 		await this.guard(async () => {
 			await this.database.run(
-				"UPDATE agent_threads SET record=json_set(record,'$.status','uncertain','$.requests',json('[]')) WHERE json_extract(record,'$.codexId') IS NOT NULL OR json_extract(record,'$.status') != 'idle'",
+				"UPDATE agent_threads SET record=json_set(record,'$.status','uncertain','$.requests',json('[]')) WHERE json_extract(record,'$.status') IN ('creating','running','waiting','uncertain')",
 			);
 		});
 	}

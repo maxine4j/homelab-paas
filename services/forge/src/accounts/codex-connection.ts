@@ -81,7 +81,7 @@ const methods = new Map<string, z.ZodType>([
 				.array(
 					z.strictObject({
 						type: z.literal("text"),
-						text: z.string().min(1).max(8000),
+						text: z.string().min(1).max(64000),
 						text_elements: z.array(z.never()),
 					}),
 				)

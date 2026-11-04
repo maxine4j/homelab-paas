@@ -28,6 +28,7 @@ export const TicketDetails = ({
 	close,
 	save,
 	move,
+	drafts,
 }: {
 	ticket: Ticket;
 	api: IWorkspaceApi;
@@ -35,6 +36,7 @@ export const TicketDetails = ({
 	close: () => void;
 	save: (input: CreateTicket) => Promise<void>;
 	move: (id: string, input: MoveTicket) => Promise<void>;
+	drafts: Map<string, string>;
 }) => {
 	const dialog = useRef<HTMLDialogElement>(null);
 	const fieldId = useId();
@@ -209,6 +211,9 @@ export const TicketDetails = ({
 						selected={tab === "chat"}
 						messagePath={`tickets/${ticket.id}/messages`}
 						blocked={blocked}
+						readOnly={history || ["backlog", "done"].includes(ticket.status)}
+						drafts={drafts}
+						workflowChanged={setJob}
 					/>
 				) : (
 					<p>

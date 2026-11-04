@@ -45,8 +45,9 @@ test("ticket HTTP create/read/edit/move persists and rejects invalid requests wi
 		store,
 		{ createTicketThread: vi.fn(), dispatch: vi.fn(), get: vi.fn(), resume: vi.fn() },
 		new AgentExecutionPool(),
-		{ merge: vi.fn(), base: vi.fn() },
+		{ merge: vi.fn(), base: vi.fn(), verify: vi.fn() },
 		new TicketPrompts(),
+		access,
 	);
 	const service = new TicketService(store, projects, access, () => new Date("2026-11-03T00:00:00.000Z"), workflow);
 	const projectService = new ProjectService(

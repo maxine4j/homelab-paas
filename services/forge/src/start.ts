@@ -176,13 +176,15 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 		pool,
 		new WorkspaceMergeClient(workspaces, git),
 		new TicketPrompts(),
+		access,
 	);
 	const tickets = new TicketService(ticketStore, store, access, () => new Date(), workflow);
 	const actor = { username: config.owner };
-	await agents.recover(actor);
-	await workflow.recover(actor);
+	await agents.seed(actor);
 	const workflowAbort = new AbortController();
 	const workflowLoop = (async () => {
+		await agents.recover(actor);
+		await workflow.recover(actor);
 		while (!workflowAbort.signal.aborted) {
 			try {
 				await workflow.tick(actor);

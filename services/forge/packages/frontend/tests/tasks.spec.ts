@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test";
 
 const projectId = "123e4567-e89b-42d3-a456-426614174000";
 const createdAt = "2026-11-03T00:00:00.000Z";
-const setup = async (page: Page, crowded = false, agentic = false) => {
+const setup = async (page: Page, crowded = false, agentic = false, review = false) => {
 	const threadId = "123e4567-e89b-42d3-a456-426614174010";
 	let messages = 0;
 	let tickets = [
@@ -11,7 +11,12 @@ const setup = async (page: Page, crowded = false, agentic = false) => {
 		{ id: "FORGE-2", projectId, title: "Second task", description: "", status: "backlog", createdAt },
 	];
 	let failMove = false;
+	let hold: Promise<void> | undefined;
+	let release = () => {};
+	let held = 0;
+	const operations: string[] = [];
 	if (agentic) tickets[0]!.status = "todo";
+	if (review) tickets[0]!.status = "in-review";
 	if (crowded)
 		tickets = Array.from({ length: 60 }, (_, i) => ({
 			id: `FORGE-${i + 1}`,
@@ -34,6 +39,7 @@ const setup = async (page: Page, crowded = false, agentic = false) => {
 						phase: "planning",
 						state: "idle",
 						mergeAttempts: 0,
+						...(review ? { implementerId: threadId } : {}),
 						...(agentic
 							? { plannerId: threadId, plan: { revision: 1, text: "Implement search with tests" } }
 							: {}),
@@ -51,14 +57,27 @@ const setup = async (page: Page, crowded = false, agentic = false) => {
 							workspaceId: threadId,
 							title: "Planning",
 							createdAt,
-							status: "completed",
+							status: review ? "waiting" : "completed",
+							...(review ? { turnId: "turn" } : {}),
 						},
 						items: Array.from({ length: 30 }, (_, i) => ({
 							id: `item-${i}`,
 							role: i % 2 ? "user" : "assistant",
 							text: `Planning message ${i}: implement search with tests.`,
 						})),
-						requests: [],
+						requests: review
+							? [
+									{ id: "approval", kind: "command", description: "Execute", questions: [] },
+									{
+										id: "input",
+										kind: "input",
+										description: "Clarify",
+										questions: [
+											{ id: "scope", question: "Which files?", secret: false, options: [] },
+										],
+									},
+								]
+							: [],
 						truncated: false,
 					},
 				});
@@ -84,11 +103,17 @@ const setup = async (page: Page, crowded = false, agentic = false) => {
 					tickets.push(ticket);
 					return route.fulfill({ status: 201, json: ticket });
 				}
+				if (hold) {
+					held++;
+					await hold;
+					operations.push("read");
+				}
 				return route.fulfill({ json: tickets });
 			}
 			if (path.startsWith("/api/tickets/")) {
 				const ticket = tickets.find((value) => value.id === path.split("/")[3])!;
 				if (path.endsWith("/move")) {
+					operations.push("move");
 					if (failMove) return route.fulfill({ status: 503, json: { error: "ticket-unavailable" } });
 					const { status, beforeId } = route.request().postDataJSON();
 					ticket.status = status;
@@ -108,6 +133,17 @@ const setup = async (page: Page, crowded = false, agentic = false) => {
 	await page.getByRole("link", { name: "Open Forge", exact: true }).click();
 	await page.getByRole("tab", { name: "Tasks", exact: true }).click();
 	return {
+		operations,
+		held: () => held,
+		blockReads: () => {
+			hold = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+		},
+		releaseReads: () => {
+			release();
+			hold = undefined;
+		},
 		messages: () => messages,
 		failMoves: () => {
 			failMove = true;
@@ -153,6 +189,48 @@ for (const size of [
 		await page.screenshot({ path: `../../../../artifacts/forge-browser/ticket-chat-${size.width}.png` });
 	});
 }
+
+test("ticket message drafts survive closing and reopening", async ({ page }) => {
+	await setup(page, false, true);
+	await page.getByRole("button", { name: "FORGE-1 First task", exact: true }).click();
+	await page.getByLabel("Message", { exact: true }).fill("Keep this feedback");
+	await page.getByRole("button", { name: "Close ticket", exact: true }).click();
+	await page.getByRole("button", { name: "FORGE-1 First task", exact: true }).click();
+	await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Keep this feedback");
+});
+
+test("planning history disables execution controls", async ({ page }) => {
+	await setup(page, false, true, true);
+	await page.getByRole("button", { name: "FORGE-1 First task", exact: true }).click();
+	await expect(page.getByRole("button", { name: "Interrupt", exact: true })).toBeVisible();
+	await page.getByRole("button", { name: "Planning history", exact: true }).click();
+	await expect(page.getByRole("button", { name: "Interrupt", exact: true })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeDisabled();
+});
+
+test("ticket input drafts survive closing and reopening", async ({ page }) => {
+	await setup(page, false, true, true);
+	await page.getByRole("button", { name: "FORGE-1 First task", exact: true }).click();
+	await page.getByLabel("Which files?", { exact: true }).fill("Only search files");
+	await page.getByRole("button", { name: "Close ticket", exact: true }).click();
+	await page.getByRole("button", { name: "FORGE-1 First task", exact: true }).click();
+	await expect(page.getByLabel("Which files?", { exact: true })).toHaveValue("Only search files");
+});
+
+test("board writes wait for an in-flight refresh", async ({ page }) => {
+	const f = await setup(page);
+	await expect(page.getByRole("button", { name: "FORGE-1 First task", exact: true })).toBeVisible();
+	f.blockReads();
+	await page.getByRole("button", { name: "Refresh board", exact: true }).click();
+	await expect.poll(f.held).toBeGreaterThan(0);
+	await page.getByRole("button", { name: "FORGE-1 First task", exact: true }).click();
+	await page.getByLabel("Status", { exact: true }).selectOption("todo");
+	// Give the request transport time to expose an incorrectly concurrent write.
+	await page.waitForTimeout(100);
+	f.releaseReads();
+	await expect.poll(() => f.operations.includes("move")).toBe(true);
+	expect(f.operations[0]).toBe("read");
+});
 
 for (const size of [
 	{ width: 1280, height: 900 },

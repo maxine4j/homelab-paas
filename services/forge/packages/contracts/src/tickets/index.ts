@@ -33,6 +33,11 @@ export const ticketWorkflowSchema = z.strictObject({
 		.regex(/^[a-f0-9]{40}$/u)
 		.optional(),
 	mergeAttempts: z.number().int().min(0).max(3),
+	run: z.number().int().nonnegative().default(0),
+	resultSha: z
+		.string()
+		.regex(/^[a-f0-9]{40}$/u)
+		.optional(),
 });
 export type TicketWorkflow = z.infer<typeof ticketWorkflowSchema>;
 export type { Ticket, TicketStatus, CreateTicket, MoveTicket } from "./types.ts";
