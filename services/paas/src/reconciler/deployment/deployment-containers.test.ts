@@ -53,6 +53,13 @@ const fixture = () => {
 	return { docker, probe, sleep, containers: new DeploymentContainers(docker, probe, sleep) };
 };
 
+test("retirement preserves the resolved replacement image while removing predecessors", async () => {
+	const f = fixture();
+	await f.containers.retire("demo", ["old"], 45, "retirement failed", candidate.imageId);
+	expect(f.docker.stopServiceContainer).toHaveBeenCalledWith("demo", "old", 45);
+	expect(f.docker.removeServiceContainer).toHaveBeenCalledWith("demo", "old", candidate.imageId);
+});
+
 test("starts a resolved candidate with all workload options and returns its freshly observed address", async () => {
 	const f = fixture();
 	await expect(f.containers.startReady(candidate)).resolves.toEqual({ id: "new", address: "10.0.0.2" });

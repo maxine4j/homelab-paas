@@ -11,6 +11,82 @@ import { artifactDirectory, TestGit } from "../util/git.ts";
 import { MockHttpServer } from "../util/http-server.ts";
 import { inProcessPaas } from "../util/in-process-paas.ts";
 
+test.each(["recreate", "surge"] as const)(
+	"%s removes retired images immediately and preserves same-image redeploys",
+	async (rolloutStrategy) => {
+		const directory = await artifactDirectory(`integration-images-${rolloutStrategy}`);
+		const git = new TestGit(directory);
+		await git.init();
+		const journal: string[] = [];
+		const docker = new MockDocker("integration", journal);
+		docker.images.set("fixture-v1:local", "sha256:old");
+		docker.images.set("fixture-v2:local", "sha256:new");
+		const envoy = new MockEnvoy(`${directory}/state`, journal);
+		await docker.server.listen(`${directory}/docker.sock`);
+		await envoy.server.listen();
+		try {
+			const config = testConfig({
+				metadata: { clusterId: "integration" },
+				auth: undefined,
+				tls: undefined,
+				services: { demo: { remote: git.remote, branch: "main", descriptorPath: "demo.sd.yaml" } },
+			});
+			const descriptor = (version: string, setting: string) =>
+				JSON.stringify({
+					version: 1,
+					metadata: { serviceId: "demo" },
+					resources: {
+						app: {
+							type: "web",
+							image: `fixture-${version}:local`,
+							rolloutStrategy,
+							ingress: { public: true, port: 8080 },
+							env: [{ name: "SETTING", value: setting }],
+						},
+						jobs: {
+							type: "worker",
+							image: `fixture-${version}:local`,
+							rolloutStrategy,
+							healthcheckPort: 9090,
+							replicas: 2,
+							env: [{ name: "SETTING", value: setting }],
+						},
+					},
+				});
+			await git.commit({ "demo.sd.yaml": descriptor("v1", "initial") });
+			const paas = await inProcessPaas(
+				config,
+				`${directory}/state`,
+				`${directory}/docker.sock`,
+				envoy.server.url,
+				() => 100000,
+				async () => {},
+			);
+			await paas.reconciler.reconcile();
+			const oldIds = [...docker.containers.values()].filter((c) => c.Image === "sha256:old").map((c) => c.Id);
+			expect(oldIds).toHaveLength(3);
+			journal.length = 0;
+			const revision = await git.commit({ "demo.sd.yaml": descriptor("v2", "initial") });
+			await paas.refresh.refreshAll();
+			expect(await paas.checkpoints.read("demo")).toMatchObject({ phase: "ready", activeRevision: revision });
+			for (const id of oldIds) expect(docker.containers.has(id)).toBe(false);
+			expect(docker.images.has("fixture-v1:local")).toBe(false);
+			expect(docker.images.get("fixture-v2:local")).toBe("sha256:new");
+			const deletion = journal.indexOf("DELETE /images/sha256:old");
+			expect(deletion).toBeGreaterThan(-1);
+			for (const id of oldIds) expect(journal.indexOf(`DELETE /containers/${id}`)).toBeLessThan(deletion);
+			journal.length = 0;
+			const next = await git.commit({ "demo.sd.yaml": descriptor("v2", "changed") });
+			await paas.refresh.refreshAll();
+			expect(await paas.checkpoints.read("demo")).toMatchObject({ phase: "ready", activeRevision: next });
+			expect(journal).not.toContain("DELETE /images/sha256:new");
+			expect(docker.images.get("fixture-v2:local")).toBe("sha256:new");
+		} finally {
+			await Promise.all([docker.server.close(), envoy.server.close()]);
+		}
+	},
+);
+
 test("pause stops mixed workloads and static ingress across Git refresh, drift audit and restart until explicit resume", async () => {
 	const directory = await artifactDirectory("integration-pause");
 	const git = new TestGit(directory);

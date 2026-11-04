@@ -271,6 +271,9 @@ function fixture(overrides: Partial<IDockerClient> = {}) {
 		async removeContainer(...args) {
 			record("removeContainer", ...args);
 		},
+		async removeImage(...args) {
+			record("removeImage", ...args);
+		},
 		async inspectImage(reference) {
 			record("inspectImage", reference);
 			return { id: "sha256:a" };
@@ -520,7 +523,7 @@ test("starts, stops and removes only containers owned by the requested service",
 	await f.service.startServiceContainer("demo", "c");
 	await f.service.stopServiceContainer("demo", "c", 45);
 	await f.service.removeServiceContainer("demo", "c");
-	expect(f.calls.filter((call) => call.operation !== "inspectContainer")).toEqual([
+	expect(f.calls.filter((call) => !["inspectContainer", "listContainers"].includes(call.operation))).toEqual([
 		{ operation: "startContainer", args: ["c"] },
 		{ operation: "stopContainer", args: ["c", 45] },
 		{ operation: "removeContainer", args: ["c"] },
@@ -528,8 +531,65 @@ test("starts, stops and removes only containers owned by the requested service",
 	await expect(f.service.startServiceContainer("other", "c")).rejects.toMatchObject({ kind: "ownership" });
 	await expect(f.service.stopServiceContainer("other", "c", 30)).rejects.toMatchObject({ kind: "ownership" });
 	await expect(f.service.removeServiceContainer("other", "c")).rejects.toMatchObject({ kind: "ownership" });
-	expect(f.calls.filter((call) => call.operation !== "inspectContainer")).toHaveLength(3);
+	expect(f.calls.filter((call) => !["inspectContainer", "listContainers"].includes(call.operation))).toHaveLength(3);
 });
+
+test("removing the last container immediately removes its image after a fresh host-wide inventory", async () => {
+	const f = fixture({
+		async listContainers() {
+			return [];
+		},
+	});
+	await f.service.removeServiceContainer("demo", "c");
+	expect(f.calls).toEqual([
+		{ operation: "inspectContainer", args: ["c"] },
+		{ operation: "removeContainer", args: ["c"] },
+		{ operation: "removeImage", args: ["sha256:a"] },
+	]);
+});
+
+test.each(["running", "exited", "created"])(
+	"retains images shared by %s containers, including other clusters",
+	async (state) => {
+		let inventoryOptions: unknown;
+		const f = fixture({
+			async listContainers(options) {
+				inventoryOptions = options;
+				return [{ ...container, id: "unrelated", state, labels: {} }];
+			},
+		});
+		await f.service.removeServiceContainer("demo", "c");
+		expect(inventoryOptions).toEqual({ all: true });
+		expect(f.calls.some(({ operation }) => operation === "removeImage")).toBe(false);
+	},
+);
+
+test("retains a resolved image needed by a replacement even before that container exists", async () => {
+	const f = fixture({
+		async listContainers() {
+			return [];
+		},
+	});
+	await f.service.removeServiceContainer("demo", "c", "sha256:a");
+	expect(f.calls.map(({ operation }) => operation)).toEqual(["inspectContainer", "removeContainer"]);
+});
+
+test.each(["not-found", "conflict", "unavailable"] as const)(
+	"image cleanup handles %s after container removal",
+	async (kind) => {
+		const f = fixture({
+			async listContainers() {
+				return [];
+			},
+			async removeImage() {
+				throw new DockerClientError(kind);
+			},
+		});
+		const removal = f.service.removeServiceContainer("demo", "c");
+		if (kind === "unavailable") await expect(removal).rejects.toMatchObject({ kind });
+		else await expect(removal).resolves.toBeUndefined();
+	},
+);
 
 test("missing containers make start fail but stop and removal succeed", async () => {
 	const f = fixture({

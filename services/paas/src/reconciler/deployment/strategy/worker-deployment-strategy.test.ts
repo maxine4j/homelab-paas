@@ -30,6 +30,13 @@ const request: WorkerDeploymentRequest = {
 	},
 };
 
+test("worker recreate protects its resolved image during predecessor retirement", async () => {
+	const f = fixture();
+	f.old();
+	await f.service.deploy(request);
+	expect(f.docker.removeServiceContainer).toHaveBeenCalledWith("demo", "old", "image");
+});
+
 test.each(["limits", "alias"])("does not retain worker replicas with observed %s drift", async (drift) => {
 	const f = fixture();
 	f.old("old", request.spec);
@@ -281,11 +288,19 @@ test.each(["stopServiceContainer", "removeServiceContainer"] as const)(
 				f.containers.get(id)!.state = "running";
 			})
 			.mockRejectedValueOnce(startup);
-		const retire = vi.mocked(f.docker[method]).getMockImplementation()!;
-		vi.mocked(f.docker[method]).mockImplementation(async (serviceId, id) => {
-			if (id === "new-1") throw cleanup;
-			await retire(serviceId, id, 60);
-		});
+		if (method === "stopServiceContainer") {
+			const retire = vi.mocked(f.docker.stopServiceContainer).getMockImplementation()!;
+			vi.mocked(f.docker.stopServiceContainer).mockImplementation(async (serviceId, id, timeout) => {
+				if (id === "new-1") throw cleanup;
+				await retire(serviceId, id, timeout);
+			});
+		} else {
+			const retire = vi.mocked(f.docker.removeServiceContainer).getMockImplementation()!;
+			vi.mocked(f.docker.removeServiceContainer).mockImplementation(async (serviceId, id, preserveImageId) => {
+				if (id === "new-1") throw cleanup;
+				await retire(serviceId, id, preserveImageId);
+			});
+		}
 		await expect(
 			f.service.deploy({ ...request, resource: { ...request.resource, rolloutStrategy: "surge" } }),
 		).rejects.toMatchObject({

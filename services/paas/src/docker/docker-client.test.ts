@@ -3,6 +3,29 @@ import { expect, test } from "vitest";
 import { DockerClient, DockerClientError } from "./docker-client.ts";
 import type { IDockerTransport } from "./docker-transport.ts";
 
+test("removes an image by immutable ID including multiple repository tags", async () => {
+	const calls: string[] = [];
+	const client = new DockerClient({
+		async request(method, path) {
+			calls.push(`${method} ${path}`);
+			return { status: 200, body: "[]" };
+		},
+	});
+	await client.removeImage("sha256:old");
+	expect(calls).toEqual(["DELETE /images/sha256%3Aold?force=true"]);
+});
+
+test.each([404, 409, 500])("reports image removal status %i", async (status) => {
+	const client = new DockerClient({
+		async request() {
+			return { status, body: "failure" };
+		},
+	});
+	await expect(client.removeImage("image")).rejects.toMatchObject({
+		kind: status === 404 ? "not-found" : status === 409 ? "conflict" : "unavailable",
+	});
+});
+
 test("returns live HostConfig CPU and memory settings independently of specification labels", async () => {
 	const f = fixture(200, {
 		Id: "id",

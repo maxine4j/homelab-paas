@@ -21,6 +21,7 @@ interface Container {
 /** Scenario-specific Engine endpoints, not a general Docker emulator. */
 export class MockDocker {
 	readonly containers = new Map<string, Container>();
+	readonly images = new Map<string, string>();
 	eventConnections = 0;
 	beforeInventory: (() => Promise<void>) | undefined;
 	private readonly streams = new Set<ReadableStreamDefaultController<Uint8Array>>();
@@ -64,7 +65,7 @@ export class MockDocker {
 				await gate?.();
 				const filters = z
 					.object({ label: z.array(z.string()) })
-					.parse(JSON.parse(url.searchParams.get("filters")!));
+					.parse(JSON.parse(url.searchParams.get("filters") ?? '{"label":[]}'));
 				return Response.json(
 					[...this.containers.values()]
 						.filter((c) =>
@@ -83,7 +84,16 @@ export class MockDocker {
 				);
 			}
 			if (method === "GET" && path.startsWith("/images/") && path.endsWith("/json"))
-				return Response.json({ Id: "sha256:test-image" });
+				return Response.json({
+					Id: this.images.get(path.slice("/images/".length, -"/json".length)) ?? "sha256:test-image",
+				});
+			if (method === "DELETE" && path.startsWith("/images/")) {
+				const id = path.slice("/images/".length);
+				if ([...this.containers.values()].some((container) => container.Image === id))
+					return new Response(null, { status: 409 });
+				for (const [reference, imageId] of this.images) if (imageId === id) this.images.delete(reference);
+				return Response.json([{ Deleted: id }]);
+			}
 			if (method === "POST" && path === "/networks/create") {
 				const input = z
 					.object({ Name: z.string(), Driver: z.string(), Labels: z.record(z.string(), z.string()) })

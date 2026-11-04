@@ -16,7 +16,13 @@ export interface IDeploymentContainers {
 	 */
 	waitReady(request: ContainerReadinessRequest): Promise<string>;
 	/** Attempt every retirement; removal follows successful graceful stop. Aggregate failures. */
-	retire(serviceId: string, ids: string[], timeoutSeconds: number, message: string): Promise<void>;
+	retire(
+		serviceId: string,
+		ids: string[],
+		timeoutSeconds: number,
+		message: string,
+		preserveImageId?: string,
+	): Promise<void>;
 	/** Clean failed candidates and rethrow the original failure, aggregating cleanup failures. */
 	cleanupFailed(
 		serviceId: string,
@@ -93,11 +99,18 @@ export class DeploymentContainers implements IDeploymentContainers {
 		throw new Error(`${worker ? "Worker" : "Container"} readiness failed after 30 checks: ${reason}`);
 	}
 
-	async retire(serviceId: string, ids: string[], timeoutSeconds: number, message: string): Promise<void> {
+	async retire(
+		serviceId: string,
+		ids: string[],
+		timeoutSeconds: number,
+		message: string,
+		preserveImageId?: string,
+	): Promise<void> {
 		const results = await Promise.allSettled(
 			ids.map(async (id) => {
 				await this.docker.stopServiceContainer(serviceId, id, timeoutSeconds);
-				await this.docker.removeServiceContainer(serviceId, id);
+				if (preserveImageId === undefined) await this.docker.removeServiceContainer(serviceId, id);
+				else await this.docker.removeServiceContainer(serviceId, id, preserveImageId);
 			}),
 		);
 		const failures = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []));

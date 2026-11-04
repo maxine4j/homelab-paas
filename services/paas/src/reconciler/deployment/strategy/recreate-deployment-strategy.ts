@@ -32,6 +32,7 @@ export class RecreateDeploymentStrategy implements DeploymentStrategy {
 			current.map(({ id }) => id),
 			resource.termination?.timeoutSeconds ?? DEFAULT_TERMINATION_TIMEOUT_SEC,
 			"Container retirement failed",
+			imageId,
 		);
 		const { address } = await this.containers.startReady({
 			serviceId,

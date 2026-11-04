@@ -24,6 +24,14 @@ const request: DeploymentRequest = {
 	},
 };
 
+test("protects the resolved image while retiring containers before replacement creation", async () => {
+	const f = fixture();
+	await f.strategy.deploy(request);
+	expect(f.calls.filter(({ action }) => action === "remove")).toEqual([
+		{ action: "remove", args: ["demo", "old", "sha256:new"] },
+	]);
+});
+
 test("withdraws and publishes only the selected resource and its primary policy", async () => {
 	const f = fixture();
 	await f.strategy.deploy({ ...request, resourceId: "admin", resource: { ...request.resource, primary: false } });
@@ -372,7 +380,7 @@ test("route publication failures propagate for the caller to retry", async () =>
 	await expect(f.strategy.deploy(request)).rejects.toThrow("publication failed");
 	expect(f.calls.filter((c) => ["stop", "remove"].includes(c.action))).toEqual([
 		{ action: "stop", args: ["demo", "old", 45] },
-		{ action: "remove", args: ["demo", "old"] },
+		{ action: "remove", args: ["demo", "old", "sha256:new"] },
 	]);
 });
 
@@ -385,11 +393,19 @@ test.each(["stopServiceContainer", "removeServiceContainer"] as const)(
 		f.docker.startServiceContainer = async () => {
 			throw startup;
 		};
-		const original = f.docker[method];
-		f.docker[method] = async (serviceId: string, id: string, timeout: number = 30) => {
-			if (id === "new") throw cleanup;
-			await original(serviceId, id, timeout);
-		};
+		if (method === "stopServiceContainer") {
+			const original = f.docker.stopServiceContainer;
+			f.docker.stopServiceContainer = async (serviceId, id, timeout) => {
+				if (id === "new") throw cleanup;
+				await original(serviceId, id, timeout);
+			};
+		} else {
+			const original = f.docker.removeServiceContainer;
+			f.docker.removeServiceContainer = async (serviceId, id, preserveImageId) => {
+				if (id === "new") throw cleanup;
+				await original(serviceId, id, preserveImageId);
+			};
+		}
 		await expect(f.strategy.deploy(request)).rejects.toMatchObject({
 			message: "Replacement startup and cleanup failed",
 			errors: [startup, expect.objectContaining({ errors: [cleanup] })],

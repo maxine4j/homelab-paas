@@ -49,6 +49,10 @@ export interface IDockerClient {
 	/** Allows the full graceful termination timeout plus five seconds for the Engine response. */
 	stopContainer(id: string, timeoutSeconds: number): Promise<void>;
 	removeContainer(id: string): Promise<void>;
+	/** Removes by immutable ID, including all tags. Caller must freshly verify no containers use it.
+	 * Running-container conflicts still reject; stopped-container references do not prevent removal.
+	 */
+	removeImage(id: string): Promise<void>;
 	inspectImage(reference: string): Promise<{ id: string } | null>;
 	pullImage(reference: string): Promise<void>;
 }
@@ -333,6 +337,10 @@ export class DockerClient implements IDockerClient, IDockerPruneClient {
 
 	async removeContainer(id: string): Promise<void> {
 		await this.request("DELETE", `/containers/${encodeURIComponent(id)}`, undefined, [204]);
+	}
+
+	async removeImage(id: string): Promise<void> {
+		await this.request("DELETE", `/images/${encodeURIComponent(id)}?force=true`, undefined, [200]);
 	}
 
 	async inspectImage(reference: string): Promise<{ id: string } | null> {

@@ -48,7 +48,7 @@ export class WorkerDeploymentStrategy implements DeploymentStrategy<WorkerDeploy
 				networkName: network.name,
 				resource,
 			});
-		if (this.name === "recreate") await this.retire(request, retiring);
+		if (this.name === "recreate") await this.retire(request, retiring, imageId);
 		// startReady owns a failed replica; this ledger owns earlier ready replicas.
 		const readyCandidates: string[] = [];
 		try {
@@ -77,12 +77,13 @@ export class WorkerDeploymentStrategy implements DeploymentStrategy<WorkerDeploy
 		if (this.name === "surge") await this.retire(request, retiring);
 	}
 
-	private async retire(request: WorkerDeploymentRequest, ids: string[]): Promise<void> {
+	private async retire(request: WorkerDeploymentRequest, ids: string[], preserveImageId?: string): Promise<void> {
 		await this.containers.retire(
 			request.serviceId,
 			ids,
 			request.resource.termination?.timeoutSeconds ?? 30,
 			"Worker retirement failed",
+			preserveImageId,
 		);
 	}
 }

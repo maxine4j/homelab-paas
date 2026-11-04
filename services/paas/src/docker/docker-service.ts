@@ -40,7 +40,11 @@ export interface IDockerService {
 	createResourceContainer(options: CreateResourceContainerOptions): Promise<string>;
 	startServiceContainer(serviceId: string, containerId: string): Promise<void>;
 	stopServiceContainer(serviceId: string, containerId: string, timeoutSeconds: number): Promise<void>;
-	removeServiceContainer(serviceId: string, containerId: string): Promise<void>;
+	/** Removes the owned container, then its image unless still used anywhere on the host.
+	 * preserveImageId protects an imminent replacement before its container exists.
+	 * Missing images and deletion conflicts are harmless; other cleanup failures propagate.
+	 */
+	removeServiceContainer(serviceId: string, containerId: string, preserveImageId?: string): Promise<void>;
 }
 
 export interface IDockerInfrastructure {
@@ -322,13 +326,21 @@ export class DockerService implements IDockerService, IDockerInfrastructure, ICl
 		}
 	}
 
-	async removeServiceContainer(serviceId: string, containerId: string): Promise<void> {
+	async removeServiceContainer(serviceId: string, containerId: string, preserveImageId?: string): Promise<void> {
 		const container = await this.inspectServiceContainer(serviceId, containerId);
 		if (!container) return;
 		try {
 			await this.client.removeContainer(container.id);
 		} catch (error) {
 			if (!(error instanceof DockerClientError && error.kind === "not-found")) throw error;
+		}
+		if (container.imageId === preserveImageId) return;
+		const remaining = await this.client.listContainers({ all: true });
+		if (remaining.some(({ imageId }) => imageId === container.imageId)) return;
+		try {
+			await this.client.removeImage(container.imageId);
+		} catch (error) {
+			if (!(error instanceof DockerClientError && ["not-found", "conflict"].includes(error.kind))) throw error;
 		}
 	}
 
