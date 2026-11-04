@@ -85,8 +85,10 @@ const setup = async (page: Page) => {
 				}
 				if (path.endsWith("/interrupt")) view.thread.status = "interrupted";
 				if (path.endsWith("/resume")) {
-					view.thread.status = "completed";
-					view.items = [{ id: "history", role: "assistant", text: "Recovered history" }];
+					if (view.thread.status === "uncertain") {
+						view.thread.status = "completed";
+						view.items = [{ id: "history", role: "assistant", text: "Recovered history" }];
+					}
 				}
 				if (path.endsWith("/replies")) {
 					replies.push(route.request().postDataJSON());
@@ -171,9 +173,7 @@ test("unknown chat deep links stay in their project and never create or resume a
 	expect(fixture.writes).toHaveLength(writes);
 });
 
-test("failed sends keep drafts; reconnect only reads; uncertain execution requires explicit recovery", async ({
-	page,
-}) => {
+test("failed sends keep drafts; reconnect recovers history without replaying input", async ({ page }) => {
 	const fixture = await setup(page);
 	await fixture.create("Recovery");
 	fixture.fail(true);
@@ -185,16 +185,73 @@ test("failed sends keep drafts; reconnect only reads; uncertain execution requir
 	await fixture.event("error");
 	await expect(page.getByText("Reconnecting to live updates…", { exact: true })).toBeVisible();
 	fixture.views[0]!.thread.status = "uncertain";
+	fixture.fail(false);
 	const reads = fixture.reads();
 	await fixture.event("open");
 	await expect.poll(fixture.reads).toBeGreaterThan(reads);
+	await expect(page.getByText("Recovered history", { exact: true })).toBeVisible();
+	expect(fixture.writes.slice(writes)).toEqual([`/api/agents/${fixture.views[0]!.thread.id}/resume`]);
+	await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Keep this draft");
+	await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeEnabled();
+});
+
+test("Agents opens the first chat and loads only selected histories without uncertain labels", async ({ page }) => {
+	const fixture = await setup(page);
+	await fixture.create("First chat");
+	await fixture.create("Second chat");
+	for (const view of fixture.views) view.thread.status = "uncertain";
+	const writes = fixture.writes.length;
+	await page.goto(`/projects/${projectId}/agents`);
+	await expect(page.getByRole("heading", { name: "First chat", exact: true })).toBeVisible();
+	await expect(page.getByText("Recovered history", { exact: true })).toBeVisible();
+	await expect(page.getByText("uncertain", { exact: true })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Resume and load history", exact: true })).toHaveCount(0);
+	expect(fixture.writes.slice(writes)).toEqual([`/api/agents/${fixture.views[0]!.thread.id}/resume`]);
+	await page.getByRole("button", { name: "Open chat Second chat", exact: true }).click();
+	await expect(page.getByRole("heading", { name: "Second chat", exact: true })).toBeVisible();
+	await expect(
+		page.getByRole("region", { name: "Chat conversation" }).getByText("Recovered history", { exact: true }),
+	).toBeVisible();
+	expect(fixture.writes.slice(writes)).toEqual(fixture.views.map((view) => `/api/agents/${view.thread.id}/resume`));
+	await page.reload();
+	await expect(page.getByText("Recovered history", { exact: true })).toBeVisible();
+	expect(fixture.writes.slice(writes)).toHaveLength(3);
+});
+
+test("history loading blocks sending and coalesces refreshes; failures allow an explicit retry", async ({ page }) => {
+	const fixture = await setup(page);
+	await fixture.create("Recovery");
+	const view = fixture.views[0]!;
+	view.thread.status = "uncertain";
+	let release = () => {};
+	const held = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	await page.route(`**/api/agents/${view.thread.id}/resume`, async (route) => {
+		await held;
+		await route.fallback();
+	});
+	await page.getByLabel("Message", { exact: true }).fill("Keep this draft");
+	await fixture.event();
+	await expect(page.getByText("Loading history…", { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
+	await fixture.event("open");
+	await fixture.event();
+	fixture.fail(true);
+	release();
+	await expect(page.getByRole("alert")).toContainText("Could not load chat history");
+	const writes = fixture.writes.length;
+	await fixture.event("open");
+	const reads = fixture.reads();
+	await expect.poll(fixture.reads).toBeGreaterThan(reads);
 	expect(fixture.writes).toHaveLength(writes);
+	await expect(page.getByText("uncertain", { exact: true })).toHaveCount(0);
 	fixture.fail(false);
-	await page.getByRole("button", { name: "Resume and load history", exact: true }).click();
+	await page.getByRole("button", { name: "Retry loading history", exact: true }).click();
 	await expect(page.getByText("Recovered history", { exact: true })).toBeVisible();
 	await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Keep this draft");
 	await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeEnabled();
+	expect(fixture.writes.filter((path) => path.endsWith("/resume"))).toHaveLength(2);
 });
 
 test("one-time command and file approvals, clarification and truncation are visible", async ({ page }) => {

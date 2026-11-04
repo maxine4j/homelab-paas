@@ -108,7 +108,7 @@ reviews; Codex owns model interaction, tools, agent execution, and conversations
   execution adapter.
 - Persist important normalized activity and approval state for browser reconnects.
   Reconcile actual Codex state after app-server or application restart before
-  dispatching more work. Surface interrupted or uncertain execution explicitly.
+  dispatching more work. Surface interrupted execution and recovery failures explicitly.
 - Interactive threads can execute concurrently, with no global active-turn limit.
   Serialize mutations within each thread and reject sending another message while
   its turn is running or awaiting input. Future asynchronous job scheduling owns
@@ -142,13 +142,13 @@ IDs, execution status and pending normalized requests. Codex's persistent home
 owns conversation history; Forge's bounded in-memory activity view is a cache.
 Persist intent before thread/turn dispatch. On restart, existing execution becomes
 `uncertain` and pending request handles are invalidated. Never replay a turn or
-approval automatically. Explicit resume reloads Codex history and reconciles state
-without submitting a message. An ambiguous thread creation with no known Codex ID
+approval automatically. Opening a chat automatically resumes it to reload Codex
+history and reconcile state without submitting a message. An ambiguous thread creation with no known Codex ID
 cannot be retried; create a new chat, retaining the old worktree. Untouched empty
 chats remain usable across restarts.
 
 Threads use `danger-full-access`, `on-request` approvals and disabled Codex
-subagent spawning. Apply that policy on both start and explicit resume. The
+subagent spawning. Apply that policy on both start and resume. The
 nonroot Forge container is the execution boundary; Codex does not create nested
 Bubblewrap namespaces, so execution requires no host user-namespace sysctls,
 privileged mode or relaxed container security profiles. Commands have the
@@ -169,7 +169,7 @@ Browser-safe schemas are exported from `@homelab-paas/forge-contracts/agents`:
 | `GET/POST /api/projects/:projectId/agents` | List summaries / create `{title}`; returns 201 and a view.                                               |
 | `GET /api/agents/:id`                      | `{thread,items,requests,truncated}`; no Codex thread IDs or internal workspace paths in metadata.        |
 | `POST /api/agents/:id/messages`            | `{text}`; starts one turn and returns its current view.                                                  |
-| `POST /api/agents/:id/resume`              | Explicit reconciliation; never sends input.                                                              |
+| `POST /api/agents/:id/resume`              | History loading and reconciliation; never sends input.                                                   |
 | `POST /api/agents/:id/interrupt`           | Requests interruption of the known active turn.                                                          |
 | `POST /api/agents/:id/replies`             | `{requestId,decision: "accept"/"decline"}` or `{requestId,answers:{questionId:text}}`.                   |
 | `GET /api/agents/:id/events`               | Authorized SSE invalidations (`data: changed`); read the current view after each notification/reconnect. |
@@ -202,13 +202,20 @@ clarification replies. Open chats retain their message and answer drafts across
 thread and project-section selection. Failed writes preserve drafts. Drafts are
 browser memory only and are lost when leaving the project or reloading the page.
 Execution continues independently of the selected chat or browser connection.
-Uncertain threads require explicit resume; the same control reloads persisted
-history after reopening. Truncation is visible. SSE reconnects and periodic polling
-read current snapshots through a serialized, coalesced reader; neither replays a
-write. No Markdown or tool HTML is executed from conversation text.
+Entering Agents without a chat URL selects the first listed chat. Opening a chat
+automatically loads persisted history and reconciles recoverable execution state;
+running/waiting chats retain their live activity and untouched empty chats need no
+resume. Sidebar chats hide the internal `uncertain` status and recover only when
+selected. The conversation shows history loading instead of uncertainty and
+blocks sending until recovery completes. Recovery failures show a retry action;
+polling does not repeatedly retry failed recovery. Drafts survive recovery.
+Truncation is visible. SSE reconnects and periodic polling read current snapshots
+through a serialized, coalesced reader; selected chats recover newly uncertain
+state without replaying messages or approvals. No Markdown or tool HTML is
+executed from conversation text.
 
 Controlled Chromium tests cover independent threads, activity, interruptions,
-reopening, failed sends/replies, approval/input, reconnects, explicit recovery and
+reopening, failed sends/replies, approval/input, reconnects, automatic recovery and
 mobile layout. Screenshots live under `artifacts/forge-browser/`. Authenticated
 live ChatGPT inference remains a separate manual check.
 
@@ -644,9 +651,10 @@ names. `/` replaces its history entry with `/projects`. Unknown routes and
 unavailable projects/branches show explicit states rather than a different view.
 Project cards and section tabs expose real links, supporting new tabs and copied
 URLs. Direct links, reloads and browser Back/Forward restore the URL's view;
-Android Back uses the same browser history. Navigation does not replay writes,
-except the documented automatic terminal inspection/create flow when opening
-Terminals. Reload reattaches its retained live shell without creating a duplicate.
+Android Back uses the same browser history. Navigation never replays messages or
+approvals. Opening Agents may resume the selected chat to load history; opening
+Terminals uses the documented automatic terminal inspection/create flow. Reload
+reattaches its retained live shell without creating a duplicate.
 
 Returning to a visited project section restores its last code/chat URL. URL
 navigation within a project and to Config retains local editor/chat drafts and

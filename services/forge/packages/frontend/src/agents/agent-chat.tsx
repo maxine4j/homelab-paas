@@ -108,7 +108,17 @@ const RequestCard = ({
 	);
 };
 
-const Conversation = ({ id, api, changed }: { id: string; api: IWorkspaceApi; changed: () => void }) => {
+const Conversation = ({
+	id,
+	api,
+	changed,
+	selected,
+}: {
+	id: string;
+	api: IWorkspaceApi;
+	changed: () => void;
+	selected: boolean;
+}) => {
 	const [view, setView] = useState<AgentView>();
 	const [draft, setDraft] = useState("");
 	const [error, setError] = useState("");
@@ -116,15 +126,53 @@ const Conversation = ({ id, api, changed }: { id: string; api: IWorkspaceApi; ch
 	const [connected, setConnected] = useState(false);
 	const poller = useRef<ResourcePoller<AgentView> | undefined>(undefined);
 	const acting = useRef(false);
+	const [loadingHistory, setLoadingHistory] = useState(true);
+	const [historyFailed, setHistoryFailed] = useState(false);
+	const historyNeeded = useRef(true);
+	const recoveryBlocked = useRef(false);
+	const selection = useRef(selected);
 	const messageId = useId();
 	useEffect(() => {
 		const resource = new ResourcePoller(
-			() => api.read(`agents/${id}`, agentViewSchema),
+			async (signal) => {
+				if (selection.current && historyNeeded.current) setLoadingHistory(true);
+				const value = await api.read(`agents/${id}`, agentViewSchema);
+				if (signal.aborted) return value;
+				if (!selection.current || recoveryBlocked.current) return value;
+				const status = value.thread.status;
+				const recover = historyNeeded.current || status === "uncertain";
+				historyNeeded.current = false;
+				if (!recover || ["idle", "creating", "running", "waiting"].includes(status)) return value;
+				setLoadingHistory(true);
+				try {
+					const recovered = await api.read(`agents/${id}/resume`, agentViewSchema, "POST", {});
+					if (recovered.thread.status === "uncertain") throw new Error("History recovery incomplete");
+					if (!signal.aborted) {
+						historyNeeded.current = false;
+						setHistoryFailed(false);
+						setError("");
+					}
+					return recovered;
+				} catch {
+					recoveryBlocked.current = true;
+					if (!signal.aborted) {
+						setHistoryFailed(true);
+						setError(
+							"Could not load chat history. Retry loading history, or create a new chat if recovery keeps failing. This chat’s work is retained.",
+						);
+					}
+					return value;
+				}
+			},
 			(value) => {
 				setView(value);
+				setLoadingHistory(false);
 				changed();
 			},
-			setError,
+			(message) => {
+				setLoadingHistory(false);
+				setError(message);
+			},
 		);
 		poller.current = resource;
 		resource.refresh();
@@ -144,6 +192,13 @@ const Conversation = ({ id, api, changed }: { id: string; api: IWorkspaceApi; ch
 			poller.current = undefined;
 		};
 	}, [api, id, changed]);
+	useEffect(() => {
+		selection.current = selected;
+		if (!selected) return;
+		historyNeeded.current = true;
+		recoveryBlocked.current = false;
+		poller.current?.refresh();
+	}, [selected]);
 	const act = (suffix: string, body: unknown, sent = false) => {
 		if (acting.current || !poller.current) return;
 		acting.current = true;
@@ -156,7 +211,7 @@ const Conversation = ({ id, api, changed }: { id: string; api: IWorkspaceApi; ch
 					if (sent) setDraft("");
 					return value;
 				} finally {
-					// Reconcile failures using reads only; mutations are never retried automatically.
+					// Refresh may reload history, but never replays messages or approval replies.
 					poller.current?.refresh();
 				}
 			})
@@ -167,18 +222,34 @@ const Conversation = ({ id, api, changed }: { id: string; api: IWorkspaceApi; ch
 	};
 	const status = view?.thread.status;
 	const active = status === "running" || status === "waiting";
-	const sendable = status && !["creating", "running", "waiting", "uncertain"].includes(status);
+	const sendable =
+		status
+		&& !loadingHistory
+		&& !historyFailed
+		&& !["creating", "running", "waiting", "uncertain"].includes(status);
+	const displayStatus = status === "uncertain" ? (historyFailed ? "unavailable" : "loading") : status;
 	return (
 		<section className='agent-conversation' aria-label='Chat conversation'>
 			<div className='agent-chat-heading'>
 				<div>
 					<h3>{view?.thread.title ?? "Loading chat…"}</h3>
-					<span className={`agent-status agent-status-${status}`}>{status ?? "loading"}</span>
+					<span className={`agent-status agent-status-${displayStatus}`}>{displayStatus ?? "loading"}</span>
 				</div>
 				<div className='agent-actions'>
-					<button disabled={busy || !view || active} onClick={() => act("resume", {})}>
-						Resume and load history
-					</button>
+					{historyFailed && (
+						<button
+							disabled={busy || loadingHistory}
+							onClick={() => {
+								recoveryBlocked.current = false;
+								historyNeeded.current = true;
+								setLoadingHistory(true);
+								setError("");
+								poller.current?.refresh();
+							}}
+						>
+							Retry loading history
+						</button>
+					)}
 					{active && (
 						<button disabled={busy || !view?.thread.turnId} onClick={() => act("interrupt", {})}>
 							Interrupt
@@ -196,15 +267,14 @@ const Conversation = ({ id, api, changed }: { id: string; api: IWorkspaceApi; ch
 					{error}
 				</p>
 			)}
-			{status === "uncertain" && (
-				<p className='agent-notice'>
-					Execution state is uncertain. Resume and load history before sending. No message or approval will be
-					replayed. If recovery fails, create a new chat; this chat’s work is retained.
+			{loadingHistory && (
+				<p className='agent-notice' role='status'>
+					Loading history…
 				</p>
 			)}
 			{view?.truncated && <p className='agent-notice'>Some history or output was omitted.</p>}
 			<div className='agent-messages' tabIndex={0} aria-label='Conversation history'>
-				{view && !view.items.length && (
+				{view && !loadingHistory && !historyFailed && status !== "uncertain" && !view.items.length && (
 					<p className='agent-empty'>
 						Start a conversation about this project. Each chat works in its own managed worktree.
 					</p>
@@ -261,6 +331,7 @@ export const AgentChat = ({ projectId, api }: { projectId: string; api: IWorkspa
 	const location = useLocation();
 	const navigate = useNavigate();
 	const route = resolveRoute(location.pathname);
+	const selectFirst = route.page === "project" && route.section === "agents" && !route.threadId;
 	const [threads, setThreads] = useState<AgentThread[]>([]);
 	const [loaded, setLoaded] = useState(false);
 	const [opened, setOpened] = useState<string[]>([]);
@@ -291,6 +362,12 @@ export const AgentChat = ({ projectId, api }: { projectId: string; api: IWorkspa
 			poller.current = undefined;
 		};
 	}, [api, projectId]);
+	const firstId = threads.at(0)?.id;
+	useEffect(() => {
+		if (selectFirst && firstId) {
+			void navigate(`/projects/${projectId}/agents/${firstId}`, { replace: true });
+		}
+	}, [selectFirst, firstId, projectId, navigate]);
 	const open = (id: string) => {
 		void navigate(`/projects/${projectId}/agents/${id}`);
 	};
@@ -350,7 +427,9 @@ export const AgentChat = ({ projectId, api }: { projectId: string; api: IWorkspa
 							onClick={() => open(thread.id)}
 						>
 							<span>{thread.title}</span>
-							<small className={`agent-status agent-status-${thread.status}`}>{thread.status}</small>
+							{thread.status !== "uncertain" && (
+								<small className={`agent-status agent-status-${thread.status}`}>{thread.status}</small>
+							)}
 						</button>
 					))}
 				</nav>
@@ -374,7 +453,12 @@ export const AgentChat = ({ projectId, api }: { projectId: string; api: IWorkspa
 					.filter((id) => threads.some((thread) => thread.id === id))
 					.map((id) => (
 						<div key={id} hidden={selected !== id}>
-							<Conversation id={id} api={api} changed={refresh} />
+							<Conversation
+								id={id}
+								api={api}
+								changed={refresh}
+								selected={selected === id && route.page === "project" && route.section === "agents"}
+							/>
 						</div>
 					))}
 			</div>
