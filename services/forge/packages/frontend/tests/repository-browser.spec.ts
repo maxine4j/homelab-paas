@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const projectId = "123e4567-e89b-42d3-a456-426614174000";
 const id = "123e4567-e89b-42d3-a456-426614174001";
@@ -10,6 +10,17 @@ const entries = [
 	{ name: "README.md", path: "README.md", kind: "file" },
 	...Array.from({ length: 12 }, (_, i) => ({ name: `file-${i}.ts`, path: `file-${i}.ts`, kind: "file" })),
 ].map((e) => ({ ...e, lastCommit: commit, lastChangedAt: date }));
+
+const selectBranch = async (page: Page, branch: string): Promise<void> => {
+	const picker = await page.getByRole("combobox", { name: "Branch" }).elementHandle();
+	if (!picker) throw new Error("Branch picker unavailable");
+	const previous = await picker.inputValue();
+	await picker.selectOption(branch);
+	// Branch views stay mounted. Wait for this specific control to retire before
+	// resolving another action against the newly visible branch.
+	if (previous !== branch) await picker.waitForElementState("hidden");
+	await expect(page.getByRole("combobox", { name: "Branch" })).toHaveValue(branch);
+};
 
 test.beforeEach(async ({ page }) => {
 	await page.route(
@@ -114,7 +125,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("code URLs restore branches, directories, files and history through reload and Back/Forward", async ({ page }) => {
-	await page.getByRole("combobox", { name: "Branch" }).selectOption("feature/navigation");
+	await selectBranch(page, "feature/navigation");
 	await page.getByRole("button", { name: "src", exact: true }).click();
 	const directoryUrl = page.url();
 	expect(new URL(directoryUrl).searchParams.get("branch")).toBe("feature/navigation");
@@ -189,10 +200,10 @@ test("directory listings have named columns, repository breadcrumbs and a parent
 });
 
 test("branch dropdown scopes code and history; committed code can be drafted", async ({ page }) => {
-	await page.getByRole("combobox", { name: "Branch" }).selectOption("feature");
+	await selectBranch(page, "feature");
 	await page.getByRole("button", { name: "Commit history" }).click();
 	await expect(page.getByRole("region", { name: "Commit history" })).toContainText("feature commit");
-	await page.getByRole("combobox", { name: "Branch" }).selectOption("main");
+	await selectBranch(page, "main");
 	await page.getByRole("button", { name: "Commit history" }).click();
 	await expect(page.getByRole("region", { name: "Commit history" })).toContainText("main commit");
 	await page.getByRole("button", { name: "Back to files", exact: true }).click();
@@ -236,8 +247,8 @@ test("left file tree expands folders while keeping the open editor and drafts", 
 	await tree.getByRole("button", { name: "Open index.ts", exact: true }).click();
 	await expect(editor).toContainText("export const value = 1;");
 	await expect(page.getByRole("navigation", { name: "File path" })).toHaveText("Forge / src / index.ts");
-	await page.getByRole("combobox", { name: "Branch" }).selectOption("feature");
-	await page.getByRole("combobox", { name: "Branch" }).selectOption("main");
+	await selectBranch(page, "feature");
+	await selectBranch(page, "main");
 	await page
 		.getByRole("tablist", { name: "Editor tabs" })
 		.getByRole("tab", { name: "file-0.ts *", exact: true })
@@ -246,18 +257,20 @@ test("left file tree expands folders while keeping the open editor and drafts", 
 });
 
 test("a delayed sidebar read stays scoped to its original branch", async ({ page }) => {
-	await page.getByRole("combobox", { name: "Branch" }).selectOption("main");
+	await selectBranch(page, "main");
 	await page
 		.getByRole("table", { name: "Repository files" })
 		.getByRole("button", { name: "file-0.ts", exact: true })
 		.click();
-	let release: (() => void) | undefined;
+	const { promise: pendingRead, resolve: release } = Promise.withResolvers<void>();
 	let requested = false;
-	await page.route("**/repository/file?*file-1.ts", async (route) => {
+	const isDelayedRead = (url: URL) =>
+		url.pathname.endsWith("/repository/file")
+		&& url.searchParams.get("branch") === "main"
+		&& url.searchParams.get("path") === "file-1.ts";
+	await page.route(isDelayedRead, async (route) => {
 		requested = true;
-		await new Promise<void>((resolve) => {
-			release = resolve;
-		});
+		await pendingRead;
 		await route.fulfill({ json: { path: "file-1.ts", content: "export const next = true;" } });
 	});
 	await page
@@ -266,10 +279,23 @@ test("a delayed sidebar read stays scoped to its original branch", async ({ page
 		.click();
 	await expect.poll(() => requested).toBe(true);
 	try {
-		await page.getByRole("combobox", { name: "Branch" }).selectOption("feature");
+		await selectBranch(page, "feature");
+		await page
+			.getByRole("table", { name: "Repository files" })
+			.getByRole("button", { name: "file-1.ts", exact: true })
+			.click();
+		await expect(page.getByRole("textbox", { name: "File editor" })).toContainText("export const value = 1;");
 	} finally {
-		release?.();
+		release();
 	}
-	await page.getByRole("combobox", { name: "Branch" }).selectOption("main");
+	await expect(
+		page
+			.getByRole("textbox", { name: "File editor", includeHidden: true })
+			.filter({ hasText: "export const next = true;" }),
+	).toHaveCount(1);
+	await expect(page.getByRole("textbox", { name: "File editor" })).toContainText("export const value = 1;");
+	await selectBranch(page, "main");
 	await expect(page.getByRole("textbox", { name: "File editor" })).toContainText("export const next = true;");
+	await selectBranch(page, "feature");
+	await expect(page.getByRole("textbox", { name: "File editor" })).toContainText("export const value = 1;");
 });
