@@ -128,3 +128,21 @@ test("mixed malformed, scalar and plain lines remain visible and markup stays es
 	expect(html).toContain("plain output");
 	expect(html).not.toContain("<script>");
 });
+
+test("renders HTTP and key/value summaries alongside plain stack lines using Docker event times", () => {
+	const docker = "2026-11-05T04:43:55.999223622Z ";
+	const html = renderToStaticMarkup(
+		<ContainerLogs
+			content={[
+				docker + 'logger=cleanup t=2026-11-04T12:00:00Z level=error msg="Cleanup failed"',
+				docker + "GET /health 200 2 - 0.188 ms",
+				docker + "\tsync/waitgroup.go:251 +0x45",
+			].join("\n")}
+		/>,
+	);
+	expect(html).toMatch(/log-message[^>]*>Cleanup failed</);
+	expect(html).toMatch(/log-message[^>]*>GET \/health → 200</);
+	expect(html).toContain('dateTime="2026-11-05T04:43:55.999Z"');
+	expect(html).toContain('class="language-log"');
+	expect(html.replace(/<[^>]+>/g, "")).toContain("\tsync/waitgroup.go:251 +0x45");
+});
