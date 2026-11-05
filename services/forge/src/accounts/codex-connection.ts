@@ -38,6 +38,7 @@ const initializeSchema = z.object({
 	platformFamily: z.string(),
 	platformOs: z.string(),
 });
+const maximumFrameBytes = 16 * 1024 * 1024;
 const methods = new Map<string, z.ZodType>([
 	["model/list", z.strictObject({ limit: z.literal(100), cursor: z.string().optional() })],
 	["skills/list", z.strictObject({ cwds: z.array(z.string().min(1)).length(1) })],
@@ -79,7 +80,16 @@ const methods = new Map<string, z.ZodType>([
 			threadId: z.string().min(1),
 			limit: z.literal(20),
 			sortDirection: z.literal("desc"),
-			itemsView: z.literal("full"),
+			itemsView: z.literal("notLoaded"),
+		}),
+	],
+	[
+		"thread/items/list",
+		z.strictObject({
+			threadId: z.string().min(1),
+			limit: z.literal(20),
+			sortDirection: z.literal("desc"),
+			cursor: z.string().min(1).optional(),
 		}),
 	],
 	[
@@ -227,13 +237,13 @@ export class CodexConnection implements ICodexAgentConnection {
 			this.buffer += chunk;
 			let newline: number;
 			while ((newline = this.buffer.indexOf("\n")) >= 0) {
-				if (Buffer.byteLength(this.buffer.slice(0, newline)) > 1024 * 1024)
+				if (Buffer.byteLength(this.buffer.slice(0, newline)) > maximumFrameBytes)
 					throw new Error("Codex frame exceeded limit");
 				const line = this.buffer.slice(0, newline);
 				this.buffer = this.buffer.slice(newline + 1);
 				if (line.trim()) this.message(JSON.parse(line));
 			}
-			if (Buffer.byteLength(this.buffer) > 1024 * 1024) throw new Error("Codex frame exceeded limit");
+			if (Buffer.byteLength(this.buffer) > maximumFrameBytes) throw new Error("Codex frame exceeded limit");
 		} catch (cause) {
 			this.disconnect(cause);
 		}

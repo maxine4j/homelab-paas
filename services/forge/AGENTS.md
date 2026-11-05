@@ -190,9 +190,13 @@ content, not a credential-redaction guarantee.
 
 Messages are limited to 8000 characters. Views retain at most 500 items, 32000
 characters per item and 240000 text characters in total; clipping sets `truncated`.
-Resume loads the latest 20 turns through the pinned paginated history API and
-marks omitted older history explicitly. Pending structured requests are bounded
-per thread. RPC deadlines remain 15 seconds and frames 1 MiB; there is no automatic
+Resume loads metadata for the latest 20 turns, then reads items newest first through
+the pinned item pagination API in pages of 20. Stop at the browser snapshot budget
+or 25 item pages, preserving the latest result and marking omitted history explicitly.
+Full turn output must not be bundled into history metadata responses.
+Pending structured requests are bounded per thread. RPC deadlines remain 15 seconds
+and frames are bounded to 16 MiB, including large individual tool results and
+completion notifications; there is no automatic
 turn timeout. The shared three-agent execution limit also applies to these chats;
 capacity failures preserve browser drafts for retry. SSE sends 15-second heartbeats,
 disconnects slow consumers and closes on application shutdown. Reconnection reads

@@ -194,6 +194,38 @@ test("queued work survives restart; ambiguous dispatch never replays and failed 
 	expect(ticket.status).toBe("todo");
 });
 
+test("reconciliation verifies a recovered completed merge candidate and moves to Done without replay", async () => {
+	const f = fixture();
+	const ticket = f.create();
+	await f.service.move(actor, ticket, { status: "todo" });
+	await f.service.tick(actor);
+	f.complete(f.jobs.get(ticket.id)!.plannerId!);
+	await f.service.tick(actor);
+	await f.service.move(actor, ticket, { status: "in-progress" });
+	await f.service.tick(actor);
+	const id = f.jobs.get(ticket.id)!.implementerId!;
+	f.complete(id);
+	await f.service.tick(actor);
+	f.merges.merge.mockResolvedValueOnce("rebase");
+	await f.service.move(actor, ticket, { status: "merging" });
+	await f.service.tick(actor);
+	await f.service.tick(actor);
+	f.complete(id, "Rebased and validated");
+	f.jobs.get(ticket.id)!.state = "uncertain";
+	f.views.get(id)!.thread.status = "uncertain";
+	f.agents.resume.mockImplementationOnce(async () => {
+		f.views.get(id)!.thread.status = "completed";
+		return structuredClone(f.views.get(id)!);
+	});
+	const dispatches = f.agents.dispatch.mock.calls.length;
+	await f.service.recover(actor, ticket.id);
+	expect(ticket.status).toBe("done");
+	expect(f.jobs.get(ticket.id)).toMatchObject({ state: "idle", resultSha: "b".repeat(40) });
+	expect(f.merges.verify).toHaveBeenLastCalledWith(actor, f.jobs.get(ticket.id)!.workspaceId, "b".repeat(40));
+	expect(f.merges.merge).toHaveBeenLastCalledWith(actor, f.jobs.get(ticket.id)!.workspaceId, "b".repeat(40));
+	expect(f.agents.dispatch).toHaveBeenCalledTimes(dispatches);
+});
+
 test("a completed turn reporting a blocker cannot approve a plan or advance implementation", async () => {
 	const f = fixture();
 	const ticket = f.create();

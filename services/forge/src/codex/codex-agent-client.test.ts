@@ -40,6 +40,11 @@ const setup = () => {
 				],
 				nextCursor: null,
 			};
+		if (method === "thread/items/list")
+			return {
+				data: [{ turnId: "old", item: { id: "a", type: "agentMessage", text: "Previous answer" } }],
+				nextCursor: null,
+			};
 		if (method === "turn/start") {
 			const { threadId } = params as { threadId: string };
 			notify("turn/started", { threadId, turn: { id: "turn-1", status: "inProgress", items: [] } });
@@ -167,6 +172,7 @@ test("an interrupted turn stops unfinished tool animations, including reloaded h
 		thread: { id, cwd: "/data/worktrees/one", historyMode: "paginated", status: { type: "idle" }, turns: [] },
 	});
 	rpc.mockResolvedValueOnce({ data: [{ id: "turn", status: "interrupted", items: [item] }], nextCursor: null });
+	rpc.mockResolvedValueOnce({ data: [{ turnId: "turn", item }], nextCursor: null });
 	expect((await client.resume(id, "/data/worktrees/one")).items[0]).toMatchObject({ status: "interrupted" });
 });
 
@@ -320,6 +326,10 @@ test("hydrates paginated history and records a second turn even without a starte
 		],
 		nextCursor: "older",
 	});
+	rpc.mockResolvedValueOnce({
+		data: [{ turnId: "old", item: { id: "history", type: "agentMessage", text: "Saved history" } }],
+		nextCursor: null,
+	});
 	expect(await client.resume(id, "/data/worktrees/one")).toMatchObject({
 		status: "completed",
 		truncated: true,
@@ -333,6 +343,143 @@ test("hydrates paginated history and records a second turn even without a starte
 	await client.send(id, "/data/worktrees/one", "Third");
 	expect(client.read(id).turnId).toBe("third");
 });
+test("history loads bounded item pages newest first and retains completion after large tool output", async () => {
+	const { client, rpc } = setup();
+	const id = await client.start("/data/worktrees/one");
+	rpc.mockResolvedValueOnce({
+		thread: { id, cwd: "/data/worktrees/one", historyMode: "paginated", turns: [], status: { type: "idle" } },
+	});
+	rpc.mockResolvedValueOnce({
+		data: [
+			{ id: "done", status: "completed", items: [] },
+			{ id: "old", status: "completed", items: [] },
+		],
+		nextCursor: null,
+	});
+	rpc.mockResolvedValueOnce({
+		data: [{ turnId: "done", item: { id: "result", type: "agentMessage", text: "FORGE_RESULT\ncomplete" } }],
+		nextCursor: "older-items",
+	});
+	rpc.mockResolvedValueOnce({
+		data: [
+			{
+				turnId: "done",
+				item: {
+					id: "tool",
+					type: "commandExecution",
+					command: "pnpm test",
+					aggregatedOutput: "x".repeat(2 * 1024 * 1024),
+					status: "completed",
+				},
+			},
+			{ turnId: "old", item: { id: "user", type: "userMessage", content: [{ type: "text", text: "Work" }] } },
+		],
+		nextCursor: null,
+	});
+	const view = await client.resume(id, "/data/worktrees/one");
+	expect(view).toMatchObject({ status: "completed", turnId: "done", truncated: true });
+	expect(view.items.map((item) => item.id)).toEqual(["user", "tool", "result"]);
+	expect(view.items.at(-1)?.text).toBe("FORGE_RESULT\ncomplete");
+	expect(view.items[1]?.text).toHaveLength(32000);
+	expect(rpc).toHaveBeenCalledWith("thread/turns/list", {
+		threadId: id,
+		limit: 20,
+		sortDirection: "desc",
+		itemsView: "notLoaded",
+	});
+	expect(rpc).toHaveBeenLastCalledWith("thread/items/list", {
+		threadId: id,
+		limit: 20,
+		sortDirection: "desc",
+		cursor: "older-items",
+	});
+});
+
+test("history stops reading older output at the snapshot budget and keeps the newest answer", async () => {
+	const { client, rpc } = setup();
+	const id = await client.start("/data/worktrees/one");
+	rpc.mockResolvedValueOnce({
+		thread: { id, cwd: "/data/worktrees/one", historyMode: "paginated", turns: [], status: { type: "idle" } },
+	});
+	rpc.mockResolvedValueOnce({ data: [{ id: "done", status: "completed", items: [] }], nextCursor: null });
+	rpc.mockResolvedValueOnce({
+		data: [
+			{ turnId: "done", item: { id: "result", type: "agentMessage", text: "Complete" } },
+			...Array.from({ length: 10 }, (_, i) => ({
+				turnId: "done",
+				item: { id: `tool-${i}`, type: "commandExecution", aggregatedOutput: "x".repeat(32000) },
+			})),
+		],
+		nextCursor: "more",
+	});
+	const view = await client.resume(id, "/data/worktrees/one");
+	expect(view.truncated).toBe(true);
+	expect(view.items.at(-1)?.text).toBe("Complete");
+	expect(view.items.reduce((size, item) => size + item.text.length, 0)).toBeLessThanOrEqual(240000);
+	expect(rpc.mock.calls.filter(([method]) => method === "thread/items/list")).toHaveLength(1);
+});
+
+test("history rejects repeated item cursors instead of looping indefinitely", async () => {
+	const { client, rpc } = setup();
+	const id = await client.start("/data/worktrees/one");
+	rpc.mockResolvedValueOnce({
+		thread: { id, cwd: "/data/worktrees/one", historyMode: "paginated", turns: [], status: { type: "idle" } },
+	});
+	rpc.mockResolvedValueOnce({ data: [{ id: "done", status: "completed", items: [] }], nextCursor: null });
+	rpc.mockResolvedValueOnce({ data: [], nextCursor: "same" });
+	rpc.mockResolvedValueOnce({ data: [], nextCursor: "same" });
+	await expect(client.resume(id, "/data/worktrees/one")).rejects.toThrow("agent-unavailable");
+});
+
+test.each([0, 20])("history bounds pagination even when pages contain %s items", async (count) => {
+	const { client, rpc } = setup();
+	const id = await client.start("/data/worktrees/one");
+	rpc.mockResolvedValueOnce({
+		thread: { id, cwd: "/data/worktrees/one", historyMode: "paginated", turns: [], status: { type: "idle" } },
+	});
+	rpc.mockResolvedValueOnce({ data: [{ id: "done", status: "completed", items: [] }], nextCursor: null });
+	let pages = 0;
+	rpc.mockImplementation(async () => ({
+		data: Array.from({ length: count }, (_, i) => ({
+			turnId: "done",
+			item: { id: `${pages}-${i}`, type: "agentMessage", text: "Answer" },
+		})),
+		nextCursor: `page-${++pages}`,
+	}));
+	const view = await client.resume(id, "/data/worktrees/one");
+	expect(view.truncated).toBe(true);
+	expect(view.items).toHaveLength(count * 25);
+	expect(pages).toBe(25);
+});
+
+test.each(["completion", "disconnect"])("item pagination preserves a newer live %s", async (event) => {
+	const { client, rpc, notify } = setup();
+	const id = await client.start("/data/worktrees/one");
+	rpc.mockResolvedValueOnce({
+		thread: { id, cwd: "/data/worktrees/one", historyMode: "paginated", turns: [], status: { type: "active" } },
+	});
+	rpc.mockResolvedValueOnce({ data: [{ id: "old", status: "inProgress", items: [] }], nextCursor: null });
+	rpc.mockImplementationOnce(async () => {
+		if (event === "completion")
+			notify("turn/completed", {
+				threadId: id,
+				turn: {
+					id: "new",
+					status: "completed",
+					items: [{ id: "live", type: "agentMessage", text: "Newest answer" }],
+				},
+			});
+		else notify("connection/lost", {});
+		return {
+			data: [{ turnId: "old", item: { id: "history", type: "agentMessage", text: "Older answer" } }],
+			nextCursor: null,
+		};
+	});
+	const view = await client.resume(id, "/data/worktrees/one");
+	expect(view.status).toBe(event === "completion" ? "completed" : "uncertain");
+	if (event === "completion") expect(view.items.at(-1)?.text).toBe("Newest answer");
+});
+
 test("terminal Codex errors stop the turn while retryable errors keep it active", async () => {
 	const { client, notify } = setup();
 	const id = await client.start("/data/worktrees/one");

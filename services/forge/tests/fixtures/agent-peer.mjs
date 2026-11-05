@@ -35,9 +35,26 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 		threads.set(thread.id, thread);
 		result = { thread };
 	}
-	if (method === "thread/resume" || method === "thread/read") result = { thread: threads.get(params.threadId) };
-	if (method === "thread/turns/list")
-		result = { data: [...threads.get(params.threadId).turns].reverse(), nextCursor: null };
+	if (method === "thread/resume" || method === "thread/read") {
+		const thread = threads.get(params.threadId);
+		result = { thread: { ...thread, turns: params.excludeTurns || !params.includeTurns ? [] : thread.turns } };
+	}
+	if (method === "thread/turns/list") {
+		const turns = [...threads.get(params.threadId).turns].reverse().slice(0, params.limit);
+		result = {
+			data: turns.map((turn) => ({ ...turn, items: params.itemsView === "notLoaded" ? [] : turn.items })),
+			nextCursor: null,
+		};
+	}
+	if (method === "thread/items/list") {
+		const items = threads
+			.get(params.threadId)
+			.turns.flatMap((turn) => turn.items.map((item) => ({ turnId: turn.id, item })))
+			.reverse();
+		const offset = Number(params.cursor ?? 0);
+		const end = offset + params.limit;
+		result = { data: items.slice(offset, end), nextCursor: end < items.length ? String(end) : null };
+	}
 	if (method === "turn/start") {
 		const thread = threads.get(params.threadId);
 		const turn = {
@@ -90,6 +107,14 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 					validation: "Controlled fixture: Git committed state verified; no authenticated inference",
 				};
 			}
+			if (prompt.includes("Rebase the ticket branch"))
+				turn.items.push({
+					id: `tool-${sequence}`,
+					type: "commandExecution",
+					command: "pnpm test",
+					status: "completed",
+					aggregatedOutput: "validation output\n".repeat(100000),
+				});
 			turn.items.push({
 				id: `answer-${sequence}`,
 				type: "agentMessage",

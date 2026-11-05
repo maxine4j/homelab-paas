@@ -173,6 +173,13 @@ test("real Git, SQLite and controlled app-server execute the ticket lifecycle an
 		await workflow.tick(owner);
 		expect(await jobs.get(ticket.id)).toMatchObject({ state: "queued", phase: "rebase", mergeAttempts: 1 });
 		await workflow.tick(owner);
+		// Lose Forge's in-memory history after the noisy rebase finishes, before observing its result.
+		await expect
+			.poll(async () => (await agents!.get(owner, reviewed.implementerId!)).thread.status)
+			.toBe("completed");
+		await jobs.save({ ...(await jobs.get(ticket.id))!, state: "uncertain" });
+		await restart();
+		expect((await agents!.get(owner, reviewed.implementerId!)).truncated).toBe(true);
 		await expect.poll(idle).toBe("idle");
 		expect((await ticketStore.get(ticket.id))?.status).toBe("done");
 		const completed = (await jobs.get(ticket.id))!;

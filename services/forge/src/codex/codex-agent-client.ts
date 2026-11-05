@@ -69,16 +69,16 @@ export class CodexAgentClient implements ICodexAgentClient {
 			);
 			if (result.thread.id !== id || result.thread.cwd !== path)
 				throw new Error("Codex workspace identity mismatch");
-			const page = z.object({ data: z.array(turnSchema), nextCursor: z.string().nullable() }).parse(
+			const page = z.object({ data: z.array(turnSchema).max(20), nextCursor: z.string().nullable() }).parse(
 				await this.connection.request("thread/turns/list", {
 					threadId: id,
 					limit: 20,
 					sortDirection: "desc",
-					itemsView: "full",
+					itemsView: "notLoaded",
 				}),
 			);
 			result.thread.turns = page.data.reverse();
-			const view = this.hydrate(result.thread);
+			const view = await this.history(result.thread);
 			view.truncated ||= page.nextCursor !== null;
 			const live = this.views.get(id)!;
 			view.requests = live.requests;
@@ -303,6 +303,64 @@ export class CodexAgentClient implements ICodexAgentClient {
 			for (const item of turn.items) this.item(view, item);
 			this.finishTools(view, this.status(turn.status));
 		}
+		return view;
+	}
+	private async history(thread: z.infer<typeof threadSchema>): Promise<AgentRuntimeView> {
+		// Read newest items first so a noisy earlier command cannot evict the final result.
+		const turns = new Map(thread.turns.map((turn) => [turn.id, turn.status]));
+		const view = this.hydrate({ ...thread, turns: thread.turns.map((turn) => ({ ...turn, items: [] })) });
+		if (!turns.size) return view;
+		const newest: AgentItem[] = [];
+		const cursors = new Set<string>();
+		const ids = new Set<string>();
+		let cursor: string | undefined;
+		let characters = 0;
+		for (let pages = 0; pages < 25; pages++) {
+			const page = z
+				.object({
+					data: z.array(z.object({ turnId: z.string(), item: z.unknown() })).max(20),
+					nextCursor: z.string().nullable(),
+				})
+				.parse(
+					await this.connection.request("thread/items/list", {
+						threadId: thread.id,
+						limit: 20,
+						sortDirection: "desc",
+						...(cursor ? { cursor } : {}),
+					}),
+				);
+			for (const entry of page.data) {
+				const status = turns.get(entry.turnId);
+				if (!status) {
+					view.truncated = true;
+					view.items = newest.reverse();
+					return view;
+				}
+				const itemView: AgentRuntimeView = { status: view.status, items: [], requests: [], truncated: false };
+				this.item(itemView, entry.item);
+				this.finishTools(itemView, this.status(status));
+				view.truncated ||= itemView.truncated;
+				const item = itemView.items[0]!;
+				if (ids.has(item.id)) throw new Error("Duplicate Codex history item");
+				if (newest.length >= 500 || characters + item.text.length > 240000) {
+					view.truncated = true;
+					view.items = newest.reverse();
+					return view;
+				}
+				ids.add(item.id);
+				newest.push(item);
+				characters += item.text.length;
+			}
+			if (page.nextCursor === null) {
+				view.items = newest.reverse();
+				return view;
+			}
+			if (cursors.has(page.nextCursor)) throw new Error("Invalid Codex item pagination");
+			cursors.add(page.nextCursor);
+			cursor = page.nextCursor;
+		}
+		view.truncated = true;
+		view.items = newest.reverse();
 		return view;
 	}
 	private finishTools(view: AgentRuntimeView, status: AgentRuntimeView["status"]): void {

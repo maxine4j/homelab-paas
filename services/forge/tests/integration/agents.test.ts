@@ -169,6 +169,22 @@ test("pinned Codex starts and resumes a thread without an inner sandbox or live 
 		await client.interrupt(id, client.read(id).turnId!);
 		await expect.poll(() => client.read(id).status).toBe("interrupted");
 		expect(await client.resume(id, path)).toMatchObject({ status: "interrupted" });
+		expect(client.read(id).items).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ role: "user", text: "Protocol probe with no credentials" }),
+			]),
+		);
+		expect(rpc).toHaveBeenCalledWith("thread/turns/list", {
+			threadId: id,
+			limit: 20,
+			sortDirection: "desc",
+			itemsView: "notLoaded",
+		});
+		expect(rpc).toHaveBeenCalledWith("thread/items/list", {
+			threadId: id,
+			limit: 20,
+			sortDirection: "desc",
+		});
 		const resumeIndex = rpc.mock.calls.findIndex(([method]) => method === "thread/resume");
 		await expect(rpc.mock.results.at(resumeIndex)!.value).resolves.toMatchObject({
 			sandbox: { type: "dangerFullAccess" },
