@@ -2,6 +2,66 @@ import { z } from "zod";
 
 import { filePathSchema, gitShaSchema, treePathSchema } from "./workspace.ts";
 
+const countSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+export const commitDiffLineSchema = z
+	.strictObject({
+		kind: z.enum(["context", "addition", "deletion", "no-newline"]),
+		text: z.string().max(262144),
+		oldLine: countSchema.min(1).optional(),
+		newLine: countSchema.min(1).optional(),
+	})
+	.refine((line) => {
+		if (line.kind === "context") return line.oldLine !== undefined && line.newLine !== undefined;
+		if (line.kind === "addition") return line.oldLine === undefined && line.newLine !== undefined;
+		if (line.kind === "deletion") return line.oldLine !== undefined && line.newLine === undefined;
+		return line.oldLine === undefined && line.newLine === undefined;
+	});
+export const commitDiffFileSchema = z.strictObject({
+	oldPath: z.string().max(4096),
+	newPath: z.string().max(4096),
+	oldMode: z.string().regex(/^[0-7]{6}$/),
+	newMode: z.string().regex(/^[0-7]{6}$/),
+	status: z.enum(["added", "deleted", "modified", "renamed", "type-changed"]),
+	additions: countSchema.optional(),
+	deletions: countSchema.optional(),
+	binary: z.boolean(),
+	unsupported: z.boolean(),
+	truncated: z.boolean(),
+	hunks: z
+		.array(
+			z.strictObject({
+				oldStart: countSchema,
+				oldCount: countSchema,
+				newStart: countSchema,
+				newCount: countSchema,
+				lines: z.array(commitDiffLineSchema).max(1000),
+			}),
+		)
+		.max(1000),
+});
+export const repositoryCommitDetailSchema = z
+	.strictObject({
+		sha: gitShaSchema,
+		subject: z.string().max(4096),
+		body: z.string().max(32768),
+		author: z.string().max(1024),
+		date: z.iso.datetime({ offset: true }),
+		parents: z.array(gitShaSchema).max(100),
+		comparisonBase: gitShaSchema,
+		files: z.array(commitDiffFileSchema).max(100),
+		omittedFiles: countSchema,
+		totalsComplete: z.boolean(),
+		metadataTruncated: z.boolean(),
+	})
+	.refine((detail) => {
+		const lines = detail.files.flatMap((file) => file.hunks.flatMap((hunk) => hunk.lines));
+		return (
+			lines.length <= 1000
+			&& lines.reduce((size, line) => size + new TextEncoder().encode(line.text).length, 0) <= 262144
+			&& new TextEncoder().encode(JSON.stringify(detail)).length <= 1048576
+		);
+	});
+
 export const branchNameSchema = z
 	.string()
 	.min(1)

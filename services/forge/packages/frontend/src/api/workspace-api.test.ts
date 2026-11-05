@@ -39,6 +39,7 @@ test.each([
 });
 
 test.each([
+	["commit-not-found", "Commit not found"],
 	["agent-not-found", "Chat no longer exists"],
 	["agent-conflict", "Chat changed"],
 	["agent-unavailable", "Chat unavailable"],

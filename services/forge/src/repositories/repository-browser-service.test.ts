@@ -32,11 +32,25 @@ test("browsing rechecks owner authorization and ready project state before Git a
 		client,
 		{ get: async () => ({ id, name: "Project", status, createdAt: "2026-11-02T00:00:00.000Z" }) },
 		new AccessService({ owner: "owner", origin: "https://forge.example" }),
+		{
+			read: async () => {
+				reads++;
+				throw new Error("commit reader called");
+			},
+		},
 	);
 	await expect(service.branches({ username: "intruder" }, id)).rejects.toThrow("Access denied");
 	await expect(service.branches({ username: "owner" }, id)).rejects.toThrow(ProjectUnavailableError);
+	await expect(service.commitDetail({ username: "intruder" }, id, "a".repeat(40))).rejects.toThrow("Access denied");
+	await expect(service.commitDetail({ username: "owner" }, id, "a".repeat(40))).rejects.toThrow(
+		ProjectUnavailableError,
+	);
 	expect(reads).toBe(0);
 	status = "ready";
 	expect(await service.branches({ username: "owner" }, id)).toEqual([]);
 	expect(reads).toBe(1);
+	await expect(service.commitDetail({ username: "owner" }, id, "a".repeat(40))).rejects.toThrow(
+		"commit reader called",
+	);
+	expect(reads).toBe(2);
 });

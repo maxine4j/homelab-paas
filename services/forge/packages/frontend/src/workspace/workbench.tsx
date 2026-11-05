@@ -82,7 +82,7 @@ export const Workbench = ({
 		opened: string[];
 	}>({ section: "code", locations: {}, opened: [] });
 	const section = route.page === "project" ? route.section : navigation.section;
-	const url = location.pathname + location.search;
+	const url = location.pathname + location.search + location.hash;
 	if (route.page === "project" && navigation.locations[section] !== url) {
 		setNavigation({
 			section,

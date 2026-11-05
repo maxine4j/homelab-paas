@@ -19,6 +19,7 @@ import { RepositoryBrowserClient } from "../../src/repositories/repository-brows
 import { RepositoryBrowserRouter } from "../../src/repositories/repository-browser-router.ts";
 import { RepositoryBrowserService } from "../../src/repositories/repository-browser-service.ts";
 import { RepositoryClient } from "../../src/repositories/repository-client.ts";
+import { RepositoryCommitClient } from "../../src/repositories/repository-commit-client.ts";
 import { WorkspaceClient } from "../../src/workspaces/workspace-client.ts";
 import { WorkspaceDiffClient } from "../../src/workspaces/workspace-diff-client.ts";
 import { WorkspaceRouter } from "../../src/workspaces/workspace-router.ts";
@@ -112,7 +113,12 @@ test("repository HTTP serves branch-specific trees, files and history behind own
 	await service.stage(owner, workspace.id, { paths: ["README.md"] });
 	await service.commit(owner, workspace.id, { message: "Documentation", expectedHead: workspace.head! });
 	const client = new RepositoryBrowserClient(root, git, new RepositoryClient(root, [], files, git));
-	const browser = new RepositoryBrowserService(client, projects, access);
+	const browser = new RepositoryBrowserService(
+		client,
+		projects,
+		access,
+		new RepositoryCommitClient(root, git, new RepositoryClient(root, [], files, git)),
+	);
 	const server = createServer(
 		new HttpApplication(new ProjectRouter(projects), access)
 			.create([new RepositoryBrowserRouter(browser)])

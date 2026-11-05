@@ -72,6 +72,50 @@ test("integrated production bundle styles editor/terminal on desktop/mobile and 
 						},
 					});
 				if (path.endsWith("/branches")) return route.fulfill({ json: [{ name: "main", sha: head }] });
+				if (path.endsWith(`/commits/${head}`))
+					return route.fulfill({
+						json: {
+							sha: head,
+							subject: "Production commit",
+							body: "<script>window.inlineScriptRan=true</script>",
+							author: "Owner",
+							date: createdAt,
+							parents: [],
+							comparisonBase: "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+							omittedFiles: 0,
+							totalsComplete: true,
+							metadataTruncated: false,
+							files: [
+								{
+									oldPath: "hostile.txt",
+									newPath: "hostile.txt",
+									oldMode: "000000",
+									newMode: "100644",
+									status: "added",
+									additions: 1,
+									deletions: 0,
+									binary: false,
+									unsupported: false,
+									truncated: false,
+									hunks: [
+										{
+											oldStart: 0,
+											oldCount: 0,
+											newStart: 1,
+											newCount: 1,
+											lines: [
+												{
+													kind: "addition",
+													newLine: 1,
+													text: "<img src=x onerror=window.inlineScriptRan=true>",
+												},
+											],
+										},
+									],
+								},
+							],
+						},
+					});
 				if (path.endsWith("/workspaces")) return route.fulfill({ json: [workspace] });
 				if (path.endsWith("/pull-requests")) return route.fulfill({ json: [] });
 				if (path.endsWith("/tickets"))
@@ -205,6 +249,24 @@ test("integrated production bundle styles editor/terminal on desktop/mobile and 
 			.locator(".cm-content span")
 			.evaluateAll((spans) => spans.map((span) => getComputedStyle(span).color));
 		expect(new Set(colors).size).toBeGreaterThan(1);
+		const commitResponse = await page.goto(
+			`http://127.0.0.1:${address.port}/projects/${projectId}/code?view=commit&commit=${head}&diff=split#diff-0`,
+		);
+		expect(commitResponse?.status()).toBe(200);
+		expect(commitResponse?.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
+		await expect(page.getByRole("heading", { name: "Production commit", exact: true })).toBeVisible();
+		await page.reload();
+		await expect(page.locator("#diff-0")).toBeVisible();
+		for (const width of [1280, 390]) {
+			await page.setViewportSize({ width, height: 844 });
+			await expect(page.locator(".commit-view")).toContainText("<img src=x onerror=window.inlineScriptRan=true>");
+			expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+		}
+		await expect(page.locator(".commit-view script, .commit-view img")).toHaveCount(0);
+		expect(await page.evaluate(() => (window as unknown as { inlineScriptRan: boolean }).inlineScriptRan)).toBe(
+			false,
+		);
+		expect(await page.evaluate(() => (window as unknown as { cspViolations: string[] }).cspViolations)).toEqual([]);
 	} finally {
 		server.closeAllConnections();
 		await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));

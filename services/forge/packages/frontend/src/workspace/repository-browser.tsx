@@ -10,13 +10,15 @@ import {
 	type RepositoryHistory,
 } from "@homelab-paas/forge-contracts";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 
 import type { IWorkspaceApi } from "../api/workspace-api.ts";
 import { resolveRoute } from "../navigation/routes.ts";
 import { Editor } from "./editor.tsx";
 import { FileIcon } from "./file-icon.tsx";
+import { RepositoryCommitView } from "./repository-commit-view.tsx";
 import { RepositoryFileTree } from "./repository-file-tree.tsx";
+import { commitHref, commitSelection } from "./repository-navigation.ts";
 
 const ChangedAt = ({ date }: { date?: string }) =>
 	date ? (
@@ -57,7 +59,9 @@ const BranchBrowser = ({
 	dirtyChange,
 	branchControl,
 	search,
+	visible,
 }: {
+	visible: boolean;
 	branchControl: ReactNode;
 	root: string;
 	repositoryName: string;
@@ -67,11 +71,13 @@ const BranchBrowser = ({
 	search?: string;
 }) => {
 	const navigate = useNavigate();
+	const historyScroll = useRef(0);
 	const [retainedSearch, setRetainedSearch] = useState("");
 	const selection = new URLSearchParams(search ?? retainedSearch);
 	const path = selection.get("path") ?? "";
 	const active = selection.get("file") ?? "";
 	const showingHistory = selection.get("view") === "history";
+	const commitLink = (sha: string) => commitHref(root.split("/").at(1)!, `?${selection}`, sha);
 	if (search !== undefined && retainedSearch !== search) setRetainedSearch(search);
 	const navigateCode = (directory: string, file = "", history = false) => {
 		const query = new URLSearchParams({ branch });
@@ -194,13 +200,17 @@ const BranchBrowser = ({
 		};
 	}, [api, root, branch, active, drafts, showingHistory]);
 	useEffect(() => {
-		if (!showingHistory) return;
+		if (!showingHistory || !visible) return;
 		let cancelled = false;
 		void api
 			.read(`${root}/history?branch=${encodeURIComponent(branch)}&offset=0`, repositoryHistorySchema)
 			.then((value) => {
 				if (!cancelled) {
-					setHistory(value);
+					setHistory((current) => {
+						if (current?.head === value.head) return current;
+						if (current) setNotice("Branch changed. Commit history refreshed.");
+						return value;
+					});
 					setError("");
 				}
 			})
@@ -210,7 +220,19 @@ const BranchBrowser = ({
 		return () => {
 			cancelled = true;
 		};
-	}, [api, root, branch, showingHistory, revision]);
+	}, [api, root, branch, showingHistory, visible, revision]);
+	useEffect(() => {
+		if (!visible || !showingHistory) return;
+		const restore = requestAnimationFrame(() => window.scrollTo(0, historyScroll.current));
+		const record = () => {
+			historyScroll.current = window.scrollY;
+		};
+		window.addEventListener("scroll", record);
+		return () => {
+			cancelAnimationFrame(restore);
+			window.removeEventListener("scroll", record);
+		};
+	}, [visible, showingHistory]);
 	const open = async (file: string) => {
 		navigateCode(file.split("/").slice(0, -1).join("/"), file);
 	};
@@ -373,11 +395,15 @@ const BranchBrowser = ({
 									{!history && !error && <p role='status'>Loading commits…</p>}
 									{history?.commits.map((commit) => (
 										<article key={commit.sha}>
-											<strong>{commit.subject}</strong>
+											<strong>
+												<Link to={commitLink(commit.sha)}>{commit.subject}</Link>
+											</strong>
 											<p>
 												{commit.author} · <ChangedAt date={commit.date} />
 											</p>
-											<code>{commit.sha.slice(0, 7)}</code>
+											<code>
+												<Link to={commitLink(commit.sha)}>{commit.sha.slice(0, 7)}</Link>
+											</code>
 										</article>
 									))}
 									{history?.commits.length === 0 && <p>No commits yet.</p>}
@@ -436,7 +462,15 @@ const BranchBrowser = ({
 															<span>{entry.name}</span>
 														</button>
 													</td>
-													<td className='file-commit'>{entry.lastCommit?.subject ?? "—"}</td>
+													<td className='file-commit'>
+														{entry.lastCommit ? (
+															<Link to={commitLink(entry.lastCommit.sha)}>
+																{entry.lastCommit.subject}
+															</Link>
+														) : (
+															"—"
+														)}
+													</td>
 													<td>
 														<ChangedAt date={entry.lastCommit?.date} />
 													</td>
@@ -558,6 +592,16 @@ export const RepositoryBrowser = ({
 	const navigate = useNavigate();
 	const route = resolveRoute(location.pathname);
 	const inCode = route.page === "project" && route.section === "code";
+	const [retainedSearch, setRetainedSearch] = useState(location.search);
+	if (inCode && retainedSearch !== location.search) setRetainedSearch(location.search);
+	const search = inCode ? location.search : retainedSearch;
+	const selection = commitSelection(search);
+	const inspecting = selection.kind !== "browse";
+	const browseQuery = new URLSearchParams(search);
+	for (const key of ["view", "commit", "diff"]) browseQuery.delete(key);
+	const filesHref = `/projects/${projectId}/code?${browseQuery}`;
+	browseQuery.set("view", "history");
+	const historyHref = `/projects/${projectId}/code?${browseQuery}`;
 	const [branches, setBranches] = useState<RepositoryBranch[]>([]);
 	const [retainedBranch, setRetainedBranch] = useState("");
 	const defaultBranch = branches.find((value) => value.name === "main")?.name ?? branches.at(0)?.name ?? "";
@@ -568,14 +612,14 @@ export const RepositoryBrowser = ({
 	const [error, setError] = useState("");
 	const [revision, setRevision] = useState(0);
 	const root = `projects/${projectId}/repository`;
-	if (inCode && branchExists) {
+	if (inCode && branchExists && !inspecting) {
 		if (retainedBranch !== branch) setRetainedBranch(branch);
 		if (!visited.includes(branch)) setVisited([...visited, branch]);
 	}
 	useEffect(() => {
-		if (!inCode || !branchExists) return;
+		if (!inCode || !branchExists || inspecting) return;
 		branchLocations.current.set(branch, location.pathname + location.search);
-	}, [inCode, branchExists, branch, location.pathname, location.search]);
+	}, [inCode, branchExists, branch, location.pathname, location.search, inspecting]);
 	useEffect(() => {
 		let cancelled = false;
 		void api
@@ -594,25 +638,44 @@ export const RepositoryBrowser = ({
 	}, [api, root, revision]);
 	return (
 		<div className='repository-browser'>
-			{branches.length > 0 && !branchExists && (
+			{inspecting && (
+				<nav className='commit-return' aria-label='Repository navigation'>
+					<Link to={historyHref}>History</Link>
+					<Link to={filesHref}>Files</Link>
+				</nav>
+			)}
+			{selection.kind === "invalid" && (
+				<p role='alert'>Invalid commit selection. Use a full commit SHA and a supported diff mode.</p>
+			)}
+			{selection.kind === "commit" && (
+				<RepositoryCommitView
+					key={selection.sha}
+					projectId={projectId}
+					sha={selection.sha}
+					mode={selection.mode}
+					api={api}
+				/>
+			)}
+			{!inspecting && branches.length > 0 && !branchExists && (
 				<p role='alert'>
 					Branch unavailable.{" "}
 					<button onClick={() => void navigate(`/projects/${projectId}/code`)}>Open default branch</button>
 				</p>
 			)}
-			{error && (
+			{!inspecting && error && (
 				<p role='alert'>
 					{error} <button onClick={() => setRevision((value) => value + 1)}>Retry branches</button>
 				</p>
 			)}
-			{!branches.length && !error && <p>No branches yet.</p>}
+			{!inspecting && !branches.length && !error && <p>No branches yet.</p>}
 			{visited.map((value) => (
-				<div key={value} hidden={branch !== value}>
+				<div key={value} hidden={branch !== value || inspecting}>
 					<BranchBrowser
 						root={root}
 						repositoryName={repositoryName}
 						branch={value}
-						search={inCode && branch === value ? location.search : undefined}
+						search={inCode && branch === value && !inspecting ? location.search : undefined}
+						visible={inCode && branch === value && !inspecting}
 						api={api}
 						dirtyChange={dirtyChange}
 						branchControl={

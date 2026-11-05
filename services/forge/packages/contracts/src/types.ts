@@ -1,8 +1,16 @@
 import type { z } from "zod";
 
-import type { repositoryCommitInputSchema } from "./repository.ts";
+import type {
+	repositoryCommitInputSchema,
+	repositoryCommitDetailSchema,
+	commitDiffFileSchema,
+	commitDiffLineSchema,
+} from "./repository.ts";
 
 export type RepositoryCommitInput = z.infer<typeof repositoryCommitInputSchema>;
+export type RepositoryCommitDetail = z.infer<typeof repositoryCommitDetailSchema>;
+export type CommitDiffFile = z.infer<typeof commitDiffFileSchema>;
+export type CommitDiffLine = z.infer<typeof commitDiffLineSchema>;
 
 import type {
 	workspaceSchema,

@@ -146,6 +146,55 @@ class MockApi implements IMockApi {
 			]);
 			this.routes.set(`${repositoryRoot}/tree`, (url) => this.tree(url, true));
 			this.routes.set(`${repositoryRoot}/file`, (url) => this.file(url, true));
+			for (const sha of [head, baseSha])
+				this.routes.set(`${repositoryRoot}/commits/${sha}`, () => ({
+					...commit,
+					sha,
+					subject: sha === head ? commit.subject : "Initialize project",
+					body: "Read-only commit preview.",
+					parents: sha === head ? [baseSha] : [],
+					comparisonBase: sha === head ? baseSha : "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+					omittedFiles: 0,
+					totalsComplete: true,
+					metadataTruncated: false,
+					files:
+						sha === baseSha
+							? []
+							: [
+									{
+										oldPath: "src/index.ts",
+										newPath: "src/index.ts",
+										oldMode: "100644",
+										newMode: "100644",
+										status: "modified",
+										additions: 1,
+										deletions: 1,
+										binary: false,
+										unsupported: false,
+										truncated: false,
+										hunks: [
+											{
+												oldStart: 1,
+												oldCount: 1,
+												newStart: 1,
+												newCount: 1,
+												lines: [
+													{
+														kind: "deletion",
+														text: "export const greeting = 'Hello';",
+														oldLine: 1,
+													},
+													{
+														kind: "addition",
+														text: "export const greeting = 'Hello, Forge';",
+														newLine: 1,
+													},
+												],
+											},
+										],
+									},
+								],
+				}));
 			this.routes.set(`${repositoryRoot}/history`, (url) =>
 				this.validBranch(url)
 					? {
@@ -272,7 +321,17 @@ export const mockApi = (): Plugin => ({
 			}
 			const value = api.read(url);
 			response.statusCode = value === undefined ? 404 : 200;
-			response.end(request.method === "HEAD" ? undefined : JSON.stringify(value ?? { error: "not-found" }));
+			response.end(
+				request.method === "HEAD"
+					? undefined
+					: JSON.stringify(
+							value ?? {
+								error: /\/repository\/commits\/[^/]+$/u.test(url.pathname)
+									? "commit-not-found"
+									: "not-found",
+							},
+						),
+			);
 		});
 	},
 });

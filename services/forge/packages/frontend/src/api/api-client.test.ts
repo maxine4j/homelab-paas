@@ -9,6 +9,7 @@ const project = {
 	createdAt: "2026-11-02T00:00:00.000Z",
 };
 test.each([
+	["commit-not-found", "Commit not found. It may no longer be retained in this repository."],
 	["workspace-not-found", "Workspace no longer exists. Refresh the list."],
 	["workspace-unavailable", "Workspace unavailable. Check its status and server storage."],
 	["workspace-conflict", "Workspace changed. Refresh before retrying."],

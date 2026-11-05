@@ -4,6 +4,9 @@ export * from "./workspace.ts";
 export * from "./repository.ts";
 export type {
 	RepositoryCommitInput,
+	RepositoryCommitDetail,
+	CommitDiffFile,
+	CommitDiffLine,
 	Workspace,
 	CreateWorkspace,
 	WorkspaceFile,
@@ -64,6 +67,7 @@ export const apiErrorSchema = z.strictObject({
 		"workspace-unavailable",
 		"workspace-conflict",
 		"file-not-found",
+		"commit-not-found",
 		"file-conflict",
 		"file-unsupported",
 	]),

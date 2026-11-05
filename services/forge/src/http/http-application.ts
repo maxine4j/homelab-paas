@@ -7,6 +7,7 @@ import { AccessDeniedError, type IAccessService } from "../auth/access-service.t
 import type { Actor } from "../auth/types.ts";
 import { InvalidProjectError, ProjectNotFoundError, ProjectUnavailableError } from "../projects/errors.ts";
 import type { IProjectRouter } from "../projects/project-router.ts";
+import { CommitNotFoundError } from "../repositories/errors.ts";
 import { TicketError } from "../tickets/errors.ts";
 import { WorkspaceError } from "../workspaces/errors.ts";
 import type { IStaticAssets } from "./static-assets.ts";
@@ -44,6 +45,9 @@ export class HttpApplication implements IHttpApplication {
 								: err.code === "ticket-conflict"
 									? 409
 									: 503;
+					ctx.body = { error: err.code };
+				} else if (err instanceof CommitNotFoundError) {
+					ctx.status = 404;
 					ctx.body = { error: err.code };
 				} else if (err instanceof WorkspaceError) {
 					ctx.status =

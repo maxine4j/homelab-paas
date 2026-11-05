@@ -14,7 +14,7 @@ import { inProcessPaas } from "../util/in-process-paas.ts";
 test.each(["recreate", "surge"] as const)(
 	"%s removes retired images immediately and preserves same-image redeploys",
 	async (rolloutStrategy) => {
-		const directory = await artifactDirectory(`integration-images-${rolloutStrategy}`);
+		const directory = await artifactDirectory(`images-${rolloutStrategy}`);
 		const git = new TestGit(directory);
 		await git.init();
 		const journal: string[] = [];

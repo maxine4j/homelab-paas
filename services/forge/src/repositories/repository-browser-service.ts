@@ -5,17 +5,20 @@ import type {
 	RepositoryFile,
 	RepositoryHistory,
 	RepositoryCommitInput,
+	RepositoryCommitDetail,
 } from "@homelab-paas/forge-contracts";
 
 import type { IAccessService } from "../auth/access-service.ts";
 import type { Actor } from "../auth/types.ts";
 import { ProjectUnavailableError } from "../projects/errors.ts";
 import type { IRepositoryBrowserClient } from "./repository-browser-client.ts";
+import type { IRepositoryCommitClient } from "./repository-commit-client.ts";
 
 interface IReadableProjects {
 	get(actor: Actor, id: string): Promise<Project>;
 }
 export interface IRepositoryBrowserService {
+	commitDetail(actor: Actor, id: string, sha: string): Promise<RepositoryCommitDetail>;
 	commit(actor: Actor, id: string, input: RepositoryCommitInput): Promise<{ head: string }>;
 	branches(actor: Actor, id: string): Promise<RepositoryBranch[]>;
 	tree(actor: Actor, id: string, branch: string, path: string): Promise<RepositoryTree>;
@@ -27,7 +30,12 @@ export class RepositoryBrowserService implements IRepositoryBrowserService {
 		private readonly client: IRepositoryBrowserClient,
 		private readonly projects: IReadableProjects,
 		private readonly access: IAccessService,
+		private readonly commits: IRepositoryCommitClient,
 	) {}
+	async commitDetail(actor: Actor, id: string, sha: string): Promise<RepositoryCommitDetail> {
+		await this.authorize(actor, id);
+		return this.commits.read(id, sha);
+	}
 	async commit(actor: Actor, id: string, input: RepositoryCommitInput): Promise<{ head: string }> {
 		await this.authorize(actor, id);
 		return this.client.commit(id, input);

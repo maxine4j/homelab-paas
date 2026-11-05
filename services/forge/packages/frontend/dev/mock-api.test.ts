@@ -9,6 +9,7 @@ import {
 	repositoryTreeSchema,
 	repositoryFileSchema,
 	repositoryHistorySchema,
+	repositoryCommitDetailSchema,
 } from "@homelab-paas/forge-contracts";
 import { agentThreadsSchema, agentViewSchema } from "@homelab-paas/forge-contracts/agents";
 import {
@@ -44,6 +45,17 @@ const read = async (path: string) => {
 	expect(response.headers.get("cache-control")).toBe("no-store");
 	return response.json();
 };
+
+test("mock commit details validate without branch context and missing commits have the production error", async () => {
+	const root = "/api/projects/123e4567-e89b-42d3-a456-426614174000/repository/commits";
+	const value = repositoryCommitDetailSchema.parse(await read(`${root}/${"a".repeat(40)}`));
+	expect(value.files.length).toBeGreaterThan(0);
+	for (const sha of value.parents)
+		expect(repositoryCommitDetailSchema.parse(await read(`${root}/${sha}`)).sha).toBe(sha);
+	const missing = await fetch(new URL(`${root}/${"f".repeat(40)}`, origin));
+	expect(missing.status).toBe(404);
+	expect(await missing.json()).toEqual({ error: "commit-not-found" });
+});
 
 test("mock chats expose isolated project history and requests while every mutation stays read-only", async () => {
 	for (const project of projectsSchema.parse(await read("/api/projects"))) {

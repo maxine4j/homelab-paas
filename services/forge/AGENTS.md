@@ -727,6 +727,54 @@ surface and accent border, rather than standalone button styling.
 A history icon loads the selected branch's commits, thirty at a time.
 Pagination rejects a changed branch head rather than mixing histories.
 
+### Commit inspection in Code
+
+Code supports read-only commit details at
+`/projects/:projectId/code?view=commit&commit=<full-40-character-SHA>`.
+Optional `branch`, `path` and `file` retain browsing context; the SHA alone
+identifies the commit. Reads remain independent of branch listing, movement or
+deletion. Invalid selections show an error. History subjects, short SHAs and
+directory last-commit subjects are ordinary links supporting new tabs.
+
+Details show subject/body, author/date, full SHA with copy feedback, all parent
+links, file navigation, status/mode/statistics and collapsible diff panels.
+Ordinary commits compare with their parent, roots with the empty tree, merges
+with their first parent (explicitly labelled). Empty commits show no file changes.
+Unified is the default; `diff=split` selects a wide-screen split view. Structured
+text preserves whitespace, old/new line numbers, addition/deletion signs and
+missing-newline markers. Long lines scroll inside panels. Repository content
+is rendered as text, never HTML. Binary/non-UTF-8 files, symlinks, submodules and
+unsupported paths receive safe summaries without dereferencing links.
+
+Commit, parent, diff-mode and stable file-fragment links create browser history
+entries. Back/Forward and fresh reload restore the selected commit, mode and
+file anchor. Retry, copy and collapse do not change history. Explicit History
+and Files links have deterministic destinations. Branch browsers remain mounted
+with drafts, commit messages and dirty guards retained; mutation controls are
+hidden in commit details. History retains pagination and scroll while its head
+is unchanged; changed heads refresh explicitly rather than mixing pages.
+
+`GET /api/projects/:id/repository/commits/:sha` rechecks owner authorization and
+project readiness. It accepts only full SHAs and verifies a commit object in the
+owned repository. Reads use immutable IDs, never checkout, fetch, mutate refs or
+write SQLite. Missing/non-commit objects return safe `commit-not-found` (404),
+malformed inputs `invalid-request` (400), infrastructure failures the existing
+unavailable response; diagnostics stay in backend logs.
+
+The validated response includes metadata, parents, comparison base, per-file
+old/new paths and modes, status, counts, structured hunks and numbered line kinds,
+binary/unsupported indicators and explicit omissions. Limits are 100 displayed
+files, 1,000 displayed diff lines, 256 KiB patch content and 1 MiB serialized
+response. Patch generation preflights a maximum of 128 KiB combined old/new blob
+content per file; larger files keep their metadata with an explicit omitted-content
+notice. Metadata and rename detection work are bounded. Incomplete totals and
+omitted content are labelled; truncation must never look like a complete empty
+diff. Git retains its 120-second/1 MiB command bounds, disables external diffs
+and text conversion, and reads NUL-delimited file identity with literal paths.
+Commit links remain valid only while Git retains the object. PR reviews/comments,
+arbitrary comparisons, whitespace settings, expanded omitted context and historical
+editing are outside this contract.
+
 Repository read APIs are under `/api/projects/:id/repository`: `branches`,
 `tree?branch=&path=`, `file?branch=&path=`, and `history?branch=&offset=`. They
 validate owner/project readiness, exact branch names and safe paths. Git reads
@@ -819,7 +867,8 @@ Run the checks listed [above](#run-package-and-verify-slice-1), plus
 `pnpm test:containers integration` for the supported Linux PTY runtime. The image
 smoke verifies production workspace/PR routing and native terminal packaging.
 Browser artifacts remain under `artifacts/forge*`.
-The browser suite starts its own Vite server on loopback port 5176 in `test`
+The browser suite starts its own Vite server on loopback port 5176 (override with
+`FORGE_BROWSER_PORT` for concurrent worktree checks) in `test`
 mode with a separate dependency cache, so it does not reuse or invalidate the
 owner's mock preview on port 5174.
 

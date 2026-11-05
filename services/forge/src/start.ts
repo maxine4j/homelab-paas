@@ -38,6 +38,7 @@ import { RepositoryBrowserClient } from "./repositories/repository-browser-clien
 import { RepositoryBrowserRouter } from "./repositories/repository-browser-router.ts";
 import { RepositoryBrowserService } from "./repositories/repository-browser-service.ts";
 import { RepositoryClient } from "./repositories/repository-client.ts";
+import { RepositoryCommitClient } from "./repositories/repository-commit-client.ts";
 import { TerminalInventory } from "./terminal/terminal-inventory.ts";
 import { TerminalProcess } from "./terminal/terminal-process.ts";
 import { TerminalRouter } from "./terminal/terminal-router.ts";
@@ -218,6 +219,7 @@ export const start = async (lifecycle: ILifecycle, options: StartOptions = {}): 
 					new RepositoryBrowserClient(config.dataDirectory, git, repositories),
 					projects,
 					access,
+					new RepositoryCommitClient(config.dataDirectory, git, repositories),
 				),
 			),
 			new TerminalRouter(terminals),

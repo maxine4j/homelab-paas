@@ -99,6 +99,7 @@ export class ApiClient implements IApiClient {
 				"workspace-unavailable": "Workspace unavailable. Check its status and server storage.",
 				"workspace-conflict": "Workspace changed. Refresh before retrying.",
 				"file-not-found": "File no longer exists. Refresh the file tree.",
+				"commit-not-found": "Commit not found. It may no longer be retained in this repository.",
 				"file-conflict": "File changed. Reload it before saving.",
 				"file-unsupported": "File is binary, too large, or unsupported.",
 			};

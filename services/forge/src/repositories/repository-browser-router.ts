@@ -5,6 +5,9 @@ import {
 	repositoryTreeSchema,
 	repositoryCommitInputSchema,
 	repositoryCommitResultSchema,
+	repositoryCommitDetailSchema,
+	gitShaSchema,
+	projectIdSchema,
 } from "@homelab-paas/forge-contracts";
 import Router from "@koa/router";
 
@@ -17,6 +20,14 @@ export class RepositoryBrowserRouter implements IHttpRouter {
 	constructor(private readonly browser: IRepositoryBrowserService) {}
 	create(): Router<{ actor: Actor }> {
 		const router = new Router<{ actor: Actor }>({ prefix: "/api/projects/:id/repository" });
+		router.get("/commits/:sha", async (ctx) => {
+			const id = projectIdSchema.safeParse(ctx.params["id"]);
+			const sha = gitShaSchema.safeParse(ctx.params["sha"]);
+			if (!id.success || !sha.success) throw new WorkspaceError("invalid-request");
+			ctx.body = repositoryCommitDetailSchema.parse(
+				await this.browser.commitDetail(ctx.state.actor, id.data, sha.data),
+			);
+		});
 		router.post("/commit", async (ctx) => {
 			const input = repositoryCommitInputSchema.safeParse(ctx.request.body);
 			if (!input.success) throw new WorkspaceError("invalid-request");

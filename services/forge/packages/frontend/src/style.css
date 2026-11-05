@@ -254,6 +254,159 @@
 		font-size: 10px;
 	}
 }
+.commit-view,
+.commit-panels,
+.commit-file,
+.commit-layout {
+	min-width: 0;
+}
+.commit-return,
+.commit-summary,
+.commit-summary nav,
+.commit-identity,
+.commit-metadata nav {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+}
+.commit-return {
+	margin: 16px 0;
+}
+.commit-metadata {
+	display: block;
+	padding: 20px;
+	border: 1px solid #30363d;
+	border-radius: 8px;
+	background: #161b22;
+	overflow-wrap: anywhere;
+}
+.commit-metadata h2 {
+	margin-top: 0;
+}
+.commit-metadata pre {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font: inherit;
+}
+.commit-identity code {
+	overflow-wrap: anywhere;
+	min-width: 0;
+}
+.commit-summary {
+	margin: 20px 0;
+}
+.commit-summary nav {
+	margin-left: auto;
+}
+.commit-summary [aria-current] {
+	font-weight: bold;
+	text-decoration: underline;
+}
+.commit-layout {
+	display: grid;
+	grid-template-columns: 220px minmax(0, 1fr);
+	gap: 20px;
+}
+.commit-file-nav {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	overflow-wrap: anywhere;
+}
+.commit-file {
+	border: 1px solid #30363d;
+	border-radius: 6px;
+	margin-bottom: 20px;
+	scroll-margin-top: 16px;
+	overflow: hidden;
+}
+.commit-file header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px;
+	background: #161b22;
+	flex-wrap: wrap;
+}
+.commit-file header strong {
+	overflow-wrap: anywhere;
+	min-width: 0;
+}
+.diff-stat {
+	margin-left: auto;
+	font-size: 12px;
+	color: #8b949e;
+}
+.diff-note {
+	padding: 0 12px;
+}
+.diff-scroll {
+	overflow-x: auto;
+	max-width: 100%;
+}
+.commit-diff {
+	width: 100%;
+	border-collapse: collapse;
+	font:
+		12px/1.65 ui-monospace,
+		monospace;
+}
+.commit-diff th {
+	text-align: left;
+	color: #8b949e;
+	font-size: 11px;
+	padding: 4px 8px;
+}
+.commit-diff td {
+	padding: 0 8px;
+	vertical-align: top;
+}
+.commit-diff .diff-text {
+	white-space: pre;
+	tab-size: 4;
+}
+.commit-diff .diff-text span {
+	display: inline-block;
+	width: 1.5em;
+}
+.commit-diff .line-number {
+	color: #8b949e;
+	width: 1%;
+	min-width: 3em;
+	text-align: right;
+	user-select: none;
+}
+.commit-diff .addition {
+	background: #122b20;
+}
+.commit-diff .deletion {
+	background: #351c21;
+}
+.commit-diff .diff-hunk {
+	background: #152334;
+	color: #8b949e;
+}
+.commit-diff .no-newline {
+	color: #d29922;
+}
+@media (max-width: 700px) {
+	.commit-layout {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.commit-file-nav {
+		max-height: 140px;
+		overflow-y: auto;
+		padding: 8px;
+		border: 1px solid #30363d;
+	}
+	.commit-summary .split-mode-link {
+		display: none;
+	}
+	.commit-metadata {
+		padding: 12px;
+	}
+}
 .task-board {
 	min-width: 0;
 	min-height: 0;
