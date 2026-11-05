@@ -219,6 +219,25 @@ through a serialized, coalesced reader; selected chats recover newly uncertain
 state without replaying messages or approvals. No Markdown or tool HTML is
 executed from conversation text.
 
+All conversations (standalone, ticket planning/implementation and read-only
+history) start following the latest content after history loads. Messages,
+streamed text, tool activity and requests keep only the history viewport at the
+bottom. Scrolling up pauses following and preserves the visible item's pixel
+offset even when earlier content grows. Sending and status updates do not resume
+following. If bounded history removes the reading anchor, preserve a surviving
+visible anchor where possible, otherwise clamp the previous position.
+
+While paused, a circular overlay button above the composer, named “Jump to latest
+messages”, resumes following and clears the new-content indication. Manually
+returning within 8 CSS pixels of the bottom also resumes. The keyboard-accessible
+button has visible focus and a 44px touch target. Meaningful changed conversation
+content produces a brief, coalesced subtle pulse; identical snapshots, connection
+events, status-only updates, geometry changes and the initial baseline do not.
+Reduced motion suppresses animation while retaining the static indication.
+Each mounted conversation retains its own follow/pause state. Hidden chats do
+not measure or scroll zero-size layouts; reselecting catches following chats up
+and restores paused anchors. Remounts start following; scroll state is not persisted.
+
 Controlled Chromium tests cover independent threads, activity, interruptions,
 reopening, failed sends/replies, approval/input, reconnects, automatic recovery and
 mobile layout. Screenshots live under `artifacts/forge-browser/`. Authenticated

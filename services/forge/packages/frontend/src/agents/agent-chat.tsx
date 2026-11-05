@@ -13,6 +13,7 @@ import { useLocation, useNavigate } from "react-router";
 import { ResourcePoller } from "../api/resource-poller.ts";
 import type { IWorkspaceApi } from "../api/workspace-api.ts";
 import { resolveRoute } from "../navigation/routes.ts";
+import { useConversationScroll } from "./use-conversation-scroll.ts";
 
 const RequestCard = ({
 	request,
@@ -41,6 +42,7 @@ const RequestCard = ({
 	return (
 		<form
 			className='agent-request'
+			data-scroll-id={`request:${request.id}`}
 			onSubmit={(event) => {
 				event.preventDefault();
 				reply({ requestId: request.id, answers });
@@ -156,6 +158,10 @@ export const Conversation = ({
 	const recoveryBlocked = useRef(false);
 	const selection = useRef(selected);
 	const messageId = useId();
+	const { viewport, content, paused, pending, pulse, onScroll, onWheel, resume } = useConversationScroll(
+		view,
+		selected,
+	);
 	useEffect(() => {
 		const resource = new ResourcePoller(
 			async (signal) => {
@@ -306,39 +312,70 @@ export const Conversation = ({
 				</p>
 			)}
 			{view?.truncated && <p className='agent-notice'>Some history or output was omitted.</p>}
-			<div className='agent-messages' tabIndex={0} aria-label='Conversation history'>
-				{view && !loadingHistory && !historyFailed && status !== "uncertain" && !view.items.length && (
-					<p className='agent-empty'>
-						Start a conversation about this project. Each chat works in its own managed worktree.
-					</p>
+			<div className='agent-history-viewport'>
+				<div
+					className='agent-messages'
+					ref={viewport}
+					onScroll={onScroll}
+					onWheel={onWheel}
+					tabIndex={0}
+					aria-label='Conversation history'
+				>
+					<div ref={content} className='agent-message-content'>
+						{view && !loadingHistory && !historyFailed && status !== "uncertain" && !view.items.length && (
+							<p className='agent-empty'>
+								Start a conversation about this project. Each chat works in its own managed worktree.
+							</p>
+						)}
+						{view?.items.map((item) =>
+							item.role === "activity" ? (
+								<details
+									key={item.id}
+									data-scroll-id={`item:${item.id}`}
+									className='agent-activity'
+									open
+								>
+									<summary>Tool activity</summary>
+									<pre>{item.text}</pre>
+								</details>
+							) : (
+								<article
+									key={item.id}
+									data-scroll-id={`item:${item.id}`}
+									className={`agent-message agent-message-${item.role}`}
+								>
+									<h4>{item.role === "user" ? "You" : "Codex"}</h4>
+									<div>{item.text}</div>
+								</article>
+							),
+						)}
+						{active && (
+							<p className='agent-notice' role='status'>
+								{status === "waiting" ? "Waiting for your response" : "Codex is working…"}
+							</p>
+						)}
+						{view?.requests.map((request) => (
+							<RequestCard
+								key={request.id}
+								request={request}
+								drafts={drafts}
+								busy={busy || readOnly}
+								reply={(input) => act("replies", input)}
+							/>
+						))}
+					</div>
+				</div>
+				{paused && (
+					<button
+						type='button'
+						className={`agent-jump ${pulse ? (pulse % 2 ? "agent-jump-pulse-odd" : "agent-jump-pulse-even") : ""}`}
+						data-pending={pending}
+						aria-label='Jump to latest messages'
+						onClick={resume}
+					>
+						<span aria-hidden='true'>↓</span>
+					</button>
 				)}
-				{view?.items.map((item) =>
-					item.role === "activity" ? (
-						<details key={item.id} className='agent-activity' open>
-							<summary>Tool activity</summary>
-							<pre>{item.text}</pre>
-						</details>
-					) : (
-						<article key={item.id} className={`agent-message agent-message-${item.role}`}>
-							<h4>{item.role === "user" ? "You" : "Codex"}</h4>
-							<div>{item.text}</div>
-						</article>
-					),
-				)}
-				{active && (
-					<p className='agent-notice' role='status'>
-						{status === "waiting" ? "Waiting for your response" : "Codex is working…"}
-					</p>
-				)}
-				{view?.requests.map((request) => (
-					<RequestCard
-						key={request.id}
-						request={request}
-						drafts={drafts}
-						busy={busy || readOnly}
-						reply={(input) => act("replies", input)}
-					/>
-				))}
 			</div>
 			<form
 				className='agent-composer'

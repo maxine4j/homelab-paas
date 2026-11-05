@@ -129,6 +129,180 @@ const setup = async (page: Page) => {
 	};
 };
 
+test("conversation follows activity, preserves a reading anchor and resumes on demand", async ({ page }) => {
+	const fixture = await setup(page);
+	await fixture.create();
+	const view = fixture.views[0]!;
+	view.items = Array.from({ length: 40 }, (_, i) => ({
+		id: `line-${i}`,
+		role: "assistant",
+		text: `Message ${i}\n${"content\n".repeat(4)}`,
+	}));
+	await fixture.event();
+	const history = page.getByLabel("Conversation history", { exact: true });
+	const gap = () => history.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop);
+	await expect.poll(gap).toBeLessThanOrEqual(8);
+	view.items.at(-1)!.text += "stream\n".repeat(10);
+	await fixture.event();
+	await expect(history).toContainText("stream");
+	await expect.poll(gap).toBeLessThanOrEqual(8);
+	await history.hover();
+	await page.mouse.wheel(0, -600);
+	const jump = page.getByRole("button", { name: "Jump to latest messages" });
+	await expect(jump).toBeVisible();
+	const anchor = history.locator("article").nth(36);
+	const offset = () => anchor.evaluate((el) => el.getBoundingClientRect().top);
+	const before = await offset();
+	view.items[0]!.text += "earlier growth\n".repeat(20);
+	view.items.push({ id: "tool-new", role: "activity", text: "tool output" });
+	await fixture.event();
+	await expect(history).toContainText("tool output");
+	await expect.poll(async () => Math.abs((await offset()) - before)).toBeLessThan(2);
+	await expect(jump).toHaveAttribute("data-pending", "true");
+	await expect.poll(() => jump.evaluate((el) => el.getAnimations().length)).toBe(0);
+	await fixture.event("open");
+	await expect.poll(() => jump.evaluate((el) => el.getAnimations().length)).toBe(0);
+	view.items.at(-1)!.text += " updated";
+	await fixture.event();
+	await expect.poll(() => jump.evaluate((el) => el.getAnimations().length)).toBeGreaterThan(0);
+	await jump.focus();
+	await page.keyboard.press("Enter");
+	await expect(jump).toHaveCount(0);
+	await expect.poll(gap).toBeLessThanOrEqual(8);
+	await history.hover();
+	await page.mouse.wheel(0, -400);
+	await expect(jump).toBeVisible();
+	expect(await jump.evaluate((el) => el.getAnimations().length)).toBe(0);
+	await history.evaluate((el) => {
+		el.scrollTop = el.scrollHeight - el.clientHeight - 6;
+	});
+	await expect(jump).toHaveCount(0);
+});
+
+test("reading pause survives hidden chats, requests, clipping and geometry changes", async ({ page }) => {
+	const fixture = await setup(page);
+	await fixture.create();
+	const view = fixture.views[0]!;
+	view.items = Array.from({ length: 40 }, (_, i) => ({
+		id: `history-${i}`,
+		role: "assistant",
+		text: `History ${i}\n${"body\n".repeat(5)}`,
+	}));
+	view.items.unshift({ id: "tool", role: "activity", text: "expanded tool\n".repeat(20) });
+	await fixture.event();
+	const conversation = page.getByRole("region", { name: "Chat conversation" }).filter({ visible: true });
+	const history = conversation.getByLabel("Conversation history", { exact: true });
+	const jump = conversation.getByRole("button", { name: "Jump to latest messages" });
+	await expect
+		.poll(() => history.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop))
+		.toBeLessThanOrEqual(8);
+	await history.hover();
+	await page.mouse.wheel(0, -650);
+	await expect(jump).toBeVisible();
+	const visibleAnchor = await history.locator("article").evaluateAll((nodes) => {
+		const top = nodes[0]!.parentElement!.parentElement!.getBoundingClientRect().top;
+		return nodes.find((node) => node.getBoundingClientRect().bottom > top)!.getAttribute("data-scroll-id")!;
+	});
+	const anchor = page.locator(`[data-scroll-id="${visibleAnchor}"]`);
+	const offset = () =>
+		anchor.evaluate(
+			(el) => el.getBoundingClientRect().top - el.parentElement!.parentElement!.getBoundingClientRect().top,
+		);
+	const before = await offset();
+	await fixture.event("open");
+	view.thread.status = "completed";
+	await fixture.event();
+	await expect(jump).toHaveAttribute("data-pending", "false");
+	await page.getByLabel("Message", { exact: true }).fill("Send while reading");
+	await page.getByRole("button", { name: "Send message", exact: true }).click();
+	await expect(history).toContainText("Send while reading");
+	await expect.poll(async () => Math.abs((await offset()) - before)).toBeLessThan(2);
+	view.requests = [{ id: "request", kind: "command", description: "Pending command", questions: [] }];
+	await fixture.event();
+	await expect(history).toContainText("Pending command");
+	await expect.poll(async () => Math.abs((await offset()) - before)).toBeLessThan(2);
+	await fixture.create();
+	view.items[0]!.text += "hidden growth\n".repeat(20);
+	await fixture.event();
+	await page.getByRole("button", { name: "Open chat Chat 1", exact: true }).click();
+	await expect(jump).toBeVisible();
+	await expect.poll(async () => Math.abs((await offset()) - before)).toBeLessThan(2);
+	await page.setViewportSize({ width: 1100, height: 800 });
+	await expect.poll(async () => Math.abs((await offset()) - before)).toBeLessThan(2);
+	await history.locator("details").evaluate((el) => {
+		el.removeAttribute("open");
+	});
+	await expect.poll(async () => Math.abs((await offset()) - before)).toBeLessThan(2);
+	const survivor = anchor.locator("xpath=following-sibling::article[1]");
+	const survivorId = await survivor.getAttribute("data-scroll-id");
+	const survivorOffset = await survivor.evaluate((el) => el.getBoundingClientRect().top);
+	view.items = view.items.filter((item) => `item:${item.id}` !== visibleAnchor);
+	await fixture.event();
+	await expect(anchor).toHaveCount(0);
+	await expect
+		.poll(async () =>
+			Math.abs(
+				(await page
+					.locator(`[data-scroll-id="${survivorId}"]`)
+					.evaluate((el) => el.getBoundingClientRect().top)) - survivorOffset,
+			),
+		)
+		.toBeLessThan(2);
+	await expect(jump).toBeVisible();
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	view.requests = [];
+	view.items.push({ id: "new", role: "assistant", text: "Reduced motion update" });
+	await fixture.event();
+	await expect(history).toContainText("Reduced motion update");
+	await expect(jump).toHaveAttribute("data-pending", "true");
+	expect(await jump.evaluate((el) => el.getAnimations().length)).toBe(0);
+	await page.screenshot({ path: "../../../../artifacts/forge-browser/agents-paused.png" });
+	await jump.click();
+	await expect(jump).toHaveCount(0);
+	await expect
+		.poll(() => history.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop))
+		.toBeLessThanOrEqual(8);
+});
+
+test("upward scroll wins a racing stream update and touch reading stays paused", async ({ browser }) => {
+	const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+	const page = await context.newPage();
+	const fixture = await setup(page);
+	await fixture.create();
+	const view = fixture.views[0]!;
+	view.items = Array.from({ length: 35 }, (_, i) => ({
+		id: `race-${i}`,
+		role: "assistant",
+		text: `Race ${i}\n${"body\n".repeat(5)}`,
+	}));
+	await fixture.event();
+	const history = page.getByLabel("Conversation history", { exact: true });
+	const gap = () => history.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop);
+	await expect.poll(gap).toBeLessThanOrEqual(8);
+	await history.hover();
+	view.items.at(-1)!.text += "racing stream\n".repeat(10);
+	await Promise.all([page.mouse.wheel(0, -200), fixture.event()]);
+	const jump = page.getByRole("button", { name: "Jump to latest messages" });
+	await expect(jump).toBeVisible();
+	await expect.poll(gap).toBeGreaterThan(100);
+	await jump.click();
+	await expect(jump).toHaveCount(0);
+	const bounds = (await history.boundingBox())!;
+	const client = await context.newCDPSession(page);
+	const x = bounds.x + bounds.width / 2;
+	const y = bounds.y + 30;
+	await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+	await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y + 130 }] });
+	await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+	await expect(jump).toBeVisible();
+	view.items.push({ id: "after-touch", role: "assistant", text: "New content after touch" });
+	await fixture.event();
+	await expect(history).toContainText("New content after touch");
+	await expect(jump).toBeVisible();
+	await page.screenshot({ path: "../../../../artifacts/forge-browser/agents-paused-mobile.png" });
+	await context.close();
+});
+
 test("Agents has one compact creation button and no redundant headings or title field", async ({ page }) => {
 	const fixture = await test.step("Open Agents", () => setup(page));
 	await expect(page.getByRole("button", { name: "Create chat", exact: true })).toBeVisible();

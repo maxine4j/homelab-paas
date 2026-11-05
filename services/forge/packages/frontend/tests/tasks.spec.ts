@@ -250,6 +250,18 @@ for (const size of [
 		await page.getByRole("button", { name: "FORGE-1 First task", exact: true }).click();
 		const panel = page.getByRole("dialog");
 		await expect(panel.getByLabel("Message", { exact: true })).toBeVisible();
+		const history = panel.getByLabel("Conversation history", { exact: true });
+		await expect
+			.poll(() => history.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop))
+			.toBeLessThanOrEqual(8);
+		await history.hover();
+		await page.mouse.wheel(0, -400);
+		const jump = panel.getByRole("button", { name: "Jump to latest messages" });
+		await expect(jump).toBeVisible();
+		expect((await jump.boundingBox())!.width).toBeGreaterThanOrEqual(44);
+		await page.screenshot({ path: `../../../../artifacts/forge-browser/ticket-chat-paused-${size.width}.png` });
+		await jump.click();
+		await expect(jump).toHaveCount(0);
 		await expect(
 			panel.getByText("Planning message 0: implement search with tests.", { exact: true }),
 		).toBeAttached();
