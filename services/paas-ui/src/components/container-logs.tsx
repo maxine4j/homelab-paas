@@ -2,6 +2,8 @@ import { Copy, Pause, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { CodeHighlight } from "./code-highlight.tsx";
+import { LogEntry } from "./log-entry.tsx";
+import { presentLog } from "./structured-log.ts";
 
 export const copyRecentLogs = async (
 	content: string,
@@ -18,10 +20,19 @@ export const copyRecentLogs = async (
 };
 
 export const ContainerLogs = ({ content }: { content?: string }) => {
-	const element = useRef<HTMLPreElement>(null);
+	const element = useRef<HTMLDivElement>(null);
 	const [frozen, setFrozen] = useState<string>();
 	const [feedback, setFeedback] = useState("");
 	const paused = frozen !== undefined;
+	const displayed = paused ? frozen : content;
+	const lines = displayed?.split("\n");
+	if (lines?.at(-1) === "") lines.pop();
+	const occurrences = new Map<string, number>();
+	const entries = lines?.map((raw) => {
+		const occurrence = occurrences.get(raw) ?? 0;
+		occurrences.set(raw, occurrence + 1);
+		return { raw, entry: presentLog(raw), key: `${raw}\0${occurrence}` };
+	});
 	useEffect(() => {
 		if (!paused && element.current) element.current.scrollTop = element.current.scrollHeight;
 	}, [content, paused]);
@@ -42,8 +53,8 @@ export const ContainerLogs = ({ content }: { content?: string }) => {
 				</button>
 				<span role='status'>{feedback}</span>
 			</div>
-			<pre
-				className='code-view logs'
+			<div
+				className='code-view logs log-viewer'
 				tabIndex={0}
 				aria-label='Container logs'
 				ref={element}
@@ -53,14 +64,24 @@ export const ContainerLogs = ({ content }: { content?: string }) => {
 						setFrozen(content ?? "");
 				}}
 			>
-				<CodeHighlight language='log'>
-					{paused
-						? frozen || "No log output yet."
-						: content === undefined
-							? "Loading logs…"
-							: content || "No log output yet."}
-				</CodeHighlight>
-			</pre>
+				{entries?.some(({ entry }) => entry) ? (
+					entries.map(({ raw, entry, key }) =>
+						entry ? (
+							<LogEntry key={key} entry={entry} />
+						) : (
+							<pre className='log-plain' key={key}>
+								<CodeHighlight language='log'>{raw + "\n"}</CodeHighlight>
+							</pre>
+						),
+					)
+				) : (
+					<pre className='log-plain'>
+						<CodeHighlight language='log'>
+							{displayed === undefined ? "Loading logs…" : displayed || "No log output yet."}
+						</CodeHighlight>
+					</pre>
+				)}
+			</div>
 		</>
 	);
 };

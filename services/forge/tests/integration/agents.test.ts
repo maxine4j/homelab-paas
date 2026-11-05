@@ -92,6 +92,8 @@ test("real Git/SQLite and a stdio peer run concurrent agents only in owned workt
 			}),
 		);
 		expect(paths[0]).not.toBe(paths[1]);
+		await files.writeFile(join(paths[0]!, "README.md"), "# Project\n");
+		expect(await agents.files(owner, one.thread.id, "")).toContain("README.md");
 		await Promise.all([agents.send(owner, one.thread.id, "First"), agents.send(owner, two.thread.id, "Second")]);
 		expect((await agents.get(owner, one.thread.id)).thread.status).toBe("running");
 		expect((await agents.get(owner, two.thread.id)).items).toEqual(
@@ -150,6 +152,9 @@ test("pinned Codex starts and resumes a thread without an inner sandbox or live 
 		).trim();
 		await git.run(["-C", join(root, "repository.git"), "worktree", "add", "-b", "probe", path, commit]);
 		const client = new CodexAgentClient(connection, files.realpath, randomUUID);
+		await files.writeFile(join(path, "probe.ts"), "export const probe = true;\n");
+		expect((await client.options(path)).models.length).toBeGreaterThan(0);
+		expect(await client.files(path, "probe")).toContain("probe.ts");
 		const rpc = vi.spyOn(connection, "request");
 		const id = await client.start(path);
 		await expect(rpc.mock.results.at(-1)!.value).resolves.toMatchObject({
@@ -159,11 +164,27 @@ test("pinned Codex starts and resumes a thread without an inner sandbox or live 
 		expect(client.read(id).status).toBe("idle");
 		const result = await connection.request("thread/read", { threadId: id, includeTurns: false });
 		expect(result).toMatchObject({ thread: { id, cwd: await files.realpath(path) } });
-		await client.send(id, path, "Protocol probe with no credentials");
+		await client.send(id, path, "Protocol probe with no credentials", { permissions: "approve-for-me" });
 		await expect.poll(() => client.read(id).items.length).toBeGreaterThan(0);
 		await client.interrupt(id, client.read(id).turnId!);
 		await expect.poll(() => client.read(id).status).toBe("interrupted");
 		expect(await client.resume(id, path)).toMatchObject({ status: "interrupted" });
+		expect(client.read(id).items).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ role: "user", text: "Protocol probe with no credentials" }),
+			]),
+		);
+		expect(rpc).toHaveBeenCalledWith("thread/turns/list", {
+			threadId: id,
+			limit: 20,
+			sortDirection: "desc",
+			itemsView: "notLoaded",
+		});
+		expect(rpc).toHaveBeenCalledWith("thread/items/list", {
+			threadId: id,
+			limit: 20,
+			sortDirection: "desc",
+		});
 		const resumeIndex = rpc.mock.calls.findIndex(([method]) => method === "thread/resume");
 		await expect(rpc.mock.results.at(resumeIndex)!.value).resolves.toMatchObject({
 			sandbox: { type: "dangerFullAccess" },

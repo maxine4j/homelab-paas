@@ -38,7 +38,18 @@ const initializeSchema = z.object({
 	platformFamily: z.string(),
 	platformOs: z.string(),
 });
+const maximumFrameBytes = 16 * 1024 * 1024;
 const methods = new Map<string, z.ZodType>([
+	["model/list", z.strictObject({ limit: z.literal(100), cursor: z.string().optional() })],
+	["skills/list", z.strictObject({ cwds: z.array(z.string().min(1)).length(1) })],
+	[
+		"fuzzyFileSearch",
+		z.strictObject({
+			query: z.string().max(500),
+			roots: z.array(z.string().min(1)).length(1),
+			cancellationToken: z.null(),
+		}),
+	],
 	["account/read", z.strictObject({ refreshToken: z.boolean().optional() })],
 	["account/login/start", z.strictObject({ type: z.literal("chatgptDeviceCode") })],
 	["account/login/cancel", z.strictObject({ loginId: z.string().min(1).max(256) })],
@@ -69,7 +80,16 @@ const methods = new Map<string, z.ZodType>([
 			threadId: z.string().min(1),
 			limit: z.literal(20),
 			sortDirection: z.literal("desc"),
-			itemsView: z.literal("full"),
+			itemsView: z.literal("notLoaded"),
+		}),
+	],
+	[
+		"thread/items/list",
+		z.strictObject({
+			threadId: z.string().min(1),
+			limit: z.literal(20),
+			sortDirection: z.literal("desc"),
+			cursor: z.string().min(1).optional(),
 		}),
 	],
 	[
@@ -77,15 +97,22 @@ const methods = new Map<string, z.ZodType>([
 		z.strictObject({
 			threadId: z.string().min(1),
 			cwd: z.string().min(1),
+			model: z.string().min(1).max(256).optional(),
+			approvalPolicy: z.enum(["on-request", "never"]).optional(),
+			approvalsReviewer: z.enum(["user", "auto_review"]).optional(),
 			input: z
 				.array(
-					z.strictObject({
-						type: z.literal("text"),
-						text: z.string().min(1).max(64000),
-						text_elements: z.array(z.never()),
-					}),
+					z.union([
+						z.strictObject({
+							type: z.literal("text"),
+							text: z.string().min(1).max(64000),
+							text_elements: z.array(z.never()),
+						}),
+						z.strictObject({ type: z.literal("skill"), name: z.string().min(1), path: z.string().min(1) }),
+					]),
 				)
-				.length(1),
+				.min(1)
+				.max(101),
 		}),
 	],
 	["turn/interrupt", z.strictObject({ threadId: z.string().min(1), turnId: z.string().min(1) })],
@@ -210,13 +237,13 @@ export class CodexConnection implements ICodexAgentConnection {
 			this.buffer += chunk;
 			let newline: number;
 			while ((newline = this.buffer.indexOf("\n")) >= 0) {
-				if (Buffer.byteLength(this.buffer.slice(0, newline)) > 1024 * 1024)
+				if (Buffer.byteLength(this.buffer.slice(0, newline)) > maximumFrameBytes)
 					throw new Error("Codex frame exceeded limit");
 				const line = this.buffer.slice(0, newline);
 				this.buffer = this.buffer.slice(newline + 1);
 				if (line.trim()) this.message(JSON.parse(line));
 			}
-			if (Buffer.byteLength(this.buffer) > 1024 * 1024) throw new Error("Codex frame exceeded limit");
+			if (Buffer.byteLength(this.buffer) > maximumFrameBytes) throw new Error("Codex frame exceeded limit");
 		} catch (cause) {
 			this.disconnect(cause);
 		}

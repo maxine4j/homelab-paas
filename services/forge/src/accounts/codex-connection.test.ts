@@ -6,6 +6,68 @@ import { CodexConnection } from "./codex-connection.ts";
 import type { AccountProcessSpec } from "./types.ts";
 
 describe("CodexConnection", () => {
+	it.each([false, true])(
+		"accepts large history frames and completion notifications (chunked: %s), but rejects over 16 MiB",
+		async (chunked) => {
+			let output: (chunk: string) => void = () => {};
+			const stop = vi.fn(async () => {});
+			const text = "x".repeat(2 * 1024 * 1024);
+			const emit = (message: unknown) => {
+				const frame = JSON.stringify(message) + "\n";
+				if (chunked) {
+					for (let offset = 0; offset < frame.length; offset += 65536)
+						output(frame.slice(offset, offset + 65536));
+				} else output(frame);
+			};
+			const connection = new CodexConnection(
+				{
+					initialize: async () => {},
+					spawn: (spec) => {
+						output = spec.onOutput;
+						return {
+							done: new Promise(() => {}),
+							stop,
+							write: (data) => {
+								const message = JSON.parse(data);
+								if (message.method === "initialize")
+									emit({
+										id: message.id,
+										result: {
+											userAgent: "test",
+											codexHome: "/data/codex",
+											platformFamily: "unix",
+											platformOs: "linux",
+										},
+									});
+								if (message.method === "thread/items/list") {
+									emit({ method: "turn/completed", params: { text } });
+									emit({ id: message.id, result: { data: [{ text }], nextCursor: null } });
+								}
+							},
+						};
+					},
+				},
+				sleep,
+			);
+			const notifications = vi.fn();
+			connection.subscribe(notifications);
+			try {
+				await connection.initialize();
+				await expect(
+					connection.request("thread/items/list", { threadId: "thread", limit: 20, sortDirection: "desc" }),
+				).resolves.toMatchObject({ data: [{ text }] });
+				expect(notifications).toHaveBeenCalledWith("turn/completed", { text });
+				expect(stop).not.toHaveBeenCalled();
+				const pending = connection.request("account/read", {});
+				await Promise.resolve();
+				output("x".repeat(16 * 1024 * 1024 + 1));
+				await expect(pending).rejects.toThrow("Codex connection unavailable");
+				expect(stop).toHaveBeenCalledOnce();
+			} finally {
+				await connection.close();
+			}
+		},
+	);
 	it("normal shutdown stops the child without reporting connection failure", async () => {
 		const warn = vi.fn();
 		const notifications = vi.fn();
@@ -131,7 +193,7 @@ describe("CodexConnection", () => {
 		expect(stopped).toBe(true);
 		await connection.initialize();
 		const pending = connection.request("account/read", {});
-		output("x".repeat(1024 * 1024 + 1));
+		output("x".repeat(16 * 1024 * 1024 + 1));
 		await expect(pending).rejects.toThrow("Codex connection unavailable");
 		await connection.close();
 	});

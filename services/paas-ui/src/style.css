@@ -62,21 +62,20 @@
 .health-single,
 .health-cluster {
 	position: absolute;
-	top: -4px;
+	top: calc(50% - 9px * var(--health-marker-scale));
+	box-sizing: border-box;
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: calc(8px * var(--health-marker-scale));
 	padding: 0;
 	pointer-events: auto;
 }
 .health-cluster {
-	top: -10px;
-	padding: 6px;
+	top: calc(50% - 15px * var(--health-marker-scale));
+	padding: calc(6px * var(--health-marker-scale));
 	border-radius: 999px;
 	background: #28303a;
-	box-shadow: 0 0 0 1px #465363;
-	overflow-x: auto;
-	scrollbar-width: none;
+	box-shadow: inset 0 0 0 1px #465363;
 }
 .health-single:hover,
 .health-single:focus-within,
@@ -90,7 +89,7 @@
 	inset: 0;
 	display: grid;
 	place-items: center;
-	font-size: 9px;
+	font-size: calc(9px * var(--health-marker-scale));
 	font-weight: 700;
 	color: #0d1015;
 }
@@ -115,13 +114,15 @@
 .health-marker {
 	position: relative;
 	top: auto;
-	flex: 0 0 16px;
-	width: 16px;
-	height: 16px;
-	margin: 1px;
+	box-sizing: border-box;
+	flex: 0 0 calc(16px * var(--health-marker-scale));
+	width: calc(16px * var(--health-marker-scale));
+	height: calc(16px * var(--health-marker-scale));
+	margin: calc(1px * var(--health-marker-scale));
 	border-radius: 50%;
-	border: 2px solid #131820;
-	box-shadow: 0 0 0 1px var(--health-colour);
+	box-shadow:
+		inset 0 0 0 calc(2px * var(--health-marker-scale)) #131820,
+		0 0 0 calc(1px * var(--health-marker-scale)) var(--health-colour);
 }
 .health-tooltip {
 	display: none;
@@ -1274,6 +1275,82 @@ dd {
 }
 .logs {
 	min-height: 240px;
+}
+.log-viewer {
+	font: inherit;
+	padding: 16px;
+	white-space: normal;
+	overflow-anchor: none;
+}
+.log-plain {
+	margin: 0;
+	font:
+		0.8rem/1.8 ui-monospace,
+		SFMono-Regular,
+		Menlo,
+		monospace;
+	overflow: auto;
+}
+.log-entry {
+	--log-colour: #a9b5c6;
+	min-width: 0;
+	margin: 0 0 8px;
+	border: 1px solid #303844;
+	border-left: 3px solid var(--log-colour);
+	border-radius: 8px;
+	background: #151c27;
+}
+.log-entry-info {
+	--log-colour: #8ab4ff;
+}
+.log-entry-warn {
+	--log-colour: #e7c56a;
+}
+.log-entry-error {
+	--log-colour: #ed929f;
+}
+.log-entry-debug {
+	--log-colour: #c3a0ef;
+}
+.log-entry > summary {
+	cursor: pointer;
+	padding: 12px;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+.log-entry > summary::marker {
+	color: var(--log-colour);
+}
+.log-level {
+	display: inline-block;
+	color: var(--log-colour);
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	margin-right: 12px;
+}
+.log-message {
+	white-space: pre-wrap;
+}
+.log-entry time {
+	color: #a9b5c6;
+	font-size: 0.8rem;
+	white-space: nowrap;
+}
+.log-entry summary time {
+	display: inline-block;
+	margin-left: 12px;
+}
+.log-details {
+	margin: 0 12px 12px;
+	min-width: 0;
+}
+.log-detail-heading {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	padding: 4px 0;
 }
 .inspection-panel {
 	background: #151b24;

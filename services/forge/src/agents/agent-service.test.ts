@@ -30,6 +30,11 @@ const setup = () => {
 		recover: vi.fn(),
 	};
 	const workspaces: IAgentWorkspaces = {
+		tree: vi.fn(async () => ({
+			path: "",
+			truncated: false,
+			entries: [{ name: "README.md", path: "README.md", kind: "file" as const, lastChangedAt: createdAt }],
+		})),
 		create: vi.fn<IAgentWorkspaces["create"]>(async () => ({
 			id: id(),
 			projectId,
@@ -51,6 +56,11 @@ const setup = () => {
 		})),
 	};
 	const client = {
+		options: vi.fn(async () => ({
+			models: [{ id: "test-model", name: "Test model", isDefault: true }],
+			skills: [],
+		})),
+		files: vi.fn(async () => ["src/main.ts"]),
 		start: vi.fn(async () => {
 			const key = `codex-${views.size + 1}`;
 			views.set(key, { status: "idle", items: [], requests: [], truncated: false });
@@ -98,6 +108,24 @@ const setup = () => {
 	);
 	return { service, client, workspaces, records, views, changed: (key: string) => changed(key) };
 };
+test("settings persist per chat and discovery always resolves the owned worktree", async () => {
+	const { service, client, workspaces, records } = setup();
+	const { thread } = await service.create(owner, projectId, "Configured");
+	expect(await service.options(owner, thread.id)).toMatchObject({ models: [{ id: "test-model" }] });
+	expect(await service.files(owner, thread.id, "main")).toEqual(["src/main.ts"]);
+	expect(await service.files(owner, thread.id, "")).toEqual(["README.md"]);
+	expect(client.files).toHaveBeenCalledWith(`/data/worktrees/${thread.workspaceId}`, "main");
+	await service.send(owner, thread.id, "Work", { model: "test-model", permissions: "approve-for-me" });
+	expect(records.get(thread.id)).toMatchObject({ model: "test-model", permissions: "approve-for-me" });
+	expect(client.send).toHaveBeenCalledWith(expect.any(String), `/data/worktrees/${thread.workspaceId}`, "Work", {
+		model: "test-model",
+		permissions: "approve-for-me",
+	});
+	expect(workspaces.resolve).toHaveBeenCalledWith(owner, thread.workspaceId);
+	await expect(service.options({ username: "outsider" }, thread.id)).rejects.toThrow();
+	await expect(service.files(owner, thread.id, "x".repeat(501))).rejects.toThrow("invalid-request");
+	await service.shutdown();
+});
 test("threads have independent verified worktrees and may execute concurrently; same-thread duplicate sends conflict", async () => {
 	const { service, client, workspaces } = setup();
 	const first = await service.create(owner, projectId, "First");

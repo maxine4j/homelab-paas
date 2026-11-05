@@ -181,33 +181,35 @@ test("overlays event circles within the window and filters resource events by ex
 	expect(service).toContain('class="health-marker health-degraded"');
 });
 
-test("nearby events share a padded pill preserving consecutive colour runs and their counts", () => {
+test("nearby events share a pill with one dot per colour in order of first appearance", () => {
 	const html = renderToStaticMarkup(
 		<HealthTimeline
 			label='Health'
 			now={now}
 			events={[
-				{ timestamp: 1000, level: "error", event: "reconciliation.failed", message: "Readiness failed" },
+				{ timestamp: 1000, level: "info", event: "deployment.started", message: "Initial rollout" },
 				{ timestamp: 2000, level: "error", event: "reconciliation.failed", message: "Readiness failed" },
-				{ timestamp: 3000, level: "info", event: "deployment.started", message: "Retry started" },
-				{ timestamp: 4000, level: "error", event: "reconciliation.failed", message: "Readiness failed" },
-				{ timestamp: 5000, level: "error", event: "reconciliation.failed", message: "Readiness failed" },
+				{ timestamp: 3000, level: "error", event: "reconciliation.failed", message: "Readiness failed" },
+				{ timestamp: 4000, level: "info", event: "deployment.started", message: "Retry started" },
+				{ timestamp: 5000, level: "info", event: "deployment.succeeded", message: "Recovered" },
 				{ timestamp: 6000, level: "error", event: "reconciliation.failed", message: "Readiness failed" },
 				{ timestamp: 7000, level: "info", event: "deployment.started", message: "Retry started again" },
+				{ timestamp: 8000, level: "info", event: "deployment.started", message: "Latest rollout" },
 			]}
 		/>,
 	);
 	expect(html).toContain('class="health-cluster"');
-	expect(html.match(/class="health-marker health-(degraded|progressing)"/g)).toEqual([
-		'class="health-marker health-degraded"',
-		'class="health-marker health-progressing"',
-		'class="health-marker health-degraded"',
-		'class="health-marker health-progressing"',
+	const dots = html.match(/<span class="health-marker [^"]+"[^>]*>/g);
+	expect(dots).toEqual([
+		expect.stringMatching(/class="health-marker health-progressing".*data-count="4"/s),
+		expect.stringMatching(/class="health-marker health-degraded".*data-count="3"/s),
+		expect.stringMatching(/class="health-marker health-healthy"/),
 	]);
-	expect(html).toContain('data-count="2"');
-	expect(html).toContain('data-count="3"');
+	expect(dots?.at(2)).not.toContain("data-count");
+	expect(html).toContain("Initial rollout");
 	expect(html).toContain("Readiness failed");
 	expect(html).toContain("Retry started again");
+	expect(html).toContain("Recovered");
 });
 
 test("clusters dots with less than a diameter of clear space, including brief health periods", () => {

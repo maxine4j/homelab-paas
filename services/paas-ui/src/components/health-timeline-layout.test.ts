@@ -21,10 +21,10 @@ test("recomputes grouping with the actual width after resizing", () => {
 	expect(layoutHealthMarkers(markers, 0, 1000, 400)).toHaveLength(1);
 });
 
-test("merges transitive neighbours while preserving sorted colour runs and leaving inputs untouched", () => {
+test("merges transitive neighbours by first colour appearance without reordering inputs", () => {
 	const markers = [marker(160), marker(100), marker(130, "Progressing"), marker(101)];
 	const [cluster] = layoutHealthMarkers(markers, 0, 1000, 1000);
-	expect(cluster?.runs.map((run) => run.map(({ timestamp }) => timestamp))).toEqual([[100, 101], [130], [160]]);
+	expect(cluster?.groups.map((group) => group.map(({ timestamp }) => timestamp))).toEqual([[100, 101, 160], [130]]);
 	expect(markers.map(({ timestamp }) => timestamp)).toEqual([160, 100, 130, 101]);
 });
 
@@ -32,7 +32,15 @@ test("merges again when a growing pill would crowd an earlier marker", () => {
 	// The first pair has 18px of clear space until the right group expands into a pill.
 	const clusters = layoutHealthMarkers([marker(100), marker(136, "Progressing"), marker(137)], 0, 1000, 1000);
 	expect(clusters).toHaveLength(1);
-	expect(clusters[0]?.runs).toHaveLength(3);
+	expect(clusters[0]?.groups).toHaveLength(2);
+});
+
+test("joins a stray dot to the closer of two pills and preserves the gap between them", () => {
+	const markers = [100, 101, 140, 175, 176].map((timestamp) => marker(timestamp));
+	const [left, right] = layoutHealthMarkers(markers, 0, 1000, 1000);
+	expect(left?.markers.map(({ timestamp }) => timestamp)).toEqual([100, 101]);
+	expect(right?.markers.map(({ timestamp }) => timestamp)).toEqual([140, 175, 176]);
+	expect(right!.left - (left!.left + left!.width)).toBeGreaterThanOrEqual(18);
 });
 
 test("keeps edge circles and pills inside the track and checks their clamped spacing", () => {
@@ -45,11 +53,16 @@ test("keeps edge circles and pills inside the track and checks their clamped spa
 	expect(clusters[0]?.markers).toHaveLength(2);
 });
 
-test("bounds very dense alternating pills to the track width", () => {
-	const markers = Array.from({ length: 40 }, (_, index) =>
-		marker(500 + index, index % 2 ? "Progressing" : "Degraded"),
+test("fits every distinct colour on a narrow track and retains all occurrences", () => {
+	const colours = ["Progressing", "Degraded", "Healthy", "Paused", "Missing", "Unknown"] as const;
+	const markers = [...colours, ...colours].map((health, index) => marker(500 + index, health));
+	const clusters = layoutHealthMarkers(markers, 0, 1000, 100);
+	expect(clusters).toHaveLength(1);
+	const cluster = clusters[0]!;
+	expect(cluster.groups.map((group) => group.map(({ health }) => health))).toEqual(
+		colours.map((health) => [health, health]),
 	);
-	const [cluster] = layoutHealthMarkers(markers, 0, 1000, 240);
-	expect(cluster?.runs).toHaveLength(40);
-	expect(cluster!.left + cluster!.width).toBeLessThanOrEqual(240);
+	expect(cluster.left).toBe(0);
+	expect(cluster.width).toBe(100);
+	expect(cluster.markerScale).toBeCloseTo(0.625);
 });

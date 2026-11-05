@@ -13,6 +13,8 @@ import { useLocation, useNavigate } from "react-router";
 import { ResourcePoller } from "../api/resource-poller.ts";
 import type { IWorkspaceApi } from "../api/workspace-api.ts";
 import { resolveRoute } from "../navigation/routes.ts";
+import { AgentActivity } from "./agent-activity.tsx";
+import { AgentComposer } from "./agent-composer.tsx";
 import { useConversationScroll } from "./use-conversation-scroll.ts";
 
 const RequestCard = ({
@@ -157,7 +159,6 @@ export const Conversation = ({
 	const historyNeeded = useRef(true);
 	const recoveryBlocked = useRef(false);
 	const selection = useRef(selected);
-	const messageId = useId();
 	const { viewport, content, paused, pending, pulse, onScroll, onWheel, resume } = useConversationScroll(
 		view,
 		selected,
@@ -327,30 +328,12 @@ export const Conversation = ({
 								Start a conversation about this project. Each chat works in its own managed worktree.
 							</p>
 						)}
-						{view?.items.map((item) =>
-							item.role === "activity" ? (
-								<details
-									key={item.id}
-									data-scroll-id={`item:${item.id}`}
-									className='agent-activity'
-									open
-								>
-									<summary>Tool activity</summary>
-									<pre>{item.text}</pre>
-								</details>
-							) : (
-								<article
-									key={item.id}
-									data-scroll-id={`item:${item.id}`}
-									className={`agent-message agent-message-${item.role}`}
-								>
-									<h4>{item.role === "user" ? "You" : "Codex"}</h4>
-									<div>{item.text}</div>
-								</article>
-							),
-						)}
+						<AgentActivity items={view?.items ?? []} />
 						{active && (
-							<p className='agent-notice' role='status'>
+							<p
+								className={`agent-notice ${status === "running" ? "agent-working-highlight" : ""}`}
+								role='status'
+							>
 								{status === "waiting" ? "Waiting for your response" : "Codex is working…"}
 							</p>
 						)}
@@ -377,31 +360,22 @@ export const Conversation = ({
 					</button>
 				)}
 			</div>
-			<form
-				className='agent-composer'
-				onSubmit={(event) => {
-					event.preventDefault();
-					if (sendable && draft.trim()) act("messages", { text: draft }, true);
-				}}
-			>
-				<label htmlFor={messageId}>Message</label>
-				<textarea
-					id={messageId}
-					rows={3}
-					maxLength={8000}
-					placeholder='Ask Codex to work on this project…'
-					value={draft}
+			{view && (
+				<AgentComposer
+					id={id}
+					api={api}
+					draft={draft}
 					disabled={busy || readOnly}
-					onChange={(event) => {
-						setDraft(event.target.value);
-						drafts?.set(id, event.target.value);
+					sendable={Boolean(sendable)}
+					settings={view.thread}
+					configurable={!messagePath && !readOnly}
+					change={(value) => {
+						setDraft(value);
+						drafts?.set(id, value);
 					}}
+					send={(settings) => act("messages", { text: draft, ...(!messagePath ? settings : {}) }, true)}
 				/>
-				<div className='agent-composer-footer'>
-					<span>{draft.length}/8000 · Draft kept in this open chat</span>
-					<button disabled={busy || !sendable || !draft.trim()}>Send message</button>
-				</div>
-			</form>
+			)}
 		</section>
 	);
 };

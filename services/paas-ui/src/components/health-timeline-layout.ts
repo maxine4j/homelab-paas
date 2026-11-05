@@ -12,30 +12,42 @@ export const layoutHealthMarkers = (
 	trackWidth: number,
 ): HealthTimelineCluster[] => {
 	const place = (entries: HealthTimelineMarker[]): HealthTimelineCluster => {
-		const runs: HealthTimelineMarker[][] = [];
+		const colours = new Map<HealthTimelineMarker["health"], HealthTimelineMarker[]>();
 		for (const marker of entries) {
-			const last = runs.at(-1);
-			if (last?.at(-1)?.health === marker.health) last.push(marker);
-			else runs.push([marker]);
+			const group = colours.get(marker.health);
+			if (group) group.push(marker);
+			else colours.set(marker.health, [marker]);
 		}
-		const width = Math.min(
-			trackWidth,
-			entries.length === 1 ? diameter : runs.length * diameter + (runs.length - 1) * gap + padding * 2,
-		);
+		const groups = [...colours.values()];
+		const naturalWidth =
+			entries.length === 1 ? diameter : groups.length * diameter + (groups.length - 1) * gap + padding * 2;
+		const width = Math.min(trackWidth, naturalWidth);
 		const middle = (((entries.at(0)!.timestamp + entries.at(-1)!.timestamp) / 2 - start) / duration) * trackWidth;
-		return { left: Math.max(0, Math.min(trackWidth - width, middle - width / 2)), width, markers: entries, runs };
+		return {
+			left: Math.max(0, Math.min(trackWidth - width, middle - width / 2)),
+			width,
+			markerScale: width / naturalWidth,
+			markers: entries,
+			groups,
+		};
 	};
-	const clusters: HealthTimelineCluster[] = [];
-	for (const marker of [...markers].sort((a, b) => a.timestamp - b.timestamp)) {
-		let cluster = place([marker]);
-		// Expansion and edge clamping can bring an earlier cluster into range too.
-		while (clusters.length) {
-			const previous = clusters.at(-1)!;
-			if (cluster.left - (previous.left + previous.width) >= diameter) break;
-			clusters.pop();
-			cluster = place([...previous.markers, ...cluster.markers]);
+	const clusters = [...markers].sort((a, b) => a.timestamp - b.timestamp).map((marker) => place([marker]));
+	while (true) {
+		// Take the closest pair first so a dot between pills joins its nearer neighbour.
+		let closest = -1;
+		let clearSpace = diameter;
+		for (let index = 0; index < clusters.length - 1; index++) {
+			const left = clusters.at(index)!;
+			const right = clusters.at(index + 1)!;
+			const space = right.left - (left.left + left.width);
+			if (space < clearSpace) {
+				closest = index;
+				clearSpace = space;
+			}
 		}
-		clusters.push(cluster);
+		if (closest === -1) return clusters;
+		const left = clusters.at(closest)!;
+		const right = clusters.at(closest + 1)!;
+		clusters.splice(closest, 2, place([...left.markers, ...right.markers]));
 	}
-	return clusters;
 };

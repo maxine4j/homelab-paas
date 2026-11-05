@@ -71,11 +71,29 @@ class MockApi implements IMockApi {
 				status: "waiting",
 			};
 			this.routes.set(`${projectRoot}/agents`, () => [agent]);
+			this.routes.set(`/api/agents/${agent.id}/options`, () => ({
+				models: [{ id: "preview-model", name: "Codex", isDefault: true }],
+				skills: [{ name: "review", description: "Review changes and check behavior" }],
+			}));
+			this.routes.set(`/api/agents/${agent.id}/files`, () => ["src/main.ts"]);
 			this.routes.set(`/api/agents/${agent.id}`, () => ({
 				thread: agent,
 				items: [
 					{ id: "user", role: "user", text: "Review the navigation and suggest a small improvement." },
-					{ id: "activity", role: "activity", text: "git status --short\nWorking tree clean" },
+					{
+						id: "activity",
+						role: "activity",
+						title: "git status --short",
+						status: "completed",
+						text: "Working tree clean",
+					},
+					{
+						id: "read",
+						role: "activity",
+						title: "Read src/main.ts",
+						status: "completed",
+						text: "Read application routing and project navigation.",
+					},
 					{
 						id: "answer",
 						role: "assistant",
