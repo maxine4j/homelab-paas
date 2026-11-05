@@ -10,8 +10,9 @@ export interface HealthTimelineMarker {
 export interface HealthTimelineCluster {
 	left: number;
 	width: number;
+	markerScale: number;
 	markers: HealthTimelineMarker[];
-	runs: HealthTimelineMarker[][];
+	groups: HealthTimelineMarker[][];
 }
 
 export type ResourceTab = "config" | "descriptor" | "logs";

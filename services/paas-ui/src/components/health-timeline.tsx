@@ -61,7 +61,7 @@ const MarkerTooltip = ({ markers, style }: { markers: HealthTimelineMarker[]; st
 	);
 };
 
-const HealthMarker = ({ run, alignment }: { run: HealthTimelineMarker[]; alignment?: string }) => {
+const HealthMarker = ({ markers, alignment }: { markers: HealthTimelineMarker[]; alignment?: string }) => {
 	const element = useRef<HTMLSpanElement>(null);
 	const [anchor, setAnchor] = useState<CSSProperties>();
 	const updateAnchor = () => {
@@ -87,8 +87,8 @@ const HealthMarker = ({ run, alignment }: { run: HealthTimelineMarker[]; alignme
 			window.removeEventListener("resize", updateAnchor);
 		};
 	}, [active]);
-	const count = run.filter(({ event }) => event).length || run.length;
-	const description = run
+	const count = markers.filter(({ event }) => event).length || markers.length;
+	const description = markers
 		.map((marker) =>
 			marker.event
 				? `${formatTime(marker.timestamp)} · ${marker.event.event}${marker.event.resourceId ? ` · ${marker.event.resourceId}` : ""}: ${marker.event.message}`
@@ -98,7 +98,7 @@ const HealthMarker = ({ run, alignment }: { run: HealthTimelineMarker[]; alignme
 	return (
 		<span
 			ref={element}
-			className={`health-marker health-${run.at(0)!.health.toLowerCase()}`}
+			className={`health-marker health-${markers.at(0)!.health.toLowerCase()}`}
 			tabIndex={0}
 			role='img'
 			aria-label={description}
@@ -111,7 +111,7 @@ const HealthMarker = ({ run, alignment }: { run: HealthTimelineMarker[]; alignme
 			}}
 			onBlur={() => setAnchor(undefined)}
 		>
-			<MarkerTooltip markers={run} style={anchor} />
+			<MarkerTooltip markers={markers} style={anchor} />
 		</span>
 	);
 };
@@ -171,21 +171,28 @@ const HealthTrack = ({
 				))}
 			</div>
 			<div className='health-markers'>
-				{layoutHealthMarkers(markers, start, duration, width).map((cluster, index) => (
-					<div
-						key={index}
-						className={cluster.markers.length > 1 ? "health-cluster" : "health-single"}
-						style={{ left: `${(cluster.left / width) * 100}%`, width: cluster.width }}
-					>
-						{cluster.runs.map((run, runIndex) => (
-							<HealthMarker
-								key={runIndex}
-								run={run}
-								alignment={alignment((cluster.left + cluster.width / 2) / width)}
-							/>
-						))}
-					</div>
-				))}
+				{layoutHealthMarkers(markers, start, duration, width).map((cluster, index) => {
+					const style: CSSProperties & { "--health-marker-scale": number } = {
+						left: `${(cluster.left / width) * 100}%`,
+						width: cluster.width,
+						"--health-marker-scale": cluster.markerScale,
+					};
+					return (
+						<div
+							key={index}
+							className={cluster.markers.length > 1 ? "health-cluster" : "health-single"}
+							style={style}
+						>
+							{cluster.groups.map((group) => (
+								<HealthMarker
+									key={group.at(0)!.health}
+									markers={group}
+									alignment={alignment((cluster.left + cluster.width / 2) / width)}
+								/>
+							))}
+						</div>
+					);
+				})}
 			</div>
 		</div>
 	);
