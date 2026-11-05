@@ -7,6 +7,7 @@ import {
 	type TicketWorkflow,
 } from "@homelab-paas/forge-contracts/tickets";
 import { useEffect, useRef, useState, useId } from "react";
+import type { PointerEvent } from "react";
 
 import { Conversation } from "../agents/agent-chat.tsx";
 import { ResourcePoller } from "../api/resource-poller.ts";
@@ -39,6 +40,16 @@ export const TicketDetails = ({
 	drafts: Map<string, string>;
 }) => {
 	const dialog = useRef<HTMLDialogElement>(null);
+	const backdropPointer = useRef<number | undefined>(undefined);
+	const outsideDialog = (event: PointerEvent<HTMLDialogElement>): boolean => {
+		const bounds = event.currentTarget.getBoundingClientRect();
+		return (
+			event.clientX < bounds.left
+			|| event.clientX > bounds.right
+			|| event.clientY < bounds.top
+			|| event.clientY > bounds.bottom
+		);
+	};
 	const fieldId = useId();
 	const poller = useRef<ResourcePoller<TicketWorkflow> | undefined>(undefined);
 	const [job, setJob] = useState<TicketWorkflow>();
@@ -85,6 +96,23 @@ export const TicketDetails = ({
 			ref={dialog}
 			className='ticket-details ticket-dialog'
 			aria-labelledby='ticket-details-title'
+			onPointerDown={(event) => {
+				backdropPointer.current =
+					event.isPrimary && event.button === 0 && !busy && outsideDialog(event)
+						? event.pointerId
+						: undefined;
+			}}
+			onPointerUp={(event) => {
+				const startedOutside = backdropPointer.current === event.pointerId;
+				backdropPointer.current = undefined;
+				if (startedOutside && event.isPrimary && event.button === 0 && !busy && outsideDialog(event)) {
+					event.preventDefault();
+					close();
+				}
+			}}
+			onPointerCancel={() => {
+				backdropPointer.current = undefined;
+			}}
 			onCancel={(event) => {
 				event.preventDefault();
 				if (!busy) close();

@@ -14,6 +14,8 @@ const setup = async (page: Page, crowded = false, agentic = false, review = fals
 	let hold: Promise<void> | undefined;
 	let release = () => {};
 	let held = 0;
+	let mutation: Promise<void> | undefined;
+	let releaseMutation = () => {};
 	const operations: string[] = [];
 	if (agentic) tickets[0]!.status = "todo";
 	if (review) tickets[0]!.status = "in-review";
@@ -114,6 +116,7 @@ const setup = async (page: Page, crowded = false, agentic = false, review = fals
 				const ticket = tickets.find((value) => value.id === path.split("/")[3])!;
 				if (path.endsWith("/move")) {
 					operations.push("move");
+					await mutation;
 					if (failMove) return route.fulfill({ status: 503, json: { error: "ticket-unavailable" } });
 					const { status, beforeId } = route.request().postDataJSON();
 					ticket.status = status;
@@ -133,6 +136,15 @@ const setup = async (page: Page, crowded = false, agentic = false, review = fals
 	await page.getByRole("link", { name: "Open Forge", exact: true }).click();
 	await page.getByRole("tab", { name: "Tasks", exact: true }).click();
 	return {
+		blockMutation: () => {
+			mutation = new Promise<void>((resolve) => {
+				releaseMutation = resolve;
+			});
+		},
+		releaseMutation: () => {
+			releaseMutation();
+			mutation = undefined;
+		},
 		operations,
 		held: () => held,
 		blockReads: () => {
@@ -150,6 +162,82 @@ const setup = async (page: Page, crowded = false, agentic = false, review = fals
 		},
 	};
 };
+
+test("backdrop gestures respect dialog bounds, busy state, and native dismissal", async ({ page }) => {
+	const fixture = await setup(page);
+	const url = page.url();
+	const entries = await page.evaluate(() => history.length);
+	const open = () => page.getByRole("button", { name: "FORGE-1 First task", exact: true }).click();
+	const card = (await page.getByRole("button", { name: "FORGE-2 Second task", exact: true }).boundingBox())!;
+	await open();
+	const dialog = page.getByRole("dialog");
+	const bounds = (await dialog.boundingBox())!;
+	const outside = { x: card.x + card.width / 2, y: card.y + card.height / 2 };
+	expect(outside.x).toBeLessThan(bounds.x);
+	await page.getByLabel("Title", { exact: true }).fill("Unsaved scope");
+	await page.mouse.click(bounds.x + 2, bounds.y + 2);
+	await expect(dialog).toBeVisible();
+	await page.getByRole("heading", { name: "FORGE-1", exact: true }).hover();
+	await page.mouse.down();
+	await page.mouse.move(outside.x, outside.y);
+	await page.mouse.up();
+	await expect(dialog).toBeVisible();
+	await page.mouse.click(outside.x, outside.y, { button: "right" });
+	await expect(dialog).toBeVisible();
+	await page.mouse.click(outside.x, outside.y);
+	await expect(dialog).toHaveCount(0);
+	await expect(page).toHaveURL(url);
+	expect(await page.evaluate(() => history.length)).toBe(entries);
+	await open();
+	await expect(page.getByLabel("Title", { exact: true })).toHaveValue("First task");
+	fixture.blockMutation();
+	await page.getByLabel("Status", { exact: true }).selectOption("todo");
+	await expect.poll(() => fixture.operations.includes("move")).toBe(true);
+	await page.mouse.click(outside.x, outside.y);
+	await page.keyboard.press("Escape");
+	await expect(dialog).toBeVisible();
+	await expect(page.getByRole("button", { name: "Close ticket" })).toBeDisabled();
+	fixture.releaseMutation();
+	await expect(page.getByRole("button", { name: "Close ticket" })).toBeEnabled();
+	await page.mouse.click(outside.x, outside.y);
+	await expect(dialog).toHaveCount(0);
+	await open();
+	await page.keyboard.press("Escape");
+	await expect(dialog).toHaveCount(0);
+});
+
+test("touch backdrop taps close while cancelled gestures and content taps preserve drafts", async ({ browser }) => {
+	const context = await browser.newContext({
+		viewport: { width: 820, height: 1000 },
+		hasTouch: true,
+		isMobile: true,
+	});
+	const page = await context.newPage();
+	await setup(page, false, true, true);
+	const open = () => page.getByRole("button", { name: "FORGE-1 First task", exact: true }).click();
+	await open();
+	const dialog = page.getByRole("dialog");
+	await page.getByLabel("Message", { exact: true }).fill("Keep feedback");
+	await page.getByLabel("Which files?", { exact: true }).fill("Keep answer");
+	const bounds = (await dialog.boundingBox())!;
+	const x = bounds.x - 10;
+	const y = bounds.y + 20;
+	expect(x).toBeGreaterThan(0);
+	await page.touchscreen.tap(bounds.x + 2, bounds.y + 2);
+	await expect(dialog).toBeVisible();
+	const client = await context.newCDPSession(page);
+	await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+	await client.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] });
+	await expect(dialog).toBeVisible();
+	await page.touchscreen.tap(x, y);
+	await expect(dialog).toHaveCount(0);
+	await open();
+	await expect(page.getByLabel("Message", { exact: true })).toHaveValue("Keep feedback");
+	await expect(page.getByLabel("Which files?", { exact: true })).toHaveValue("Keep answer");
+	await page.getByRole("button", { name: "Close ticket", exact: true }).click();
+	await expect(dialog).toHaveCount(0);
+	await context.close();
+});
 
 for (const size of [
 	{ width: 1280, height: 900 },

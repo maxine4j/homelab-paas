@@ -688,6 +688,15 @@ Reload/unload retains the native unsaved-code warning. Draft contents are not
 stored in URLs or persisted across reloads. Ticket forms remain native modal
 `<dialog>` overlays with Escape dismissal and no history entries; Popover API is
 not used for modal forms.
+Ticket details also close after a primary click or touch gesture that starts and
+ends outside the dialog bounds when the backdrop is exposed. Dialog content,
+padding, gestures starting inside, and cancelled gestures do not dismiss it.
+The board busy guard blocks outside, Escape, and close-button dismissal during
+mutations; agent execution status alone does not block dismissal. Outside dismissal
+uses the existing close lifecycle, preserving board-memory conversation drafts
+without saving unsaved ticket fields, activating the board beneath, or adding
+history entries. Native modality and the full-viewport phone layout remain unchanged.
+This outside-dismissal contract applies only to ticket details, not ticket creation.
 
 Workspaces are internal execution resources, not a user-facing concept. Do not
 show workspace creation, selection, archival, names or raw
