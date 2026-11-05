@@ -10,7 +10,12 @@ import {
 	repositoryFileSchema,
 	repositoryHistorySchema,
 } from "@homelab-paas/forge-contracts";
-import { agentThreadsSchema, agentViewSchema } from "@homelab-paas/forge-contracts/agents";
+import {
+	agentThreadsSchema,
+	agentViewSchema,
+	agentOptionsSchema,
+	agentFilesSchema,
+} from "@homelab-paas/forge-contracts/agents";
 import {
 	pullRequestsSchema,
 	pullRequestSchema,
@@ -52,6 +57,8 @@ test("mock chats expose isolated project history and requests while every mutati
 		for (const thread of threads) {
 			expect(thread.projectId).toBe(project.id);
 			const path = `/api/agents/${thread.id}`;
+			expect(agentOptionsSchema.parse(await read(`${path}/options`)).skills.length).toBeGreaterThan(0);
+			expect(agentFilesSchema.parse(await read(`${path}/files?query=main`))).toEqual(["src/main.ts"]);
 			const view = agentViewSchema.parse(await read(path));
 			expect(view.items.length).toBeGreaterThan(0);
 			expect(view.requests.length).toBeGreaterThan(0);

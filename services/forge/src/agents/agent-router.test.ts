@@ -29,6 +29,8 @@ test("owner/origin validation, bounded inputs, safe failures and reconnectable S
 	let changed = () => {};
 	const detach = vi.fn();
 	const service: IAgentService = {
+		options: vi.fn(async () => ({ models: [], skills: [] })),
+		files: vi.fn(async () => ["src/main.ts"]),
 		create: vi.fn(async () => view),
 		list: async () => [view.thread],
 		get: async () => view,
@@ -64,9 +66,14 @@ test("owner/origin validation, bounded inputs, safe failures and reconnectable S
 			...(body === undefined ? {} : { body: JSON.stringify(body) }),
 		});
 	try {
+		expect(await (await request(`agents/${id}/options`)).json()).toEqual({ models: [], skills: [] });
+		expect(await (await request(`agents/${id}/files?query=main`)).json()).toEqual(["src/main.ts"]);
+		expect(service.files).toHaveBeenCalledWith({ username: "owner" }, id, "main");
+		expect((await request(`agents/${id}/files?query=${"x".repeat(501)}`)).status).toBe(400);
 		expect((await request(`projects/${id}/agents`, "POST", { title: "Chat" })).status).toBe(201);
 		expect(await (await request(`projects/${id}/agents`)).json()).toEqual([view.thread]);
 		expect((await request(`agents/${id}/messages`, "POST", { text: "Hello" })).status).toBe(200);
+		expect(vi.mocked(service.send).mock.calls[0]?.[3]).toStrictEqual({});
 		expect((await request(`agents/${id}/messages`, "POST", { text: "" })).status).toBe(400);
 		expect((await request(`agents/${id}/messages`, "POST", { text: "Hello" }, "outsider")).status).toBe(403);
 		expect(

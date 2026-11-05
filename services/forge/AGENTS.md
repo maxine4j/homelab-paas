@@ -147,8 +147,14 @@ history and reconcile state without submitting a message. An ambiguous thread cr
 cannot be retried; create a new chat, retaining the old worktree. Untouched empty
 chats remain usable across restarts.
 
-Threads use `danger-full-access`, `on-request` approvals and disabled Codex
-subagent spawning. Apply that policy on both start and resume. The
+Threads use `danger-full-access` and disabled Codex subagent spawning. Start and
+resume use `on-request` approvals; each submitted turn applies its chat's selected
+model and permission mode. `Ask` uses `on-request` with the `user` reviewer,
+`Approve for me` uses `on-request` with Codex's `auto_review` reviewer, and
+`Full access` uses `never` with the `user` reviewer. Automatic review is a runtime
+risk assessment, not Forge automatically accepting approval callbacks. Chat
+settings persist with thread metadata and apply to subsequent turns; changes in
+the composer take effect on its next submitted message. The
 nonroot Forge container is the execution boundary; Codex does not create nested
 Bubblewrap namespaces, so execution requires no host user-namespace sysctls,
 privileged mode or relaxed container security profiles. Commands have the
@@ -164,15 +170,17 @@ Git metadata.
 
 Browser-safe schemas are exported from `@homelab-paas/forge-contracts/agents`:
 
-| Route                                      | Contract                                                                                                 |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `GET/POST /api/projects/:projectId/agents` | List summaries / create `{title}`; returns 201 and a view.                                               |
-| `GET /api/agents/:id`                      | `{thread,items,requests,truncated}`; no Codex thread IDs or internal workspace paths in metadata.        |
-| `POST /api/agents/:id/messages`            | `{text}`; starts one turn and returns its current view.                                                  |
-| `POST /api/agents/:id/resume`              | History loading and reconciliation; never sends input.                                                   |
-| `POST /api/agents/:id/interrupt`           | Requests interruption of the known active turn.                                                          |
-| `POST /api/agents/:id/replies`             | `{requestId,decision: "accept"/"decline"}` or `{requestId,answers:{questionId:text}}`.                   |
-| `GET /api/agents/:id/events`               | Authorized SSE invalidations (`data: changed`); read the current view after each notification/reconnect. |
+| Route                                      | Contract                                                                                                                                                                                                   |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET/POST /api/projects/:projectId/agents` | List summaries / create `{title}`; returns 201 and a view.                                                                                                                                                 |
+| `GET /api/agents/:id`                      | `{thread,items,requests,truncated}`; no Codex thread IDs or internal workspace paths in metadata.                                                                                                          |
+| `POST /api/agents/:id/messages`            | `{text,model?,permissions?}`; starts one turn and returns its current view. Permission values are `ask`, `approve-for-me`, `full-access`.                                                                  |
+| `GET /api/agents/:id/options`              | Runtime models `{id,name,isDefault}` and enabled worktree skills `{name,description}`; no internal skill paths.                                                                                            |
+| `GET /api/agents/:id/files?query=…`        | At most 100 relative file paths from the chat's verified worktree. Empty query lists root files through the workspace tree API; nonempty query uses runtime fuzzy search. Query bounded to 500 characters. |
+| `POST /api/agents/:id/resume`              | History loading and reconciliation; never sends input.                                                                                                                                                     |
+| `POST /api/agents/:id/interrupt`           | Requests interruption of the known active turn.                                                                                                                                                            |
+| `POST /api/agents/:id/replies`             | `{requestId,decision: "accept"/"decline"}` or `{requestId,answers:{questionId:text}}`.                                                                                                                     |
+| `GET /api/agents/:id/events`               | Authorized SSE invalidations (`data: changed`); read the current view after each notification/reconnect.                                                                                                   |
 
 Every operation rechecks owner access; HTTP mutations retain exact-origin checks.
 Errors are `invalid-request` (400), `agent-not-found` (404), `agent-conflict` (409),
@@ -218,6 +226,26 @@ Truncation is visible. SSE reconnects and periodic polling read current snapshot
 through a serialized, coalesced reader; selected chats recover newly uncertain
 state without replaying messages or approvals. No Markdown or tool HTML is
 executed from conversation text.
+
+The conversation follows the Codex desktop layout: right-aligned user bubbles,
+unboxed agent text and consecutive tool calls in one initially collapsed group.
+Each tool expands to its output and displays its actual runtime status when
+available. Running tool summaries use a sweeping text highlight, disabled with
+reduced-motion preferences. Tool titles/statuses remain structured through output
+deltas and history reloads. No project/workspace/worktree picker is exposed.
+
+The rounded composer includes a runtime model selector, permission selector and
+small blue upward-arrow send button. Enter sends; Cmd+Enter and Ctrl+Enter insert
+a newline at the caret (Shift+Enter also retains normal textarea behavior). IME
+composition must not submit. `$` opens enabled skills, `@` opens worktree files;
+filter from the caret, navigate with arrows, insert with Tab or a pointer, and
+dismiss with Escape. Completion preserves text after the caret. Explicit `$skill`
+names in submitted text resolve through the verified worktree's enabled runtime
+catalog and are sent as structured skill inputs. File completion inserts a
+relative path into the message. Model/skill discovery failures expose a retry;
+file-search failures retain the draft and allow another query. Ticket workflow
+conversations share message layout and keyboard behavior, but their orchestration
+does not expose standalone-chat model/permission controls.
 
 Controlled Chromium tests cover independent threads, activity, interruptions,
 reopening, failed sends/replies, approval/input, reconnects, automatic recovery and

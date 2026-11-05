@@ -4,6 +4,8 @@ import {
 	type AgentReply,
 	type AgentRequest,
 	type AgentItem,
+	type AgentSettings,
+	type AgentOptions,
 } from "@homelab-paas/forge-contracts/agents";
 import { z } from "zod";
 
@@ -15,7 +17,9 @@ export interface ICodexAgentClient {
 	start(path: string): Promise<string>;
 	resume(id: string, path: string): Promise<AgentRuntimeView>;
 	read(id: string): AgentRuntimeView;
-	send(id: string, path: string, text: string): Promise<void>;
+	send(id: string, path: string, text: string, settings?: AgentSettings): Promise<void>;
+	options(path: string): Promise<AgentOptions>;
+	files(path: string, query: string): Promise<string[]>;
 	interrupt(id: string, turnId: string): Promise<void>;
 	reply(id: string, input: AgentReply): void;
 	subscribe(listener: (id: string) => void): () => void;
@@ -39,7 +43,9 @@ export class CodexAgentClient implements ICodexAgentClient {
 		return this.guard(async () => {
 			path = await this.realpath(path);
 			await this.connection.initialize();
-			const result = threadResponse.parse(await this.connection.request("thread/start", this.options(path)));
+			const result = threadResponse.parse(
+				await this.connection.request("thread/start", this.runtimeOptions(path)),
+			);
 			if (result.thread.cwd !== path) throw new Error("Codex workspace identity mismatch");
 			this.views.set(result.thread.id, this.hydrate(result.thread));
 			return result.thread.id;
@@ -57,7 +63,7 @@ export class CodexAgentClient implements ICodexAgentClient {
 			const result = threadResponse.parse(
 				await this.connection.request("thread/resume", {
 					threadId: id,
-					...this.options(path),
+					...this.runtimeOptions(path),
 					excludeTurns: true,
 				}),
 			);
@@ -96,11 +102,76 @@ export class CodexAgentClient implements ICodexAgentClient {
 		if (!view) throw new AgentError("agent-unavailable");
 		return structuredClone(view);
 	}
-	async send(id: string, path: string, text: string): Promise<void> {
+	async options(path: string): Promise<AgentOptions> {
+		return this.guard(async () => {
+			await this.connection.initialize();
+			const models: AgentOptions["models"] = [];
+			let cursor: string | undefined;
+			let pages = 0;
+			do {
+				const page = z
+					.object({
+						data: z.array(
+							z.object({
+								model: z.string().min(1).max(256),
+								displayName: z.string().max(256),
+								isDefault: z.boolean(),
+							}),
+						),
+						nextCursor: z.string().nullable(),
+					})
+					.parse(await this.connection.request("model/list", { limit: 100, ...(cursor ? { cursor } : {}) }));
+				models.push(
+					...page.data.map((model) => ({
+						id: model.model,
+						name: model.displayName,
+						isDefault: model.isDefault,
+					})),
+				);
+				if (
+					models.length > 500
+					|| (++pages >= 5 && page.nextCursor)
+					|| (page.nextCursor && page.nextCursor === cursor)
+				)
+					throw new Error("Invalid model pagination");
+				cursor = page.nextCursor ?? undefined;
+			} while (cursor);
+			const skills = await this.skills(path);
+			return { models, skills: skills.map(({ name, description }) => ({ name, description })) };
+		});
+	}
+	async files(path: string, query: string): Promise<string[]> {
+		return this.guard(async () => {
+			path = await this.realpath(path);
+			await this.connection.initialize();
+			const result = z
+				.object({ files: z.array(z.object({ root: z.string(), path: z.string().min(1).max(4096) })) })
+				.parse(
+					await this.connection.request("fuzzyFileSearch", { query, roots: [path], cancellationToken: null }),
+				);
+			return [
+				...new Set(
+					result.files
+						.filter(
+							(file) =>
+								file.root === path
+								&& !file.path.startsWith("/")
+								&& !file.path.includes("\\")
+								&& !file.path.split("/").some((part) => part === ".." || part === "."),
+						)
+						.map((file) => file.path),
+				),
+			].slice(0, 100);
+		});
+	}
+	async send(id: string, path: string, text: string, settings?: AgentSettings): Promise<void> {
 		await this.guard(async () => {
 			const view = this.views.get(id);
 			if (!view || ["running", "waiting", "uncertain"].includes(view.status))
 				throw new AgentError("agent-conflict");
+			const selectedSkills = /(?:^|\s)\$[\w-]+/.test(text)
+				? (await this.skills(path)).filter((skill) => text.split(/\s+/).includes(`$${skill.name}`))
+				: [];
 			view.status = "running";
 			delete view.turnId;
 			try {
@@ -108,7 +179,18 @@ export class CodexAgentClient implements ICodexAgentClient {
 					await this.connection.request("turn/start", {
 						threadId: id,
 						cwd: path,
-						input: [{ type: "text", text, text_elements: [] }],
+						...(settings
+							? {
+									...(settings.model ? { model: settings.model } : {}),
+									approvalPolicy: settings.permissions === "full-access" ? "never" : "on-request",
+									approvalsReviewer:
+										settings.permissions === "approve-for-me" ? "auto_review" : "user",
+								}
+							: {}),
+						input: [
+							{ type: "text", text, text_elements: [] },
+							...selectedSkills.map(({ name, path }) => ({ type: "skill", name, path })),
+						],
 					}),
 				);
 				// Completion notifications can precede the RPC response. Do not resurrect a finished turn.
@@ -170,7 +252,31 @@ export class CodexAgentClient implements ICodexAgentClient {
 			this.listeners.delete(listener);
 		};
 	}
-	private options(path: string) {
+	private async skills(path: string): Promise<{ name: string; description: string; path: string }[]> {
+		path = await this.realpath(path);
+		const result = z
+			.object({
+				data: z.array(
+					z.object({
+						cwd: z.string(),
+						skills: z.array(
+							z.object({
+								name: z.string().min(1).max(256),
+								description: z.string().max(4000),
+								path: z.string().min(1),
+								enabled: z.boolean(),
+							}),
+						),
+						errors: z.array(z.unknown()),
+					}),
+				),
+			})
+			.parse(await this.connection.request("skills/list", { cwds: [path] }));
+		const entry = result.data.find((entry) => entry.cwd === path);
+		if (!entry || entry.errors.length || entry.skills.length > 500) throw new Error("Skills unavailable");
+		return entry.skills.filter((skill) => skill.enabled);
+	}
+	private runtimeOptions(path: string) {
 		return {
 			cwd: path,
 			sandbox: "danger-full-access",
@@ -193,8 +299,15 @@ export class CodexAgentClient implements ICodexAgentClient {
 			requests: [],
 			truncated: false,
 		};
-		for (const turn of thread.turns) for (const item of turn.items) this.item(view, item);
+		for (const turn of thread.turns) {
+			for (const item of turn.items) this.item(view, item);
+			this.finishTools(view, this.status(turn.status));
+		}
 		return view;
+	}
+	private finishTools(view: AgentRuntimeView, status: AgentRuntimeView["status"]): void {
+		if (status !== "completed" && status !== "failed" && status !== "interrupted") return;
+		for (const item of view.items) if (item.status === "running") item.status = status;
 	}
 	private status(status: string): AgentRuntimeView["status"] {
 		return status === "inProgress"
@@ -226,7 +339,28 @@ export class CodexAgentClient implements ICodexAgentClient {
 					?? (item.type === "commandExecution"
 						? `${item.command ?? "Command"}\n${item.aggregatedOutput ?? item.status ?? ""}`
 						: `${item.type}${item.status ? `: ${item.status}` : ""}`));
-		this.put(view, { id: item.id, role, text });
+		this.put(view, {
+			id: item.id,
+			role,
+			text,
+			...(role === "activity"
+				? {
+						title: (item.command ?? item.type.replace(/([a-z])([A-Z])/g, "$1 $2")).slice(0, 256),
+						...(item.status
+							? {
+									status:
+										item.status === "inProgress"
+											? ("running" as const)
+											: item.status === "failed" || item.status === "declined"
+												? ("failed" as const)
+												: item.status === "interrupted"
+													? ("interrupted" as const)
+													: ("completed" as const),
+								}
+							: {}),
+					}
+				: {}),
+		});
 	}
 	private put(view: AgentRuntimeView, item: AgentItem): void {
 		if (item.text.length > 32000) {
@@ -280,6 +414,7 @@ export class CodexAgentClient implements ICodexAgentClient {
 				if (!error.willRetry) {
 					view.turnId = error.turnId;
 					view.status = "failed";
+					this.finishTools(view, "failed");
 					view.requests = [];
 				}
 			} else if (method === "turn/started" || method === "turn/completed") {
@@ -288,6 +423,7 @@ export class CodexAgentClient implements ICodexAgentClient {
 				view.status = this.status(turn.status);
 				for (const item of turn.items) this.item(view, item);
 				if (method === "turn/completed") {
+					this.finishTools(view, view.status);
 					view.requests = [];
 					for (const [key, request] of this.pending) if (request.threadId === id) this.pending.delete(key);
 				}
@@ -299,6 +435,7 @@ export class CodexAgentClient implements ICodexAgentClient {
 				const delta = z.object({ itemId: z.string().min(1).max(256), delta: z.string() }).parse(params);
 				const existing = view.items.find((item) => item.id === delta.itemId);
 				this.put(view, {
+					...existing,
 					id: delta.itemId,
 					role: method === "item/agentMessage/delta" ? "assistant" : "activity",
 					text: (existing?.text ?? "") + delta.delta,

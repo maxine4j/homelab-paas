@@ -69,6 +69,20 @@ const setup = async (page: Page) => {
 			}
 			if (path.startsWith("/api/agents/")) {
 				const view = views.find((value) => value.thread.id === path.split("/")[3])!;
+				if (path.endsWith("/options"))
+					return route.fulfill({
+						json: {
+							models: [
+								{ id: "test-model", name: "Test model", isDefault: true },
+								{ id: "other-model", name: "Other model", isDefault: false },
+							],
+							skills: [
+								{ name: "review", description: "Review changes" },
+								{ name: "release", description: "Prepare release" },
+							],
+						},
+					});
+				if (path.endsWith("/files")) return route.fulfill({ json: ["src/main.ts", "src/app.tsx"] });
 				if (method === "GET") {
 					reads++;
 					return route.fulfill({ json: view });
@@ -128,6 +142,72 @@ const setup = async (page: Page) => {
 		},
 	};
 };
+
+test("composer selects model and permissions, completes skills/files, and sends with Enter", async ({ page }) => {
+	const fixture = await setup(page);
+	await fixture.create();
+	const message = page.getByRole("textbox", { name: "Message", exact: true });
+	await page.getByRole("combobox", { name: "Model", exact: true }).selectOption("other-model");
+	await page.getByRole("combobox", { name: "Permissions", exact: true }).selectOption("approve-for-me");
+	await message.fill("Use $rev");
+	await expect(page.getByRole("option", { name: /review.*Review changes/ })).toBeVisible();
+	await message.press("Tab");
+	await expect(message).toHaveValue("Use $review ");
+	await message.press("End");
+	await message.press("Control+Enter");
+	await expect(message).toHaveValue("Use $review \n");
+	await message.press("Meta+Enter");
+	await expect(message).toHaveValue("Use $review \n\n");
+	await message.press("@");
+	await expect(page.getByRole("option", { name: "src/main.ts", exact: true })).toBeVisible();
+	await message.press("ArrowDown");
+	await message.press("Tab");
+	await expect(message).toHaveValue("Use $review \n\n@src/app.tsx ");
+	const request = page.waitForRequest((request) => request.url().endsWith("/messages"));
+	await message.press("Enter");
+	expect((await request).postDataJSON()).toMatchObject({
+		model: "other-model",
+		permissions: "approve-for-me",
+		text: "Use $review \n\n@src/app.tsx ",
+	});
+	await expect(message).toHaveValue("");
+});
+
+test("default model can replace an explicit model and completion dismisses without submitting", async ({ page }) => {
+	const fixture = await setup(page);
+	await fixture.create();
+	const message = page.getByRole("textbox", { name: "Message", exact: true });
+	await page.getByRole("combobox", { name: "Model", exact: true }).selectOption("other-model");
+	await page.getByRole("combobox", { name: "Model", exact: true }).selectOption({ label: "Test model" });
+	await message.fill("$rev");
+	await expect(page.getByRole("listbox", { name: "Skills" })).toBeVisible();
+	await message.press("Escape");
+	await expect(page.getByRole("listbox", { name: "Skills" })).toHaveCount(0);
+	const request = page.waitForRequest((request) => request.url().endsWith("/messages"));
+	await message.press("Enter");
+	expect((await request).postDataJSON()).toMatchObject({ model: "test-model", permissions: "ask" });
+});
+
+test("consecutive tools share a collapsed group with statuses and agent messages have no bubbles", async ({ page }) => {
+	const fixture = await setup(page);
+	await fixture.create();
+	fixture.views[0]!.items = [
+		{ id: "u", role: "user", text: "Inspect changes" },
+		{ id: "a", role: "assistant", text: "I’ll inspect the changed files." },
+		{ id: "t1", role: "activity", title: "git status", text: "Clean", status: "completed" },
+		{ id: "t2", role: "activity", title: "pnpm test", text: "Running tests", status: "running" },
+	];
+	await fixture.event();
+	const group = page.locator(".agent-tool-group");
+	await expect(group).toHaveCount(1);
+	await expect(group).not.toHaveAttribute("open");
+	await group.locator("summary").first().click();
+	await expect(group.getByText("git status", { exact: true })).toBeVisible();
+	await expect(group.getByText("Completed", { exact: true })).toBeVisible();
+	await expect(group.locator('.agent-activity[data-status="running"]')).toHaveCount(1);
+	await expect(page.locator(".agent-message-assistant")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+	await page.screenshot({ path: "../../../../artifacts/forge-browser/agents-codex-desktop.png" });
+});
 
 test("Agents has one compact creation button and no redundant headings or title field", async ({ page }) => {
 	const fixture = await test.step("Open Agents", () => setup(page));

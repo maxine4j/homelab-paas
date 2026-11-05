@@ -11,6 +11,16 @@ export interface AgentItem {
 	id: string;
 	role: "user" | "assistant" | "activity";
 	text: string;
+	title?: string;
+	status?: "running" | "completed" | "failed" | "interrupted";
+}
+export interface AgentSettings {
+	model?: string;
+	permissions?: "ask" | "approve-for-me" | "full-access";
+}
+export interface AgentOptions {
+	models: { id: string; name: string; isDefault: boolean }[];
+	skills: { name: string; description: string }[];
 }
 export interface AgentQuestion {
 	id: string;
@@ -24,7 +34,7 @@ export interface AgentRequest {
 	description: string;
 	questions: AgentQuestion[];
 }
-export interface AgentThread {
+export interface AgentThread extends AgentSettings {
 	id: string;
 	projectId: string;
 	workspaceId: string;

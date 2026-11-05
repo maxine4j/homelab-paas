@@ -1,9 +1,12 @@
 import { createLogger } from "@homelab-paas/backend-infrastructure/logger";
-import type { Workspace, CreateWorkspace } from "@homelab-paas/forge-contracts";
+import type { Workspace, CreateWorkspace, WorkspaceTree } from "@homelab-paas/forge-contracts";
 import {
 	agentThreadSchema,
 	createAgentSchema,
 	agentMessageSchema,
+	agentSettingsSchema,
+	type AgentSettings,
+	type AgentOptions,
 	type AgentThread,
 	type AgentView,
 	type AgentReply,
@@ -22,13 +25,16 @@ import type { AgentThreadRecord } from "./types.ts";
 export interface IAgentWorkspaces {
 	create(actor: Actor, projectId: string, input: CreateWorkspace): Promise<Workspace>;
 	resolve(actor: Actor, id: string): Promise<WorkspaceLocation>;
+	tree(actor: Actor, id: string, path: string): Promise<WorkspaceTree>;
 }
 export interface IAgentService {
 	/** Owner-only. Creates a dedicated workspace; Codex identifiers stay private. Throws AgentError. */
 	create(actor: Actor, projectId: string, title: string): Promise<AgentView>;
 	list(actor: Actor, projectId: string): Promise<AgentThread[]>;
 	get(actor: Actor, id: string): Promise<AgentView>;
-	send(actor: Actor, id: string, text: string): Promise<AgentView>;
+	send(actor: Actor, id: string, text: string, settings?: AgentSettings): Promise<AgentView>;
+	options(actor: Actor, id: string): Promise<AgentOptions>;
+	files(actor: Actor, id: string, query: string): Promise<string[]>;
 	resume(actor: Actor, id: string): Promise<AgentView>;
 	interrupt(actor: Actor, id: string): Promise<AgentView>;
 	reply(actor: Actor, id: string, input: AgentReply): Promise<AgentView>;
@@ -84,14 +90,34 @@ export class AgentService implements IAgentService, ITicketAgents {
 		this.authorize(actor);
 		return this.serialize(id, async () => this.view(await this.require(id)));
 	}
-	async send(actor: Actor, id: string, text: string): Promise<AgentView> {
+	async options(actor: Actor, id: string): Promise<AgentOptions> {
 		this.authorize(actor);
-		if (!agentMessageSchema.safeParse({ text }).success) throw new AgentError("invalid-request");
+		const record = await this.require(id);
+		const location = await this.workspaces.resolve(actor, record.workspaceId);
+		return this.client.options(location.path);
+	}
+	async files(actor: Actor, id: string, query: string): Promise<string[]> {
+		this.authorize(actor);
+		if (query.length > 500) throw new AgentError("invalid-request");
+		const record = await this.require(id);
+		const location = await this.workspaces.resolve(actor, record.workspaceId);
+		if (!query) {
+			const tree = await this.workspaces.tree(actor, record.workspaceId, "");
+			return tree.entries
+				.filter((entry) => entry.kind === "file")
+				.slice(0, 100)
+				.map((entry) => entry.path);
+		}
+		return this.client.files(location.path, query);
+	}
+	async send(actor: Actor, id: string, text: string, settings?: AgentSettings): Promise<AgentView> {
+		this.authorize(actor);
+		if (!agentMessageSchema.safeParse({ text, ...settings }).success) throw new AgentError("invalid-request");
 		if ((await this.require(id)).managed) throw new AgentError("agent-conflict");
-		return this.dispatch(actor, id, text);
+		return this.dispatch(actor, id, text, settings);
 	}
 	/** Ticket scheduler dispatch; the prompt is internal and can include a complete approved plan. */
-	async dispatch(actor: Actor, id: string, text: string): Promise<AgentView> {
+	async dispatch(actor: Actor, id: string, text: string, settings?: AgentSettings): Promise<AgentView> {
 		this.authorize(actor);
 		const input = z.object({ text: z.string().trim().min(1).max(64000) }).safeParse({ text });
 		if (!input.success) throw new AgentError("invalid-request");
@@ -100,6 +126,11 @@ export class AgentService implements IAgentService, ITicketAgents {
 			if (["creating", "running", "waiting", "uncertain"].includes(record.status))
 				throw new AgentError("agent-conflict");
 			const location = await this.workspaces.resolve(actor, record.workspaceId);
+			if (settings) {
+				const parsed = agentSettingsSchema.safeParse(settings);
+				if (!parsed.success) throw new AgentError("invalid-request");
+				Object.assign(record, parsed.data);
+			}
 			this.pool.claim(id);
 			try {
 				if (record.codexId) {
@@ -116,7 +147,12 @@ export class AgentService implements IAgentService, ITicketAgents {
 				}
 				record.status = "running";
 				await this.store.update(record);
-				await this.client.send(record.codexId, location.path, input.data.text);
+				await this.client.send(
+					record.codexId,
+					location.path,
+					input.data.text,
+					agentSettingsSchema.parse({ model: record.model, permissions: record.permissions }),
+				);
 				return await this.sync(record);
 			} catch (cause) {
 				record.status = "uncertain";

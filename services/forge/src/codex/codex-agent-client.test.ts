@@ -76,6 +76,135 @@ const setup = () => {
 	};
 };
 
+test("discovers runtime models and enabled worktree skills, searches only that worktree", async () => {
+	const { client, rpc } = setup();
+	rpc.mockResolvedValueOnce({
+		data: [{ model: "test-model", displayName: "Test model", isDefault: true }],
+		nextCursor: null,
+	});
+	rpc.mockResolvedValueOnce({
+		data: [
+			{
+				cwd: "/data/worktrees/one",
+				skills: [
+					{ name: "review", description: "Review changes", path: "/skills/review/SKILL.md", enabled: true },
+					{ name: "disabled", description: "Hidden", path: "/skills/disabled", enabled: false },
+				],
+				errors: [],
+			},
+		],
+	});
+	expect(await client.options("/data/worktrees/one")).toEqual({
+		models: [{ id: "test-model", name: "Test model", isDefault: true }],
+		skills: [{ name: "review", description: "Review changes" }],
+	});
+	rpc.mockResolvedValueOnce({
+		files: [
+			{ root: "/data/worktrees/one", path: "src/main.ts" },
+			{ root: "/other", path: "secret" },
+			{ root: "/data/worktrees/one", path: "../escape" },
+		],
+	});
+	expect(await client.files("/data/worktrees/one", "main")).toEqual(["src/main.ts"]);
+	expect(rpc).toHaveBeenLastCalledWith("fuzzyFileSearch", {
+		query: "main",
+		roots: ["/data/worktrees/one"],
+		cancellationToken: null,
+	});
+});
+
+test.each([
+	["ask", "on-request", "user"],
+	["approve-for-me", "on-request", "auto_review"],
+	["full-access", "never", "user"],
+] as const)(
+	"applies %s permissions and selected model to the actual turn",
+	async (permissions, approvalPolicy, approvalsReviewer) => {
+		const { client, rpc } = setup();
+		const id = await client.start("/data/worktrees/one");
+		await client.send(id, "/data/worktrees/one", "Work", { model: "test-model", permissions });
+		expect(rpc).toHaveBeenLastCalledWith(
+			"turn/start",
+			expect.objectContaining({ model: "test-model", approvalPolicy, approvalsReviewer }),
+		);
+	},
+);
+
+test("tool lifecycle and streamed output preserve structured command and status", async () => {
+	const { client, notify } = setup();
+	const id = await client.start("/data/worktrees/one");
+	notify("item/started", {
+		threadId: id,
+		item: { id: "cmd", type: "commandExecution", command: "pnpm test", status: "inProgress" },
+	});
+	notify("item/commandExecution/outputDelta", { threadId: id, itemId: "cmd", delta: "Tests passing" });
+	expect(client.read(id).items[0]).toMatchObject({
+		title: "pnpm test",
+		status: "running",
+		text: expect.stringContaining("Tests passing"),
+	});
+	notify("item/completed", {
+		threadId: id,
+		item: {
+			id: "cmd",
+			type: "commandExecution",
+			command: "pnpm test",
+			status: "completed",
+			aggregatedOutput: "Tests passing",
+		},
+	});
+	expect(client.read(id).items[0]).toMatchObject({ title: "pnpm test", status: "completed" });
+});
+
+test("an interrupted turn stops unfinished tool animations, including reloaded history", async () => {
+	const { client, notify, rpc } = setup();
+	const id = await client.start("/data/worktrees/one");
+	const item = { id: "cmd", type: "commandExecution", command: "pnpm test", status: "inProgress" };
+	notify("item/started", { threadId: id, item });
+	notify("turn/completed", { threadId: id, turn: { id: "turn", status: "interrupted", items: [item] } });
+	expect(client.read(id).items[0]).toMatchObject({ status: "interrupted" });
+	rpc.mockResolvedValueOnce({
+		thread: { id, cwd: "/data/worktrees/one", historyMode: "paginated", status: { type: "idle" }, turns: [] },
+	});
+	rpc.mockResolvedValueOnce({ data: [{ id: "turn", status: "interrupted", items: [item] }], nextCursor: null });
+	expect((await client.resume(id, "/data/worktrees/one")).items[0]).toMatchObject({ status: "interrupted" });
+});
+
+test("explicit skills resolve from the worktree catalog and are supplied as structured inputs", async () => {
+	const { client, rpc } = setup();
+	const id = await client.start("/data/worktrees/one");
+	rpc.mockResolvedValueOnce({
+		data: [
+			{
+				cwd: "/data/worktrees/one",
+				skills: [{ name: "review", description: "Review", path: "/skills/review/SKILL.md", enabled: true }],
+				errors: [],
+			},
+		],
+	});
+	await client.send(id, "/data/worktrees/one", "$review changes");
+	expect(rpc).toHaveBeenLastCalledWith(
+		"turn/start",
+		expect.objectContaining({
+			input: [
+				{ type: "text", text: "$review changes", text_elements: [] },
+				{ type: "skill", name: "review", path: "/skills/review/SKILL.md" },
+			],
+		}),
+	);
+});
+
+test("model discovery bounds empty paginated responses", async () => {
+	const { client, rpc } = setup();
+	let page = 0;
+	rpc.mockImplementation(async () => {
+		if (++page > 5) throw new Error("Unbounded pagination");
+		return { data: [], nextCursor: `page-${page}` };
+	});
+	await expect(client.options("/data/worktrees/one")).rejects.toThrow("agent-unavailable");
+	expect(rpc.mock.calls.length).toBeLessThanOrEqual(5);
+});
+
 test("connection loss preserves idle and completed chats without inventing active execution", async () => {
 	const { client, notify } = setup();
 	const idle = await client.start("/data/worktrees/one");

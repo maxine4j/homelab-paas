@@ -7,6 +7,8 @@ import {
 	agentThreadsSchema,
 	agentViewSchema,
 	createAgentSchema,
+	agentOptionsSchema,
+	agentFilesSchema,
 } from "@homelab-paas/forge-contracts/agents";
 import Router from "@koa/router";
 import { z } from "zod";
@@ -57,11 +59,23 @@ export class AgentRouter {
 		router.get("/api/agents/:id", async (ctx) => {
 			ctx.body = agentViewSchema.parse(await this.service.get(ctx.state.actor, ctx.params["id"]!));
 		});
+		router.get("/api/agents/:id/options", async (ctx) => {
+			ctx.body = agentOptionsSchema.parse(await this.service.options(ctx.state.actor, ctx.params["id"]!));
+		});
+		router.get("/api/agents/:id/files", async (ctx) => {
+			const query = z
+				.string()
+				.max(500)
+				.safeParse(ctx.query["query"] ?? "");
+			if (!query.success) throw new AgentError("invalid-request");
+			ctx.body = agentFilesSchema.parse(await this.service.files(ctx.state.actor, ctx.params["id"]!, query.data));
+		});
 		router.post("/api/agents/:id/messages", async (ctx) => {
 			const input = agentMessageSchema.safeParse(ctx.request.body);
 			if (!input.success) throw new AgentError("invalid-request");
+			const { text, ...settings } = input.data;
 			ctx.body = agentViewSchema.parse(
-				await this.service.send(ctx.state.actor, ctx.params["id"]!, input.data.text),
+				await this.service.send(ctx.state.actor, ctx.params["id"]!, text, settings),
 			);
 		});
 		router.post("/api/agents/:id/replies", async (ctx) => {

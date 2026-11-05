@@ -39,6 +39,16 @@ const initializeSchema = z.object({
 	platformOs: z.string(),
 });
 const methods = new Map<string, z.ZodType>([
+	["model/list", z.strictObject({ limit: z.literal(100), cursor: z.string().optional() })],
+	["skills/list", z.strictObject({ cwds: z.array(z.string().min(1)).length(1) })],
+	[
+		"fuzzyFileSearch",
+		z.strictObject({
+			query: z.string().max(500),
+			roots: z.array(z.string().min(1)).length(1),
+			cancellationToken: z.null(),
+		}),
+	],
 	["account/read", z.strictObject({ refreshToken: z.boolean().optional() })],
 	["account/login/start", z.strictObject({ type: z.literal("chatgptDeviceCode") })],
 	["account/login/cancel", z.strictObject({ loginId: z.string().min(1).max(256) })],
@@ -77,15 +87,22 @@ const methods = new Map<string, z.ZodType>([
 		z.strictObject({
 			threadId: z.string().min(1),
 			cwd: z.string().min(1),
+			model: z.string().min(1).max(256).optional(),
+			approvalPolicy: z.enum(["on-request", "never"]).optional(),
+			approvalsReviewer: z.enum(["user", "auto_review"]).optional(),
 			input: z
 				.array(
-					z.strictObject({
-						type: z.literal("text"),
-						text: z.string().min(1).max(64000),
-						text_elements: z.array(z.never()),
-					}),
+					z.union([
+						z.strictObject({
+							type: z.literal("text"),
+							text: z.string().min(1).max(64000),
+							text_elements: z.array(z.never()),
+						}),
+						z.strictObject({ type: z.literal("skill"), name: z.string().min(1), path: z.string().min(1) }),
+					]),
 				)
-				.length(1),
+				.min(1)
+				.max(101),
 		}),
 	],
 	["turn/interrupt", z.strictObject({ threadId: z.string().min(1), turnId: z.string().min(1) })],
